@@ -20,7 +20,7 @@ export function placeOf(id: SessionId): Place | null {
   return session && worktree && project ? { session, worktree, project } : null
 }
 
-/** The project's leader session (PRD F21 v1.177), or null. */
+/** The project's leader session (PRD F21 v1.178), or null. */
 export function leaderOfProject(projectId: string): SessionId | null {
   return useWorkspace.getState().leaderSessions?.[projectId] ?? null
 }

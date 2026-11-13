@@ -117,7 +117,7 @@ describe('StatusController', () => {
     expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBeUndefined()
   })
 
-  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.177)', () => {
+  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.178)', () => {
     const waiting = () => h.sessions.find((s) => s.id === 'b')?.waitingFor
     h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
     expect(waiting()).toBeUndefined()

@@ -1,8 +1,9 @@
-// What keeps an agent from being a project's leader session on this machine (PRD F21 v1.177 · 不改代码). A Codex leader
+// What keeps an agent from being a project's leader session on this machine (PRD F21 v1.178 · 不改代码). A Codex leader
 // runs with a read-only permission profile (`leaderLaunchArgs`), which Codex ignores when its config sets
-// `sandbox_mode` (Codex docs, §6.14 v1.177): then the new-session panel does not offer Codex as leader, and a Codex
-// leader launched anyway (made leader earlier, the config changed since) gets `sandbox_mode="read-only"` on its command
-// line, so it still cannot change files (its `wavi` requests fail then too). Only reads the user's config, never writes it.
+// `sandbox_mode` (Codex docs, §6.14 v1.178): then the new-session panel does not offer Codex as leader, and a Codex
+// leader launched anyway (made leader earlier, the config changed since) gets `--sandbox read-only` on its command line
+// (a flag, so it also wins over a `[profiles.<name>]` sandbox_mode), so it still cannot change files (its `wavi`
+// requests fail then too). Only reads the user's config, never writes it.
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { homedir } from 'node:os'
@@ -44,9 +45,9 @@ export async function leaderCheck(path = codexConfigPath()): Promise<LeaderCheck
 }
 
 /**
- * What a Codex leader's launch adds when the user's config sets `sandbox_mode` (`leaderCheck`): the same key, read-only,
- * on its command line, which wins over config.toml. Nothing otherwise: the read-only permission profile holds then.
+ * What a Codex leader's launch adds when the user's config sets `sandbox_mode` (`leaderCheck`): `--sandbox read-only`,
+ * a command-line flag, which wins over config.toml and its profiles. Nothing otherwise: the read-only permission profile holds then.
  */
 export function codexLeaderSandboxArgs(check: LeaderCheck): string[] {
-  return check.codexSandboxMode ? ['-c', 'sandbox_mode="read-only"'] : []
+  return check.codexSandboxMode ? ['--sandbox', 'read-only'] : []
 }

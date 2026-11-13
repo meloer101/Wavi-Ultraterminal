@@ -125,7 +125,7 @@ export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent,
 }
 
 /**
- * The arguments that keep a leader session from changing files (PRD F21 v1.177 · 不改代码), with or without dispatch:
+ * The arguments that keep a leader session from changing files (PRD F21 v1.178 · 不改代码), with or without dispatch:
  * a leader never runs unrestricted. Its WAVI_DIR stays writable for `wavi` when dispatch is on; a Codex leader whose
  * config.toml sets `sandbox_mode` is read-only throughout (`codexLeaderSandboxArgs`). Empty for any other launch.
  */

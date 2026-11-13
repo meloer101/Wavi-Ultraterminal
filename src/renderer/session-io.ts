@@ -36,7 +36,7 @@ function refuseOverMenu(sessionId: SessionId): void {
 /**
  * Types `text` into the session's agent and presses Enter once the agent shows it. Rejects with a user-facing message.
  * `user`: the user's click sent it (a button, 送进去), so the turn it starts is theirs, like a line typed in its terminal
- * (`noteUserLine`, PRD F21 v1.177); Wavi's own sends (reports, 定时任务, auto-resume, auto-fix) leave it out.
+ * (`noteUserLine`, PRD F21 v1.178); Wavi's own sends (reports, 定时任务, auto-resume, auto-fix) leave it out.
  */
 export async function submitPrompt(sessionId: SessionId, text: string, options: { user?: boolean } = {}): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)

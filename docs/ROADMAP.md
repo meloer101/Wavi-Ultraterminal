@@ -228,7 +228,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] 实现（2026-11-01，PRD v1.111）：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户、侧栏第二层和模型；删掉 `mcp-server.ts` / `mcp-config.ts`
   - [x] 测试（2026-11-01）：e2e `dispatch.spec.ts` 重写（9 个，假 agent 在 shell 里跑 `wavi`），单元测试 `src/shared/dispatch.test.ts`、`src/main/dispatch/{requests,broker}.test.ts`、`handler.test.ts`、`typing.test.ts`、快照 worktree
   - [x] 真 agent 跑一次（2026-11-01，PRD §6.14 v1.111）：Claude（Haiku）派给 Codex 和 Grok（快照），Grok 派给 Claude；Claude 收件箱、第二档打字送达都走通，修了 Grok 信任对话框被当成一轮结束。Codex 服务商 503，Codex 自己做完任务、`wavi report` 没看到
-- [ ] leader 会话（PRD F21 v1.177，Figma 77，2026-11-13 定）：项目里一个 Claude / Codex 终端会话做统一入口，派活、接管用户的会话、收报告、只把要用户决定的事交给用户，自己不改代码
+- [ ] leader 会话（PRD F21 v1.178，Figma 77，2026-11-13 定）：项目里一个 Claude / Codex 终端会话做统一入口，派活、接管用户的会话、收报告、只把要用户决定的事交给用户，自己不改代码
   - [x] 数据、命令和启动参数（2026-11-13）：workspace.json 的 `leaderSessions`、设置 `dispatch.leader`（默认关）、`wavi ls --all` / `wavi adopt` / `wavi tell`、`wavi ls` 分开写等权限和等回答、leader 能读本项目任一会话、接管走确认条、leader 的子会话简报写「有问题写在回复里」、报告叫醒的一轮不提醒；Claude 加 `--disallowedTools Edit Write NotebookEdit MultiEdit`，Codex 加只读权限 profile（`$CODEX_HOME/config.toml` 有 `sandbox_mode` 时 `leaderCheck` 报出来）；单元测试 `dispatch.test.ts`、`handler.test.ts`、`reports.test.ts`、`bridge.test.ts`、`workspace-model.test.ts`、`workspace-file.test.ts`、`saved-runs.test.ts`、`typing.test.ts`、`controller.test.ts`、`src/main/dispatch/leader.test.ts`、`validate.test.ts`
   - [ ] 界面：新建会话面板「作为 leader」、项目 ⋯「新建 leader…」、设置 · 自动化 · 派活的开关、确认条的「接管」行、侧栏第二行的 tell、会话头 `leader · 本小时叫醒 N 次`
   - [ ] e2e 和真 agent 跑一次（Claude、Codex 各一次 leader）

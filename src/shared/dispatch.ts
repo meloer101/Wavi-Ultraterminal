@@ -43,8 +43,8 @@ export const isDispatchAgent = (value: unknown): value is DispatchAgent => isCli
 export const agentLabel = (kind: DispatchAgent): string => AGENT_SPECS[kind].label
 
 /**
- * Who can be a project's leader session (PRD F21 v1.177): an agent that runs `wavi`, has a way in that does not type
- * into its input line, and whose launch flags can turn off changing files (§6.14 v1.177). Terminal sessions only; the
+ * Who can be a project's leader session (PRD F21 v1.178): an agent that runs `wavi`, has a way in that does not type
+ * into its input line, and whose launch flags can turn off changing files (§6.14 v1.178). Terminal sessions only; the
  * other CLIs and GUI sessions come when measured. Every CLI can still be a leader's worker.
  */
 const LEADER_AGENTS: Partial<Record<DispatchAgent, true>> = { claude: true, codex: true }
@@ -52,7 +52,7 @@ const LEADER_AGENTS: Partial<Record<DispatchAgent, true>> = { claude: true, code
 /** Whether a session of this kind and 界面 can be its project's leader (the only answer to that question). */
 export const canLead = (kind: AgentKind, ui: SessionUi = 'cli'): kind is DispatchAgent => kind !== 'shell' && ui !== 'gui' && LEADER_AGENTS[kind] === true
 
-/** What main found on this machine that keeps an agent from being a leader (PRD F21 v1.177 · 不改代码). */
+/** What main found on this machine that keeps an agent from being a leader (PRD F21 v1.178 · 不改代码). */
 export interface LeaderCheck {
   /** The user's `$CODEX_HOME/config.toml` sets `sandbox_mode`, so Codex ignores the read-only permission profile. */
   codexSandboxMode: boolean
@@ -104,13 +104,13 @@ export type WaviCommand =
   | { name: 'run'; agent: DispatchAgent; task: string; title?: string; model?: string; base: WaviBase; ui?: SessionUi }
   | { name: 'send'; id: string; text: string }
   | { name: 'report'; text: string }
-  /** `all`: a leader's `wavi ls --all`, every session of its project (PRD F21 v1.177). */
+  /** `all`: a leader's `wavi ls --all`, every session of its project (PRD F21 v1.178). */
   | { name: 'ls'; all?: true }
   | { name: 'read'; id: string; offset: number }
   | { name: 'stop'; id: string }
-  /** A leader takes over one of the user's own top-level sessions, with a task for it (PRD F21 v1.177 · 接管). */
+  /** A leader takes over one of the user's own top-level sessions, with a task for it (PRD F21 v1.178 · 接管). */
   | { name: 'adopt'; id: string; task: string }
-  /** A leader puts one decision in front of the user (PRD F21 v1.177 · 交给用户). */
+  /** A leader puts one decision in front of the user (PRD F21 v1.178 · 交给用户). */
   | { name: 'tell'; text: string }
   /** PRD F24: a 定时任务 the user confirms; to this session unless `agent` asks for a new session each time. */
   | { name: 'schedule'; text: string; when: WaviWhen; title?: string; agent?: CliAgent }
@@ -421,7 +421,7 @@ export const WAVI_SKILL = [
 export const WAVI_SYSTEM_PROMPT =
   'You are running inside Wavi. To hand a self-contained piece of work to another coding agent (Claude Code, Codex, Gemini, Grok, Pi and others), each in its own git worktree, run `wavi` in the shell; run `wavi --skill` first to learn how. Results come back to you as a message.'
 
-/** Appended to the launch's system prompt for a project's leader session (PRD F21 v1.177 · 不改代码). */
+/** Appended to the launch's system prompt for a project's leader session (PRD F21 v1.178 · 不改代码). */
 export const WAVI_LEADER_PROMPT = [
   "You are this project's leader session in Wavi: the user talks to you, and you get their work done through other sessions.",
   'Plan the work, start sessions with `wavi run`, take over the user\'s own sessions with `wavi adopt`, follow up with `wavi send`, and check results with `wavi ls --all` and `wavi read`; answer your sessions\' questions yourself.',
@@ -429,14 +429,14 @@ export const WAVI_LEADER_PROMPT = [
   'Bring the user only what needs their decision, with `wavi tell "<what to decide>"`, then end your turn. Run `wavi --skill` first.'
 ].join(' ')
 
-/** Claude Code's file-changing tools, off for a leader (measured 2.1.325: `wavi` still runs, §6.14 v1.177). */
+/** Claude Code's file-changing tools, off for a leader (measured 2.1.325: `wavi` still runs, §6.14 v1.178). */
 export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'MultiEdit'] as const
 
-/** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.177). */
+/** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.178). */
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
 /**
- * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.177). Claude: its editing
+ * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.178). Claude: its editing
  * tools off, default permission mode kept, so a write from the shell asks the user. Codex: a profile that extends
  * `:read-only` and lets it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout.
  * Empty for an agent that cannot lead.
@@ -489,7 +489,7 @@ export function startRefusal(input: { depth: number; toolsOn: boolean; openTasks
 }
 
 /**
- * Why a leader may not adopt this session (PRD F21 v1.177 · 接管), or null. The session joins the leader's tree with
+ * Why a leader may not adopt this session (PRD F21 v1.178 · 接管), or null. The session joins the leader's tree with
  * the sessions it dispatched itself: `subtreeSize` of them (open ones), `subtreeDepth` levels below it (0: none).
  * `openTasks` / `treeSize` as for `startRefusal`, of the leader.
  */
@@ -613,7 +613,7 @@ export function childBrief(input: {
   branch: string
   base: string
   snapshot: boolean
-  /** The dispatcher is its project's leader (PRD F21 v1.177 · 问题): questions go in the reply, not a question tool. */
+  /** The dispatcher is its project's leader (PRD F21 v1.178 · 问题): questions go in the reply, not a question tool. */
   leader?: boolean
 }): string {
   const from = `${agentLabel(input.parentAgent)}（会话「${input.parentTitle || '未命名'}」）`
@@ -639,7 +639,7 @@ function briefRules(onward: string, leader: boolean): string {
 }
 
 /**
- * The message an adopted session gets once the user let the leader take it over (PRD F21 v1.177 · 接管): who it
+ * The message an adopted session gets once the user let the leader take it over (PRD F21 v1.178 · 接管): who it
  * reports to from now on, the leader's task and the same rules as a child's brief. Framed like `wavi send`'s: from
  * another session, not the user.
  */
@@ -891,7 +891,7 @@ export function tellLabel(text: string): string {
   return chars.length > 200 ? `${chars.slice(0, 199).join('')}…` : line
 }
 
-/** How many times reports woke this dispatcher in the last hour (a leader's header, PRD F21 v1.177 · 花费). */
+/** How many times reports woke this dispatcher in the last hour (a leader's header, PRD F21 v1.178 · 花费). */
 export const wakesThisHour = (queue: ReportQueue, now: number): number => queue.sent.filter((t) => now - t < HOUR).length
 
 /** A page of a long message for `wavi read`. */
@@ -935,7 +935,7 @@ export const DISPATCH_IPC = {
   reply: 'dispatch:reply',
   /** invoke(DeliverRequest) → DeliverResult: put a message into a session through its agent's own channel */
   deliver: 'dispatch:deliver',
-  /** invoke() → LeaderCheck: what on this machine keeps an agent from being a leader (PRD F21 v1.177) */
+  /** invoke() → LeaderCheck: what on this machine keeps an agent from being a leader (PRD F21 v1.178) */
   leaderCheck: 'dispatch:leader-check'
 } as const
 
@@ -995,7 +995,7 @@ export interface PendingStart {
   /** The dispatcher's checkout has uncommitted changes, which a `head` child will not have. */
   uncommitted: boolean
   /**
-   * A leader's `wavi adopt` (PRD F21 v1.177): `childId` is the user's session it takes over, `plan` only describes it
+   * A leader's `wavi adopt` (PRD F21 v1.178): `childId` is the user's session it takes over, `plan` only describes it
    * (its agent, title, branch, path and the task; `adoptPlan`) — no worktree is made.
    */
   adopt?: true

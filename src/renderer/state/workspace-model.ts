@@ -19,7 +19,7 @@ export interface WorkspaceData {
   activeSessionId: SessionId | null
   /** The main area's split (PRD F20); absent / null = the active session alone. Kept in step by reconcileSplit. */
   split?: SplitNode | null
-  /** Each project's leader session (PRD F21 v1.177); absent / empty = none. Kept valid by pruneLeaders. */
+  /** Each project's leader session (PRD F21 v1.178); absent / empty = none. Kept valid by pruneLeaders. */
   leaderSessions?: Readonly<Record<ProjectId, SessionId>>
 }
 
@@ -175,7 +175,7 @@ export function retargetSession(data: WorkspaceData, sessionId: SessionId, chang
   return pruneLeaders({ ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) })
 }
 
-/** The project's leader session (PRD F21 v1.177), or null. */
+/** The project's leader session (PRD F21 v1.178), or null. */
 export function leaderOf(data: Pick<WorkspaceData, 'leaderSessions'>, projectId: ProjectId): SessionId | null {
   return data.leaderSessions?.[projectId] ?? null
 }
@@ -195,7 +195,7 @@ function pruneLeaders(data: WorkspaceData): WorkspaceData {
 }
 
 /**
- * Makes a session its project's leader (PRD F21 v1.177 · 开): only an agent that can lead (`canLead`), in that
+ * Makes a session its project's leader (PRD F21 v1.178 · 开): only an agent that can lead (`canLead`), in that
  * project, not dispatched by another session, and only while the project has no other leader. `data` itself when refused.
  */
 export function setLeader(data: WorkspaceData, projectId: ProjectId, sessionId: SessionId): WorkspaceData {
@@ -224,7 +224,7 @@ export function closeSession(data: WorkspaceData, sessionId: SessionId): Workspa
     })
   const activeSessionId =
     data.activeSessionId === sessionId ? (sessions[at]?.id ?? sessions[at - 1]?.id ?? null) : data.activeSessionId
-  // A closed leader leaves its project without one (PRD F21 v1.177 · 存盘).
+  // A closed leader leaves its project without one (PRD F21 v1.178 · 存盘).
   return pruneLeaders({ ...data, sessions, activeSessionId })
 }
 

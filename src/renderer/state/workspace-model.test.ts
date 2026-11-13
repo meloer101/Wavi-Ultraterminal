@@ -515,7 +515,7 @@ describe('newProjectAgent (⌘O)', () => {
   })
 })
 
-describe('leader sessions (PRD F21 v1.177)', () => {
+describe('leader sessions (PRD F21 v1.178)', () => {
   const ui = { sidebarCollapsed: false, sidebarWidth: 264, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 520, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [], newSessionWorkdir: {} }
 
   it('makes one Claude or Codex terminal session per project its leader, and is saved with the workspace', () => {

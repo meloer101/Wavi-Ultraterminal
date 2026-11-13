@@ -72,7 +72,7 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
             if (action === 'send') {
               // A session restored from disk starts (resuming its conversation) before it takes the message.
               await ensureAgentUp(target.id)
-              // The user's own message: a leader's turn this starts is theirs (PRD F21 v1.177).
+              // The user's own message: a leader's turn this starts is theirs (PRD F21 v1.178).
               noteUserLine(target.id)
               await submitPrompt(target.id, text)
             } else {

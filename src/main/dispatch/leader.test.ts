@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { codexConfigPath, codexLeaderSandboxArgs, leaderCheck, setsSandboxMode } from './leader'
 
-describe('Codex as a leader (PRD F21 v1.177 · 不改代码)', () => {
+describe('Codex as a leader (PRD F21 v1.178 · 不改代码)', () => {
   let dir: string | null = null
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true })
@@ -36,7 +36,7 @@ describe('Codex as a leader (PRD F21 v1.177 · 不改代码)', () => {
   })
 
   it('pins a Codex leader read-only on its command line when the config sets sandbox_mode, else adds nothing', () => {
-    expect(codexLeaderSandboxArgs({ codexSandboxMode: true })).toEqual(['-c', 'sandbox_mode="read-only"'])
+    expect(codexLeaderSandboxArgs({ codexSandboxMode: true })).toEqual(['--sandbox', 'read-only'])
     expect(codexLeaderSandboxArgs({ codexSandboxMode: false })).toEqual([])
   })
 })

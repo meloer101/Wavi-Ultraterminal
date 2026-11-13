@@ -172,7 +172,7 @@ export interface DispatchSettings {
   tools: boolean
   /** Start the sessions an agent asks for without the confirmation strip (the limits still apply). */
   autoApprove: boolean
-  /** 「leader 会话」(PRD F21 v1.177): the new-session panel offers 作为 leader. Off by default. */
+  /** 「leader 会话」(PRD F21 v1.178): the new-session panel offers 作为 leader. Off by default. */
   leader: boolean
 }
 

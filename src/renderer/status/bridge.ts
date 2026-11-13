@@ -76,7 +76,7 @@ export function startStatusBridge(): () => void {
     // PRD F21: the dispatcher's agent is gone, so its requests to start sessions go too.
     onWaviAskAbandoned: (id) => dropConfirmsOf(id),
     // PRD F21 回报: a dispatched session's finished turn that goes to its dispatcher as a report is read already.
-    // PRD F21 v1.177: so is a leader's turn that a report woke, unless the user spoke there since.
+    // PRD F21 v1.178: so is a leader's turn that a report woke, unless the user spoke there since.
     finishReported: (id) => finishGoesToDispatcher(id) || leaderTurnQuiet(id)
   })
 
@@ -232,7 +232,7 @@ export function startStatusBridge(): () => void {
   const applyConfirms = (): void => {
     const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
     for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
-    // PRD F21 v1.177: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
+    // PRD F21 v1.178: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
     for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !labels.has(id)) labels.set(id, tellLabel(text))
     for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
     asking = new Set(labels.keys())

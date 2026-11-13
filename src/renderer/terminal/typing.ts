@@ -4,7 +4,7 @@
 import type { SessionId } from '@shared/types'
 
 const typing = new Map<SessionId, { at: number; draft: boolean }>()
-/** When the user last submitted a line (Enter) in each terminal: a leader's turn they started is theirs (PRD F21 v1.177). */
+/** When the user last submitted a line (Enter) in each terminal: a leader's turn they started is theirs (PRD F21 v1.178). */
 const submits = new Map<SessionId, number>()
 const submitListeners = new Set<(sessionId: SessionId) => void>()
 
@@ -47,7 +47,7 @@ export function noteInput(sessionId: SessionId, data: string, now = Date.now()):
   }
 }
 
-/** The user pressed Enter in a session's terminal (a leader's `wavi tell` is answered then, PRD F21 v1.177). */
+/** The user pressed Enter in a session's terminal (a leader's `wavi tell` is answered then, PRD F21 v1.178). */
 export function onUserSubmit(listener: (sessionId: SessionId) => void): () => void {
   submitListeners.add(listener)
   return () => submitListeners.delete(listener)
@@ -55,7 +55,7 @@ export function onUserSubmit(listener: (sessionId: SessionId) => void): () => vo
 
 /**
  * The user sent a line to this session from outside its terminal (the phone, 总览's batch send): their turn, not a
- * report's (PRD F21 v1.177). Only `lastSubmitIn`; a leader's `wavi tell` is answered in its terminal.
+ * report's (PRD F21 v1.178). Only `lastSubmitIn`; a leader's `wavi tell` is answered in its terminal.
  */
 export function noteUserLine(sessionId: SessionId, now = Date.now()): void {
   submits.set(sessionId, now)

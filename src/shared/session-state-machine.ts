@@ -45,7 +45,7 @@ export interface Ask {
   agent: string
   label: string
   at: number
-  /** A permission dialog or a question to answer (a leader's `wavi ls --all` tells them apart, PRD F21 v1.177). */
+  /** A permission dialog or a question to answer (a leader's `wavi ls --all` tells them apart, PRD F21 v1.178). */
   kind?: AskKind
 }
 

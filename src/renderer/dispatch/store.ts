@@ -24,11 +24,11 @@ interface State {
   /** A child's `+84 −3 · 2 个文件` as its last report counted, for the GUI dispatcher's graph (Figma 68′). Not saved. */
   changes: Record<SessionId, string | undefined>
   /**
-   * A leader's `wavi tell` (PRD F21 v1.177 · 交给用户): the decision it put before the user, shown as a Wavi ask on the
+   * A leader's `wavi tell` (PRD F21 v1.178 · 交给用户): the decision it put before the user, shown as a Wavi ask on the
    * leader until the user submits a line in its terminal. Not saved.
    */
   tells: Record<SessionId, string | undefined>
-  /** When a report last went into a leader (its next turn is the reports', not the user's, PRD F21 v1.177). Not saved. */
+  /** When a report last went into a leader (its next turn is the reports', not the user's, PRD F21 v1.178). Not saved. */
   woken: Record<SessionId, number | undefined>
 }
 
@@ -139,7 +139,7 @@ export function setWoken(id: SessionId, at: number | null): void {
 
 /**
  * The session is no longer its project's leader (closed, or no longer the leader): its decision for the user and the
- * time a report last woke it go (PRD F21 v1.177), so nothing of it as leader remains.
+ * time a report last woke it go (PRD F21 v1.178), so nothing of it as leader remains.
  */
 export function forgetLeader(id: SessionId): void {
   const { tells, woken } = useDispatch.getState()

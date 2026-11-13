@@ -88,7 +88,7 @@ describe('insertIntoTerminal', () => {
   })
 })
 
-describe('who sent a prompt (PRD F21 v1.177)', () => {
+describe('who sent a prompt (PRD F21 v1.178)', () => {
   it('counts the user’s click as their line, not Wavi’s own send nor a send refused over a menu', async () => {
     forgetTyping('s-gui')
     forgetTyping('s-1')

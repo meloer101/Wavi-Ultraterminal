@@ -174,7 +174,7 @@ describe('sanitizeSavedDispatch', () => {
     expect(sanitizeSavedDispatch({ confirms: [odd] }, sessions)?.confirms).toEqual([pending])
   })
 
-  it('keeps a leader’s adopt request, whose plan makes no worktree (PRD F21 v1.177)', () => {
+  it('keeps a leader’s adopt request, whose plan makes no worktree (PRD F21 v1.178)', () => {
     const adopt: PendingStart = { ...adoptPending }
     expect(sanitizeSavedDispatch({ confirms: [adopt] }, sessions)?.confirms).toEqual([adopt])
     expect(sanitizeSavedDispatch({ confirms: [{ ...adopt, plan: { ...adopt.plan, request: { root: 'relative' } } }] }, sessions)).toBeNull()

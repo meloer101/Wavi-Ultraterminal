@@ -241,7 +241,7 @@ function hold(pending: PendingStart, caller: Place): void {
   }
 }
 
-// --- wavi adopt (PRD F21 v1.177 · 接管) ------------------------------------------------------------------------------
+// --- wavi adopt (PRD F21 v1.178 · 接管) ------------------------------------------------------------------------------
 
 /** How many levels of sessions hang under this one (0: none), archived ones too: they keep their dispatcher. */
 function levelsBelow(id: SessionId): number {
@@ -286,7 +286,7 @@ async function adopt(caller: Place, request: DispatchRequest, command: Extract<W
   )
 }
 
-/** 开始 on an adopt request: the session reports to the leader from now on and gets the task (PRD F21 v1.177 · 接管). */
+/** 开始 on an adopt request: the session reports to the leader from now on and gets the task (PRD F21 v1.178 · 接管). */
 function adoptNow(leader: Place, pending: PendingStart): StartedChild | null {
   const target = placeOf(pending.childId)
   // It changed while the request waited (closed, dispatched by someone, its agent gone, archived): nothing to adopt.
@@ -301,7 +301,7 @@ function adoptNow(leader: Place, pending: PendingStart): StartedChild | null {
   return { id: session.id, agent: kind, title: session.title, branch: target.worktree.branch, adopted: true }
 }
 
-// --- wavi tell (PRD F21 v1.177 · 交给用户) ---------------------------------------------------------------------------
+// --- wavi tell (PRD F21 v1.178 · 交给用户) ---------------------------------------------------------------------------
 
 function tell(caller: Place, text: string): WaviResult {
   if (!isLeaderSession(caller.session.id)) {
@@ -406,7 +406,7 @@ const STATUS_TEXT: Record<Session['status'], string> = {
   exited: 'exited'
 }
 
-/** What its agent's own ask waits for (PRD F21 v1.177: a leader tells a permission from a question). */
+/** What its agent's own ask waits for (PRD F21 v1.178: a leader tells a permission from a question). */
 const WAITING_TEXT: Record<NonNullable<Session['waitingFor']>, string> = {
   permission: 'waiting for the user to answer a permission prompt in its terminal',
   question: 'waiting for the user to answer a question in its terminal'
@@ -477,7 +477,7 @@ function underLeader(place: Place, leaderId: SessionId): boolean {
   return false
 }
 
-/** `wavi ls --all` (PRD F21 v1.177 · 看): every open agent session of the leader's project but its own. */
+/** `wavi ls --all` (PRD F21 v1.178 · 看): every open agent session of the leader's project but its own. */
 async function listAll(caller: Place): Promise<WaviResult> {
   if (!isLeaderSession(caller.session.id)) return waviFail('not_allowed', "Only the project's leader session lists the whole project. wavi ls lists the sessions you started.")
   const places = useWorkspace

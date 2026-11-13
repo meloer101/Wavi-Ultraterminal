@@ -37,7 +37,7 @@ async function send(sessionId: string, text: string, paths: string[]): Promise<R
     return result.ok ? { ok: true } : remoteFail(result.reason)
   }
   if (paths.length > 0) await insertPaths(sessionId, paths)
-  // The user speaks from the phone: a leader's turn this starts is theirs, with the usual notification (PRD F21 v1.177).
+  // The user speaks from the phone: a leader's turn this starts is theirs, with the usual notification (PRD F21 v1.178).
   noteUserLine(sessionId)
   if (text.trim()) await submitPrompt(sessionId, text)
   else await submitInputLine(sessionId, '[Image #')

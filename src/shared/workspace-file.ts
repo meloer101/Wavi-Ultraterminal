@@ -165,7 +165,7 @@ export interface WorkspaceFile {
   /** Dispatch's waiting 开始 and reports on their way (saved-runs.ts); only sessions that exist. Absent when none. */
   dispatch?: SavedDispatch
   /**
-   * Each project's leader session (PRD F21 v1.177), by project id: an agent session (not a plain terminal) in one of that
+   * Each project's leader session (PRD F21 v1.178), by project id: an agent session (not a plain terminal) in one of that
    * project's worktrees. At most one per project. Absent when none.
    */
   leaderSessions?: Record<string, string>
@@ -393,7 +393,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
 
 /**
  * A leader whose session is gone, is in another project's worktree or cannot lead (`canLead`: a plain terminal, a GUI
- * session, an agent not measured as leader) is dropped (PRD F21 v1.177 · 存盘).
+ * session, an agent not measured as leader) is dropped (PRD F21 v1.178 · 存盘).
  */
 export function sanitizeLeaders(
   raw: unknown,

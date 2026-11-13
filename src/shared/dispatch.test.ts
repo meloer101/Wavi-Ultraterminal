@@ -361,7 +361,7 @@ describe('the rest', () => {
   })
 })
 
-describe('leader session (PRD F21 v1.177)', () => {
+describe('leader session (PRD F21 v1.178)', () => {
   const command = (...argv: string[]) => {
     const args = parseWaviArgv(argv)
     return args.kind === 'command' ? parseWaviCommand(args.command) : args

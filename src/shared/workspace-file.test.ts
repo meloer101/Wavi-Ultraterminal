@@ -32,7 +32,7 @@ describe('sanitizeWorkspaceFile', () => {
     for (const key of ['fixRuns', 'shipRuns', 'dispatch']) expect(plain).not.toHaveProperty(key)
   })
 
-  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.177)', () => {
+  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.178)', () => {
     const raw = {
       ...structuredClone(valid),
       projects: [...valid.projects, { id: 'p2', name: 'other', rootPath: '/code/other' }],
@@ -46,7 +46,7 @@ describe('sanitizeWorkspaceFile', () => {
     }
   })
 
-  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.177)', () => {
+  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.178)', () => {
     const sessions = [
       ...valid.sessions,
       { id: 's3', worktreeId: 'w1', kind: 'gemini', title: 'Gemini', startedAt: 150, lastActivityAt: 150 },

@@ -212,7 +212,7 @@ describe('wavi in a window (PRD F21)', () => {
   })
 })
 
-describe('wavi for a project’s leader (PRD F21 v1.177)', () => {
+describe('wavi for a project’s leader (PRD F21 v1.178)', () => {
   beforeEach(() => {
     sessions = [
       session('lead'),
