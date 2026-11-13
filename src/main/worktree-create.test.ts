@@ -170,6 +170,10 @@ describe('createWorktree', () => {
     expect(existsSync(join(result.path, 'fix.txt'))).toBe(true)
     expect(git(clone, 'config', '--get', 'branch.feat/fix.base').trim()).toBe('main')
     expect(git(clone, 'rev-parse', '--abbrev-ref', 'feat/fix@{upstream}').trim()).toBe('origin/feat/fix')
+    // The PR's branch name taken locally: another name still tracks the PR head, so a push updates the PR.
+    const other = await createWorktree({ root: clone, branch: 'jacob/pr-fix', base: 'main', folder: 'pr-fix-2', prepare: false, startAt: 'refs/remotes/origin/feat/fix' })
+    expect(other.ok).toBe(true)
+    expect(git(clone, 'rev-parse', '--abbrev-ref', 'jacob/pr-fix@{upstream}').trim()).toBe('origin/feat/fix')
     expect(await createWorktree({ root: clone, branch: 'x', base: 'main', folder: 'pr-x', prepare: false, startAt: 'refs/remotes/origin/nope' })).toEqual({ ok: false, reason: 'base-missing' })
     expect(await createWorktree({ root: clone, branch: 'x', base: 'main', folder: 'pr-x', prepare: false, startAt: 'refs/heads/main' })).toEqual({ ok: false, reason: 'invalid' })
   })

@@ -134,6 +134,8 @@ export async function prStart(raw: unknown): Promise<BoardPrStart> {
   if ((await detectGh()) !== 'ready') return { ok: false, message: 'gh 还没有登录：在终端运行 gh auth login' }
   const where = await projectRepo(request.root)
   if (!where) return { ok: false, message: '这个项目不在 GitHub 上' }
+  const wait = paused()
+  if (wait) return { ok: false, message: wait }
   const viewed = await ghJson(['pr', 'view', String(request.number), `--repo=${repoArg(where.repo)}`, '--json=headRefName,baseRefName,isCrossRepository'])
   if ('error' in viewed) return { ok: false, message: viewed.error }
   const head = parsePrHead(viewed.json)

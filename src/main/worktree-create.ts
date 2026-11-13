@@ -200,17 +200,20 @@ async function startPoint(top: string, base: string): Promise<string | null> {
 }
 
 /**
- * A branch started at `refs/remotes/<remote>/<its own name>` (a same-repository PR's head) tracks it, so 推送 updates
- * the PR and F16 finds the PR. Any other start (a fork's PR head) gets no upstream. A failure is logged: the branch is
- * still there, and 推送 asks before its first push as for any branch without one.
+ * A branch started at `refs/remotes/<remote>/<head>` (a same-repository PR's head) tracks it — under its own name, or
+ * another when that one was taken locally — so 推送 updates the PR and F16 finds the PR. Any other start (a fork's PR
+ * head) gets no upstream. A failure is logged: the branch is still there, and 推送 asks before its first push as for
+ * any branch without one.
  */
 async function trackPrHead(top: string, branch: string, startAt: string): Promise<void> {
-  if (!startAt.startsWith('refs/remotes/') || !startAt.endsWith(`/${branch}`)) return
-  const remote = startAt.slice('refs/remotes/'.length, -branch.length - 1)
-  const remotes = (await orEmpty(git(top, ['remote']))).split('\n').map((r) => r.trim())
-  if (!remote || !remotes.includes(remote)) return
-  await git(top, ['branch', `--set-upstream-to=${remote}/${branch}`, '--', branch]).catch((error: unknown) =>
-    console.error(`[worktree-create] upstream of ${branch} not set to ${remote}/${branch}:`, errorText(error))
+  if (!startAt.startsWith('refs/remotes/')) return
+  const tracked = startAt.slice('refs/remotes/'.length)
+  const remotes = (await orEmpty(git(top, ['remote']))).split('\n').map((r) => r.trim()).filter(Boolean)
+  // The longest remote name that prefixes it (a remote may itself contain `/`).
+  const remote = remotes.filter((r) => tracked.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0]
+  if (!remote) return
+  await git(top, ['branch', `--set-upstream-to=${tracked}`, '--', branch]).catch((error: unknown) =>
+    console.error(`[worktree-create] upstream of ${branch} not set to ${tracked}:`, errorText(error))
   )
 }
 

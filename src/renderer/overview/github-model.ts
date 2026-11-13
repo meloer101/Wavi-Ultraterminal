@@ -1,7 +1,6 @@
 // Pure view model of 看板 · GitHub (PRD F9 v1.177, Figma 77B / 77F): which projects show in which order, the filter,
 // a PR's tags, the header's summary and which session handles an item.
 import type { BoardItem, BoardPr, GitHubLink } from '@shared/github-board'
-import { sameLink } from '@shared/github-board'
 import { repoArg } from '@shared/pull-requests'
 import type { Project, Session, Worktree } from '@shared/types'
 import type { ProjectLoad } from './github-store'
@@ -70,12 +69,20 @@ export function checksMark(pr: BoardPr): { state: 'passing' | 'failing' | 'pendi
   return { state: checks.state, text: checks.state === 'passing' ? '检查通过' : '检查进行中' }
 }
 
-/** The session handling an item: the latest one started on it whose worktree is not archived. */
-export function linkedSession(sessions: readonly Session[], worktrees: readonly Worktree[], link: GitHubLink): Session | null {
+/** A link's key in linkedSessions' map: the repository without case, the kind and the number. */
+export const linkKey = (link: GitHubLink): string => `${link.repo.toLowerCase()}#${link.kind}#${link.number}`
+
+/** The session handling each item: the latest one started on it whose worktree is not archived (one pass for all rows). */
+export function linkedSessions(sessions: readonly Session[], worktrees: readonly Worktree[]): Map<string, Session> {
   const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
-  let best: Session | null = null
-  for (const s of sessions) if (sameLink(s.github, link) && !archived.has(s.worktreeId) && (!best || s.startedAt > best.startedAt)) best = s
-  return best
+  const byLink = new Map<string, Session>()
+  for (const s of sessions) {
+    if (!s.github || archived.has(s.worktreeId)) continue
+    const key = linkKey(s.github)
+    const best = byLink.get(key)
+    if (!best || s.startedAt > best.startedAt) byLink.set(key, s)
+  }
+  return byLink
 }
 
 export const linkOf = (repo: Parameters<typeof repoArg>[0], item: Pick<BoardItem, 'kind' | 'number'>): GitHubLink => ({ repo: repoArg(repo), kind: item.kind, number: item.number })

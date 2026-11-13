@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardItem, BoardList, BoardPr } from '@shared/github-board'
 import type { Project, Session, Worktree } from '@shared/types'
-import { checksMark, ghProblem, githubSummary, linkedSession, matchesFilter, orderProjects, prTags } from './github-model'
+import { checksMark, ghProblem, githubSummary, linkedSessions, linkKey, matchesFilter, orderProjects, prTags } from './github-model'
 
 const item: BoardItem = { kind: 'issue', number: 139, title: '结算页在 Safari 17 上白屏', url: '', author: 'lin-wei', labels: ['bug'], comments: 0, updatedAt: 0 }
 const pr = (patch: Partial<BoardPr>): BoardPr => ({
@@ -49,6 +49,8 @@ describe('github model', () => {
       { id: 's3', worktreeId: 'w1', startedAt: 3, github: { ...link, number: 1 } }
     ] as Session[]
     const worktrees = [{ id: 'w1' }, { id: 'w2', archived: { id: 'x' } }] as unknown as Worktree[]
-    expect(linkedSession(sessions, worktrees, link)?.id).toBe('s1')
+    const byLink = linkedSessions(sessions, worktrees)
+    expect(byLink.get(linkKey({ ...link, repo: 'GitHub.com/A/b' }))?.id).toBe('s1')
+    expect(byLink.get(linkKey({ ...link, kind: 'pr' }))).toBeUndefined()
   })
 })

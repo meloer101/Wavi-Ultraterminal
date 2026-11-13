@@ -121,15 +121,18 @@ function Sheet() {
   }, [])
 
   // A generated name per project, made once its branches are known (and kept while the sheet is open).
+  // A PR whose branch is already here: checked out in a worktree, the session opens there; otherwise the new branch gets
+  // the item's name and still starts at, and tracks, the PR head (WorktreeCreateRequest.startAt).
+  const localPrBranch = task?.branch && info ? (info.branches.find((b) => !b.remote && b.name === task.branch) ?? null) : null
   const generated = useMemo(() => {
     if (!info?.repo) return ''
     const taken = new Set(info.branches.filter((b) => !b.remote).map((b) => b.name))
-    if (task) return task.branch ?? itemBranch(info.prefix, task.branchFrom.kind, task.branchFrom.number, task.branchFrom.title, taken)
+    if (task) return task.branch && !taken.has(task.branch) ? task.branch : itemBranch(info.prefix, task.branchFrom.kind, task.branchFrom.number, task.branchFrom.title, taken)
     return generateBranchName(info.prefix, taken)
   }, [info, task])
 
   const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? (task ? 'worktree' : initialWorkdir(remembered, projectId ?? '', true)))
-  const base = baseChoice ?? task?.base ?? (info ? defaultBase(info) : null)
+  const base = baseChoice ?? (isElsewhere(localPrBranch) ? localPrBranch.name : task?.base) ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
   const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
   const form = { workdir, base, branch, prepare }

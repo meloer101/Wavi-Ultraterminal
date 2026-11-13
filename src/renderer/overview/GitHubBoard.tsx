@@ -1,7 +1,7 @@
 // 看板 · GitHub (PRD F9 v1.177, Figma 77B / 77F / 77G): each project's open issues (left) and PRs (right) through the
 // user's gh login, a scope over all of them, and a row per item. A row opens the item (GitHubDetail); a session already
 // started on it takes the row's end, and clicking that enters it. Projects not on GitHub are folded at the bottom.
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, Circle, CircleDot, GitPullRequest, GitPullRequestDraft, MessageSquare, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { BOARD_SCOPES, type BoardItem, type BoardPr, type BoardProject } from '@shared/github-board'
@@ -13,7 +13,7 @@ import { useWorkspace } from '../state/workspace'
 import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { glyphStatus } from '../lifecycle/present'
-import { checksMark, ghProblem, linkedSession, linkOf, matchesFilter, orderProjects, prTags } from './github-model'
+import { checksMark, ghProblem, linkedSessions, linkKey, linkOf, matchesFilter, orderProjects, prTags } from './github-model'
 import { openItem, refreshGitHub, setScope, useGitHubBoard } from './github-store'
 import { GitHubDetail } from './GitHubDetail'
 import { enterSession } from './store'
@@ -25,8 +25,13 @@ const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** "Now" to the minute on the shared clock: `3h` changes without re-rendering every row each frame. */
 const minuteNow = (): number => Math.floor(Date.now() / 60_000) * 60_000
 
+/** Which session handles which item, built once per workspace change for every row. */
+const Linked = createContext<ReadonlyMap<string, Session>>(new Map())
+
 export function GitHubBoard({ filter }: { filter: string }) {
   const projects = useWorkspace((s) => s.projects)
+  const { sessions, worktrees } = useWorkspace(useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees })))
+  const linked = useMemo(() => linkedSessions(sessions, worktrees), [sessions, worktrees])
   const { scope, byRoot, open } = useGitHubBoard(useShallow((g) => ({ scope: g.scope, byRoot: g.byRoot, open: g.open })))
   const roots = projects.map((p) => p.rootPath).join('\n')
 
@@ -47,6 +52,7 @@ export function GitHubBoard({ filter }: { filter: string }) {
   if (projects.length === 0) return <p className={styles.empty}>还没有项目。</p>
 
   return (
+    <Linked.Provider value={linked}>
     <div className={styles.board} data-testid="github-board">
       <Segmented label="范围" value={scope} options={BOARD_SCOPES} onChange={setScope} className={styles.scope} />
       {orderProjects(projects, byRoot).map(({ project, offGitHub }) => (
@@ -54,6 +60,7 @@ export function GitHubBoard({ filter }: { filter: string }) {
       ))}
       {open && <GitHubDetail item={open} />}
     </div>
+    </Linked.Provider>
   )
 }
 
@@ -114,7 +121,7 @@ function Column({ label, count, items, project, result }: { label: string; count
 }
 
 function ItemRow({ item, project, result }: { item: BoardItem; project: Project; result: Extract<BoardProject, { state: 'ok' }> }) {
-  const linked = useWorkspace((s) => linkedSession(s.sessions, s.worktrees, linkOf(result.repo, item)))
+  const linked = useContext(Linked).get(linkKey(linkOf(result.repo, item))) ?? null
   const selected = useGitHubBoard((g) => g.open?.root === project.rootPath && g.open.kind === item.kind && g.open.number === item.number)
   const pr = item.kind === 'pr' ? (item as BoardPr) : null
   const mark = pr ? checksMark(pr) : null

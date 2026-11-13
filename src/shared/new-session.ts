@@ -56,8 +56,8 @@ export interface WorktreeCreateRequest {
   snapshotOf?: string
   /**
    * Start the new branch at this ref instead of at `base`, which stays its base for merging (看板 · GitHub: a PR's
-   * head). `refs/remotes/<remote>/<branch>` with the new branch's own name also becomes its upstream, so a push updates
-   * the PR; `refs/wavi/pull/<n>` is a fork's PR head main fetched. Additive: 新建会话 sets it only from 看板 · GitHub.
+   * head). `refs/remotes/<remote>/<branch>` also becomes its upstream, so a push updates the PR (whatever the new
+   * branch is called); `refs/wavi/pull/<n>` is a fork's PR head main fetched. Additive: only 看板 · GitHub sets it.
    */
   startAt?: string
 }

@@ -41,7 +41,7 @@ const BASELINE: Record<string, number> = {
   'attempts/AttemptGroups.module.css': 2,
   'dispatch/DispatchStrip.module.css': 1,
   'gui/Chat.module.css': 12,
-  'overview/Overview.module.css': 5,
+  'overview/Overview.module.css': 2,
   'overview/SessionOverlay.module.css': 3,
   'panels/files/FilesView.module.css': 1,
   'panels/files/MarkdownView.module.css': 1,
