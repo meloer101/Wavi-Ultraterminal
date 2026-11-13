@@ -146,6 +146,10 @@ export function AutomationPane({
               onChange={(autoApprove) => updateDispatch({ autoApprove })}
             />
           </Row>
+          {/* PRD F21 v1.178, Figma 81D: offers 作为 leader in 新建会话 and 新建 leader… in a project's ⋯ menu. */}
+          <Row label="leader 会话">
+            <Toggle label="leader 会话" checked={dispatch.leader} onChange={(leader) => updateDispatch({ leader })} />
+          </Row>
         </Section>
         <Section title="定时任务">
           <Row label="全部暂停">

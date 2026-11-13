@@ -18,6 +18,7 @@ import {
   noticeText,
   planChild,
   startRefusal,
+  confirmHead,
   tellLabel,
   titleFor,
   waviFail,
@@ -236,8 +237,9 @@ function hold(pending: PendingStart, caller: Place): void {
     window.setTimeout(() => decide([pending.callId], 'timeout'), DISPATCH_LIMITS.confirmMs)
   )
   if (!document.hasFocus()) {
-    const count = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id).length
-    window.tr.ui.notify({ title: `「${caller.session.title}」想开 ${count} 个会话`, body: '在 Wavi 里确认要不要开始。', tag: caller.session.id })
+    const waiting = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id)
+    const adopts = waiting.filter((c) => c.adopt).length
+    window.tr.ui.notify({ title: `「${caller.session.title}」${confirmHead(waiting.length - adopts, adopts)}`, body: '在 Wavi 里确认要不要开始。', tag: caller.session.id })
   }
 }
 

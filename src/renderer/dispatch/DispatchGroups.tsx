@@ -1,4 +1,4 @@
-// 派出的会话 in the overview (PRD F21; no Figma frame yet — drawn like the 同任务多解 section): one row per dispatcher
+// 派出的会话 in the overview (PRD F21, Figma 81B — drawn like the 同任务多解 section, its Split icon text-primary): one row per dispatcher
 // with sessions still open (同任务多解's members have their own row there, so not here), its name and each session it started as status glyph and name, then 比较 to put them
 // side by side. Clicking a name goes to that session. Status is the glyph's shape plus text, never color alone.
 import { useMemo } from 'react'
@@ -43,7 +43,7 @@ export function DispatchGroups() {
       </div>
       {groups.map((g) => (
         <div key={g.parent.id} className={styles.row} data-testid="dispatch-group" data-parent-id={g.parent.id}>
-          <span className={styles.icon}>
+          <span className={`${styles.icon} ${local.icon}`}>
             <Split {...ICON} />
           </span>
           <button type="button" className={`${styles.task} ${local.link}`} title={`前往「${g.parent.title}」`} onClick={() => enterSession(g.parent.id)}>

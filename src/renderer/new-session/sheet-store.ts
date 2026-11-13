@@ -1,22 +1,24 @@
-// Whether the new-session sheet is open, and for which project (⌘N: the current one; a project's ＋: that one); and
+// Whether the new-session sheet is open, and for which project (⌘N: the current one; a project's ＋: that one), with
+// 作为 leader already on (a project's ⋯ · 新建 leader…, PRD F21 v1.178); and
 // the installed agents its quicker sibling, 在此新建会话, lists at once.
 import { create } from 'zustand'
 import type { AgentAvailability } from '@shared/ipc'
 import type { ProjectId } from '@shared/types'
 
-export const useNewSessionSheet = create<{ open: boolean; projectId: ProjectId | null; generation: number }>()(() => ({
+export const useNewSessionSheet = create<{ open: boolean; projectId: ProjectId | null; leader: boolean; generation: number }>()(() => ({
   open: false,
   projectId: null,
+  leader: false,
   generation: 0
 }))
 
 let restoreFocus: HTMLElement | null = null
 
-export function openNewSessionSheet(projectId: ProjectId | null): void {
+export function openNewSessionSheet(projectId: ProjectId | null, options: { leader?: boolean } = {}): void {
   if (useNewSessionSheet.getState().open) return
   const active = document.activeElement
   restoreFocus = active instanceof HTMLElement && active !== document.body ? active : null
-  useNewSessionSheet.setState((s) => ({ open: true, projectId, generation: s.generation + 1 }))
+  useNewSessionSheet.setState((s) => ({ open: true, projectId, leader: options.leader === true, generation: s.generation + 1 }))
 }
 
 /** `refocus`: give the keyboard back to what had it (cancel); after 创建 the new session's terminal takes it instead. */

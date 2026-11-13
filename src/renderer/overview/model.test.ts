@@ -19,6 +19,19 @@ function session(id: string, worktreeId: string, status: SessionStatus, minutesA
   return { id, worktreeId, kind: 'claude', title: id, status, startedAt: NOW - 30 * MIN, lastActivityAt: NOW - minutesAgo * MIN, ...extra }
 }
 
+describe('a leader’s wavi tell (PRD F21 v1.178, Figma 81B)', () => {
+  it('reads 等你回答 with its sentence while the tell is the ask shown, 等你处理 otherwise', () => {
+    const told = session('lead', 'wam', 'needs_you', 1, { currentAction: '旧的「记住我」还留吗？' })
+    const confirming = session('lead2', 'wb', 'needs_you', 1, { currentAction: '想开 1 个会话' })
+    const tells = { lead: '旧的「记住我」还留吗？\n留就要多改一处 cookie', lead2: '先合哪个？' }
+    const rows = buildOverview({ projects, worktrees, sessions: [told, confirming], now: NOW, tells })[0]?.rows ?? []
+    expect(rows.map((r) => [r.session.id, r.statusLabel, r.summary])).toEqual([
+      ['lead', '等你回答', '旧的「记住我」还留吗？'],
+      ['lead2', '等你处理', '想开 1 个会话']
+    ])
+  })
+})
+
 describe('buildOverview', () => {
   const sessions = [
     session('run', 'wa', 'running', 1, { currentAction: '编辑 a.ts' }),

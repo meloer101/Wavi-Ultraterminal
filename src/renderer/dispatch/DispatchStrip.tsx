@@ -3,9 +3,11 @@
 // so the other sessions stay usable. Every request of that session waiting at once is one row here — agent, name, the
 // branch it gets (or 当前改动的快照), its task (a click shows all of it) — then 拒绝 / 开始. ⌘↵ starts while the strip
 // is shown; Esc stays the terminal's (it interrupts the agent). 拒绝 tells the agent not to retry.
+// A leader's `wavi adopt` (PRD F21 v1.178, Figma 81A) is a row of the same strip: the adopted session's agent,
+// 接管 <its name>, its own branch and the task; the head counts them apart (想开 N 个会话 · 接管 M 个).
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, CircleAlert, Split } from 'lucide-react'
-import { agentLabel } from '@shared/dispatch'
+import { agentLabel, confirmHead } from '@shared/dispatch'
 import { useActiveSession } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { decideConfirms } from './handler'
@@ -28,6 +30,10 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
   const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<string | null>(null)
   const count = pending.length
+  const adopts = pending.filter((c) => c.adopt).length
+  const head = confirmHead(count - adopts, adopts)
+  // 基于 is where new sessions start; an adopted one keeps its own branch.
+  const base = pending.find((c) => !c.adopt)?.base
   const uncommitted = pending.some((c) => c.uncommitted && c.plan.item.base === 'head')
 
   // ⌘↵ from the terminal or the strip itself, while the strip is on screen. Not from a sheet, the overview or any other
@@ -51,13 +57,13 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
   }, [parentId])
 
   return (
-    <div ref={ref} className={styles.strip} role="region" aria-label={`想开 ${count} 个会话`} data-testid="dispatch-strip">
+    <div ref={ref} className={styles.strip} role="region" aria-label={head} data-testid="dispatch-strip">
       <div className={styles.row}>
         <span className={styles.gutter}>
           <Split {...ICON} />
         </span>
-        <span className={styles.title}>想开 {count} 个会话</span>
-        <span className={styles.base}>基于 {pending[0]!.base}</span>
+        <span className={styles.title}>{head}</span>
+        {base !== undefined && <span className={styles.base}>基于 {base}</span>}
       </div>
       {uncommitted && (
         <div className={styles.row}>
@@ -67,7 +73,7 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
           <span className={styles.note}>未提交的改动不会带到新的 worktree 里</span>
         </div>
       )}
-      {pending.map(({ callId, plan }) => {
+      {pending.map(({ callId, plan, adopt }) => {
         const expanded = open === callId
         const firstLine = plan.item.task.split('\n').find((l) => l.trim() !== '') ?? ''
         return (
@@ -76,8 +82,8 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
               <span className={styles.gutter} title={agentLabel(plan.item.agent)} data-agent={plan.item.agent}>
                 <AgentIcon kind={plan.item.agent} size={12} />
               </span>
-              <span className={styles.name}>{plan.item.title}</span>
-              <span className={styles.branch}>{plan.branch || '当前改动的快照'}</span>
+              <span className={styles.name}>{adopt ? `接管 ${plan.item.title}` : plan.item.title}</span>
+              <span className={styles.branch}>{adopt ? plan.branch : plan.branch || '当前改动的快照'}</span>
               <span className={styles.task}>{plan.item.model ? `${plan.item.model} · ${firstLine}` : firstLine}</span>
               <span className={styles.chevron}>
                 <ChevronRight {...ICON} />

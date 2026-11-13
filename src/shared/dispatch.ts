@@ -58,10 +58,10 @@ export interface LeaderCheck {
   codexSandboxMode: boolean
 }
 
-/** Why this agent cannot be the leader here (UI copy for the new-session panel), or null when it can. */
+/** Why this agent cannot be the leader here (UI copy for the new-session panel's agent menu, Figma 81C), or null when it can. */
 export function leaderBlock(kind: AgentKind, ui: SessionUi, check: LeaderCheck | null): string | null {
   if (!canLead(kind, ui)) return ui === 'gui' && kind !== 'shell' && LEADER_AGENTS[kind] ? 'GUI 会话还不能当 leader' : '只有终端里的 Claude Code 和 Codex 能当 leader'
-  if (kind === 'codex' && check?.codexSandboxMode) return '~/.codex/config.toml 里写了 sandbox_mode，Codex 会忽略 leader 的只读权限'
+  if (kind === 'codex' && check?.codexSandboxMode) return 'config.toml 设了 sandbox_mode'
   return null
 }
 
@@ -905,10 +905,22 @@ export function messagePage(message: string, offset = 0): { text: string; nextOf
  * What a dispatcher's row says while its requests wait for 开始 (PRD F21, Figma 40B): the session is the user's to
  * answer, like a permission dialog. Several waiting requests of one dispatcher add up.
  */
-export function confirmLabels(confirms: ReadonlyArray<{ parentId: string; count: number }>): Map<string, string> {
-  const counts = new Map<string, number>()
-  for (const c of confirms) counts.set(c.parentId, (counts.get(c.parentId) ?? 0) + c.count)
-  return new Map([...counts].map(([id, n]) => [id, `想开 ${n} 个会话`]))
+export function confirmLabels(confirms: ReadonlyArray<{ parentId: string; count: number; adopt?: boolean }>): Map<string, string> {
+  const counts = new Map<string, { starts: number; adopts: number }>()
+  for (const c of confirms) {
+    const now = counts.get(c.parentId) ?? { starts: 0, adopts: 0 }
+    counts.set(c.parentId, c.adopt ? { ...now, adopts: now.adopts + c.count } : { ...now, starts: now.starts + c.count })
+  }
+  return new Map([...counts].map(([id, n]) => [id, confirmHead(n.starts, n.adopts)]))
+}
+
+/**
+ * The confirm strip's head line, the dispatcher's sidebar line and its notification (PRD F21 v1.178, Figma 81A):
+ * `想开 N 个会话`, with a leader's `wavi adopt` requests `想开 N 个会话 · 接管 M 个`, only those `想接管 M 个会话`.
+ */
+export function confirmHead(starts: number, adopts: number): string {
+  if (adopts === 0) return `想开 ${starts} 个会话`
+  return starts === 0 ? `想接管 ${adopts} 个会话` : `想开 ${starts} 个会话 · 接管 ${adopts} 个`
 }
 
 // --- the 送进去 send's two extra checks (PRD F21 覆盖 · 复用发消息的链路) -------------------------------------------

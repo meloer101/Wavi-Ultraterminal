@@ -230,7 +230,7 @@ export function startStatusBridge(): () => void {
   // PRD F24: so does an agent's `wavi schedule` (想建 N 个定时任务); a session with both shows the sessions first.
   let asking = new Set<string>()
   const applyConfirms = (): void => {
-    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
+    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1, adopt: c.adopt === true })))
     for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
     // PRD F21 v1.178: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
     for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !labels.has(id)) labels.set(id, tellLabel(text))

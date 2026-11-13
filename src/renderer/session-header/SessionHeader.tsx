@@ -1,6 +1,10 @@
 import { usageVendor } from '@shared/agents'
 import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type LucideIcon } from 'lucide-react'
-import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react'
+import { emptyQueue, wakesThisHour } from '@shared/dispatch'
+import { useDispatch } from '../dispatch/store'
+import { subscribeClock } from '../sidebar/clock'
+import { isLeader } from '../state/workspace-model'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { useWorktreeCreations } from '../new-session/creation'
@@ -152,6 +156,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             </span>
           )}
           {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
+          <LeaderMeta sessionId={active.session.id} />
           <LoopBadge sessionId={active.session.id} />
           {active.session.scheduledBy && (
             <button
@@ -331,6 +336,19 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone(value: strin
       onKeyDown={onKeyDown}
       onBlur={() => finish(value)}
     />
+  )
+}
+
+/** A project's leader (PRD F21 v1.178 · 花费, Figma 81E): how many times reports woke it in the last hour. */
+function LeaderMeta({ sessionId }: { sessionId: SessionId }) {
+  const leader = useWorkspace((s) => isLeader(s, sessionId))
+  const queue = useDispatch((s) => s.queues[sessionId])
+  const wakes = useSyncExternalStore(subscribeClock, () => wakesThisHour(queue ?? emptyQueue(), Date.now()))
+  if (!leader) return null
+  return (
+    <span className={styles.leaderMeta} data-testid="leader-meta">
+      leader · 本小时叫醒 {wakes} 次
+    </span>
   )
 }
 

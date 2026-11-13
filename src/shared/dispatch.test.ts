@@ -15,6 +15,7 @@ import {
   childBrief,
   childEvent,
   childUi,
+  confirmHead,
   confirmLabels,
   DISPATCH_LIMITS,
   emptyQueue,
@@ -358,6 +359,14 @@ describe('the rest', () => {
       ['a', '想开 3 个会话'],
       ['b', '想开 1 个会话']
     ])
+  })
+
+  it('counts a leader’s adopt requests apart (Figma 81A)', () => {
+    expect([...confirmLabels([{ parentId: 'a', count: 1 }, { parentId: 'a', count: 1, adopt: true }, { parentId: 'b', count: 2, adopt: true }])]).toEqual([
+      ['a', '想开 1 个会话 · 接管 1 个'],
+      ['b', '想接管 2 个会话']
+    ])
+    expect(confirmHead(3, 0)).toBe('想开 3 个会话')
   })
 })
 

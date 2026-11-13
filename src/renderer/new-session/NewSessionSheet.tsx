@@ -5,6 +5,9 @@
 // 智能体 (Figma 24A, PRD F4 v1.68): a pop-up menu — 已安装 (Claude Code and Codex always, the other CLIs when found, each
 // with its version) and 其他 (终端); remembered per project; the hint says how many are not installed. Several agents
 // on one task start from a session instead (同任务多解, attempts/SameTaskSheet).
+// 作为 leader (PRD F21 v1.178, Figma 81C / 81C′): a toggle under 项目 while 设置 · 派活 · leader 会话 is on and the project
+// has no leader. On, the session opens in the main checkout (当前目录, 基于 dimmed), CLI only, with no 高级; the agent
+// menu lists the agents that can lead, one that cannot here dimmed with `<version> · <reason>` on its right.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, CircleAlert, GitBranch, GitFork, Globe } from 'lucide-react'
 import {
@@ -17,13 +20,15 @@ import {
   type Workdir
 } from '@shared/new-session'
 import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
+import { canLead, leaderBlock, type LeaderCheck } from '@shared/dispatch'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import type { AgentKind, ProjectId, SessionUi } from '@shared/types'
 import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
+import { leaderOf } from '../state/workspace-model'
 import { runCreatePlan } from './creation'
-import { binaryInstalled, branchProblemText, folderFor, isElsewhere, listedAgents, planCreate, prepareText, selectedBase, tilde, uiRow } from './model'
+import { binaryInstalled, branchProblemText, folderFor, isElsewhere, listedAgents, planCreate, prepareText, selectedBase, tilde, uiRow, type UiRow } from './model'
 import { closeNewSessionSheet, useNewSessionSheet } from './sheet-store'
 import { SheetMenu, type SheetMenuSection } from './SheetMenu'
 import styles from './NewSessionSheet.module.css'
@@ -31,6 +36,12 @@ import styles from './NewSessionSheet.module.css'
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 const isKindChoice = (value: string): value is AgentKind => value === 'shell' || (CLI_AGENTS as readonly string[]).includes(value)
+
+/** The agents a leader can be (`canLead`), in the menu's order. */
+const LEADER_KINDS: readonly AgentKind[] = CLI_AGENTS.filter((id) => canLead(id))
+
+/** A leader is a terminal session: 界面 stays on CLI with GUI dimmed (Figma 81C′). */
+const LEADER_UI: UiRow = { value: 'cli', guiDisabled: true, forced: true }
 
 const UIS: ReadonlyArray<{ value: SessionUi; label: string }> = [
   { value: 'gui', label: 'GUI' },
@@ -77,6 +88,11 @@ function Sheet() {
   const [prepareChoice, setPrepareChoice] = useState(true)
   const [advanced, setAdvanced] = useState(false)
   const [menu, setMenu] = useState<{ kind: 'project' | 'base' | 'agent'; anchor: HTMLElement } | null>(null)
+  // 新建 leader… opens the sheet with the toggle on, and only while the setting is (no wait for it then).
+  const [leaderOn, setLeaderOn] = useState(() => useNewSessionSheet.getState().leader)
+  const [leaderSetting, setLeaderSetting] = useState(leaderOn)
+  const [leaderCheck, setLeaderCheck] = useState<LeaderCheck | null>(null)
+  const projectLeader = useWorkspace((s) => (projectId ? leaderOf(s, projectId) : null))
 
   const sheetRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -105,6 +121,14 @@ function Sheet() {
       .agentVersions()
       .then((next) => !cancelled && setVersions(next))
       .catch(() => {})
+    void window.tr.settings
+      .get()
+      .then((next) => !cancelled && setLeaderSetting(next.dispatch.leader))
+      .catch(() => {})
+    void window.tr.dispatch
+      .leaderCheck()
+      .then((next) => !cancelled && setLeaderCheck(next))
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -116,7 +140,11 @@ function Sheet() {
     [info]
   )
 
-  const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
+  const offerLeader = leaderSetting && projectLeader === null
+  const leader = offerLeader && leaderOn
+  // A leader runs in the main checkout as an agent that can lead here: the chosen one, else the first that can.
+  const leaderKind = leaderBlock(kind, 'cli', leaderCheck) === null ? kind : (LEADER_KINDS.find((id) => leaderBlock(id, 'cli', leaderCheck) === null) ?? null)
+  const workdir: Workdir = notRepo || leader ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
   const base = baseChoice ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
   const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
@@ -127,9 +155,10 @@ function Sheet() {
   const problem = result?.problem ?? null
   const branchProblem = problem === 'exists' || problem === 'invalid' || problem === 'empty' ? problem : null
   const showAdvanced = !!info?.repo && workdir === 'worktree' && !elsewhere
-  const canCreate = !!result?.plan
+  const canCreate = leader ? !!project && leaderKind !== null : !!result?.plan
   const advancedOpen = advanced || branchProblem !== null
-  const ui = uiRow(kind, uiChoice ?? initialUi(rememberedUis, projectId ?? ''), binaryInstalled(found))
+  const shownKind = leader ? (leaderKind ?? kind) : kind
+  const ui: UiRow | null = leader ? LEADER_UI : uiRow(kind, uiChoice ?? initialUi(rememberedUis, projectId ?? ''), binaryInstalled(found))
 
   const chooseProject = (id: ProjectId): void => {
     setProjectId(id)
@@ -142,6 +171,13 @@ function Sheet() {
   }
 
   const create = (): void => {
+    if (leader) {
+      if (!project || !leaderKind) return
+      closeNewSessionSheet(false)
+      const id = useWorkspace.getState().addLeaderSession(project.id, leaderKind)
+      if (id) useWorkspace.getState().setActiveSession(id)
+      return
+    }
     if (!project || !result?.plan) return
     closeNewSessionSheet(false)
     // A choice made before the git state arrived still counts; only a folder known not to be a repo is not remembered.
@@ -177,14 +213,27 @@ function Sheet() {
     (query: string): SheetMenuSection[] => {
       const q = query.trim().toLowerCase()
       const matches = (label: string): boolean => q === '' || label.toLowerCase().includes(q)
-      const check = (value: AgentKind) => (value === kind ? <Check {...ICON} /> : null)
+      const check = (value: AgentKind) => (value === shownKind ? <Check {...ICON} /> : null)
+      const version = (id: AgentKind): string | undefined =>
+        id !== 'shell' && found && found[id] === false ? '没装' : id !== 'shell' ? (versions[id] ?? undefined) : undefined
+      if (leader) {
+        return [
+          {
+            items: LEADER_KINDS.map((id) => {
+              const blocked = leaderBlock(id, 'cli', leaderCheck)
+              const meta = version(id)
+              return { value: id, label: agentName(id), icon: check(id), meta: blocked ? (meta ? `${meta} · ${blocked}` : blocked) : meta, ...(blocked ? { disabled: true } : {}) }
+            })
+          }
+        ]
+      }
       const installed = listedAgents(found)
         .filter((id) => matches(agentName(id)) || (id !== 'shell' && matches(AGENT_SPECS[id].binary)))
         .map((id) => ({
           value: id,
           label: agentName(id),
           icon: check(id),
-          meta: id !== 'shell' && found && found[id] === false ? '没装' : (id !== 'shell' ? (versions[id] ?? undefined) : undefined)
+          meta: version(id)
         }))
       const others = [{ value: 'shell', label: '终端', icon: check('shell') }].filter((item) => matches(item.label))
       return [
@@ -192,7 +241,7 @@ function Sheet() {
         { title: '其他', items: others }
       ]
     },
-    [found, versions, kind]
+    [found, versions, shownKind, leader, leaderCheck]
   )
   const missingAgents = found ? CLI_AGENTS.filter((id) => !found[id]).length : 0
 
@@ -258,11 +307,23 @@ function Sheet() {
             />
           </Field>
 
+          {offerLeader && (
+            <div className={styles.field} role="group" aria-label="作为 leader">
+              <span className={styles.labelSpacer} />
+              <span className={styles.leader}>
+                <Toggle checked={leaderOn} onChange={setLeaderOn} label="作为 leader" />
+                <span className={styles.leaderText} aria-hidden>
+                  作为 leader
+                </span>
+              </span>
+            </div>
+          )}
+
           <Field label="工作目录" note={notRepo ? notRepoText(loaded) : null}>
             <Segmented
               label="工作目录"
               value={workdir}
-              options={WORKDIRS.map((o) => ({ ...o, disabled: o.value === 'worktree' && notRepo }))}
+              options={WORKDIRS.map((o) => ({ ...o, disabled: o.value === 'worktree' && (notRepo || leader) }))}
               onChange={setWorkdirChoice}
             />
           </Field>
@@ -284,7 +345,7 @@ function Sheet() {
           )}
 
           <Field label="智能体">
-            <SelectButton label="智能体" value={agentName(kind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
+            <SelectButton label="智能体" value={agentName(shownKind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
           </Field>
 
           {ui && (
@@ -395,11 +456,11 @@ function Sheet() {
           anchor={menu.anchor}
           label="智能体"
           sections={agentSections}
-          selected={kind}
-          search="搜索智能体"
+          selected={shownKind}
+          {...(leader ? {} : { search: '搜索智能体' })}
           empty="没有匹配的智能体"
           align="selected"
-          hint={missingAgents > 0 ? `还有 ${missingAgents} 家没装：在设置 · 智能体里看怎么装 · 按项目记住上次的选择` : '按项目记住上次的选择'}
+          hint={leader ? null : missingAgents > 0 ? `还有 ${missingAgents} 家没装：在设置 · 智能体里看怎么装 · 按项目记住上次的选择` : '按项目记住上次的选择'}
           onPick={(value) => {
             if (!isKindChoice(value)) return
             setKind(value)
