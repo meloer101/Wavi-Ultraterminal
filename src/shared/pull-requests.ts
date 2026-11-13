@@ -347,6 +347,44 @@ export function summarizeChecks(rollup: unknown): ChecksSummary {
   return summary
 }
 
+export interface CheckEntry {
+  name: string
+  verdict: 'passed' | 'failed' | 'pending'
+  /** Epoch ms the check started / finished, when gh said (CheckRun only). */
+  startedAt: number | null
+  completedAt: number | null
+}
+
+const epoch = (value: unknown): number | null => {
+  const ms = typeof value === 'string' ? Date.parse(value) : NaN
+  // GitHub writes 0001-01-01 for a check that has not started.
+  return Number.isFinite(ms) && ms > 0 ? ms : null
+}
+
+/** `statusCheckRollup` → one entry per check, by the same verdicts as summarizeChecks (看板 · GitHub's PR detail). */
+export function checkEntries(rollup: unknown, limit = 100): CheckEntry[] {
+  if (!Array.isArray(rollup)) return []
+  const entries: CheckEntry[] = []
+  for (const item of rollup.slice(0, limit)) {
+    if (!isRecord(item)) continue
+    const isContext = item.__typename === 'StatusContext'
+    const rawName = isContext ? item.context : item.name
+    const name = typeof rawName === 'string' && rawName.trim() ? stripControl(rawName).trim().slice(0, 120) : '未命名检查'
+    const verdict = isContext
+      ? String(item.state ?? '').toUpperCase()
+      : String(item.status ?? '').toUpperCase() === 'COMPLETED'
+        ? String(item.conclusion ?? '').toUpperCase()
+        : String(item.status ?? '').toUpperCase()
+    entries.push({
+      name,
+      verdict: PASSED.has(verdict) ? 'passed' : FAILED.has(verdict) ? 'failed' : 'pending',
+      startedAt: isContext ? null : epoch(item.startedAt),
+      completedAt: isContext ? null : epoch(item.completedAt)
+    })
+  }
+  return entries
+}
+
 // ── which PR ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function prState(state: unknown, draft: unknown): PrState | null {

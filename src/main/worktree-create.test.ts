@@ -153,6 +153,27 @@ describe('createWorktree', () => {
     expect(result).toMatchObject({ ok: true, fetchFailed: '拉取需要登录：在终端里运行一次 git fetch' })
   })
 
+  // 看板 · GitHub: a same-repository PR's worktree starts at its head, takes its branch name and tracks it.
+  it('starts at a PR head, keeps the PR base as the base and tracks the head branch', async () => {
+    const origin = repo('pr-origin')
+    git(origin, 'switch', '-q', '-c', 'feat/fix')
+    writeFileSync(join(origin, 'fix.txt'), 'f\n')
+    git(origin, 'add', '.')
+    git(origin, 'commit', '-q', '-m', 'fix')
+    git(origin, 'switch', '-q', 'main')
+    const clone = join(base, 'pr-clone')
+    git(base, 'clone', '-q', origin, clone)
+    roots.add(clone)
+    const result = await createWorktree({ root: clone, branch: 'feat/fix', base: 'main', folder: 'pr-fix', prepare: false, startAt: 'refs/remotes/origin/feat/fix' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(existsSync(join(result.path, 'fix.txt'))).toBe(true)
+    expect(git(clone, 'config', '--get', 'branch.feat/fix.base').trim()).toBe('main')
+    expect(git(clone, 'rev-parse', '--abbrev-ref', 'feat/fix@{upstream}').trim()).toBe('origin/feat/fix')
+    expect(await createWorktree({ root: clone, branch: 'x', base: 'main', folder: 'pr-x', prepare: false, startAt: 'refs/remotes/origin/nope' })).toEqual({ ok: false, reason: 'base-missing' })
+    expect(await createWorktree({ root: clone, branch: 'x', base: 'main', folder: 'pr-x', prepare: false, startAt: 'refs/heads/main' })).toEqual({ ok: false, reason: 'invalid' })
+  })
+
   it('says when the base could not be recorded', async () => {
     const lockRepo = repo('locked-config')
     writeFileSync(join(lockRepo, '.git', 'config.lock'), '')
