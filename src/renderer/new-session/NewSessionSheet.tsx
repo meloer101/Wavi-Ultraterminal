@@ -1,7 +1,9 @@
 // 新建会话 (PRD F4, Figma 15 Section 170:7853): one row per choice, each with a default, so ⌘↵ alone starts a session.
 // 项目 · 工作目录 (新 worktree / 当前目录, remembered per project) · 基于 · 智能体 · 高级 (分支名 · 文件夹 · 准备).
-// No task description: the user types the first message in the terminal. Text appears only when something is limited
-// or wrong (15E, 15F). Glass material from PRD §5; solid under "reduce transparency".
+// No task description: the user types the first message in the terminal — except when 看板 · GitHub hands an issue or
+// PR over (Figma 77E): then the project is fixed, a 任务 row holds the first message (editable), the branch is named
+// after the item and 创建并发送 sends it. Text appears only when something is limited or wrong (15E, 15F). Glass
+// material from PRD §5; solid under "reduce transparency".
 // 智能体 (Figma 24A, PRD F4 v1.68): a pop-up menu — 已安装 (Claude Code and Codex always, the other CLIs when found, each
 // with its version) and 其他 (终端); remembered per project; the hint says how many are not installed. Several agents
 // on one task start from a session instead (同任务多解, attempts/SameTaskSheet).
@@ -17,14 +19,19 @@ import {
   type Workdir
 } from '@shared/new-session'
 import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
+import { promptOnCommandLine } from '@shared/agent-launch'
+import { itemBranch } from '@shared/github-board'
+import type { SessionId } from '@shared/types'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import type { AgentKind, ProjectId, SessionUi } from '@shared/types'
 import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
+import { setLaunch } from '../dispatch/store'
+import { submitPrompt, whenAgentReady } from '../session-io'
 import { runCreatePlan } from './creation'
 import { binaryInstalled, branchProblemText, folderFor, isElsewhere, listedAgents, planCreate, prepareText, selectedBase, tilde, uiRow } from './model'
-import { closeNewSessionSheet, useNewSessionSheet } from './sheet-store'
+import { closeNewSessionSheet, useNewSessionSheet, type SheetTask } from './sheet-store'
 import { SheetMenu, type SheetMenuSection } from './SheetMenu'
 import styles from './NewSessionSheet.module.css'
 
@@ -53,6 +60,9 @@ export function NewSessionSheet() {
 
 function Sheet() {
   const projects = useWorkspace((s) => s.projects)
+  // Read once: a sheet opened from 看板 · GitHub keeps its item while it is open.
+  const [task] = useState<SheetTask | null>(() => useNewSessionSheet.getState().task)
+  const [taskText, setTaskText] = useState(() => task?.prompt ?? '')
   const remembered = useWorkspace((s) => s.newSessionWorkdir)
   const [projectId, setProjectId] = useState<ProjectId | null>(() => useNewSessionSheet.getState().projectId ?? projects[0]?.id ?? null)
   const project = projects.find((p) => p.id === projectId) ?? null
@@ -111,13 +121,15 @@ function Sheet() {
   }, [])
 
   // A generated name per project, made once its branches are known (and kept while the sheet is open).
-  const generated = useMemo(
-    () => (info?.repo ? generateBranchName(info.prefix, new Set(info.branches.filter((b) => !b.remote).map((b) => b.name))) : ''),
-    [info]
-  )
+  const generated = useMemo(() => {
+    if (!info?.repo) return ''
+    const taken = new Set(info.branches.filter((b) => !b.remote).map((b) => b.name))
+    if (task) return task.branch ?? itemBranch(info.prefix, task.branchFrom.kind, task.branchFrom.number, task.branchFrom.title, taken)
+    return generateBranchName(info.prefix, taken)
+  }, [info, task])
 
-  const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
-  const base = baseChoice ?? (info ? defaultBase(info) : null)
+  const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? (task ? 'worktree' : initialWorkdir(remembered, projectId ?? '', true)))
+  const base = baseChoice ?? task?.base ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
   const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
   const form = { workdir, base, branch, prepare }
@@ -141,11 +153,16 @@ function Sheet() {
     setUiChoice(null)
   }
 
+  const sends = task !== null && kind !== 'shell' && taskText.trim() !== ''
+
   const create = (): void => {
     if (!project || !result?.plan) return
     closeNewSessionSheet(false)
+    // A PR's worktree starts at the PR head main fetched; the chosen base stays what it merges into.
+    const plan = task?.startAt && result.plan.type === 'worktree' ? { ...result.plan, request: { ...result.plan.request, startAt: task.startAt } } : result.plan
     // A choice made before the git state arrived still counts; only a folder known not to be a repo is not remembered.
-    runCreatePlan(project.id, result.plan, kind, workdir, !notRepo, ui?.value ?? 'cli', ui?.forced ?? false)
+    const id = runCreatePlan(project.id, plan, kind, workdir, !notRepo, ui?.value ?? 'cli', ui?.forced ?? false)
+    if (id && task) handTask(id, task, kind, ui?.value ?? 'cli', sends ? taskText : null)
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -246,6 +263,7 @@ function Sheet() {
           <h2 id={titleId} className={styles.title}>
             新建会话
           </h2>
+          {task && <span className={styles.subtitle}>{task.title}</span>}
         </header>
 
         <div className={styles.fields}>
@@ -253,6 +271,7 @@ function Sheet() {
             <SelectButton
               label="项目"
               value={project?.name ?? '—'}
+              disabled={task !== null}
               expanded={menu?.kind === 'project'}
               onClick={(anchor) => toggleMenu('project', anchor)}
             />
@@ -318,6 +337,19 @@ function Sheet() {
             </div>
           )}
 
+          {task && (
+            <Field label="任务">
+              <textarea
+                className={styles.task}
+                aria-label="任务"
+                value={taskText}
+                spellCheck={false}
+                rows={9}
+                onChange={(event) => setTaskText(event.currentTarget.value)}
+              />
+            </Field>
+          )}
+
           {showAdvanced && (
             <button
               type="button"
@@ -370,7 +402,7 @@ function Sheet() {
             取消
           </button>
           <button type="button" className={styles.primary} disabled={!canCreate} onClick={create}>
-            创建
+            {sends ? '创建并发送' : '创建'}
             <span className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>
@@ -426,6 +458,22 @@ function Sheet() {
       )}
     </div>
   )
+}
+
+/**
+ * The new session takes the item's title and link, and its first message: on the CLI's command line or the GUI's
+ * launch where the agent has one, else typed in once the agent is ready (as 一题多解 does).
+ */
+function handTask(id: SessionId, task: SheetTask, kind: AgentKind, ui: SessionUi, text: string | null): void {
+  useWorkspace.getState().patchSession(id, { title: task.title, titleSource: 'prompt', github: task.link })
+  if (text === null || kind === 'shell') return
+  if (ui === 'gui' || promptOnCommandLine(kind)) {
+    setLaunch(id, { initialPrompt: text })
+    return
+  }
+  void whenAgentReady(id)
+    .then(() => submitPrompt(id, text))
+    .catch((error: unknown) => console.error('[new-session] the task did not reach the agent:', error))
 }
 
 function notRepoText(loaded: LoadedInfo | undefined): string {

@@ -174,10 +174,10 @@ export function Sidebar() {
         <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut={formatAccelerator(SHORTCUTS['command-palette'])} onClick={openCommandPalette} />
         <NavItem
           icon={<LayoutList {...ICON} />}
-          label="总览"
+          label="看板"
           shortcut={formatAccelerator(SHORTCUTS['toggle-overview'])}
           selected={overview}
-          title={waiting.length > 0 ? `${waiting.length} 个会话需要你 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}` : `总览 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}`}
+          title={waiting.length > 0 ? `${waiting.length} 个会话需要你 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}` : `看板 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}`}
           badge={
             waiting[0] && (
               <>

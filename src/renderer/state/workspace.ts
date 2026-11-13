@@ -215,6 +215,7 @@ export type SessionPatch = Partial<
     | 'dispatchBase'
     | 'dispatchModel'
     | 'scheduledBy'
+    | 'github'
     | 'guiPermission'
     | 'guiPlan'
   >

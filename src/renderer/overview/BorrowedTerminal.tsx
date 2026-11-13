@@ -1,4 +1,4 @@
-// A session's own terminal shown inside the overview — the list's in-place tray and the board's overlay. It is
+// A session's own terminal shown inside 看板 · 进度's overlay (and, before v1.177, the list's tray). It is
 // the same xterm on the same PTY as in the main area (terminal/borrow.ts), fully interactive, never a copy.
 import { useEffect, useRef } from 'react'
 import type { Session } from '@shared/types'

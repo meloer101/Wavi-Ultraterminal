@@ -24,7 +24,7 @@ const QUOTE = pickQuote()
 
 const HINTS = [
   [SHORTCUTS['command-palette'], '跳转到'],
-  [SHORTCUTS['toggle-overview'], '总览'],
+  [SHORTCUTS['toggle-overview'], '看板'],
   [SHORTCUTS['next-attention'], '下一个等你处理'],
   [SHORTCUTS['open-project'], '打开项目']
 ] as const

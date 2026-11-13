@@ -3,6 +3,7 @@
 // parsing gh's JSON (everything from GitHub is untrusted text: control characters removed, lengths capped), the new
 // branch's name and the task the agent gets — which says the GitHub text is material, not instructions.
 import { isValidRefName } from './git-graph/log'
+import type { GitHubLink } from './types'
 import { checkEntries, repoArg, stripControl, summarizeChecks, type CheckEntry, type ChecksSummary, type GhState, type GitHubRepo } from './pull-requests'
 
 export type BoardScope = 'all' | 'assigned' | 'mine' | 'review'
@@ -15,12 +16,8 @@ export const BOARD_SCOPES: ReadonlyArray<{ value: BoardScope; label: string }> =
 
 export type GitHubItemKind = 'issue' | 'pr'
 
-/** Which issue or PR a session works on (persisted on the session). `repo` is `host/owner/name`. */
-export interface GitHubLink {
-  repo: string
-  kind: GitHubItemKind
-  number: number
-}
+/** Which issue or PR a session works on (persisted on the session as Session.github). `repo` is `host/owner/name`. */
+export type { GitHubLink }
 
 export type ReviewState = 'approved' | 'changes-requested' | 'review-required'
 

@@ -1,37 +1,30 @@
-// Overview UI state (PRD F9): which view, what is selected / opened, the filter and folded groups.
-// The view, folded groups and tray height are per-viewer conveniences kept in localStorage; losing them is harmless.
+// 看板 UI state (PRD F9): which tab, what is selected, the board overlay, the filter and the batch.
+// The tab and the overlay's place are per-viewer conveniences kept in localStorage; losing them is harmless.
 import { create } from 'zustand'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
-import { TRAY_HEIGHT, type OverviewGroupKey } from './model'
 import { addToLayout, layoutIds, MAX_PANES, PICKER_SLOT, removeFromLayout, replaceInLayout, singleLayout, type PaneLayout, type Rect } from './pane-layout'
 
-export type OverviewView = 'list' | 'board'
+/** 进度: the sessions by status (the board); GitHub: each project's open issues and PRs (v1.177). */
+export type BoardTab = 'progress' | 'github'
 
 const PREFS_KEY = 'tr.overview.v1'
 
 interface Prefs {
-  view: OverviewView
-  collapsed: OverviewGroupKey[]
-  /** Height of the list's in-place terminal, before clamping to the window. */
-  trayHeight: number
+  tab: BoardTab
   /** Where the board overlay sits once its edges were dragged (window px); null = the default, centered (PRD F9). */
   overlayRect: Rect | null
 }
 
-const DEFAULT_PREFS: Prefs = { view: 'list', collapsed: ['exited'], trayHeight: TRAY_HEIGHT.initial, overlayRect: null }
+const DEFAULT_PREFS: Prefs = { tab: 'progress', overlayRect: null }
 
 function loadPrefs(): Prefs {
   try {
     const raw: unknown = JSON.parse(globalThis.localStorage?.getItem(PREFS_KEY) ?? 'null')
     if (typeof raw !== 'object' || raw === null) return DEFAULT_PREFS
     const value = raw as Partial<Prefs>
-    return {
-      view: value.view === 'board' ? 'board' : 'list',
-      collapsed: Array.isArray(value.collapsed) ? value.collapsed.filter((k): k is OverviewGroupKey => typeof k === 'string') : DEFAULT_PREFS.collapsed,
-      trayHeight: typeof value.trayHeight === 'number' && Number.isFinite(value.trayHeight) ? value.trayHeight : DEFAULT_PREFS.trayHeight,
-      overlayRect: isRect(value.overlayRect) ? value.overlayRect : null
-    }
+    // Saved before v1.177 there was `view` (列表 / 看板) instead: both are 进度 now.
+    return { tab: value.tab === 'github' ? 'github' : 'progress', overlayRect: isRect(value.overlayRect) ? value.overlayRect : null }
   } catch {
     return DEFAULT_PREFS
   }
@@ -53,8 +46,6 @@ function savePrefs(prefs: Prefs): void {
 
 interface OverviewState extends Prefs {
   selectedId: SessionId | null
-  /** Session whose terminal is expanded in place in the list. */
-  openId: SessionId | null
   /** The sessions tiled in the overlay over the board (at most four, pane-layout.ts); null = closed. */
   layout: PaneLayout | null
   /** The overlay shows one more tile for picking the next session to add; it sits in `layout` as PICKER_SLOT. */
@@ -67,10 +58,8 @@ interface OverviewState extends Prefs {
   /** Where a ⇧-click range starts: the last session clicked with or without ⌘. */
   pickAnchor: SessionId | null
 
-  setView(view: OverviewView): void
-  toggleGroup(key: OverviewGroupKey): void
+  setTab(tab: BoardTab): void
   select(id: SessionId | null): void
-  setOpen(id: SessionId | null): void
   /** Opens the board's overlay on just this session (a card click), or closes it with null. */
   openOverlay(id: SessionId | null): void
   setLayout(layout: PaneLayout): void
@@ -78,7 +67,6 @@ interface OverviewState extends Prefs {
   closePane(id: SessionId): void
   setPicking(picking: boolean): void
   setFilter(filter: string): void
-  setTrayHeight(height: number): void
   setOverlayRect(rect: Rect | null): void
   /** Opens the overlay on an attempt group's members, side by side. */
   openCompare(groupId: string, ids: readonly SessionId[]): void
@@ -88,7 +76,6 @@ interface OverviewState extends Prefs {
 export const useOverviewStore = create<OverviewState>()((set, get) => ({
   ...loadPrefs(),
   selectedId: null,
-  openId: null,
   layout: null,
   picking: false,
   filter: '',
@@ -96,19 +83,12 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   picked: [],
   pickAnchor: null,
 
-  setView(view) {
-    // The list's tray and the board's overlay are different things: switching closes whichever is open.
-    set({ view, openId: null, layout: null, picking: false, compareGroup: null })
-    savePrefs({ ...prefsOf(get()), view })
+  setTab(tab) {
+    // The session overlay belongs to 进度: switching to GitHub closes it.
+    set({ tab, layout: null, picking: false, compareGroup: null, filter: '' })
+    savePrefs({ ...prefsOf(get()), tab })
   },
-  toggleGroup(key) {
-    const collapsed = get().collapsed.includes(key) ? get().collapsed.filter((k) => k !== key) : [...get().collapsed, key]
-    set({ collapsed })
-    savePrefs({ ...prefsOf(get()), collapsed })
-  },
-  // Moving the selection leaves the open terminal where it is (a 420 px tray jumping with every ↓ is disorienting).
   select: (id) => set({ selectedId: id }),
-  setOpen: (id) => set({ openId: id, ...(id ? { selectedId: id } : {}) }),
   openOverlay: (id) => set({ layout: id ? singleLayout(id) : null, picking: false, compareGroup: null, ...(id ? { selectedId: id } : {}) }),
   setLayout: (layout) => set({ layout }),
   addPane(id) {
@@ -129,10 +109,6 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
     set({ picking, layout: picking ? addToLayout(layout, PICKER_SLOT) : removeFromLayout(layout, PICKER_SLOT) })
   },
   setFilter: (filter) => set({ filter }),
-  setTrayHeight(trayHeight) {
-    set({ trayHeight })
-    savePrefs({ ...prefsOf(get()), trayHeight })
-  },
   setOverlayRect(overlayRect) {
     set({ overlayRect })
     savePrefs({ ...prefsOf(get()), overlayRect })
@@ -140,17 +116,17 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   openCompare(groupId, ids) {
     const [first, ...rest] = ids.slice(0, MAX_PANES)
     if (!first) return
-    // The overlay borrows the members' terminals: the list's tray gives its one back first.
-    set({ layout: rest.reduce(addToLayout, singleLayout(first)), picking: false, openId: null, compareGroup: groupId, selectedId: first })
+    // A comparison is a 进度 overlay: it opens there whichever tab was showing.
+    set({ tab: 'progress', layout: rest.reduce(addToLayout, singleLayout(first)), picking: false, compareGroup: groupId, selectedId: first })
   },
   setPicked: (picked, anchor) => set({ picked, ...(anchor !== undefined ? { pickAnchor: anchor } : {}) })
 }))
 
-function prefsOf({ view, collapsed, trayHeight, overlayRect }: Prefs): Prefs {
-  return { view, collapsed, trayHeight, overlayRect }
+function prefsOf({ tab, overlayRect }: Prefs): Prefs {
+  return { tab, overlayRect }
 }
 
-/** ⌘⇧A, the sidebar entry and ⌘K: show the overview, or go back to the session it was opened from. */
+/** ⌘⇧A, the sidebar entry and ⌘K: show 看板, or go back to the session it was opened from. */
 export function toggleOverview(): void {
   const workspace = useWorkspace.getState()
   workspace.setMainView(workspace.mainView === 'overview' ? 'session' : 'overview')
@@ -158,7 +134,7 @@ export function toggleOverview(): void {
 
 /** Leaves the overview for a session's terminal. */
 export function enterSession(id: SessionId): void {
-  useOverviewStore.setState({ openId: null, layout: null, picking: false, compareGroup: null })
+  useOverviewStore.setState({ layout: null, picking: false, compareGroup: null })
   useWorkspace.getState().setActiveSession(id)
 }
 

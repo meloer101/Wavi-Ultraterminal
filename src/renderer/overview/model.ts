@@ -1,5 +1,5 @@
 // Pure overview model (PRD F9, Figma 11 v2): every session across projects, grouped by what it
-// needs from the user. The list and the board draw the same groups, so the two views never disagree.
+// needs from the user: the columns of 看板 · 进度.
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { sessionTime } from '../sidebar/format-elapsed'
 import { glyphStatus, phaseLine } from '../lifecycle/present'
@@ -210,11 +210,4 @@ export function moveSelection(ids: readonly SessionId[], current: SessionId | nu
   return ids[Math.min(ids.length - 1, Math.max(0, at + direction))] ?? null
 }
 
-/** The in-place terminal in the list: 420 by default, draggable between 240 and 70% of the window. */
-export const TRAY_HEIGHT = { initial: 420, min: 240, maxShare: 0.7 } as const
-
-export function clampTrayHeight(height: number, viewportHeight: number): number {
-  const max = Math.max(TRAY_HEIGHT.min, Math.floor(viewportHeight * TRAY_HEIGHT.maxShare))
-  return Math.round(Math.min(max, Math.max(TRAY_HEIGHT.min, height)))
-}
 
