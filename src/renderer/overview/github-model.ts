@@ -49,14 +49,15 @@ export function githubSummary(byRoot: Readonly<Record<string, ProjectLoad | unde
   return any ? `${projects} · ${issues} 个 issue · ${prs} 个 PR` : loads.length > 0 ? projects : ''
 }
 
-export type TagTone = 'plain' | 'quiet' | 'attention' | 'done' | 'error'
+/** Color only for what needs the user (Figma 77′B): 待你审阅 and 要求修改; the rest stays neutral. */
+export type TagTone = 'plain' | 'quiet' | 'attention'
 
-/** A PR row's words after the title (Figma 77B): 草稿, then whose review it waits for or what the review said. */
+/** A PR row's words after the title (Figma 77′B): 草稿, then whose review it waits for or what the review said. */
 export function prTags(pr: BoardPr): { text: string; tone: TagTone }[] {
   const tags: { text: string; tone: TagTone }[] = []
   if (pr.draft) tags.push({ text: '草稿', tone: 'quiet' })
   if (pr.reviewRequestedFromMe) tags.push({ text: '待你审阅', tone: 'attention' })
-  else if (pr.review === 'approved') tags.push({ text: '已批准', tone: 'done' })
+  else if (pr.review === 'approved') tags.push({ text: '已批准', tone: 'plain' })
   else if (pr.review === 'changes-requested') tags.push({ text: '要求修改', tone: 'attention' })
   return tags
 }

@@ -1,6 +1,7 @@
-// 看板 · GitHub (PRD F9 v1.177, Figma 77B / 77F / 77G): each project's open issues (left) and PRs (right) through the
-// user's gh login, a scope over all of them, and a row per item. A row opens the item (GitHubDetail); a session already
-// started on it takes the row's end, and clicking that enters it. Projects not on GitHub are folded at the bottom.
+// 看板 · GitHub (PRD F9 v1.177, Figma 77′B / 77′F / 77G): each project's open issues (left) and PRs (right) through
+// the user's gh login, a scope over all of them (text tabs), and a row per item whose end is fixed columns — 检查 (PRs),
+// 评论, 时间 — kept in place when empty. A row opens the item (GitHubDetail); a session already started on it takes the
+// 评论 and 时间 slot, and clicking that enters it. Projects not on GitHub are folded at the bottom.
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, Circle, CircleDot, GitPullRequest, GitPullRequestDraft, MessageSquare, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -10,7 +11,6 @@ import type { Project, Session } from '@shared/types'
 import { subscribeClock } from '../sidebar/clock'
 import { formatElapsed } from '../sidebar/format-elapsed'
 import { useWorkspace } from '../state/workspace'
-import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { glyphStatus } from '../lifecycle/present'
 import { checksMark, ghProblem, linkedSessions, linkKey, linkOf, matchesFilter, orderProjects, prTags } from './github-model'
@@ -54,7 +54,13 @@ export function GitHubBoard({ filter }: { filter: string }) {
   return (
     <Linked.Provider value={linked}>
     <div className={styles.board} data-testid="github-board">
-      <Segmented label="范围" value={scope} options={BOARD_SCOPES} onChange={setScope} className={styles.scope} />
+      <div className={styles.scope} role="radiogroup" aria-label="范围">
+        {BOARD_SCOPES.map((option) => (
+          <button key={option.value} type="button" role="radio" aria-checked={option.value === scope} className={styles.scopeTab} onClick={() => setScope(option.value)}>
+            {option.label}
+          </button>
+        ))}
+      </div>
       {orderProjects(projects, byRoot).map(({ project, offGitHub }) => (
         <ProjectSection key={project.id} project={project} offGitHub={offGitHub} filter={filter} />
       ))}
@@ -143,16 +149,21 @@ function ItemRow({ item, project, result }: { item: BoardItem; project: Project;
               {tag.text}
             </span>
           ))}
-        {mark && (
-          <span className={styles.checks} data-state={mark.state} title={mark.text}>
-            {mark.state === 'passing' ? <Check {...SMALL} /> : mark.state === 'failing' ? <X {...SMALL} /> : <Circle {...SMALL} />}
-            {mark.state === 'failing' && <span>{mark.text}</span>}
+        {/* Fixed columns, empty ones kept, so every row's end lines up (Figma 77′B). */}
+        {pr && (
+          <span className={styles.checks} data-state={mark?.state} title={mark?.text}>
+            {mark && (mark.state === 'passing' ? <Check {...SMALL} /> : mark.state === 'failing' ? <X {...SMALL} /> : <Circle {...SMALL} />)}
+            {mark?.state === 'failing' && <span>{mark.text}</span>}
           </span>
         )}
-        {!linked && item.comments > 0 && (
-          <span className={styles.comments} aria-label={`${item.comments} 条评论`}>
-            <MessageSquare {...SMALL} />
-            {item.comments}
+        {!linked && (
+          <span className={styles.comments} aria-label={item.comments > 0 ? `${item.comments} 条评论` : undefined}>
+            {item.comments > 0 && (
+              <>
+                <MessageSquare {...SMALL} />
+                {item.comments}
+              </>
+            )}
           </span>
         )}
         {!linked && <span className={styles.time}>{item.updatedAt > 0 ? formatElapsed(now - item.updatedAt) : ''}</span>}

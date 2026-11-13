@@ -40,7 +40,7 @@ function setup() {
   gh.setBoard(
     [
       { number: 142, title: '登录后刷新页面会丢失会话', url: 'https://github.com/acme/web/issues/142', author: author('mika'), labels: [{ name: 'bug' }], comments: [], updatedAt: ago(2) },
-      { number: 139, title: 'Safari 17 上结算页白屏', url: 'https://github.com/acme/web/issues/139', author: author('lin-wei'), labels: [{ name: 'bug' }], comments: [{}, {}, {}, {}, {}], updatedAt: ago(26) },
+      { number: 139, title: 'Safari 17 上结算页白屏', url: 'https://github.com/acme/web/issues/139', author: author('lin-wei'), labels: [{ name: 'bug' }], comments: [{}, {}], updatedAt: ago(26) },
       { number: 131, title: '支持按团队导出账单 CSV', url: 'https://github.com/acme/web/issues/131', author: author('jacob'), labels: [{ name: 'feature' }], comments: [], updatedAt: ago(72) }
     ],
     [

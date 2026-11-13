@@ -36,7 +36,8 @@ describe('github model', () => {
 
   it('tags a PR by draft and review, and marks its checks', () => {
     expect(prTags(pr({ draft: true, reviewRequestedFromMe: true }))).toEqual([{ text: '草稿', tone: 'quiet' }, { text: '待你审阅', tone: 'attention' }])
-    expect(prTags(pr({ review: 'approved' }))).toEqual([{ text: '已批准', tone: 'done' }])
+    expect(prTags(pr({ review: 'approved' }))).toEqual([{ text: '已批准', tone: 'plain' }])
+    expect(prTags(pr({ review: 'changes-requested' }))).toEqual([{ text: '要求修改', tone: 'attention' }])
     expect(checksMark(pr({ checks: { state: 'failing', total: 2, passed: 1, pending: 0, failing: [{ name: 'e2e', runId: null, jobId: null }] } }))).toEqual({ state: 'failing', text: '1 失败' })
     expect(checksMark(pr({}))).toBeNull()
   })

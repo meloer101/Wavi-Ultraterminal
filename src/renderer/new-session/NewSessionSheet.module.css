@@ -182,16 +182,17 @@
   user-select: text;
 }
 
+/* 13/20 like the rest of the sheet; text starts on the selects' left edge (12 in) — Figma 77′E. */
 .task {
   width: 100%;
   min-height: 120px;
   max-height: 40vh;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
   border: 0;
   border-radius: var(--radius-md);
   background: var(--bg-selected);
-  font: var(--text-caption);
-  line-height: 18px;
+  font: var(--text-body);
+  line-height: 20px;
   color: var(--text-primary);
   resize: vertical;
   outline: none;

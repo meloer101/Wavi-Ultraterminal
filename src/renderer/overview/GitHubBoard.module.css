@@ -1,4 +1,5 @@
-/* 看板 · GitHub (Figma 77B–77G): rows 36 high, hierarchy from type and alignment; color only for status. */
+/* 看板 · GitHub (Figma 77′B–77′F): rows 36 high, one left edge (24 from the card), fixed columns at the row's end;
+ * color only for what needs the user (待你审阅, 要求修改, 失败). */
 
 .board {
   display: flex;
@@ -7,7 +8,32 @@
 }
 
 .scope {
-  align-self: flex-start;
+  display: flex;
+  gap: var(--space-20);
+  padding: 0 var(--space-8);
+}
+
+/* Text tabs under the header's segmented 进度 | GitHub: the chosen one in primary with a 1px underline. */
+.scopeTab {
+  height: 28px;
+  padding: var(--space-4) 0 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font: var(--text-body);
+  line-height: 20px;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.scopeTab:hover {
+  color: var(--text-primary);
+}
+
+.scopeTab[aria-checked='true'] {
+  font-weight: 500;
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
 }
 
 .project {
@@ -20,8 +46,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  height: 30px;
-  padding: 0 var(--space-8) 0 var(--space-4);
+  height: 28px;
+  padding: 0 var(--space-8);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -151,20 +177,20 @@
   color: var(--status-attention);
 }
 
-.tag[data-tone='done'] {
-  color: var(--status-done);
-}
-
-.checks {
+.checks,
+.comments,
+.time {
   flex: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-4);
-  font: var(--text-caption);
 }
 
-.checks[data-state='passing'] {
-  color: var(--status-done);
+.checks {
+  width: 64px;
+  font: var(--text-caption);
+  color: var(--text-secondary);
 }
 
 .checks[data-state='failing'] {
@@ -172,31 +198,29 @@
 }
 
 .checks[data-state='pending'] {
-  color: var(--status-working);
+  color: var(--text-tertiary);
 }
 
 .comments {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
+  width: 36px;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
 }
 
 .time {
-  flex: none;
-  min-width: 24px;
-  text-align: right;
+  width: 32px;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
 }
 
+/* Takes the 评论 + 时间 slot (36 + 8 + 32) and grows to the left with a longer name. */
 .linked {
   flex: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-6);
+  min-width: 76px;
   max-width: 45%;
   height: 28px;
   margin-right: var(--space-4);
@@ -311,11 +335,12 @@
   -webkit-app-region: no-drag;
 }
 
+/* As tall as its content, up to the session overlay's height (Figma 77′C / 77′D). */
 .dialog {
   display: flex;
   flex-direction: column;
   width: min(calc(100vw - 96px), 880px);
-  height: min(calc(100vh - 64px), 1040px);
+  max-height: min(calc(100vh - 64px), 1040px);
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-window);
@@ -357,23 +382,27 @@
 }
 
 .dialogBody {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
   /* The text starts under the bar's #number (20 + icon 16 + gap 8). */
-  padding: var(--space-4) var(--space-40) var(--space-24) calc(var(--space-20) + var(--space-24));
+  padding: var(--space-4) var(--space-40) var(--space-32) calc(var(--space-20) + var(--space-24));
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4) var(--space-12);
+  gap: var(--space-4) var(--space-8);
   font: var(--text-caption);
   color: var(--text-secondary);
+}
+
+.sep {
+  color: var(--text-tertiary);
 }
 
 .metaStrong {
@@ -387,6 +416,15 @@
 
 .markdown {
   padding: 0;
+}
+
+/* GitHub's headings stay under the overlay's title: all of them 13/600, no rules under h1 / h2 (Figma 77′C). */
+.dialogBody .markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-16) 0 var(--space-8);
+  padding-bottom: 0;
+  border-bottom: 0;
+  font: var(--text-body-heading);
+  color: var(--text-primary);
 }
 
 .rule {
@@ -417,7 +455,7 @@
 }
 
 .checkRow[data-state='passed'] > svg {
-  color: var(--status-done);
+  color: var(--text-secondary);
 }
 
 .checkRow[data-state='failed'] > svg {
@@ -425,7 +463,7 @@
 }
 
 .checkRow[data-state='pending'] > svg {
-  color: var(--status-working);
+  color: var(--text-tertiary);
 }
 
 .checkName {

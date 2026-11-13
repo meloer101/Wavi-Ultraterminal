@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-13：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.177，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。
+- 2026-11-13：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.177，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。
 - 2026-11-12：F17 右侧栏加「终端」和「iOS 模拟器」（PRD v1.176，Figma 76）：终端是当前 worktree 的 shell，多个 tab、重载和重启后接回；模拟器用 serve-sim 画面和输入，可点按、滚动、打字、主屏幕、旋转、选设备和启动设备。会话头 6 个图标，默认 480 宽时额度收起。打包后的 app（`npm run dist:dir`，Developer ID 签名、hardened runtime，未公证）里 helper 从 `app.asar.unpacked` 跑起来，点按、旋转、退出不留进程都验过。还没测：公证后的下载版、Xcode 27 的 Device Hub 路径、横屏 app 的画面方向。
 - 2026-11-10：架构评估的修复：Git 视图和后台审阅的 IPC 只接受 workspace 目录；token 检查也算 `rgb()` 等颜色函数；自动修复和建 worktree 的 4 处静默失败改成记日志；「这家 CLI 能做什么」收进 `agents.ts`（PRD v1.169：批量操作对每家 agent 生效、⌘O 启动最近用过的 agent）；renderer 分层规则（ui/styles → state → 功能 → app-shell，现有 33 处列入基线只减不增）；手机与 Mac 的消息契约测试
 - 2026-11-11：窗口材质合并成「玻璃」和「实色」两项，底层不透明度只剩一个值、默认 30%（PRD v1.174，Figma 66′）：旧设置自动迁移。还没在作者的真机上确认默认 30%，也没在 macOS 26 以前的系统上试过。

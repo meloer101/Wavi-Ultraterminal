@@ -1,8 +1,8 @@
-// 看板 · GitHub's detail overlay (PRD F9 v1.177, Figma 77C issue / 77D PR): an item's body and comments, a PR's
+// 看板 · GitHub's detail overlay (PRD F9 v1.177, Figma 77′C issue / 77′D PR, as tall as its content): an item's body and comments, a PR's
 // branches, size and checks. The bar has 在 GitHub 打开 (system browser) and 交给 agent, which opens 新建会话 with the
 // item as its task (Figma 77E). GitHub's Markdown is rendered through the sanitize schema; links and images open in
 // the system browser rather than loading here.
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { Check, Circle, CircleDot, ExternalLink, GitPullRequest, X } from 'lucide-react'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
@@ -131,14 +131,14 @@ function DetailBody({ detail }: { detail: BoardDetail }) {
     <>
       <div className={styles.meta}>
         <span className={styles.metaStrong}>{detail.state === 'open' ? (pr?.draft ? '草稿' : '打开') : detail.state === 'merged' ? '已合并' : '已关闭'}</span>
-        {pr && <span className={styles.mono}>{`${pr.headRef} → ${pr.baseRef}`}</span>}
-        {pr && <span>{`+${pr.additions} −${pr.deletions} · ${pr.changedFiles} 个文件`}</span>}
-        {!pr && <span>{`${detail.author} ${ago(detail.createdAt)}创建`}</span>}
-        {detail.labels.map((label) => (
-          <span key={label}>{label}</span>
+        {metaItems(detail).map((item, i) => (
+          <Fragment key={i}>
+            <span className={styles.sep} aria-hidden>
+              ·
+            </span>
+            <span className={item.mono ? styles.mono : undefined}>{item.text}</span>
+          </Fragment>
         ))}
-        {detail.assignees.length > 0 && <span>{`指派给 ${detail.assignees.join('、')}`}</span>}
-        {pr && <span>{pr.review === 'approved' ? '已批准' : pr.review === 'changes-requested' ? '要求修改' : '还没有审阅'}</span>}
       </div>
       {pr && pr.checks.length > 0 && (
         <section className={styles.checkList} aria-label="检查">
@@ -180,6 +180,19 @@ function DetailBody({ detail }: { detail: BoardDetail }) {
       ))}
     </>
   )
+}
+
+/** The meta row after the state word (Figma 77′C / 77′D), `·` between the parts. */
+function metaItems(detail: BoardDetail): { text: string; mono?: boolean }[] {
+  const pr = detail.pr
+  const items: { text: string; mono?: boolean }[] = []
+  if (pr) {
+    items.push({ text: `${pr.headRef} → ${pr.baseRef}`, mono: true }, { text: `+${pr.additions} −${pr.deletions} · ${pr.changedFiles} 个文件` })
+  } else items.push({ text: `${detail.author} ${ago(detail.createdAt)}创建` })
+  for (const label of detail.labels) items.push({ text: label })
+  if (detail.assignees.length > 0) items.push({ text: `指派给 ${detail.assignees.join('、')}` })
+  if (pr) items.push({ text: pr.review === 'approved' ? '已批准' : pr.review === 'changes-requested' ? '要求修改' : '还没有审阅' })
+  return items
 }
 
 function duration(start: number | null, end: number | null): string {
