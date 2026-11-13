@@ -443,18 +443,12 @@ test.describe('session metrics: todo · context · usage', () => {
     await shoot('17B-codex')
   })
 
-  test('the overview has todo / context columns and one usage chip per vendor', async () => {
-    await page.locator('[data-region="sidebar"]').getByText('总览').click()
+  test('看板 · 进度 has one usage chip per vendor', async () => {
+    await page.locator('[data-region="sidebar"]').getByText('看板').click()
     const overview = page.locator('[data-region="overview"]')
     await expect(overview.getByTestId('plan-usage')).toBeVisible()
     await expect(overview.getByTestId('usage-chip-claude')).toHaveText('Claude7d 85%')
     await expect(overview.getByTestId('usage-chip-codex')).toHaveText('Codex5h 40%')
-    const row = (id: string) => overview.locator(`[data-session-id="${id}"]`)
-    await expect(row('s-cookie').getByTestId('overview-todo')).toHaveText('3/7')
-    await expect(row('s-cookie').getByTestId('overview-context')).toHaveText('context 62%')
-    await expect(row('s-graph').getByTestId('overview-todo')).toHaveText('')
-    await expect(row('s-graph').getByTestId('overview-context')).toHaveText('context 41%')
-    await expect(row('s-main').getByTestId('overview-context')).toHaveText('')
     await overview.getByTestId('usage-chip-claude').click()
     await expect(page.getByTestId('usage-popover').getByRole('region')).toHaveCount(2)
     await shoot('17C-overview')
@@ -471,7 +465,7 @@ test.describe('session metrics: todo · context · usage', () => {
         { minutes: 10080, percent: 30, resetsAt: Date.now() + 5 * 86400_000 }
       ]
     })
-    await page.locator('[data-region="sidebar"]').getByText('总览').click()
+    await page.locator('[data-region="sidebar"]').getByText('看板').click()
     const chip = page.locator('[data-region="overview"]').getByTestId('usage-chip-codex')
     await expect(chip).toHaveText(/^Codex5h 用完 · \d\d:\d\d 恢复$/, WITHIN)
     await expect(chip).toHaveAttribute('data-level', 'exhausted')

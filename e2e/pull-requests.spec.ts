@@ -243,17 +243,6 @@ test.describe('F16 PR / CI status', () => {
     await shoot('sidebar')
   })
 
-  test('the overview list has a PR column, blank for a branch without one', async () => {
-    await page.keyboard.press('Meta+Shift+A')
-    const overview = page.locator('[data-region="overview"]')
-    await expect(overview.locator('[data-session-id="s-ci"] [data-testid="overview-pr"]')).toHaveText('#12', WITHIN)
-    await expect(overview.locator('[data-session-id="s-done"] [data-testid="overview-pr"]')).toHaveText('#9已合并')
-    await expect(overview.locator('[data-session-id="s-nav"] [data-testid="overview-pr"]')).toHaveText('')
-    await shoot('overview')
-    await page.keyboard.press('Escape')
-    await expect(overview).toHaveCount(0)
-  })
-
   test('the footer offers 审阅全部改动 and both exits; the preflight (base not protected) makes 合并到 main 并推送 the primary one', async () => {
     await row('s-nav').click()
     await showChanges()

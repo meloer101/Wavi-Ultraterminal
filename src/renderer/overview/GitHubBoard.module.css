@@ -401,7 +401,8 @@
   flex-direction: column;
 }
 
-.checkList .groupHeader {
+/* In the overlay the headers sit on the text's left edge, as the body does. */
+.dialogBody .groupHeader {
   height: 28px;
   padding: 0;
 }

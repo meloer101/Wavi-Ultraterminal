@@ -29,7 +29,7 @@ describe('github model', () => {
 
   it('sums what the header says and notices when gh is not usable', () => {
     expect(githubSummary({ '/a': { loading: false, list: ok(4, 3) }, '/b': { loading: false, list: ok(2, 1) } })).toBe('2 个项目 · 6 个 issue · 4 个 PR')
-    expect(githubSummary({ '/a': { loading: true, list: null } })).toBe('1 个项目')
+    expect(githubSummary({ '/a': { loading: true, list: null }, '/n': { loading: false, list: { gh: 'ready', project: { state: 'not-github' } } } })).toBe('1 个项目')
     expect(ghProblem({ '/a': { loading: false, list: { gh: 'signed-out' } } })).toBe('signed-out')
     expect(ghProblem({ '/a': { loading: false, list: ok(0, 0) } })).toBeNull()
   })

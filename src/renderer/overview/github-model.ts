@@ -35,7 +35,8 @@ export function ghProblem(byRoot: Readonly<Record<string, ProjectLoad | undefine
 }
 
 export function githubSummary(byRoot: Readonly<Record<string, ProjectLoad | undefined>>): string {
-  const loads = Object.values(byRoot).filter((p): p is ProjectLoad => !!p)
+  // Projects known not to be on GitHub are not counted (Figma 77F: they sit folded at the bottom).
+  const loads = Object.values(byRoot).filter((p): p is ProjectLoad => !!p && !(p.list?.gh === 'ready' && p.list.project.state === 'not-github'))
   let issues = 0
   let prs = 0
   let any = false
