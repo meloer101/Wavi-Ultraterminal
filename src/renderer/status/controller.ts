@@ -3,7 +3,7 @@
 import type { ProgramStatus } from '@shared/program-status'
 import type { AgentEvent } from '@shared/agent-events'
 import type { AgentMarker } from '@shared/agent-launch'
-import { healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
+import { askKindOf, healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
 import { needsAttention, STATUS_LABEL } from '@shared/session-status'
 import type { AgentPhase, Session, SessionId, SessionStatus } from '@shared/types'
 
@@ -19,6 +19,8 @@ export interface StatusPatch {
   turnStartedAt?: number
   /** Subagents with a pending ask; absent when none. */
   askingAgents?: string[]
+  /** What the agent's own ask waits for (absent while Wavi's own question is open, or none is pending). */
+  waitingFor?: 'permission' | 'question'
 }
 
 /**
@@ -351,7 +353,8 @@ export class StatusController {
       finishedAt: state.finishedAt,
       statusSince: ask ? ask.since : state.statusSince,
       turnStartedAt: state.turnStartedAt,
-      askingAgents: this.askingOf(id, state)
+      askingAgents: this.askingOf(id, state),
+      waitingFor: !ask && state.status === 'needs_you' ? askKindOf(state) : undefined
     }
   }
 

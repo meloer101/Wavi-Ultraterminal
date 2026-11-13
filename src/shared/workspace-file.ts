@@ -163,6 +163,11 @@ export interface WorkspaceFile {
   shipRuns?: SavedShipRun[]
   /** Dispatch's waiting 开始 and reports on their way (saved-runs.ts); only sessions that exist. Absent when none. */
   dispatch?: SavedDispatch
+  /**
+   * Each project's leader session (PRD F21 v1.177), by project id: an agent session (not a plain terminal) in one of that
+   * project's worktrees. At most one per project. Absent when none.
+   */
+  leaderSessions?: Record<string, string>
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -286,6 +291,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     delete s.dispatchModel
   }
 
+  const leaderSessions = sanitizeLeaders(value.leaderSessions, { sessions, worktrees, projectIds })
+
   const drafts: Record<string, string> = {}
   if (isRecord(value.drafts)) {
     for (const [id, text] of Object.entries(value.drafts)) {
@@ -378,8 +385,26 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(attemptGroups.length > 0 ? { attemptGroups } : {}),
     ...(fixRuns.length > 0 ? { fixRuns } : {}),
     ...(shipRuns.length > 0 ? { shipRuns } : {}),
-    ...(dispatch ? { dispatch } : {})
+    ...(dispatch ? { dispatch } : {}),
+    ...(Object.keys(leaderSessions).length > 0 ? { leaderSessions } : {})
   }
+}
+
+/** A leader whose session is gone, is in another project's worktree or is a plain terminal is dropped (PRD F21 v1.177 · 存盘). */
+export function sanitizeLeaders(
+  raw: unknown,
+  workspace: { sessions: readonly Pick<PersistedSession, 'id' | 'worktreeId' | 'kind'>[]; worktrees: readonly Pick<PersistedWorktree, 'id' | 'projectId'>[]; projectIds: ReadonlySet<string> }
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!isRecord(raw)) return out
+  for (const [projectId, sessionId] of Object.entries(raw)) {
+    if (!workspace.projectIds.has(projectId) || !isText(sessionId)) continue
+    const session = workspace.sessions.find((s) => s.id === sessionId)
+    if (!session || session.kind === 'shell') continue
+    if (workspace.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) continue
+    out[projectId] = sessionId
+  }
+  return out
 }
 
 function parseJson(raw: string | null): unknown {

@@ -241,7 +241,9 @@ function sanitizePending(raw: unknown): PendingStart | null {
   if (!isRecord(raw) || !isText(raw.callId, 256) || !isText(raw.parentId, 256) || !isText(raw.childId, 256)) return null
   if (!isText(raw.base, 256) || typeof raw.uncommitted !== 'boolean' || !isRecord(raw.plan)) return null
   const { item, branch, path, request } = raw.plan
-  const parsed = parseCreateRequest(request)
+  // A leader's adopt makes no worktree: its plan's request is a placeholder (adoptPlan).
+  const adopt = raw.adopt === true
+  const parsed = adopt ? (isRecord(request) && isPath(request.root) ? { root: request.root, branch: '', base: 'HEAD', folder: '', prepare: false } : null) : parseCreateRequest(request)
   if (!isRecord(item) || !isCliAgent(item.agent) || !isText(item.task) || !isText(item.title, 1024) || (item.base !== 'head' && item.base !== 'snapshot')) return null
   if (!parsed || !isText(branch, 256) || !isPath(path)) return null
   return {
@@ -250,6 +252,7 @@ function sanitizePending(raw: unknown): PendingStart | null {
     childId: raw.childId,
     base: raw.base,
     uncommitted: raw.uncommitted,
+    ...(adopt ? { adopt: true as const } : {}),
     plan: { item: { agent: item.agent, task: item.task, title: item.title, ...optional('model', isText(item.model, 256) ? item.model : undefined), base: item.base, ...(item.ui === 'gui' ? { ui: 'gui' as const } : {}) }, branch, path, request: parsed }
   }
 }

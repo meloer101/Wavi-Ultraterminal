@@ -1,7 +1,7 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
 import { hasOwnAdapter } from '@shared/agents'
-import { confirmLabels } from '@shared/dispatch'
+import { confirmLabels, tellLabel } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId } from '@shared/types'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
@@ -14,7 +14,7 @@ import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 import { dropConfirmsOf } from '../dispatch/handler'
-import { finishGoesToDispatcher } from '../dispatch/reports'
+import { finishGoesToDispatcher, leaderTurnQuiet } from '../dispatch/reports'
 import { useDispatch } from '../dispatch/store'
 import { scheduleRequestCounts, useScheduleRequests } from '../schedules/agent-requests'
 
@@ -76,7 +76,8 @@ export function startStatusBridge(): () => void {
     // PRD F21: the dispatcher's agent is gone, so its requests to start sessions go too.
     onWaviAskAbandoned: (id) => dropConfirmsOf(id),
     // PRD F21 回报: a dispatched session's finished turn that goes to its dispatcher as a report is read already.
-    finishReported: (id) => finishGoesToDispatcher(id)
+    // PRD F21 v1.177: so is a leader's turn that a report woke, unless the user spoke there since.
+    finishReported: (id) => finishGoesToDispatcher(id) || leaderTurnQuiet(id)
   })
 
   const exitSubscriptions = new Map<SessionId, () => void>()
@@ -231,6 +232,8 @@ export function startStatusBridge(): () => void {
   const applyConfirms = (): void => {
     const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
     for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
+    // PRD F21 v1.177: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
+    for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !labels.has(id)) labels.set(id, tellLabel(text))
     for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
     asking = new Set(labels.keys())
   }
@@ -239,7 +242,7 @@ export function startStatusBridge(): () => void {
     if (state.pending !== prev.pending) applyConfirms()
   })
   const unsubscribeConfirms = useDispatch.subscribe((state, prev) => {
-    if (state.confirms !== prev.confirms) applyConfirms()
+    if (state.confirms !== prev.confirms || state.tells !== prev.tells) applyConfirms()
     // A report that could not go in waits for 送进去: the turn it is about is the user's to read after all.
     if (state.held !== prev.held) {
       for (const [id, items] of Object.entries(state.held)) {

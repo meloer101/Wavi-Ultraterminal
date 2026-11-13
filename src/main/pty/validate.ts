@@ -115,6 +115,10 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (typeof o.dispatched !== 'boolean') throw new Error('invalid dispatched')
     if (o.dispatched) result.dispatched = true
   }
+  if (o.leader !== undefined) {
+    if (typeof o.leader !== 'boolean') throw new Error('invalid leader')
+    if (o.leader) result.leader = true
+  }
   if (o.script !== undefined) {
     if (o.script !== 'setup' && o.script !== 'run') throw new Error('invalid script')
     if (result.command !== undefined) throw new Error('a script cannot be combined with a command')

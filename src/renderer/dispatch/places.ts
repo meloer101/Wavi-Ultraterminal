@@ -20,6 +20,17 @@ export function placeOf(id: SessionId): Place | null {
   return session && worktree && project ? { session, worktree, project } : null
 }
 
+/** The project's leader session (PRD F21 v1.177), or null. */
+export function leaderOfProject(projectId: string): SessionId | null {
+  return useWorkspace.getState().leaderSessions?.[projectId] ?? null
+}
+
+/** Whether this session is its project's leader. */
+export function isLeaderSession(id: SessionId): boolean {
+  const place = placeOf(id)
+  return place !== null && leaderOfProject(place.project.id) === id
+}
+
 /** The sessions this one dispatched, listed ones first (an archived child is still its child). */
 export function childrenOf(parentId: SessionId): Place[] {
   return useWorkspace

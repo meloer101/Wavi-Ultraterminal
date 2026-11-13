@@ -32,6 +32,20 @@ describe('sanitizeWorkspaceFile', () => {
     for (const key of ['fixRuns', 'shipRuns', 'dispatch']) expect(plain).not.toHaveProperty(key)
   })
 
+  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.177)', () => {
+    const raw = {
+      ...structuredClone(valid),
+      projects: [...valid.projects, { id: 'p2', name: 'other', rootPath: '/code/other' }],
+      worktrees: [...valid.worktrees, { id: 'w2', projectId: 'p2', branch: 'main', path: '/code/other', isMain: true }],
+      leaderSessions: { p1: 's1', p2: 's1', gone: 's1' }
+    }
+    expect(sanitizeWorkspaceFile(raw, 0)!.leaderSessions).toEqual({ p1: 's1' })
+    // A plain terminal, a session that is gone and junk are dropped; with nothing left the key is absent.
+    for (const leaderSessions of [{ p1: 's2' }, { p1: 'nope' }, 'junk', { p1: 7 }]) {
+      expect(sanitizeWorkspaceFile({ ...structuredClone(valid), leaderSessions }, 0)).not.toHaveProperty('leaderSessions')
+    }
+  })
+
   it('round-trips a valid file', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })

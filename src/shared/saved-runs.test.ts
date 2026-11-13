@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FixRun } from './auto-fix-brakes'
-import type { PendingStart } from './dispatch'
+import { adoptPlan, type PendingStart } from './dispatch'
 import { GIT_FAILURE_KINDS } from './git-failures'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedShipRun } from './saved-runs'
 import type { ShipState } from './ship'
@@ -142,6 +142,16 @@ const pending: PendingStart = {
   }
 }
 
+const adoptPending: PendingStart = {
+  callId: 'c3',
+  parentId: 's1',
+  childId: 's2',
+  base: 'main',
+  uncommitted: false,
+  adopt: true,
+  plan: adoptPlan({ agent: 'claude', title: 'Login form', task: 'Finish it', branch: 'main', path: '/code/acme', root: '/code/acme' })
+}
+
 describe('sanitizeSavedDispatch', () => {
   it('keeps what waits for the user and the reports on their way, for sessions that exist', () => {
     const report = { childId: 's2', title: 'tests', agent: 'codex', event: 'done', branch: 'jacob/tests', turn: 3 }
@@ -162,6 +172,12 @@ describe('sanitizeSavedDispatch', () => {
     expect(sanitizeSavedDispatch({ confirms: [gui] }, sessions)?.confirms).toEqual([gui])
     const odd = { ...pending, plan: { ...pending.plan, item: { ...pending.plan.item, ui: 'tui' } } }
     expect(sanitizeSavedDispatch({ confirms: [odd] }, sessions)?.confirms).toEqual([pending])
+  })
+
+  it('keeps a leader’s adopt request, whose plan makes no worktree (PRD F21 v1.177)', () => {
+    const adopt: PendingStart = { ...adoptPending }
+    expect(sanitizeSavedDispatch({ confirms: [adopt] }, sessions)?.confirms).toEqual([adopt])
+    expect(sanitizeSavedDispatch({ confirms: [{ ...adopt, plan: { ...adopt.plan, request: { root: 'relative' } } }] }, sessions)).toBeNull()
   })
 
   it('is nothing when nothing is left', () => {

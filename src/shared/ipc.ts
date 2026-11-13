@@ -62,6 +62,11 @@ export interface PtySpawnOptions {
   permission?: CliPermission
   /** The session was started by another session's `wavi run` (PRD F21): its brief, not a system prompt, tells it about `wavi`. */
   dispatched?: boolean
+  /**
+   * The session is its project's leader (PRD F21 v1.177): Claude / Codex start without their file-changing tools or
+   * with a read-only permission profile, and with the leader system prompt. Main ignores it for any other agent.
+   */
+  leader?: boolean
   cols: number
   rows: number
 }

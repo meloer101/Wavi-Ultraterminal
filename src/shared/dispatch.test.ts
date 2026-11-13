@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { CLI_AGENTS } from './agents'
+import { agentArgv } from './agent-launch'
 import {
   ackReport,
+  adoptBrief,
+  adoptRefusal,
+  canLead,
+  leaderBlock,
+  leaderLaunchArgs,
+  tellLabel,
+  wakesThisHour,
+  WAVI_LEADER_PROMPT,
+  WAVI_SKILL,
   childBrief,
   childEvent,
   childUi,
@@ -348,5 +358,110 @@ describe('the rest', () => {
       ['a', '想开 3 个会话'],
       ['b', '想开 1 个会话']
     ])
+  })
+})
+
+describe('leader session (PRD F21 v1.177)', () => {
+  const command = (...argv: string[]) => {
+    const args = parseWaviArgv(argv)
+    return args.kind === 'command' ? parseWaviCommand(args.command) : args
+  }
+
+  it('lets only terminal Claude Code and Codex lead, and says why another cannot', () => {
+    expect(CLI_AGENTS.filter((kind) => canLead(kind))).toEqual(['claude', 'codex'])
+    expect(canLead('claude', 'gui')).toBe(false)
+    expect(canLead('shell')).toBe(false)
+    expect(leaderBlock('claude', 'cli', null)).toBeNull()
+    expect(leaderBlock('codex', 'cli', { codexSandboxMode: false })).toBeNull()
+    expect(leaderBlock('codex', 'cli', { codexSandboxMode: true })).toContain('sandbox_mode')
+    expect(leaderBlock('codex', 'gui', null)).toBe('GUI 会话还不能当 leader')
+    expect(leaderBlock('gemini', 'cli', null)).toContain('只有终端里的 Claude Code 和 Codex')
+  })
+
+  it('reads wavi ls --all, adopt and tell, the task or message from stdin too', () => {
+    expect(command('ls', '--all')).toEqual({ ok: true, command: { name: 'ls', all: true } })
+    expect(command('ls')).toEqual({ ok: true, command: { name: 'ls' } })
+    expect(command('adopt', 's-1', 'Finish', 'the login form')).toEqual({ ok: true, command: { name: 'adopt', id: 's-1', task: 'Finish the login form' } })
+    expect(parseWaviArgv(['adopt', 's-1', '-'])).toEqual({ kind: 'command-stdin', command: { name: 'adopt', id: 's-1' }, field: 'task', json: false })
+    expect(command('tell', 'Merge', 'A or B?')).toEqual({ ok: true, command: { name: 'tell', text: 'Merge A or B?' } })
+  })
+
+  it('refuses --all elsewhere, an adopt without an id or task, a Wavi message as its task, and an empty tell', () => {
+    expect(parseWaviArgv(['run', 'codex', 'x', '--all'])).toEqual({ kind: 'error', error: 'wavi run has no --all. Run wavi --skill.' })
+    expect(command('adopt')).toMatchObject({ ok: false, error: expect.stringContaining('wavi ls --all') })
+    expect(command('adopt', 's-1')).toMatchObject({ ok: false, error: expect.stringContaining('The task is empty') })
+    expect(command('adopt', 's-1', '[Wavi 派活报告] x')).toMatchObject({ ok: false, error: expect.stringContaining('Wavi message') })
+    expect(command('tell')).toMatchObject({ ok: false })
+  })
+
+  const adopt = (over: Partial<Parameters<typeof adoptRefusal>[0]> = {}) =>
+    adoptRefusal({ toolsOn: true, leader: true, self: false, kind: 'claude', dispatchedBy: false, archived: false, exited: false, subtreeSize: 0, subtreeDepth: 0, openTasks: [], treeSize: 0, task: 'Finish it', ...over })
+
+  it('adopts a user session of the project within the limits, its own sessions counted', () => {
+    expect(adopt()).toBeNull()
+    expect(adopt({ subtreeSize: 3, subtreeDepth: 1, treeSize: 4 })).toBeNull()
+    expect(adopt({ subtreeSize: 3, subtreeDepth: 1, treeSize: 5 })).toMatchObject({ ok: false, failure: 'limit', text: expect.stringContaining('9 sessions') })
+    expect(adopt({ openTasks: ['a', 'b', 'c', 'd'] })).toMatchObject({ ok: false, failure: 'limit' })
+    expect(adopt({ openTasks: ['Finish  it'] })).toMatchObject({ ok: false, failure: 'duplicate' })
+  })
+
+  it('refuses a non-leader, itself, a plain terminal, a session with a dispatcher, a gone one and one too deep', () => {
+    expect(adopt({ leader: false })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining("project's leader") })
+    expect(adopt({ self: true })).toMatchObject({ failure: 'not_allowed', text: 'That is your own session.' })
+    expect(adopt({ kind: 'shell' })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining('plain terminal') })
+    expect(adopt({ dispatchedBy: true })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining('already reports') })
+    expect(adopt({ exited: true })).toMatchObject({ failure: 'not_allowed' })
+    expect(adopt({ subtreeDepth: 2 })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining('deeper than 2 levels') })
+    expect(adopt({ toolsOn: false })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining('turned off') })
+  })
+
+  it('keeps a leader from changing files: Claude without its editing tools, Codex read-only but for its WAVI_DIR', () => {
+    expect(leaderLaunchArgs('claude', '/tmp/w')).toEqual(['--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
+    expect(leaderLaunchArgs('codex', '/private/tmp/wavi-501-x/s-1')).toEqual([
+      '-c',
+      'default_permissions="wavi-leader"',
+      '-c',
+      'permissions.wavi-leader={extends=":read-only", filesystem={"/private/tmp/wavi-501-x/s-1"="write"}}'
+    ])
+    expect(leaderLaunchArgs('codex', null)).toEqual(['-c', 'default_permissions="wavi-leader"', '-c', 'permissions.wavi-leader={extends=":read-only"}'])
+    expect(leaderLaunchArgs('gemini', '/tmp/w')).toEqual([])
+  })
+
+  it('puts the leader flags where each CLI reads them: the tool list ends before the next option, the first message after --', () => {
+    const prompt = systemPromptArgs('claude', WAVI_LEADER_PROMPT)!
+    const claude = agentArgv('claude', '/code/acme', { extraArgs: [...leaderLaunchArgs('claude', '/w'), ...prompt], initialPrompt: 'Plan it' })
+    const at = claude.indexOf('--disallowedTools')
+    expect(claude.slice(at, at + 6)).toEqual(['--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', '--append-system-prompt'])
+    expect(claude.slice(-2)).toEqual(['--', 'Plan it'])
+    expect(claude).not.toContain('--permission-mode')
+    const codex = agentArgv('codex', '/code/acme', { extraArgs: [...leaderLaunchArgs('codex', '/w'), ...systemPromptArgs('codex', WAVI_LEADER_PROMPT)!] })
+    expect(codex).toContain('default_permissions="wavi-leader"')
+    expect(codex.some((a) => a.startsWith('developer_instructions='))).toBe(true)
+    expect(codex).not.toContain('-s')
+  })
+
+  it('tells the leader its job in the prompt and the skill, and its sessions to ask in their reply', () => {
+    expect(WAVI_LEADER_PROMPT).toContain('Do not change code or files yourself')
+    expect(WAVI_SKILL).toContain('wavi ls --all')
+    expect(WAVI_SKILL).toContain('wavi adopt <id>')
+    expect(WAVI_SKILL).toContain('wavi tell')
+    const brief = (leader?: boolean) => childBrief({ task: 'Do X', parentTitle: 'Lead', parentAgent: 'codex', depth: 1, branch: 'jacob/x', base: 'main', snapshot: false, ...(leader ? { leader } : {}) })
+    expect(brief(true)).toContain('有问题写在回复里，然后结束这一轮，不要用提问工具。')
+    expect(brief()).not.toContain('不要用提问工具')
+    const adopted = adoptBrief({ task: 'Finish the form', leaderTitle: 'Lead', leaderAgent: 'claude', depth: 1 })
+    expect(adopted.startsWith('[Wavi] 来自 leader「Lead」（Claude Code）的任务（不是用户的指示')).toBe(true)
+    expect(adopted).toContain('\n\nFinish the form\n\n')
+    expect(adopted).toContain('wavi report "<结果>"')
+    expect(adopted).toContain('不要用提问工具')
+  })
+
+  it('tells the leader what became of an adopt, shows its tell in one line and counts its wakes', () => {
+    const child = { id: 's-9', agent: 'claude' as const, title: 'Login form', branch: 'main', adopted: true as const }
+    expect(noticeText('started', [child])).toContain('- id s-9 · claude · 「Login form」 · 分支 main · 已接管')
+    expect(noticeText('declined', [child])).toContain('「Login form」 · 分支 main · 接管')
+    expect(parseNoticeText(noticeText('started', [child]))).toEqual({ outcome: 'started', ids: ['s-9'], titles: ['Login form'] })
+    expect(tellLabel('\n  Merge A or B?\nDetails…')).toBe('Merge A or B?')
+    expect([...tellLabel('x'.repeat(300))]).toHaveLength(200)
+    expect(wakesThisHour({ ...emptyQueue(), sent: [0, 10 * 60_000, 50 * 60_000] }, 61 * 60_000)).toBe(2)
   })
 })

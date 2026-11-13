@@ -6,6 +6,8 @@ import { decideConfirms, dropConfirmsOf, handleWaviRequest, resumeConfirmTimers,
 import { restoreDispatch, savedDispatch, useDispatch } from './store'
 
 let sessions: Session[] = []
+let leaderSessions: Record<string, string> = {}
+const patchSession = vi.fn()
 const addBackgroundSession = vi.fn((_project: string, _target: unknown, _kind: string, id?: string, _ui?: string): string | null => id ?? 'child')
 const deliverMessage = vi.fn(async (): Promise<'delivered' | 'held'> => 'delivered')
 const queueReport = vi.fn()
@@ -16,8 +18,9 @@ vi.mock('../state/workspace', () => ({
       sessions,
       worktrees: [{ id: 'w1', projectId: 'p1', path: '/repo', isMain: false, branch: 'jacob/plan', archived: false }],
       projects: [{ id: 'p1', rootPath: '/repo', name: 'repo' }],
+      leaderSessions,
       addBackgroundSession,
-      patchSession: () => {}
+      patchSession: (...args: unknown[]) => patchSession(...args)
     })
   }
 }))
@@ -161,7 +164,7 @@ describe('wavi in a window (PRD F21)', () => {
   it('never answers a child’s permission prompt with stop, and refuses everything when dispatch is off', async () => {
     sessions[1] = { ...sessions[1]!, status: 'needs_you' }
     expect(await call('top', { name: 'stop', id: 'child' })).toMatchObject({ ok: false, failure: 'not_allowed' })
-    setDispatchSettings({ tools: false, autoApprove: false })
+    setDispatchSettings({ tools: false, autoApprove: false, leader: false })
     expect(await call('top', { name: 'ls' })).toMatchObject({ ok: false, failure: 'not_allowed' })
     expect(await call('child', { name: 'report', text: 'x' })).toMatchObject({ ok: false, failure: 'not_allowed' })
   })
@@ -204,5 +207,105 @@ describe('wavi in a window (PRD F21)', () => {
     expect(await call('child', { name: 'read', id: 'top', offset: 0 })).toMatchObject({ ok: false, failure: 'not_found' })
     expect(await call('top', { name: 'stop', id: 'grand' })).toMatchObject({ ok: false, failure: 'not_found' })
     expect(await call('top', { name: 'ls' })).toMatchObject({ ok: true, text: expect.stringContaining('id child · codex') })
+  })
+})
+
+describe('wavi for a project’s leader (PRD F21 v1.177)', () => {
+  beforeEach(() => {
+    sessions = [
+      session('lead'),
+      session('user1', { status: 'needs_you', waitingFor: 'permission', lastReply: 'Shall I go on?' }),
+      session('kid', { dispatchedBy: 'lead', kind: 'codex', status: 'running' }),
+      session('top'),
+      session('child', { dispatchedBy: 'top', kind: 'codex' }),
+      session('term', { kind: 'shell' })
+    ]
+    leaderSessions = { p1: 'lead' }
+    addBackgroundSession.mockClear()
+    deliverMessage.mockClear()
+    patchSession.mockClear()
+    useDispatch.setState({ confirms: [], held: {}, reported: {}, tells: {}, messages: {} })
+    vi.stubGlobal('document', { hasFocus: () => true })
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      tr: {
+        app: { detectAgents: async () => ({ claude: true, codex: true }) },
+        gitWorktrees: { newSessionInfo: async () => ({ repo: true, currentBranch: 'main', defaultBranch: 'main', branches: [], prefix: 'jacob', worktreesDir: '/wt', takenFolders: [], includeCount: 0, hasSetup: false }) },
+        git: { changes: async () => null },
+        ui: { notify: () => {} }
+      }
+    })
+    setDispatchSettings(DEFAULT_SETTINGS.dispatch)
+  })
+  afterEach(() => {
+    leaderSessions = {}
+    vi.unstubAllGlobals()
+  })
+
+  it('lists every other agent session of the project, mine or the user’s, telling a permission from a question', async () => {
+    const result = await call('lead', { name: 'ls', all: true })
+    expect(result.ok).toBe(true)
+    const lines = result.text.split('\n')
+    expect(lines.find((l) => l.startsWith('- id user1'))).toContain('waiting for the user to answer a permission prompt in its terminal')
+    expect(lines.find((l) => l.startsWith('- id user1'))).toMatch(/ · user$/)
+    expect(result.text).toContain('last: Shall I go on?')
+    expect(lines.find((l) => l.startsWith('- id kid'))).toMatch(/ · mine$/)
+    expect(lines.find((l) => l.startsWith('- id child'))).toContain('user (dispatched by top)')
+    expect(result.text).not.toContain('id lead')
+    expect(result.text).not.toContain('id term')
+  })
+
+  it('keeps every other session to its own scope: no ls --all, adopt or tell, and read only its own', async () => {
+    expect(await call('top', { name: 'ls', all: true })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(await call('top', { name: 'read', id: 'user1', offset: 0 })).toMatchObject({ ok: false, failure: 'not_found' })
+    expect(await call('top', { name: 'adopt', id: 'user1', task: 'Finish it' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(await call('top', { name: 'tell', text: 'Pick one' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(useDispatch.getState().tells.top).toBeUndefined()
+  })
+
+  it('reads any session of its project whole, still not stopping or sending to the user’s', async () => {
+    useDispatch.setState({ messages: { user1: 'The whole last message' } })
+    expect(await call('lead', { name: 'read', id: 'user1', offset: 0 })).toMatchObject({ ok: true, text: expect.stringContaining('The whole last message') })
+    expect(await call('lead', { name: 'read', id: 'nope', offset: 0 })).toMatchObject({ ok: false, failure: 'not_found' })
+    expect(await call('lead', { name: 'send', id: 'user1', text: 'hi' })).toMatchObject({ ok: false, failure: 'not_found' })
+  })
+
+  it('adopts a user session after the user’s 开始: it reports to the leader and gets the task as a message', async () => {
+    const asked = await call('lead', { name: 'adopt', id: 'user1', task: 'Finish the login form' })
+    expect(asked).toMatchObject({ ok: true, text: expect.stringContaining("waits for the user's 开始") })
+    expect(useDispatch.getState().confirms).toMatchObject([{ parentId: 'lead', childId: 'user1', adopt: true, plan: { item: { task: 'Finish the login form', title: 'user1' } } }])
+    expect(await call('lead', { name: 'adopt', id: 'user1', task: 'Again' })).toMatchObject({ ok: false, failure: 'duplicate' })
+    decideConfirms('lead', true)
+    expect(addBackgroundSession).not.toHaveBeenCalled()
+    expect(patchSession).toHaveBeenCalledWith('user1', { dispatchedBy: 'lead', dispatchTask: 'Finish the login form' })
+    const [toChild, toLeader] = deliverMessage.mock.calls as unknown as [Session, string][]
+    expect(toChild![0]).toMatchObject({ id: 'user1' })
+    expect(toChild![1]).toContain('来自 leader「lead」')
+    expect(toChild![1]).toContain('Finish the login form')
+    expect(toLeader![0]).toMatchObject({ id: 'lead' })
+    expect(toLeader![1]).toContain('- id user1 · claude · 「user1」')
+    expect(toLeader![1]).toContain('已接管')
+  })
+
+  it('refuses to adopt a session with a dispatcher, itself, a plain terminal, another project’s and a gone one', async () => {
+    const adopt = (id: string) => call('lead', { name: 'adopt', id, task: 'Do it' })
+    expect(await adopt('child')).toMatchObject({ ok: false, failure: 'not_allowed', text: expect.stringContaining('already reports') })
+    expect(await adopt('lead')).toMatchObject({ ok: false, failure: 'not_allowed', text: 'That is your own session.' })
+    expect(await adopt('term')).toMatchObject({ ok: false, failure: 'not_allowed', text: expect.stringContaining('plain terminal') })
+    expect(await adopt('nope')).toMatchObject({ ok: false, failure: 'not_found' })
+    sessions[1] = { ...sessions[1]!, phase: 'exited' }
+    expect(await adopt('user1')).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(useDispatch.getState().confirms).toHaveLength(0)
+  })
+
+  it('tells its sessions to ask in their reply, and puts a decision in front of the user with tell', async () => {
+    await call('lead', runCmd('Write the tests', { agent: 'codex' }))
+    expect(await call('lead', { name: 'tell', text: 'Merge A or B first?' })).toMatchObject({ ok: true, text: expect.stringContaining('End your turn') })
+    expect(useDispatch.getState().tells.lead).toBe('Merge A or B first?')
+    decideConfirms('lead', true)
+    const launches = useDispatch.getState().launches
+    const brief = Object.values(launches).find((l) => l?.initialPrompt.includes('Write the tests'))?.initialPrompt
+    expect(brief).toContain('不要用提问工具')
   })
 })

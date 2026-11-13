@@ -5,7 +5,8 @@ import { handleWaviRequest, resumeConfirmTimers, setDispatchSettings } from './h
 import { startAttemptReports } from '../attempts/report'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { resumeReports, startReports } from './reports'
-import { restoreDispatch, savedDispatch, useDispatch } from './store'
+import { onUserSubmit } from '../terminal/typing'
+import { restoreDispatch, savedDispatch, setTell, useDispatch } from './store'
 
 let started = false
 /** The saved waits are taken up once per window (not again on a remount). */
@@ -37,7 +38,10 @@ export function startDispatchBridge(): () => void {
   })
   // 同任务多解's members report through the same channels (attempts/report.ts).
   const offAttempts = startAttemptReports()
+  // A leader's `wavi tell` is answered when the user sends a line in its terminal (PRD F21 v1.177 · 交给用户).
+  const offSubmits = onUserSubmit((id) => setTell(id, null))
   return () => {
+    offSubmits()
     offAttempts()
     offSaves()
     offSnapshot()

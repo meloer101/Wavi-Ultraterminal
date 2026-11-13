@@ -13,6 +13,9 @@ import {
   EMPTY_WORKSPACE,
   forgetWorktrees,
   archiveWorktrees,
+  isLeader,
+  leaderOf,
+  setLeader,
   unarchiveWorktrees,
   persistedStateChanged,
   projectOfSession,
@@ -509,5 +512,43 @@ describe('newProjectAgent (⌘O)', () => {
   it('with no agent session yet, starts the first CLI on PATH, else Claude Code', () => {
     expect(newProjectAgent([], { codex: true })).toBe('codex')
     expect(newProjectAgent([{ kind: 'shell', lastActivityAt: 3 }], null)).toBe('claude')
+  })
+})
+
+describe('leader sessions (PRD F21 v1.177)', () => {
+  const ui = { sidebarCollapsed: false, sidebarWidth: 264, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 520, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [], newSessionWorkdir: {} }
+
+  it('makes one Claude or Codex terminal session per project its leader, and is saved with the workspace', () => {
+    const data = withSessions('claude', 'codex', 'shell') // p-1: s-3, s-4, s-5
+    const led = setLeader(data, 'p-1', 's-3')
+    expect(leaderOf(led, 'p-1')).toBe('s-3')
+    expect(isLeader(led, 's-3')).toBe(true)
+    expect(isLeader(led, 's-4')).toBe(false)
+    // One per project: a second is refused until the first is gone.
+    expect(setLeader(led, 'p-1', 's-4')).toBe(led)
+    const file = serializeWorkspace(led, ui, {})
+    expect(file.leaderSessions).toEqual({ 'p-1': 's-3' })
+    expect(restoreWorkspace(sanitizeWorkspaceFile(file, 0)).leaderSessions).toEqual({ 'p-1': 's-3' })
+    expect(persistedStateChanged({ ...led, ...ui }, { ...data, ...ui })).toBe(true)
+    expect(serializeWorkspace(data, ui, {})).not.toHaveProperty('leaderSessions')
+  })
+
+  it('refuses a plain terminal, a GUI session, another project and a session that is not there', () => {
+    const data = withSessions('claude', 'shell') // s-3, s-4
+    expect(setLeader(data, 'p-1', 's-4')).toBe(data)
+    expect(setLeader(data, 'p-2', 's-3')).toBe(data)
+    expect(setLeader(data, 'p-1', 'nope')).toBe(data)
+    const gui = { ...data, sessions: data.sessions.map((s) => (s.id === 's-3' ? { ...s, ui: 'gui' as const } : s)) }
+    expect(setLeader(gui, 'p-1', 's-3')).toBe(gui)
+  })
+
+  it('forgets the leader when it is closed or its project removed; its children become ordinary sessions', () => {
+    const data = setLeader(withSessions('claude', 'codex'), 'p-1', 's-3')
+    const withChild = { ...data, sessions: data.sessions.map((s) => (s.id === 's-4' ? { ...s, dispatchedBy: 's-3', dispatchTask: 'x' } : s)) }
+    const closed = closeSession(withChild, 's-3')
+    expect(leaderOf(closed, 'p-1')).toBeNull()
+    expect(closed.sessions.find((s) => s.id === 's-4')).not.toHaveProperty('dispatchedBy')
+    expect(leaderOf(closeSession(withChild, 's-4'), 'p-1')).toBe('s-3')
+    expect(removeProject(data, 'p-1').leaderSessions).toEqual({})
   })
 })

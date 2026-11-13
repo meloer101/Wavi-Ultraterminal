@@ -13,6 +13,7 @@ import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
 import { takeDispatchLaunch } from '../dispatch/store'
 import { useWorkspace } from '../state/workspace'
+import { isLeader } from '../state/workspace-model'
 import { noteInput } from './typing'
 
 const ACK_BATCH_UNITS = 32 * 1024
@@ -212,6 +213,8 @@ export class SessionTerminal {
     // A dispatched session's first launch carries its task on the command line (PRD F21); a resume never does.
     const dispatched = resumeAgentSessionId ? undefined : takeDispatchLaunch(id)
     const child = useWorkspace.getState().sessions.some((s) => s.id === id && s.dispatchedBy !== undefined)
+    // A project's leader runs without changing files, every launch (PRD F21 v1.177).
+    const leader = isLeader(useWorkspace.getState(), id)
     try {
       await pty.spawn({
         sessionId: id,
@@ -222,6 +225,7 @@ export class SessionTerminal {
         ...(resumeAgentSessionId ? { resumeAgentSessionId } : {}),
         ...(script ? { script } : {}),
         ...(child ? { dispatched: true } : {}),
+        ...(leader ? { leader: true } : {}),
         ...(dispatched
           ? { initialPrompt: dispatched.initialPrompt, ...(dispatched.model ? { model: dispatched.model } : {}), ...(dispatched.permission ? { permission: dispatched.permission } : {}) }
           : {})

@@ -117,6 +117,20 @@ describe('StatusController', () => {
     expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBeUndefined()
   })
 
+  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.177)', () => {
+    const waiting = () => h.sessions.find((s) => s.id === 'b')?.waitingFor
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    expect(waiting()).toBeUndefined()
+    h.controller.handleEvent('b', { type: 'permission-request', tool: 'Bash', input: { command: 'pnpm lint' } })
+    expect(waiting()).toBe('permission')
+    h.controller.handleEvent('b', { type: 'tool-end', tool: 'Bash', input: { command: 'pnpm lint' }, ok: true })
+    expect(waiting()).toBeUndefined()
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'AskUserQuestion', input: { questions: [{ question: 'Which?' }] } })
+    expect(waiting()).toBe('question')
+    h.controller.setWaviAsk('b', '想开 1 个会话')
+    expect(waiting()).toBeUndefined()
+  })
+
   it('does not patch when nothing changed', () => {
     const before = h.sessions
     h.controller.tick()

@@ -5,12 +5,24 @@ import { createHash, randomBytes } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { shellQuote } from '@shared/agent-launch'
-import { DISPATCH_IPC, parseDeliverRequest, reportChannelOf, systemPromptArgs, WAVI_SYSTEM_PROMPT, type DeliverResult, type DispatchAgent } from '@shared/dispatch'
+import {
+  canLead,
+  DISPATCH_IPC,
+  leaderLaunchArgs,
+  parseDeliverRequest,
+  reportChannelOf,
+  systemPromptArgs,
+  WAVI_LEADER_PROMPT,
+  WAVI_SYSTEM_PROMPT,
+  type DeliverResult,
+  type DispatchAgent
+} from '@shared/dispatch'
 import { executableOnPath, userLoginPath } from '../agents-installed'
 import { setDispatchHookHandler } from '../hooks'
 import { getSettings } from '../settings'
 import { DispatchBroker } from './broker'
 import { codexQueue, PiInbox, writeInbox } from './deliver'
+import { leaderCheck } from './leader'
 import { parseInbox, WaviRequests } from './requests'
 
 let ownerOf: (sessionId: string) => WebContents | null = () => null
@@ -98,7 +110,7 @@ export interface DispatchLaunch {
 }
 
 /** What an agent launch adds for dispatch; null when the user turned it off (设置 · 自动化 · 派活) or it is not ready. */
-export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent, options: { child: boolean }): Promise<DispatchLaunch | null> {
+export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent, options: { child: boolean; leader?: boolean }): Promise<DispatchLaunch | null> {
   if (!getSettings().dispatch.tools || !requests || !binDir || !wrapper) return null
   const session = await requests.ensureSession(sessionId).catch((error: unknown) => {
     console.error('[dispatch] could not make the session folder:', error)
@@ -108,8 +120,17 @@ export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent,
   return {
     env: { WAVI_DIR: session.dir, WAVI_TOKEN: session.token, WAVI_BIN: wrapper },
     pathPrefix: binDir,
-    extraArgs: options.child ? [] : (systemPromptArgs(agent, WAVI_SYSTEM_PROMPT) ?? [])
+    extraArgs: options.child ? [] : (systemPromptArgs(agent, options.leader && canLead(agent) ? `${WAVI_SYSTEM_PROMPT}\n\n${WAVI_LEADER_PROMPT}` : WAVI_SYSTEM_PROMPT) ?? [])
   }
+}
+
+/**
+ * The arguments that keep a leader session from changing files (PRD F21 v1.177 · 不改代码), with or without dispatch:
+ * a leader never runs unrestricted. Its WAVI_DIR stays writable for `wavi` when dispatch is on. Empty for any other
+ * launch.
+ */
+export function leaderArgsFor(agent: DispatchAgent, leader: boolean, dispatch: DispatchLaunch | null): string[] {
+  return leader && canLead(agent) ? leaderLaunchArgs(agent, dispatch?.env.WAVI_DIR ?? null) : []
 }
 
 /** A GUI session's own input (PRD F23): null when the session is not one; else whether the message went in. */
@@ -174,5 +195,6 @@ export function registerDispatchHandlers(owner: (sessionId: string) => WebConten
     if (typeof callId === 'string' && callId.length <= 64) broker.answer(event.sender, callId, result)
   })
   ipcMain.handle(DISPATCH_IPC.deliver, (event, raw: unknown) => deliver(raw, event.sender))
+  ipcMain.handle(DISPATCH_IPC.leaderCheck, () => leaderCheck())
   app.on('will-quit', () => requests?.stop())
 }
