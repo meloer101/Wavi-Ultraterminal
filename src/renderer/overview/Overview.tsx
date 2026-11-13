@@ -44,7 +44,6 @@ import { SessionOverlay } from './SessionOverlay'
 import { BatchBar } from './BatchBar'
 import { AttemptGroups } from '../attempts/AttemptGroups'
 import { DispatchGroups } from '../dispatch/DispatchGroups'
-import { useDispatch } from '../dispatch/store'
 import { enterSession, useOverviewStore, type OverviewView } from './store'
 import styles from './Overview.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -81,15 +80,14 @@ export function Overview() {
     }))
   )
   const now = useClockNow()
-  const tells = useDispatch((s) => s.tells)
   const { view, collapsed, selectedId, openId, layout, filter, picked, pickAnchor, setView, toggleGroup, select, setOpen, openOverlay, closePane, setFilter, setPicked } =
     useOverviewStore()
   const bodyRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
 
   const groups = useMemo(
-    () => buildOverview({ projects, worktrees, sessions, now, filter, tells }),
-    [projects, worktrees, sessions, filter, now, tells]
+    () => buildOverview({ projects, worktrees, sessions, now, filter }),
+    [projects, worktrees, sessions, filter, now]
   )
   const collapsedSet = useMemo(() => new Set(view === 'board' ? [] : collapsed), [collapsed, view])
   const ids = useMemo(() => orderedIds(groups, collapsedSet), [groups, collapsedSet])

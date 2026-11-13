@@ -3,7 +3,7 @@
 import { hasOwnAdapter } from '@shared/agents'
 import { confirmLabels, tellLabel } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
-import type { SessionId } from '@shared/types'
+import type { SessionId, WaviAskKind } from '@shared/types'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
@@ -230,12 +230,16 @@ export function startStatusBridge(): () => void {
   // PRD F24: so does an agent's `wavi schedule` (想建 N 个定时任务); a session with both shows the sessions first.
   let asking = new Set<string>()
   const applyConfirms = (): void => {
-    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1, adopt: c.adopt === true })))
-    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
+    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1, adopt: c.kind === 'adopt' })))
+    const asks = new Map<string, { label: string; kind: WaviAskKind }>([...labels].map(([id, label]) => [id, { label, kind: 'confirm' as const }]))
+    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!asks.has(id)) asks.set(id, { label: `想建 ${n} 个定时任务`, kind: 'schedule' })
     // PRD F21 v1.178: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
-    for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !labels.has(id)) labels.set(id, tellLabel(text))
-    for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
-    asking = new Set(labels.keys())
+    for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !asks.has(id)) asks.set(id, { label: tellLabel(text), kind: 'tell' })
+    for (const id of new Set([...asking, ...asks.keys()])) {
+      const ask = asks.get(id)
+      controller.setWaviAsk(id, ask?.label ?? null, ask?.kind)
+    }
+    asking = new Set(asks.keys())
   }
   applyConfirms()
   const unsubscribeScheduleRequests = useScheduleRequests.subscribe((state, prev) => {

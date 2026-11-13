@@ -99,8 +99,9 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
 /**
  * Presses Enter on what is already in the agent's input line once `needle` shows there — the phone's photos sent
  * without text (PRD F22): their paths became `[Image #N]`. Rejects with a user-facing message while a menu is open.
+ * `user`: as for `submitPrompt`.
  */
-export async function submitInputLine(sessionId: SessionId, needle: string): Promise<void> {
+export async function submitInputLine(sessionId: SessionId, needle: string, options: { user?: boolean } = {}): Promise<void> {
   if (isGuiSession(sessionId)) {
     // The photos are the composer's attachments: send them with whatever is typed.
     const attachments = useGuiSessions.getState().attachments[sessionId] ?? []
@@ -110,6 +111,7 @@ export async function submitInputLine(sessionId: SessionId, needle: string): Pro
     return
   }
   refuseOverMenu(sessionId)
+  if (options.user) noteUserLine(sessionId)
   try {
     await sendQueued(queue, sessionId, [{ type: 'waitForText', needles: [needle], timeoutMs: 5_000 }, { type: 'delay', ms: 150 }, { type: 'write', data: '\r' }], getSendIo(sessionId))
   } catch (error) {

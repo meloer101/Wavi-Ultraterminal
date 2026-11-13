@@ -100,6 +100,26 @@ describe('who sent a prompt (PRD F21 v1.178)', () => {
     await expect(submitPrompt('s-1', '继续', { user: true })).rejects.toThrow(MENU_REFUSAL)
     expect(lastSubmitIn('s-1')).toBeNull()
   })
+
+  it('counts the phone’s photos sent without text as the user’s line too, only when said so', async () => {
+    forgetTyping('s-1')
+    // The photo's `[Image #1]` shows up after the send began, as the paste lands.
+    const photo = async (options?: { user?: boolean }): Promise<void> => {
+      term.viewport = '❯ '
+      const sent = submitInputLine('s-1', '[Image #', options)
+      setTimeout(() => (term.viewport = '❯ [Image #1] '), 60)
+      await sent
+    }
+    await photo()
+    expect(lastSubmitIn('s-1')).toBeNull()
+    await photo({ user: true })
+    expect(lastSubmitIn('s-1')).not.toBeNull()
+    expect(term.writes.at(-1)).toBe('\r')
+    forgetTyping('s-1')
+    term.viewport = LIMIT_MENU
+    await expect(submitInputLine('s-1', '[Image #', { user: true })).rejects.toThrow(MENU_REFUSAL)
+    expect(lastSubmitIn('s-1')).toBeNull()
+  })
 })
 
 describe('GUI sessions (PRD F23)', () => {

@@ -2,7 +2,7 @@
 // above the composer read the same view, so the two never disagree. A child is a session (dispatchedBy), or a request
 // still waiting for 开始 (named in `wavi run`'s answer already); its own children hang under it. Pure.
 import type { CliAgent } from '@shared/agents'
-import type { PendingStart } from '@shared/dispatch'
+import { pendingShown, type PendingStart } from '@shared/dispatch'
 import type { Session, SessionId } from '@shared/types'
 
 /** `pending`: waits for 开始. `working` includes a child whose first turn has not begun (its agent is starting). */
@@ -89,14 +89,15 @@ function sessionNode(s: Session, input: DispatchInput, depth: number): DispatchN
 export function dispatchView(input: DispatchInput): DispatchView {
   const waiting: PendingStart[] = []
   const nodes = input.ids.map((id): DispatchNode => {
-    const session = input.sessions.find((s) => s.id === id)
-    if (session) return sessionNode(session, input, 1)
+    // A waiting request first: a leader's `wavi adopt` names a session that exists already but is not started for it.
     const confirm = input.confirms.find((c) => c.childId === id)
     if (confirm) {
       waiting.push(confirm)
-      const { item } = confirm.plan
-      return { id, agent: item.agent, title: item.title, ...(item.model ? { model: item.model } : {}), task: item.task.split('\n', 1)[0], state: 'pending', children: [], reported: false }
+      const { agent, title, task, model } = pendingShown(confirm)
+      return { id, agent, title, ...(model ? { model } : {}), task: task.split('\n', 1)[0], state: 'pending', children: [], reported: false }
     }
+    const session = input.sessions.find((s) => s.id === id)
+    if (session) return sessionNode(session, input, 1)
     const outcome = input.outcomes?.get(id)
     if (outcome) return { id, agent: null, title: outcome.title, state: 'exited', reported: false, declined: outcome.outcome, children: [] }
     return { id, agent: null, title: '', state: 'exited', reported: false, gone: true, children: [] }

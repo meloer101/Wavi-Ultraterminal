@@ -425,7 +425,7 @@ describe('leader session (PRD F21 v1.178)', () => {
   })
 
   it('keeps a leader from changing files: Claude without its editing tools, Codex read-only but for its WAVI_DIR', () => {
-    expect(leaderLaunchArgs('claude', '/tmp/w')).toEqual(['--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
+    expect(leaderLaunchArgs('claude', '/tmp/w')).toEqual(['--permission-mode', 'default', '--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
     expect(leaderLaunchArgs('codex', '/private/tmp/wavi-501-x/s-1')).toEqual([
       '-c',
       'default_permissions="wavi-leader"',
@@ -442,11 +442,21 @@ describe('leader session (PRD F21 v1.178)', () => {
     const at = claude.indexOf('--disallowedTools')
     expect(claude.slice(at, at + 6)).toEqual(['--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', '--append-system-prompt'])
     expect(claude.slice(-2)).toEqual(['--', 'Plan it'])
-    expect(claude).not.toContain('--permission-mode')
+    expect(claude.filter((a) => a === '--permission-mode')).toHaveLength(1)
+    expect(claude[claude.indexOf('--permission-mode') + 1]).toBe('default')
     const codex = agentArgv('codex', '/code/acme', { extraArgs: [...leaderLaunchArgs('codex', '/w'), ...systemPromptArgs('codex', WAVI_LEADER_PROMPT)!] })
     expect(codex).toContain('default_permissions="wavi-leader"')
     expect(codex.some((a) => a.startsWith('developer_instructions='))).toBe(true)
     expect(codex).not.toContain('-s')
+  })
+
+  it("keeps the leader's default permission mode over a 定时任务's 权限 and when resuming", () => {
+    const leader = leaderLaunchArgs('claude', '/w')
+    const modes = (argv: string[]) => argv.flatMap((a, i) => (a === '--permission-mode' ? [argv[i + 1]] : []))
+    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, permission: 'auto', initialPrompt: 'go' }))).toEqual(['default'])
+    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, resumeAgentSessionId: '0b8c7c8e-1f4e-4a77-9a3e-0c4f2b1e5d6a' }))).toEqual(['default'])
+    // Not a leader: the 定时任务's 权限 as before.
+    expect(modes(agentArgv('claude', '/code/acme', { permission: 'auto', initialPrompt: 'go' }))).toEqual(['auto'])
   })
 
   it('tells the leader its job in the prompt and the skill, and its sessions to ask in their reply', () => {
@@ -464,11 +474,31 @@ describe('leader session (PRD F21 v1.178)', () => {
     expect(adopted).toContain('不要用提问工具')
   })
 
+  it('gives a child and an adopted session the same rule on dispatching further, by depth', () => {
+    const rules = (text: string) => text.slice(text.lastIndexOf('\n\n') + 2)
+    for (const depth of [1, 2]) {
+      const child = childBrief({ task: 'Do X', parentTitle: 'Lead', parentAgent: 'codex', depth, branch: 'jacob/x', base: 'main', snapshot: false, leader: true })
+      const adopted = adoptBrief({ task: 'Do X', leaderTitle: 'Lead', leaderAgent: 'codex', depth })
+      expect(rules(adopted)).toBe(rules(child))
+    }
+    expect(adoptBrief({ task: 'X', leaderTitle: 'L', leaderAgent: 'codex', depth: 1 })).toContain('只能再派一层')
+    expect(adoptBrief({ task: 'X', leaderTitle: 'L', leaderAgent: 'codex', depth: 2 })).toContain('这一层不能再派活')
+  })
+
   it('tells the leader what became of an adopt, shows its tell in one line and counts its wakes', () => {
     const child = { id: 's-9', agent: 'claude' as const, title: 'Login form', branch: 'main', adopted: true as const }
     expect(noticeText('started', [child])).toContain('- id s-9 · claude · 「Login form」 · 分支 main · 已接管')
     expect(noticeText('declined', [child])).toContain('「Login form」 · 分支 main · 接管')
     expect(parseNoticeText(noticeText('started', [child]))).toEqual({ outcome: 'started', ids: ['s-9'], titles: ['Login form'] })
+    // An adopt the user started that could not be done: named with why, never read back as a session of the notice.
+    const missed = { id: 's-7', title: 'Footer', reason: 'That session is archived or its agent has exited.' }
+    const both = noticeText('started', [child], [missed])
+    expect(both).toContain('- 没有接管 s-7「Footer」：That session is archived or its agent has exited.')
+    expect(parseNoticeText(both)?.ids).toEqual(['s-9'])
+    const none = noticeText('started', [], [missed])
+    expect(none).toContain('没能接管，什么都没开')
+    expect(none).not.toContain('已经开始')
+    expect(parseNoticeText(none)?.ids).toEqual([])
     expect(tellLabel('\n  Merge A or B?\nDetails…')).toBe('Merge A or B?')
     expect([...tellLabel('x'.repeat(300))]).toHaveLength(200)
     expect(wakesThisHour({ ...emptyQueue(), sent: [0, 10 * 60_000, 50 * 60_000] }, 61 * 60_000)).toBe(2)

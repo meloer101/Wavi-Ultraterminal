@@ -5,7 +5,7 @@ import type { AgentEvent } from '@shared/agent-events'
 import type { AgentMarker } from '@shared/agent-launch'
 import { askKindOf, healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
 import { needsAttention, STATUS_LABEL } from '@shared/session-status'
-import type { AgentPhase, Session, SessionId, SessionStatus } from '@shared/types'
+import type { AgentPhase, Session, SessionId, SessionStatus, WaviAskKind } from '@shared/types'
 
 export interface StatusPatch {
   status: SessionStatus
@@ -21,6 +21,8 @@ export interface StatusPatch {
   askingAgents?: string[]
   /** What the agent's own ask waits for (absent while Wavi's own question is open, or none is pending). */
   waitingFor?: 'permission' | 'question'
+  /** Which of Wavi's own questions is open (absent: none). */
+  waviAsk?: WaviAskKind
 }
 
 /**
@@ -95,7 +97,7 @@ export class StatusController {
    * shows `needs_you` with this label while one is open. The state machine never sees them: the agent's busy title
    * and its input footer on screen would heal an ask of its own away.
    */
-  private readonly waviAsks = new Map<SessionId, { label: string; since: number }>()
+  private readonly waviAsks = new Map<SessionId, { label: string; kind: WaviAskKind; since: number }>()
   /** Finished turns read on the dispatcher's behalf (`finishReported`), until their status moves on. */
   private readonly quieted = new Set<SessionId>()
 
@@ -261,15 +263,15 @@ export class StatusController {
     return active ? [active] : []
   }
 
-  /** Opens (`label`) or closes (null) Wavi's own question about a session; see `waviAsks`. */
-  setWaviAsk(id: SessionId, label: string | null): void {
+  /** Opens (`label`, of `kind`) or closes (null) Wavi's own question about a session; see `waviAsks`. */
+  setWaviAsk(id: SessionId, label: string | null, kind: WaviAskKind = 'confirm'): void {
     const open = this.waviAsks.get(id)
     if (label === null) {
       if (!open) return
       this.waviAsks.delete(id)
     } else {
-      if (open?.label === label) return
-      this.waviAsks.set(id, { label, since: open?.since ?? this.deps.now() })
+      if (open?.label === label && open.kind === kind) return
+      this.waviAsks.set(id, { label, kind, since: open?.since ?? this.deps.now() })
     }
     const state = this.states.get(id)
     if (!state) return
@@ -354,7 +356,8 @@ export class StatusController {
       statusSince: ask ? ask.since : state.statusSince,
       turnStartedAt: state.turnStartedAt,
       askingAgents: this.askingOf(id, state),
-      waitingFor: !ask && state.status === 'needs_you' ? askKindOf(state) : undefined
+      waitingFor: !ask && state.status === 'needs_you' ? askKindOf(state) : undefined,
+      waviAsk: ask?.kind
     }
   }
 

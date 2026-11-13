@@ -5,6 +5,7 @@ import { checksText, turnCheckView } from '@shared/turn-checks'
 import { markFor, useRadar } from '../conflict-radar/store'
 import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
+import { isLeader, leaderOf } from '../state/workspace-model'
 
 export interface Place {
   session: Session
@@ -20,15 +21,14 @@ export function placeOf(id: SessionId): Place | null {
   return session && worktree && project ? { session, worktree, project } : null
 }
 
-/** The project's leader session (PRD F21 v1.178), or null. */
+/** The project's leader session (PRD F21 v1.178), or null: workspace-model's `leaderOf` on the live workspace. */
 export function leaderOfProject(projectId: string): SessionId | null {
-  return useWorkspace.getState().leaderSessions?.[projectId] ?? null
+  return leaderOf(useWorkspace.getState(), projectId)
 }
 
-/** Whether this session is its project's leader. */
+/** Whether this session is its project's leader: workspace-model's `isLeader` on the live workspace. */
 export function isLeaderSession(id: SessionId): boolean {
-  const place = placeOf(id)
-  return place !== null && leaderOfProject(place.project.id) === id
+  return isLeader(useWorkspace.getState(), id)
 }
 
 /** The sessions this one dispatched, listed ones first (an archived child is still its child). */

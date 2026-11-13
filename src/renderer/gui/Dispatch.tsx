@@ -6,7 +6,7 @@
 // report, the notice of what the user decided — are drawn as such, never as the user's bubble.
 import { memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Split } from 'lucide-react'
-import { agentLabel, DISPATCH_LIMITS, type PendingStart } from '@shared/dispatch'
+import { agentLabel, DISPATCH_LIMITS, pendingShown, type PendingStart } from '@shared/dispatch'
 import type { AgentKind, SessionId, SessionStatus } from '@shared/types'
 import { decideCalls } from '../dispatch/handler'
 import { useDispatch } from '../dispatch/store'
@@ -26,6 +26,12 @@ const WORD: Record<NodeState, string> = { pending: '等你点开始', working: '
 const COUNT_ORDER: readonly NodeState[] = ['working', 'attention', 'error', 'done', 'exited']
 
 const open = (id: SessionId): void => useWorkspace.getState().setActiveSession(id)
+
+/** Where the waiting new sessions start: the first `wavi run`'s base (an adopted session keeps its own branch). */
+function waitingBase(waiting: readonly PendingStart[]): string | undefined {
+  const run = waiting.find((c) => c.kind === 'start')
+  return run && (run.plan.item.base === 'snapshot' ? '当前改动的快照' : run.base)
+}
 
 function useDispatchView(parentId: SessionId, ids: readonly SessionId[]): DispatchView {
   const sessions = useWorkspace((s) => s.sessions)
@@ -149,7 +155,7 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
           {waiting > 0 ? `想开 ${waiting} 个会话` : view.nodes.every((n) => n.declined) ? `没有开 ${view.nodes.length} 个会话` : `派出 ${view.nodes.length} 个会话`}
         </span>
         {waiting > 0 ? (
-          <span className={styles.muted}>基于 {view.waiting[0]?.plan.item.base === 'snapshot' ? '当前改动的快照' : view.waiting[0]?.base}</span>
+          <span className={styles.muted}>基于 {waitingBase(view.waiting)}</span>
         ) : (
           grand > 0 && <span className={styles.muted}>另有 {grand} 个是它们再派的</span>
         )}
@@ -371,9 +377,9 @@ function WaitingStrip({ waiting }: { waiting: readonly PendingStart[] }) {
       <div className={styles.rows}>
         {waiting.map((c) => (
           <div key={c.callId} className={styles.row}>
-            <AgentIcon kind={c.plan.item.agent} size={14} />
-            <span className={styles.rowTitle}>{c.plan.item.title}</span>
-            <span className={styles.action}>{c.plan.item.task.split('\n', 1)[0]}</span>
+            <AgentIcon kind={pendingShown(c).agent} size={14} />
+            <span className={styles.rowTitle}>{pendingShown(c).title}</span>
+            <span className={styles.action}>{pendingShown(c).task.split('\n', 1)[0]}</span>
           </div>
         ))}
       </div>

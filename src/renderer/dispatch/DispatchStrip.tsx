@@ -7,7 +7,7 @@
 // 接管 <its name>, its own branch and the task; the head counts them apart (想开 N 个会话 · 接管 M 个).
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, CircleAlert, Split } from 'lucide-react'
-import { agentLabel, confirmHead } from '@shared/dispatch'
+import { agentLabel, confirmHead, pendingShown } from '@shared/dispatch'
 import { useActiveSession } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { decideConfirms } from './handler'
@@ -30,11 +30,11 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
   const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<string | null>(null)
   const count = pending.length
-  const adopts = pending.filter((c) => c.adopt).length
-  const head = confirmHead(count - adopts, adopts)
+  const runs = pending.flatMap((c) => (c.kind === 'start' ? [c] : []))
+  const head = confirmHead(runs.length, count - runs.length)
   // 基于 is where new sessions start; an adopted one keeps its own branch.
-  const base = pending.find((c) => !c.adopt)?.base
-  const uncommitted = pending.some((c) => c.uncommitted && c.plan.item.base === 'head')
+  const base = runs[0]?.base
+  const uncommitted = runs.some((c) => c.uncommitted && c.plan.item.base === 'head')
 
   // ⌘↵ from the terminal or the strip itself, while the strip is on screen. Not from a sheet, the overview or any other
   // field with a ⌘↵ of its own: starting sessions is not undone by pressing it in the wrong place. No key repeat.
@@ -73,23 +73,26 @@ function Strip({ parentId, pending }: { parentId: string; pending: readonly Pend
           <span className={styles.note}>未提交的改动不会带到新的 worktree 里</span>
         </div>
       )}
-      {pending.map(({ callId, plan, adopt }) => {
+      {pending.map((c) => {
+        const { callId } = c
+        const { agent, title, task, branch, model } = pendingShown(c)
+        const adopt = c.kind === 'adopt'
         const expanded = open === callId
-        const firstLine = plan.item.task.split('\n').find((l) => l.trim() !== '') ?? ''
+        const firstLine = task.split('\n').find((l) => l.trim() !== '') ?? ''
         return (
           <div key={callId} data-testid="dispatch-row">
             <button type="button" className={styles.row} data-expanded={expanded} aria-expanded={expanded} onClick={() => setOpen(expanded ? null : callId)}>
-              <span className={styles.gutter} title={agentLabel(plan.item.agent)} data-agent={plan.item.agent}>
-                <AgentIcon kind={plan.item.agent} size={12} />
+              <span className={styles.gutter} title={agentLabel(agent)} data-agent={agent}>
+                <AgentIcon kind={agent} size={12} />
               </span>
-              <span className={styles.name}>{adopt ? `接管 ${plan.item.title}` : plan.item.title}</span>
-              <span className={styles.branch}>{adopt ? plan.branch : plan.branch || '当前改动的快照'}</span>
-              <span className={styles.task}>{plan.item.model ? `${plan.item.model} · ${firstLine}` : firstLine}</span>
+              <span className={styles.name}>{adopt ? `接管 ${title}` : title}</span>
+              <span className={styles.branch}>{adopt ? branch : branch || '当前改动的快照'}</span>
+              <span className={styles.task}>{model ? `${model} · ${firstLine}` : firstLine}</span>
               <span className={styles.chevron}>
                 <ChevronRight {...ICON} />
               </span>
             </button>
-            {expanded && <pre className={styles.taskBody}>{plan.item.task}</pre>}
+            {expanded && <pre className={styles.taskBody}>{task}</pre>}
           </div>
         )
       })}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import { DISPATCH_LIMITS, waviRunIds, type DispatchRequest, type WaviCommand, type WaviResult } from '@shared/dispatch'
+import { DISPATCH_LIMITS, waviRunIds, type DispatchRequest, type PendingRun, type PendingStart, type WaviCommand, type WaviResult } from '@shared/dispatch'
 import type { Session } from '@shared/types'
 import { decideConfirms, dropConfirmsOf, handleWaviRequest, resumeConfirmTimers, setDispatchSettings } from './handler'
 import { restoreDispatch, savedDispatch, useDispatch } from './store'
@@ -25,7 +25,7 @@ vi.mock('../state/workspace', () => ({
   }
 }))
 let ids = 0
-vi.mock('../state/workspace-model', () => ({ randomId: (prefix: string) => `${prefix}-new${++ids}` }))
+vi.mock('../state/workspace-model', async (importOriginal) => ({ ...(await importOriginal<typeof import('../state/workspace-model')>()), randomId: (prefix: string) => `${prefix}-new${++ids}` }))
 vi.mock('../new-session/creation', () => ({ createWorktreeFor: async () => true, holdForWorktree: () => {}, startEagerly: () => {} }))
 vi.mock('../session-io', () => ({ interruptAgent: () => {} }))
 let attemptGroups: { id: string; members: string[]; reportTo?: string }[] = []
@@ -35,6 +35,12 @@ vi.mock('../conflict-radar/store', () => ({ markFor: () => null, useRadar: { get
 vi.mock('./reports', () => ({ deliverMessage: (...args: unknown[]) => deliverMessage(...(args as [])), queueReport: (...args: unknown[]) => queueReport(...args) }))
 
 const session = (id: string, over: Partial<Session> = {}): Session => ({ id, worktreeId: 'w1', kind: 'claude', title: id, status: 'idle', startedAt: 1, lastActivityAt: 1, ...over })
+
+/** A waiting `wavi run`'s plan (the request is one: these tests only make runs there). */
+const planOf = (c: PendingStart | undefined): PendingRun['plan'] => {
+  if (c?.kind !== 'start') throw new Error('not a wavi run')
+  return c.plan
+}
 
 let n = 0
 const call = (sessionId: string, command: WaviCommand, deadline = Date.now() + 60_000): Promise<WaviResult> =>
@@ -73,7 +79,7 @@ describe('wavi in a window (PRD F21)', () => {
     expect(result.text).toContain(`Session ${pending!.childId}`)
     // A GUI dispatcher finds the session in this answer (Figma 68′).
     expect(waviRunIds(result.text)).toEqual([pending!.childId])
-    expect(pending!.plan).toMatchObject({ branch: '', request: { snapshotOf: '/repo' } })
+    expect(planOf(pending)).toMatchObject({ branch: '', request: { snapshotOf: '/repo' } })
     expect(addBackgroundSession).not.toHaveBeenCalled()
   })
 
@@ -81,7 +87,7 @@ describe('wavi in a window (PRD F21)', () => {
     await call('top', runCmd('Fix the login form'))
     await call('top', runCmd('Write login tests', { agent: 'claude' }))
     const [a, b] = useDispatch.getState().confirms
-    expect(a!.plan.branch).not.toBe(b!.plan.branch)
+    expect(planOf(a).branch).not.toBe(planOf(b).branch)
     decideConfirms('top', true)
     expect(useDispatch.getState().confirms).toHaveLength(0)
     expect(addBackgroundSession.mock.calls.map((c) => c[3])).toEqual([a!.childId, b!.childId])
@@ -185,7 +191,7 @@ describe('wavi in a window (PRD F21)', () => {
     expect(addBackgroundSession.mock.calls[0]?.[4]).toBe('gui')
     // The user's own session's child waits for 开始 with its 界面 decided, and keeps it.
     await call('top', runCmd('Fix the login form', { agent: 'claude' }))
-    expect(useDispatch.getState().confirms[0]!.plan.item.ui).toBe('gui')
+    expect(planOf(useDispatch.getState().confirms[0]).item.ui).toBe('gui')
     decideConfirms('top', true)
     expect(addBackgroundSession.mock.calls[1]?.[4]).toBe('gui')
   })
@@ -202,7 +208,7 @@ describe('wavi in a window (PRD F21)', () => {
     // A CLI dispatcher can ask for a chat too; without asking its children stay terminals.
     expect(await call('top', runCmd('Claude in a chat', { agent: 'claude', ui: 'gui' }))).toMatchObject({ ok: true, text: expect.stringContaining('shown as a chat') })
     await call('top', runCmd('Claude in a terminal', { agent: 'claude' }))
-    expect(useDispatch.getState().confirms.map((c) => c.plan.item.ui)).toEqual(['gui', undefined])
+    expect(useDispatch.getState().confirms.map((c) => planOf(c).item.ui)).toEqual(['gui', undefined])
   })
 
   it('acts only on the caller’s own sessions', async () => {
@@ -276,7 +282,7 @@ describe('wavi for a project’s leader (PRD F21 v1.178)', () => {
   it('adopts a user session after the user’s 开始: it reports to the leader and gets the task as a message', async () => {
     const asked = await call('lead', { name: 'adopt', id: 'user1', task: 'Finish the login form' })
     expect(asked).toMatchObject({ ok: true, text: expect.stringContaining("waits for the user's 开始") })
-    expect(useDispatch.getState().confirms).toMatchObject([{ parentId: 'lead', childId: 'user1', adopt: true, plan: { item: { task: 'Finish the login form', title: 'user1' } } }])
+    expect(useDispatch.getState().confirms).toEqual([{ kind: 'adopt', callId: expect.any(String), parentId: 'lead', childId: 'user1', agent: 'claude', title: 'user1', branch: 'jacob/plan', task: 'Finish the login form' }])
     expect(await call('lead', { name: 'adopt', id: 'user1', task: 'Again' })).toMatchObject({ ok: false, failure: 'duplicate' })
     decideConfirms('lead', true)
     expect(addBackgroundSession).not.toHaveBeenCalled()
@@ -288,6 +294,35 @@ describe('wavi for a project’s leader (PRD F21 v1.178)', () => {
     expect(toLeader![0]).toMatchObject({ id: 'lead' })
     expect(toLeader![1]).toContain('- id user1 · claude · 「user1」')
     expect(toLeader![1]).toContain('已接管')
+  })
+
+  it('checks again at 开始: a session that dispatched two levels meanwhile is not adopted, and the leader hears why', async () => {
+    await call('lead', { name: 'adopt', id: 'user1', task: 'Finish the login form' })
+    // While the request waited, the user's session dispatched a session that dispatched one of its own.
+    sessions.push(session('u-kid', { dispatchedBy: 'user1', kind: 'codex' }), session('u-grand', { dispatchedBy: 'u-kid', kind: 'codex' }))
+    decideConfirms('lead', true)
+    expect(patchSession).not.toHaveBeenCalled()
+    expect(deliverMessage).toHaveBeenCalledTimes(1)
+    const [to, text] = deliverMessage.mock.calls[0] as unknown as [Session, string]
+    expect(to).toMatchObject({ id: 'lead' })
+    expect(text).toContain('没能接管')
+    expect(text).toContain('- 没有接管 user1「user1」：')
+    expect(text).toContain('deeper than 2 levels')
+    expect(text).not.toContain('已经开始')
+  })
+
+  it('says which adopt failed at 开始 next to the ones that went through: one exited, one closed', async () => {
+    sessions.push(session('user2'), session('user3'))
+    await call('lead', { name: 'adopt', id: 'user1', task: 'Finish the login form' })
+    await call('lead', { name: 'adopt', id: 'user2', task: 'Fix the footer' })
+    await call('lead', { name: 'adopt', id: 'user3', task: 'Bump deps' })
+    sessions = sessions.filter((s) => s.id !== 'user3').map((s) => (s.id === 'user2' ? { ...s, phase: 'exited' as const } : s))
+    decideConfirms('lead', true)
+    expect(patchSession.mock.calls.map((c) => c[0])).toEqual(['user1'])
+    const text = (deliverMessage.mock.calls.at(-1) as unknown as [Session, string])[1]
+    expect(text).toContain('- id user1 · claude · 「user1」')
+    expect(text).toContain('- 没有接管 user2「user2」：That session is archived or its agent has exited.')
+    expect(text).toContain('- 没有接管 user3「user3」：That session was closed.')
   })
 
   it('refuses to adopt a session with a dispatcher, itself, a plain terminal, another project’s and a gone one', async () => {

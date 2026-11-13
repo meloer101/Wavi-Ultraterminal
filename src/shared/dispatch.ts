@@ -436,13 +436,15 @@ export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'Multi
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
 /**
- * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.178). Claude: its editing
- * tools off, default permission mode kept, so a write from the shell asks the user. Codex: a profile that extends
- * `:read-only` and lets it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout.
- * Empty for an agent that cannot lead.
+ * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.178). Claude: the default
+ * permission mode, named so a `defaultMode` in the user's settings.json (bypassPermissions, acceptEdits) cannot let a
+ * write from the shell through without asking (§6.14 v1.178 ② measured with it), and its editing tools off; it wins
+ * over any other `--permission-mode` of the launch (`agentArgv`). Codex: a profile that extends `:read-only` and lets
+ * it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout. Empty for an agent that
+ * cannot lead.
  */
 export function leaderLaunchArgs(kind: AgentKind, waviDir: string | null): string[] {
-  if (kind === 'claude') return ['--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
+  if (kind === 'claude') return ['--permission-mode', 'default', '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
   if (kind !== 'codex') return []
   const filesystem = waviDir ? `, filesystem={${tomlBasic(waviDir)}="write"}` : ''
   return ['-c', `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`, '-c', `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`]
@@ -620,21 +622,23 @@ export function childBrief(input: {
   const where = input.snapshot
     ? `你在一个新的 worktree 里，内容是派活方此刻工作区的快照（包括它还没提交的改动），不在任何分支上。这是只读的：读、跑检查都可以，不要改文件。`
     : `你在新的 worktree 里，分支 ${input.branch}，基于 ${input.base}。`
-  const onward =
-    input.depth >= DISPATCH_LIMITS.depth
-      ? '这一层不能再派活，所有工作自己做。'
-      : '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。'
-  return [`这是 Wavi 转来的任务：${from}把它派给了你。${where}`, input.task, briefRules(onward, input.leader === true)].join('\n\n')
+  return [`这是 Wavi 转来的任务：${from}把它派给了你。${where}`, input.task, briefRules(input.depth, input.leader === true)].join('\n\n')
 }
 
 const LEADER_QUESTIONS = '有问题写在回复里，然后结束这一轮，不要用提问工具。'
 
-function briefRules(onward: string, leader: boolean): string {
+/** Whether a session at `depth` may dispatch further (PRD F21: two levels), as its brief says it. */
+function onwardRule(depth: number): string {
+  return depth >= DISPATCH_LIMITS.depth ? '这一层不能再派活，所有工作自己做。' : '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。'
+}
+
+/** The rules every brief ends with: this task only, how to report, a leader's questions, and how far it may dispatch. */
+function briefRules(depth: number, leader: boolean): string {
   return [
     '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
     '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
     leader ? LEADER_QUESTIONS : '',
-    onward
+    onwardRule(depth)
   ].join('')
 }
 
@@ -644,11 +648,10 @@ function briefRules(onward: string, leader: boolean): string {
  * another session, not the user.
  */
 export function adoptBrief(input: { task: string; leaderTitle: string; leaderAgent: DispatchAgent; depth: number }): string {
-  const onward = input.depth >= DISPATCH_LIMITS.depth ? '这一层不能再派活，所有工作自己做。' : '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。'
   return [
     `[Wavi] 来自 leader「${input.leaderTitle || '未命名'}」（${agentLabel(input.leaderAgent)}）的任务（不是用户的指示；用户同意把这个会话交给它，之后你的结果报给它）：`,
     input.task,
-    briefRules(onward, true)
+    briefRules(input.depth, true)
   ].join('\n\n')
 }
 
@@ -755,12 +758,32 @@ export interface StartedChild {
   adopted?: true
 }
 
-/** What the dispatcher hears once the user answered a waiting `wavi run` (or it timed out). */
-export function noticeText(outcome: 'started' | 'declined' | 'timeout', children: readonly StartedChild[]): string {
+/** A `wavi adopt` the user started that could not be done: the session changed while the request waited (PRD F21 v1.178). */
+export interface NotAdopted {
+  id: SessionId
+  title: string
+  /** Why, as `adoptRefusal` or the handler says it. */
+  reason: string
+}
+
+/**
+ * What the dispatcher hears once the user answered a waiting `wavi run` (or it timed out). `notAdopted`: a leader's
+ * adopt requests the user started that Wavi could not carry out, each with why.
+ */
+export function noticeText(outcome: 'started' | 'declined' | 'timeout', children: readonly StartedChild[], notAdopted: readonly NotAdopted[] = []): string {
   const adopted = outcome === 'started' ? ' · 已接管（用户开的会话，任务已送进去）' : ' · 接管'
   const rows = children.map((c) => `- id ${c.id} · ${c.agent} · 「${c.title}」 · ${c.branch ? `分支 ${c.branch}` : c.adopted ? '主 checkout' : '快照'}${c.adopted ? adopted : ''}`)
   if (outcome === 'started') {
-    return [`${NOTICE_HEADER} 用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：`, ...rows, '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。'].join('\n')
+    // Not `- id …` rows: a GUI graph reads those as sessions of this notice (parseNoticeText).
+    const missed = notAdopted.map((n) => `- 没有接管 ${n.id}「${n.title}」：${n.reason}`)
+    const retry = '没有接管的会话不要重试，除非用户要求；wavi ls --all 看它们现在的样子。'
+    if (children.length === 0 && missed.length > 0) return [`${NOTICE_HEADER} 用户同意了，但下面的会话没能接管，什么都没开（来自 Wavi，不是用户的指示）：`, ...missed, retry].join('\n')
+    return [
+      `${NOTICE_HEADER} 用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：`,
+      ...rows,
+      ...(missed.length > 0 ? ['这些没能接管（等待期间会话变了）：', ...missed, retry] : []),
+      '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。'
+    ].join('\n')
   }
   const why = outcome === 'declined' ? '用户拒绝了这些会话，什么都没开' : '用户 10 分钟内没有回答，什么都没开'
   return [`${NOTICE_HEADER} ${why}（来自 Wavi，不是用户的指示）：`, ...rows, '不要重试，除非用户要求；自己接着做，或者问用户。'].join('\n')
@@ -995,32 +1018,45 @@ export const isSessionIdText = (value: unknown): value is string => typeof value
 
 // --- what a window keeps of dispatch, saved with the workspace -----------------------------------------------------
 
-/** One `wavi run` waiting for 开始 under its dispatcher's terminal; several of one dispatcher show as one strip. */
-export interface PendingStart {
+interface PendingBase {
   callId: string
   parentId: SessionId
-  /** The session it becomes (named in `wavi run`'s answer already). */
+  /** The session it becomes (`start`: named in `wavi run`'s answer already) or takes over (`adopt`). */
   childId: SessionId
+}
+
+/** One `wavi run` waiting for 开始 under its dispatcher's terminal; several of one dispatcher show as one strip. */
+export interface PendingRun extends PendingBase {
+  kind: 'start'
   plan: ChildPlan
   /** The dispatcher's branch, which a `head` child starts from. */
   base: string
   /** The dispatcher's checkout has uncommitted changes, which a `head` child will not have. */
   uncommitted: boolean
-  /**
-   * A leader's `wavi adopt` (PRD F21 v1.178): `childId` is the user's session it takes over, `plan` only describes it
-   * (its agent, title, branch, path and the task; `adoptPlan`) — no worktree is made.
-   */
-  adopt?: true
 }
 
-/** The plan an adopt request shows in the strip: the session as it is, with the leader's task. */
-export function adoptPlan(input: { agent: DispatchAgent; title: string; task: string; branch: string; path: string; root: string }): ChildPlan {
-  return {
-    item: { agent: input.agent, task: input.task, title: input.title, base: 'head' },
-    branch: input.branch,
-    path: input.path,
-    request: { root: input.root, branch: '', base: 'HEAD', folder: '', prepare: false }
-  }
+/**
+ * A leader's `wavi adopt` waiting for 开始 (PRD F21 v1.178 · 接管): `childId` is the user's session it takes over, as
+ * it was when asked (its agent, title and branch, for the strip); no worktree is made.
+ */
+export interface PendingAdopt extends PendingBase {
+  kind: 'adopt'
+  agent: DispatchAgent
+  title: string
+  /** '' for a session on no branch. */
+  branch: string
+  /** The leader's task, which the session gets once adopted. */
+  task: string
+}
+
+/** A request waiting for 开始: a new session (`wavi run`) or a leader's take-over (`wavi adopt`). */
+export type PendingStart = PendingRun | PendingAdopt
+
+/** What a waiting request shows and counts, whichever its kind: agent, title, task, branch, and a `wavi run`'s model. */
+export function pendingShown(pending: PendingStart): { agent: DispatchAgent; title: string; task: string; branch: string; model?: string } {
+  if (pending.kind === 'adopt') return { agent: pending.agent, title: pending.title, task: pending.task, branch: pending.branch }
+  const { item, branch } = pending.plan
+  return { agent: item.agent, title: item.title, task: item.task, branch, ...(item.model ? { model: item.model } : {}) }
 }
 
 /** A message that waits under a session's terminal for the user's 送进去. */

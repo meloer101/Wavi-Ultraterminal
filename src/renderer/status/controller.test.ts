@@ -357,6 +357,21 @@ describe('Wavi’s own asks (PRD F21)', () => {
     expect(h.badges.at(-1)).toBe(0)
   })
 
+  it('marks which of its asks is shown, so a tell is told apart without comparing labels (PRD F21 v1.178)', () => {
+    const h = harness([session('a'), session('b')], 'a')
+    const ask = () => h.sessions.find((s) => s.id === 'b')?.waviAsk
+    expect(ask()).toBeUndefined()
+    h.controller.setWaviAsk('b', '先合哪个？', 'tell')
+    expect(ask()).toBe('tell')
+    // The same words as another kind of ask are that kind.
+    h.controller.setWaviAsk('b', '先合哪个？', 'confirm')
+    expect(ask()).toBe('confirm')
+    h.controller.setWaviAsk('b', '想建 1 个定时任务', 'schedule')
+    expect(ask()).toBe('schedule')
+    h.controller.setWaviAsk('b', null)
+    expect(ask()).toBeUndefined()
+  })
+
   it('reads a dispatched session’s finished turn for its dispatcher, and gives it back when the report is held (PRD F21)', () => {
     const h = harness([session('a'), session('kid')], 'a')
     let quiet = true

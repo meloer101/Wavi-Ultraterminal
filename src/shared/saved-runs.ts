@@ -237,22 +237,25 @@ export interface SavedDispatch {
 
 const CHILD_EVENTS: ReadonlySet<unknown> = new Set(['report', 'done', 'error', 'exited'])
 
+/** A saved request waiting for 开始; one without `kind` was saved before `wavi adopt` (PRD F21 v1.178): a `wavi run`. */
 function sanitizePending(raw: unknown): PendingStart | null {
   if (!isRecord(raw) || !isText(raw.callId, 256) || !isText(raw.parentId, 256) || !isText(raw.childId, 256)) return null
+  const ids = { callId: raw.callId, parentId: raw.parentId, childId: raw.childId }
+  if (raw.kind === 'adopt') {
+    if (!isCliAgent(raw.agent) || !isText(raw.title, 1024) || !isText(raw.branch, 256) || !isText(raw.task)) return null
+    return { kind: 'adopt', ...ids, agent: raw.agent, title: raw.title, branch: raw.branch, task: raw.task }
+  }
+  if (raw.kind !== undefined && raw.kind !== 'start') return null
   if (!isText(raw.base, 256) || typeof raw.uncommitted !== 'boolean' || !isRecord(raw.plan)) return null
   const { item, branch, path, request } = raw.plan
-  // A leader's adopt makes no worktree: its plan's request is a placeholder (adoptPlan).
-  const adopt = raw.adopt === true
-  const parsed = adopt ? (isRecord(request) && isPath(request.root) ? { root: request.root, branch: '', base: 'HEAD', folder: '', prepare: false } : null) : parseCreateRequest(request)
+  const parsed = parseCreateRequest(request)
   if (!isRecord(item) || !isCliAgent(item.agent) || !isText(item.task) || !isText(item.title, 1024) || (item.base !== 'head' && item.base !== 'snapshot')) return null
   if (!parsed || !isText(branch, 256) || !isPath(path)) return null
   return {
-    callId: raw.callId,
-    parentId: raw.parentId,
-    childId: raw.childId,
+    kind: 'start',
+    ...ids,
     base: raw.base,
     uncommitted: raw.uncommitted,
-    ...(adopt ? { adopt: true as const } : {}),
     plan: { item: { agent: item.agent, task: item.task, title: item.title, ...optional('model', isText(item.model, 256) ? item.model : undefined), base: item.base, ...(item.ui === 'gui' ? { ui: 'gui' as const } : {}) }, branch, path, request: parsed }
   }
 }

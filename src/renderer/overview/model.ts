@@ -1,6 +1,5 @@
 // Pure overview model (PRD F9, Figma 11 v2): every session across projects, grouped by what it
 // needs from the user. The list and the board draw the same groups, so the two views never disagree.
-import { tellLabel } from '@shared/dispatch'
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { sessionTime } from '../sidebar/format-elapsed'
 import { glyphStatus, phaseLine } from '../lifecycle/present'
@@ -59,8 +58,6 @@ export interface OverviewInput {
   now: number
   /** Free text plus `p:项目` / `s:状态` tokens, all of which must match. */
   filter?: string
-  /** A leader's `wavi tell` (PRD F21 v1.178): while it is the ask shown, the row reads 等你回答 and the sentence (81B). */
-  tells?: Readonly<Record<SessionId, string | undefined>>
 }
 
 function statusLabel(session: Session, status: SessionStatus): string {
@@ -118,12 +115,10 @@ function cardOf(status: SessionStatus): CardTone {
   }
 }
 
-/** The leader's `wavi tell` is what its session waits on (a confirm or a 定时任务 request is shown before it). */
-function toldNow(session: Session, tell: string | undefined): boolean {
-  return tell !== undefined && session.status === 'needs_you' && session.currentAction === tellLabel(tell)
-}
+/** The leader's `wavi tell` is what its session waits on now (a confirm or a 定时任务 request is shown before it). */
+const toldNow = (session: Session): boolean => session.status === 'needs_you' && session.waviAsk === 'tell'
 
-function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number, tell?: string): OverviewRow {
+function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number): OverviewRow {
   const status = glyphStatus(session)
   const projectName = project?.name ?? ''
   // The main checkout reads as the project alone, whatever branch it is on.
@@ -133,7 +128,7 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
   return {
     session,
     status,
-    statusLabel: toldNow(session, tell) ? '等你回答' : statusLabel(session, status),
+    statusLabel: toldNow(session) ? '等你回答' : statusLabel(session, status),
     tone: toneOf(status),
     card: cardOf(status),
     title: session.title,
@@ -177,7 +172,7 @@ function matches(row: OverviewRow, groupLabel: string, f: FilterTokens): boolean
  * list skips them) except `exited`, which only appears when it has rows. Waiting sessions list the one
  * that has waited longest first; every other group lists the most recently active first.
  */
-export function buildOverview({ projects, worktrees, sessions, now, filter, tells = {} }: OverviewInput): OverviewGroup[] {
+export function buildOverview({ projects, worktrees, sessions, now, filter }: OverviewInput): OverviewGroup[] {
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const projectById = new Map(projects.map((p) => [p.id, p]))
   const f = parseFilter(filter)
@@ -185,7 +180,7 @@ export function buildOverview({ projects, worktrees, sessions, now, filter, tell
   for (const session of sessions) {
     const worktree = worktreeById.get(session.worktreeId)
     if (worktree?.archived) continue
-    const row = toRow(session, worktree, worktree && projectById.get(worktree.projectId), now, tells[session.id])
+    const row = toRow(session, worktree, worktree && projectById.get(worktree.projectId), now)
     if (!matches(row, GROUP_LABEL[row.status], f)) continue
     byGroup.get(row.status)?.push(row)
   }

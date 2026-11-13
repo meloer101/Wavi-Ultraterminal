@@ -8,7 +8,6 @@ import { diffSummary, diffSummaryText, groupOfSession } from '@shared/attempt-gr
 import {
   ackReport,
   adoptBrief,
-  adoptPlan,
   adoptRefusal,
   agentLabel,
   childBrief,
@@ -16,6 +15,7 @@ import {
   DISPATCH_LIMITS,
   messagePage,
   noticeText,
+  pendingShown,
   planChild,
   startRefusal,
   confirmHead,
@@ -25,6 +25,8 @@ import {
   waviOk,
   type ChildPlan,
   type DispatchRequest,
+  type NotAdopted,
+  type PendingAdopt,
   type StartedChild,
   type WaviCommand,
   type WaviResult
@@ -157,7 +159,7 @@ function load(caller: Place): { openTasks: string[]; treeSize: number } {
       ...childrenOf(caller.session.id)
         .filter(isOpen)
         .map((c) => c.session.dispatchTask ?? c.session.title),
-      ...waiting.filter((c) => c.parentId === caller.session.id).map((c) => c.plan.item.task)
+      ...waiting.filter((c) => c.parentId === caller.session.id).map((c) => pendingShown(c).task)
     ],
     treeSize: tree.size - 1 + waiting.filter((c) => tree.has(c.parentId)).length
   }
@@ -166,7 +168,7 @@ function load(caller: Place): { openTasks: string[]; treeSize: number } {
 async function start(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'run' }>): Promise<WaviResult> {
   const callId = request.callId
   const depth = depthOf(caller.session)
-  const waiting = useDispatch.getState().confirms
+  const waiting = useDispatch.getState().confirms.flatMap((c) => (c.kind === 'start' ? [c] : []))
   const refusal = startRefusal({ depth, toolsOn: settings.tools, ...load(caller), task: command.task })
   if (refusal) return refusal
   // In parallel: `wavi` waits 5 s for the whole answer (PRD F21 接口).
@@ -220,7 +222,7 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
       `Started session ${started.id} (${command.agent}${model}, ${where(plan)}).${note} It works on its own: Wavi sends you its report when it finishes a turn, fails or exits. End your turn now instead of waiting.`
     )
   }
-  hold({ callId, parentId: caller.session.id, childId, plan, base: base ?? 'HEAD', uncommitted }, caller)
+  hold({ kind: 'start', callId, parentId: caller.session.id, childId, plan, base: base ?? 'HEAD', uncommitted }, caller)
   return waviOk(
     [
       `Session ${childId} (${command.agent}${model}, ${where(plan)}) waits for the user's 开始 in Wavi.${note}${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
@@ -238,7 +240,7 @@ function hold(pending: PendingStart, caller: Place): void {
   )
   if (!document.hasFocus()) {
     const waiting = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id)
-    const adopts = waiting.filter((c) => c.adopt).length
+    const adopts = waiting.filter((c) => c.kind === 'adopt').length
     window.tr.ui.notify({ title: `「${caller.session.title}」${confirmHead(waiting.length - adopts, adopts)}`, body: '在 Wavi 里确认要不要开始。', tag: caller.session.id })
   }
 }
@@ -254,15 +256,15 @@ function levelsBelow(id: SessionId): number {
 
 const gone = (session: Session): boolean => session.phase === 'exited' || session.status === 'exited'
 
-async function adopt(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'adopt' }>): Promise<WaviResult> {
-  const leader = isLeaderSession(caller.session.id)
-  const found = placeOf(command.id)
-  const target = found && found.project.id === caller.project.id ? found : null
-  if (leader && !target) return waviFail('not_found', `No session with id ${command.id} in this project. wavi ls --all shows them.`)
-  const refusal = adoptRefusal({
+/**
+ * Why `leader` may not adopt `target` now (`adoptRefusal` on the workspace as it is), or null. Asked when the leader
+ * runs `wavi adopt` and again at 开始: the session may have changed while the request waited.
+ */
+function adoptCheck(leader: Place, target: Place | null, task: string): WaviResult | null {
+  return adoptRefusal({
     toolsOn: settings.tools,
-    leader,
-    self: target?.session.id === caller.session.id,
+    leader: isLeaderSession(leader.session.id),
+    self: target?.session.id === leader.session.id,
     kind: target?.session.kind ?? 'shell',
     dispatchedBy: target?.session.dispatchedBy !== undefined,
     attemptMember: target ? groupOfSession(useAttemptGroups.getState().groups, target.session.id) !== undefined : false,
@@ -270,16 +272,22 @@ async function adopt(caller: Place, request: DispatchRequest, command: Extract<W
     exited: target ? gone(target.session) : false,
     subtreeSize: target ? treeOf(target.session.id).length : 0,
     subtreeDepth: target ? levelsBelow(target.session.id) : 0,
-    ...load(caller),
-    task: command.task
+    ...load(leader),
+    task
   })
+}
+
+async function adopt(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'adopt' }>): Promise<WaviResult> {
+  const found = placeOf(command.id)
+  const target = found && found.project.id === caller.project.id ? found : null
+  if (isLeaderSession(caller.session.id) && !target) return waviFail('not_found', `No session with id ${command.id} in this project. wavi ls --all shows them.`)
+  const refusal = adoptCheck(caller, target, command.task)
   const kind = target?.session.kind
   if (refusal || !target || kind === undefined || kind === 'shell') return refusal ?? waviFail('not_allowed', 'That session cannot be adopted.')
-  if (useDispatch.getState().confirms.some((c) => c.childId === target.session.id)) return waviFail('duplicate', `Session ${target.session.id} already waits for the user's 开始.`)
+  const { session, worktree } = target
+  if (useDispatch.getState().confirms.some((c) => c.childId === session.id)) return waviFail('duplicate', `Session ${session.id} already waits for the user's 开始.`)
   if (late(request)) return TOO_LATE()
-  const { session, worktree, project } = target
-  const plan = adoptPlan({ agent: kind, title: session.title, task: command.task, branch: worktree.branch, path: worktree.path, root: project.rootPath })
-  hold({ callId: request.callId, parentId: caller.session.id, childId: session.id, plan, base: worktree.branch || 'HEAD', uncommitted: false, adopt: true }, caller)
+  hold({ kind: 'adopt', callId: request.callId, parentId: caller.session.id, childId: session.id, agent: kind, title: session.title, branch: worktree.branch, task: command.task }, caller)
   return waviOk(
     [
       `Session ${session.id} (${session.kind}, "${session.title}") waits for the user's 开始 in Wavi before it becomes yours.`,
@@ -288,19 +296,25 @@ async function adopt(caller: Place, request: DispatchRequest, command: Extract<W
   )
 }
 
-/** 开始 on an adopt request: the session reports to the leader from now on and gets the task (PRD F21 v1.178 · 接管). */
-function adoptNow(leader: Place, pending: PendingStart): StartedChild | null {
-  const target = placeOf(pending.childId)
-  // It changed while the request waited (closed, dispatched by someone, its agent gone, archived): nothing to adopt.
-  const kind = target?.session.kind
-  if (!target || kind === undefined || kind === 'shell' || target.project.id !== leader.project.id || target.session.dispatchedBy !== undefined) return null
-  if (target.worktree.archived || gone(target.session)) return null
+/**
+ * 开始 on an adopt request: the session reports to the leader from now on and gets the task (PRD F21 v1.178 · 接管).
+ * The checks run again on the workspace as it is now (it may have closed, exited, been dispatched, or dispatched
+ * sessions of its own while the request waited); when one fails, nothing is adopted and the leader hears why.
+ */
+function adoptNow(leader: Place, pending: PendingAdopt): StartedChild | NotAdopted {
+  const found = placeOf(pending.childId)
+  const target = found && found.project.id === leader.project.id ? found : null
+  const notAdopted = (reason: string): NotAdopted => ({ id: pending.childId, title: pending.title, reason })
+  if (!target) return notAdopted('That session was closed.')
+  const refusal = adoptCheck(leader, target, pending.task)
+  if (refusal) return notAdopted(refusal.text)
   const { session } = target
-  useWorkspace.getState().patchSession(session.id, { dispatchedBy: leader.session.id, dispatchTask: pending.plan.item.task })
+  if (session.kind === 'shell') return notAdopted('That is a plain terminal, not an agent session; it cannot take a task.')
+  useWorkspace.getState().patchSession(session.id, { dispatchedBy: leader.session.id, dispatchTask: pending.task })
   const leaderAgent = leader.session.kind === 'shell' ? 'claude' : leader.session.kind
-  const brief = adoptBrief({ task: pending.plan.item.task, leaderTitle: leader.session.title, leaderAgent, depth: depthOf(leader.session) + 1 })
+  const brief = adoptBrief({ task: pending.task, leaderTitle: leader.session.title, leaderAgent, depth: depthOf(leader.session) + 1 })
   void deliverMessage(session, brief, { key: `adopt:${pending.callId}`, title: `来自「${leader.session.title}」` })
-  return { id: session.id, agent: kind, title: session.title, branch: target.worktree.branch, adopted: true }
+  return { id: session.id, agent: session.kind, title: session.title, branch: target.worktree.branch, adopted: true }
 }
 
 // --- wavi tell (PRD F21 v1.178 · 交给用户) ---------------------------------------------------------------------------
@@ -360,16 +374,22 @@ function decide(callIds: readonly string[], outcome: 'started' | 'declined' | 't
   for (const [parentId, confirms] of byParent) {
     const parent = placeOf(parentId)
     if (!parent) continue
-    const children: StartedChild[] = confirms.flatMap((c) => {
-      if (outcome !== 'started') return [{ id: c.childId, agent: c.plan.item.agent, title: c.plan.item.title, branch: c.plan.branch, ...(c.adopt ? { adopted: true as const } : {}) }]
-      if (c.adopt) {
+    const children: StartedChild[] = []
+    const notAdopted: NotAdopted[] = []
+    for (const c of confirms) {
+      if (outcome !== 'started') {
+        const { agent, title, branch } = pendingShown(c)
+        children.push({ id: c.childId, agent, title, branch, ...(c.kind === 'adopt' ? { adopted: true as const } : {}) })
+      } else if (c.kind === 'adopt') {
         const adopted = adoptNow(parent, c)
-        return adopted ? [adopted] : []
+        if ('reason' in adopted) notAdopted.push(adopted)
+        else children.push(adopted)
+      } else {
+        const started = launch(parent, c.plan, c.childId, c.base, depthOf(parent.session) + 1)
+        if (started) children.push(started)
       }
-      const started = launch(parent, c.plan, c.childId, c.base, depthOf(parent.session) + 1)
-      return started ? [started] : []
-    })
-    void deliverMessage(parent.session, noticeText(outcome, children), { key: `notice:${confirms[0]!.callId}`, title: '派活结果' })
+    }
+    void deliverMessage(parent.session, noticeText(outcome, children, notAdopted), { key: `notice:${confirms[0]!.callId}`, title: '派活结果' })
   }
 }
 
@@ -458,7 +478,7 @@ async function list(caller: Place): Promise<WaviResult> {
       return { line: `- ${facts.filter(Boolean).join(' · ')}${reply}`, place: c, conflicts, size: changes.size }
     })
   )
-  const pending = waiting.map((c) => `- id ${c.childId} · ${c.plan.item.agent} · "${c.plan.item.title}" · waiting for the user's 开始`)
+  const pending = waiting.map((c) => `- id ${c.childId} · ${pendingShown(c).agent} · "${pendingShown(c).title}" · ${c.kind === 'adopt' ? 'adopting: ' : ''}waiting for the user's 开始`)
   // Merge the work that conflicts with nothing first, smaller diffs before larger ones (the user merges, in Wavi).
   const order = rows
     .filter((r) => !r.place.worktree.archived && r.place.session.dispatchBase !== 'snapshot')
@@ -509,7 +529,7 @@ async function listAll(caller: Place): Promise<WaviResult> {
       return `- ${facts.filter(Boolean).join(' · ')}${reply}`
     })
   )
-  const pending = waiting.map((c) => `- id ${c.childId} · ${c.plan.item.agent} · "${c.plan.item.title}" · ${c.adopt ? 'adopting: ' : ''}waiting for the user's 开始`)
+  const pending = waiting.map((c) => `- id ${c.childId} · ${pendingShown(c).agent} · "${pendingShown(c).title}" · ${c.kind === 'adopt' ? 'adopting: ' : ''}waiting for the user's 开始`)
   return waviOk([...rows, ...pending, '', 'wavi read <id> reads any of them; wavi send and wavi stop only the ones you started or adopted.'].join('\n'))
 }
 

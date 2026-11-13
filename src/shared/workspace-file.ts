@@ -392,13 +392,14 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
 }
 
 /**
- * A leader whose session is gone, is in another project's worktree or cannot lead (`canLead`: a plain terminal, a GUI
- * session, an agent not measured as leader) is dropped (PRD F21 v1.178 · 存盘).
+ * A leader whose session is gone, is in another project's worktree, cannot lead (`canLead`: a plain terminal, a GUI
+ * session, an agent not measured as leader) or reports to a dispatcher (`dispatchedBy`: a leader is a top-level
+ * session, as workspace-model `setLeader` has it) is dropped (PRD F21 v1.178 · 存盘).
  */
 export function sanitizeLeaders(
   raw: unknown,
   workspace: {
-    sessions: readonly (Pick<PersistedSession, 'id' | 'worktreeId' | 'kind'> & { ui?: SessionUi })[]
+    sessions: readonly (Pick<PersistedSession, 'id' | 'worktreeId' | 'kind' | 'dispatchedBy'> & { ui?: SessionUi })[]
     worktrees: readonly Pick<PersistedWorktree, 'id' | 'projectId'>[]
     projectIds: ReadonlySet<string>
   }
@@ -408,7 +409,7 @@ export function sanitizeLeaders(
   for (const [projectId, sessionId] of Object.entries(raw)) {
     if (!workspace.projectIds.has(projectId) || !isText(sessionId)) continue
     const session = workspace.sessions.find((s) => s.id === sessionId)
-    if (!session || !canLead(session.kind, session.ui ?? 'cli')) continue
+    if (!session || !canLead(session.kind, session.ui ?? 'cli') || session.dispatchedBy !== undefined) continue
     if (workspace.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) continue
     out[projectId] = sessionId
   }

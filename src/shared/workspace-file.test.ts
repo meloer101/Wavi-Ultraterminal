@@ -59,6 +59,14 @@ describe('sanitizeWorkspaceFile', () => {
     }
   })
 
+  it('drops a leader that reports to a dispatcher, as setLeader refuses one, and keeps a top-level one (PRD F21 v1.178)', () => {
+    const sessions = [...valid.sessions, { id: 's3', worktreeId: 'w1', kind: 'codex', title: 'Codex', startedAt: 150, lastActivityAt: 150, dispatchedBy: 's1' }]
+    const dispatched = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions: { p1: 's3' } }, 0)!
+    expect(dispatched.sessions.find((s) => s.id === 's3')?.dispatchedBy).toBe('s1')
+    expect(dispatched).not.toHaveProperty('leaderSessions')
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions: { p1: 's1' } }, 0)!.leaderSessions).toEqual({ p1: 's1' })
+  })
+
   it('round-trips a valid file', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })

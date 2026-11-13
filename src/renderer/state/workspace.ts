@@ -160,8 +160,6 @@ interface WorkspaceState extends WorkspaceData {
    * a leader, or the agent cannot lead (`canLead`).
    */
   addLeaderSession(projectId: ProjectId, kind: AgentKind): SessionId | null
-  /** Makes an existing session its project's leader; false when refused (see workspace-model setLeader). */
-  setLeader(projectId: ProjectId, sessionId: SessionId): boolean
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
@@ -222,6 +220,7 @@ export type SessionPatch = Partial<
     | 'turnStartedAt'
     | 'askingAgents'
     | 'waitingFor'
+    | 'waviAsk'
     | 'dispatchedBy'
     | 'dispatchTask'
     | 'dispatchBase'
@@ -428,13 +427,6 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       if (next === result.data) return null
       commit(next)
       return result.sessionId
-    },
-    setLeader(projectId, sessionId) {
-      const data = pick(get())
-      const next = setLeader(data, projectId, sessionId)
-      if (next === data) return false
-      set({ leaderSessions: next.leaderSessions })
-      return true
     },
     addSessionInWorktree(projectId, target, kind, ui) {
       const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), randomId, ui)

@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-13
+> 最后更新：2026-11-14
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -230,7 +230,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] 测试（2026-11-01）：e2e `dispatch.spec.ts` 重写（9 个，假 agent 在 shell 里跑 `wavi`），单元测试 `src/shared/dispatch.test.ts`、`src/main/dispatch/{requests,broker}.test.ts`、`handler.test.ts`、`typing.test.ts`、快照 worktree
   - [x] 真 agent 跑一次（2026-11-01，PRD §6.14 v1.111）：Claude（Haiku）派给 Codex 和 Grok（快照），Grok 派给 Claude；Claude 收件箱、第二档打字送达都走通，修了 Grok 信任对话框被当成一轮结束。Codex 服务商 503，Codex 自己做完任务、`wavi report` 没看到
 - [ ] leader 会话（PRD F21 v1.178，Figma 81，2026-11-13 定）：项目里一个 Claude / Codex 终端会话做统一入口，派活、接管用户的会话、收报告、只把要用户决定的事交给用户，自己不改代码
-  - [x] 数据、命令和启动参数（2026-11-13）：workspace.json 的 `leaderSessions`、设置 `dispatch.leader`（默认关）、`wavi ls --all` / `wavi adopt` / `wavi tell`、`wavi ls` 分开写等权限和等回答、leader 能读本项目任一会话、接管走确认条、leader 的子会话简报写「有问题写在回复里」、报告叫醒的一轮不提醒；Claude 加 `--disallowedTools Edit Write NotebookEdit MultiEdit`，Codex 加只读权限 profile（`$CODEX_HOME/config.toml` 有 `sandbox_mode` 时 `leaderCheck` 报出来）；单元测试 `dispatch.test.ts`、`handler.test.ts`、`reports.test.ts`、`bridge.test.ts`、`workspace-model.test.ts`、`workspace-file.test.ts`、`saved-runs.test.ts`、`typing.test.ts`、`controller.test.ts`、`src/main/dispatch/leader.test.ts`、`validate.test.ts`
+  - [x] 数据、命令和启动参数（2026-11-13）：workspace.json 的 `leaderSessions`、设置 `dispatch.leader`（默认关）、`wavi ls --all` / `wavi adopt` / `wavi tell`、`wavi ls` 分开写等权限和等回答、leader 能读本项目任一会话、接管走确认条、leader 的子会话简报写「有问题写在回复里」、报告叫醒的一轮不提醒；Claude 加 `--permission-mode default --disallowedTools Edit Write NotebookEdit MultiEdit`，Codex 加只读权限 profile（`$CODEX_HOME/config.toml` 有 `sandbox_mode` 时 `leaderCheck` 报出来）；单元测试 `dispatch.test.ts`、`handler.test.ts`、`reports.test.ts`、`bridge.test.ts`、`workspace-model.test.ts`、`workspace-file.test.ts`、`saved-runs.test.ts`、`typing.test.ts`、`controller.test.ts`、`src/main/dispatch/leader.test.ts`、`validate.test.ts`
   - [x] 界面（Figma 81，2026-11-13）：设置 · 自动化 · 派活的「leader 会话」开关、新建会话面板「作为 leader」（当前目录、只 CLI、智能体菜单只列能当 leader 的，不能选的写 `<版本> · <原因>`）、项目 ⋯「新建 leader…」、侧栏第三行 `leader · <分支>`、确认条的「接管」行和 `想开 N 个会话 · 接管 M 个`、会话头 `leader · 本小时叫醒 N 次`、总览 tell 的「等你回答」、派出的会话的 Split 图标改 text-primary；e2e `dispatch.spec.ts`「leader 会话」一组，截图在 `test-results/dispatch/leader-*`
   - [ ] 真 agent 跑一次（Claude、Codex 各一次 leader）
 - [ ] agent 自带的 subagent 只显示、不接管（PRD F21 v1.66 改，v1.109 改为读文件）：在所在会话下列出 subagent 的任务、模型和状态，不变成 Wavi 会话；状态来自 hook 的 `agent_id` / `SubagentStop`，名字、类型、模型、上一级读 agent 自己的 `subagents/agent-<id>.meta.json`（做法参照 yetone/magpie @ d714c42 `internal/sessions/subagents.go`）
