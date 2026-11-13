@@ -196,11 +196,14 @@ function pruneLeaders(data: WorkspaceData): WorkspaceData {
 
 /**
  * Makes a session its project's leader (PRD F21 v1.177 · 开): only an agent that can lead (`canLead`), in that
- * project, and only while the project has no other leader. `data` itself when refused.
+ * project, not dispatched by another session, and only while the project has no other leader. `data` itself when refused.
  */
 export function setLeader(data: WorkspaceData, projectId: ProjectId, sessionId: SessionId): WorkspaceData {
   const session = data.sessions.find((s) => s.id === sessionId)
   if (!session || !canLead(session.kind, session.ui ?? 'cli')) return data
+  // A leader is a top-level session: one that reports to a dispatcher could adopt that dispatcher (a cycle) or build a
+  // tree deeper than DISPATCH_LIMITS.depth with `wavi adopt`.
+  if (session.dispatchedBy !== undefined) return data
   if (data.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) return data
   const current = leaderOf(data, projectId)
   if (current !== null) return data

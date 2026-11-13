@@ -533,13 +533,16 @@ describe('leader sessions (PRD F21 v1.177)', () => {
     expect(serializeWorkspace(data, ui, {})).not.toHaveProperty('leaderSessions')
   })
 
-  it('refuses a plain terminal, a GUI session, another project and a session that is not there', () => {
+  it('refuses a plain terminal, a GUI session, a dispatched session, another project and a session that is not there', () => {
     const data = withSessions('claude', 'shell') // s-3, s-4
     expect(setLeader(data, 'p-1', 's-4')).toBe(data)
     expect(setLeader(data, 'p-2', 's-3')).toBe(data)
     expect(setLeader(data, 'p-1', 'nope')).toBe(data)
     const gui = { ...data, sessions: data.sessions.map((s) => (s.id === 's-3' ? { ...s, ui: 'gui' as const } : s)) }
     expect(setLeader(gui, 'p-1', 's-3')).toBe(gui)
+    // A dispatched session reports to its dispatcher; as a leader it could adopt that dispatcher (a cycle).
+    const child = { ...data, sessions: data.sessions.map((s) => (s.id === 's-3' ? { ...s, dispatchedBy: 's-4', dispatchTask: 'x' } : s)) }
+    expect(setLeader(child, 'p-1', 's-3')).toBe(child)
   })
 
   it('forgets the leader when it is closed or its project removed; its children become ordinary sessions', () => {

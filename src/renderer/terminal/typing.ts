@@ -53,6 +53,14 @@ export function onUserSubmit(listener: (sessionId: SessionId) => void): () => vo
   return () => submitListeners.delete(listener)
 }
 
+/**
+ * The user sent a line to this session from outside its terminal (the phone, 总览's batch send): their turn, not a
+ * report's (PRD F21 v1.177). Only `lastSubmitIn`; a leader's `wavi tell` is answered in its terminal.
+ */
+export function noteUserLine(sessionId: SessionId, now = Date.now()): void {
+  submits.set(sessionId, now)
+}
+
 /** When the user last submitted a line in this terminal, or null. */
 export function lastSubmitIn(sessionId: SessionId): number | null {
   return submits.get(sessionId) ?? null

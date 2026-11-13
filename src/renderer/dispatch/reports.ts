@@ -159,9 +159,11 @@ async function flush(parentId: SessionId, batch: readonly ChildReport[]): Promis
   // Nobody left to tell (closed: its children were made ordinary sessions already).
   if (!parent) return
   const full = await Promise.all(batch.map(complete))
+  // Taken before the report goes in: the turn it wakes can start (its hook reach the window) before deliverTo returns.
+  const sentAt = Date.now()
   const result = await deliverTo(parent, reportText(full, stillRunning(parentId, full)))
   if (result !== 'delivered') addHeld(parentId, heldReports(full))
-  else if (isLeaderSession(parentId)) setWoken(parentId, Date.now())
+  else if (isLeaderSession(parentId)) setWoken(parentId, sentAt)
 }
 
 /** What 送进去 types: the held reports as one report, then each held message. */

@@ -20,6 +20,7 @@ import type { SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { interruptAgent, submitPrompt } from '../session-io'
 import { useWorkspace } from '../state/workspace'
+import { noteUserLine } from '../terminal/typing'
 import { IconButton } from '../ui/IconButton'
 import enterStyles from './EnterButton.module.css'
 import styles from './BatchBar.module.css'
@@ -71,6 +72,8 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
             if (action === 'send') {
               // A session restored from disk starts (resuming its conversation) before it takes the message.
               await ensureAgentUp(target.id)
+              // The user's own message: a leader's turn this starts is theirs (PRD F21 v1.177).
+              noteUserLine(target.id)
               await submitPrompt(target.id, text)
             } else {
               await interruptAgent(target.id)
