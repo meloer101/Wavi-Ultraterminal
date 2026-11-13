@@ -111,6 +111,19 @@ describe('buildSidebarGroups', () => {
   })
 })
 
+describe('leader session (PRD F21 v1.178, Figma 81A)', () => {
+  it('writes leader before the branch on the leader’s third line, in both views', () => {
+    const sessions = [session('lead', 'wam', 'idle'), session('kid', 'wa1', 'running', 0, { dispatchedBy: 'lead' })]
+    const [alpha] = buildSidebarGroups({ projects, worktrees, sessions, leaderSessions: { pa: 'lead' } })
+    expect(alpha?.rows.map((r) => [r.session.id, r.branch, r.depth])).toEqual([
+      ['lead', 'leader · main', 0],
+      ['kid', 'x/one', 1]
+    ])
+    const byStatus = buildSidebarGroups({ projects, worktrees, sessions, leaderSessions: { pa: 'lead' }, groupBy: 'status' })
+    expect(byStatus.flatMap((g) => g.rows).find((r) => r.session.id === 'lead')?.branch).toBe('alpha › leader · main')
+  })
+})
+
 describe('keyboard targets', () => {
   const sessions = [
     session('run1', 'wa1', 'running'),

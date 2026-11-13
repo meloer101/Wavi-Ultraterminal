@@ -59,6 +59,7 @@ export function Sidebar() {
     collapsedProjectIds,
     groupBy,
     collapsedStatusGroups,
+    leaderSessions,
     setActiveSession,
     toggleSidebar,
     toggleProjectCollapsed,
@@ -73,6 +74,7 @@ export function Sidebar() {
         collapsedProjectIds: s.collapsedProjectIds,
         groupBy: s.sidebarGroupBy,
         collapsedStatusGroups: s.collapsedStatusGroups,
+        leaderSessions: s.leaderSessions,
         toggleStatusGroupCollapsed: s.toggleStatusGroupCollapsed,
         setActiveSession: s.setActiveSession,
         toggleSidebar: s.toggleSidebar,
@@ -135,8 +137,8 @@ export function Sidebar() {
     return out
   }, [subagentLists, runLists, sessions, folded])
   const groups = useMemo(
-    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
-    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]
+    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, ...(leaderSessions ? { leaderSessions } : {}) }),
+    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, leaderSessions]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   const waiting = useMemo(() => sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency), [sessions])

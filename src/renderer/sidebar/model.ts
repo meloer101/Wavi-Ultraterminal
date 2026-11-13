@@ -99,6 +99,8 @@ export interface SidebarInput {
   /** Absent = by project. */
   groupBy?: SidebarGroupBy
   collapsedStatusGroups?: readonly SessionStatus[]
+  /** Each project's leader session (PRD F21 v1.178): its branch line reads `leader · <branch>` (Figma 81A). */
+  leaderSessions?: Readonly<Record<ProjectId, SessionId | undefined>>
 }
 
 /** What a finished turn left: "已完成 · <reply>" while unread, the reply once seen. */
@@ -114,15 +116,16 @@ export function nestedTitle(title: string, parentTitle: string | undefined): str
   return prefix && title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title
 }
 
-function toRow(session: Session, worktree: Worktree | undefined, { depth, parentTitle, tree, opens, after, pass }: NestedRow): SessionRowModel {
+function toRow(session: Session, worktree: Worktree | undefined, { depth, parentTitle, tree, opens, after, pass }: NestedRow, leader = false): SessionRowModel {
   // The project header already says which folder this is; the branch has its own line (Figma 34P).
+  const branch = session.dispatchBase === 'snapshot' ? '快照' : session.scheduledBy ? `定时 · ${worktree?.branch ?? ''}` : (worktree?.branch ?? '')
   return {
     session,
     title: depth > 0 ? nestedTitle(session.title, parentTitle) : session.title,
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
-    // A snapshot has no branch (detached): its line says so instead.
-    branch: session.dispatchBase === 'snapshot' ? '快照' : session.scheduledBy ? `定时 · ${worktree?.branch ?? ''}` : (worktree?.branch ?? ''),
+    // A snapshot has no branch (detached): its line says so instead; a leader's says it leads.
+    branch: leader ? (branch ? `leader · ${branch}` : 'leader') : branch,
     depth,
     model: session.dispatchModel ?? '',
     tree,
@@ -284,7 +287,7 @@ function sessionsOf(project: Project, sessions: readonly Session[], worktreeById
  */
 export function buildSidebarGroups(input: SidebarInput): SidebarGroup[] {
   if (input.groupBy === 'status') return buildStatusGroups(input)
-  const { projects, worktrees, sessions, collapsedProjectIds = [], subagents } = input
+  const { projects, worktrees, sessions, collapsedProjectIds = [], subagents, leaderSessions = {} } = input
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const subagentsOf: SubagentsOf = subagents ? (id) => subagents[id] ?? [] : NO_SUBAGENTS
   const collapsed = new Set(collapsedProjectIds)
@@ -296,7 +299,11 @@ export function buildSidebarGroups(input: SidebarInput): SidebarGroup[] {
       id: project.id,
       kind: 'project',
       title: project.name,
-      rows: isCollapsed ? [] : withChildrenNested(own, subagentsOf).map((nested) => toRow(nested.session, worktreeById.get(nested.session.worktreeId), nested)),
+      rows: isCollapsed
+        ? []
+        : withChildrenNested(own, subagentsOf).map((nested) =>
+            toRow(nested.session, worktreeById.get(nested.session.worktreeId), nested, leaderSessions[project.id] === nested.session.id)
+          ),
       sessionCount: own.length,
       collapsed: isCollapsed,
       attention: urgent?.status ?? null
@@ -310,7 +317,7 @@ export function buildSidebarGroups(input: SidebarInput): SidebarGroup[] {
  * (projects, then store order), so a row only moves when its status does. Rows are flat — a dispatched session goes to
  * its own status's group — and their last line reads `<project> › <branch>`. A session's own subagents stay under it.
  */
-export function buildStatusGroups({ projects, worktrees, sessions, collapsedStatusGroups = [], subagents }: SidebarInput): SidebarGroup[] {
+export function buildStatusGroups({ projects, worktrees, sessions, collapsedStatusGroups = [], subagents, leaderSessions = {} }: SidebarInput): SidebarGroup[] {
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const listed = projects.flatMap((project) => sessionsOf(project, sessions, worktreeById).map((session) => ({ session, project })))
   const collapsed = new Set(collapsedStatusGroups)
@@ -329,11 +336,16 @@ export function buildStatusGroups({ projects, worktrees, sessions, collapsedStat
           : own.map(({ session, project }) => {
               const worktree = worktreeById.get(session.worktreeId)
               const subs = subagents?.[session.id] ?? []
-              const row = toRow(session, worktree, {
+              const row = toRow(
                 session,
-                depth: 0,
-                ...(subs.length > 0 ? { tree: 'parent' as const, after: subagentRows(session, subs, 1, false) } : {})
-              })
+                worktree,
+                {
+                  session,
+                  depth: 0,
+                  ...(subs.length > 0 ? { tree: 'parent' as const, after: subagentRows(session, subs, 1, false) } : {})
+                },
+                leaderSessions[project.id] === session.id
+              )
               return { ...row, branch: row.branch ? `${project.name} › ${row.branch}` : project.name }
             }),
         sessionCount: own.length,
