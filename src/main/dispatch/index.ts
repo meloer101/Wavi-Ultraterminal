@@ -22,7 +22,7 @@ import { setDispatchHookHandler } from '../hooks'
 import { getSettings } from '../settings'
 import { DispatchBroker } from './broker'
 import { codexQueue, PiInbox, writeInbox } from './deliver'
-import { leaderCheck } from './leader'
+import { codexLeaderSandboxArgs, leaderCheck } from './leader'
 import { parseInbox, WaviRequests } from './requests'
 
 let ownerOf: (sessionId: string) => WebContents | null = () => null
@@ -126,11 +126,13 @@ export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent,
 
 /**
  * The arguments that keep a leader session from changing files (PRD F21 v1.177 · 不改代码), with or without dispatch:
- * a leader never runs unrestricted. Its WAVI_DIR stays writable for `wavi` when dispatch is on. Empty for any other
- * launch.
+ * a leader never runs unrestricted. Its WAVI_DIR stays writable for `wavi` when dispatch is on; a Codex leader whose
+ * config.toml sets `sandbox_mode` is read-only throughout (`codexLeaderSandboxArgs`). Empty for any other launch.
  */
-export function leaderArgsFor(agent: DispatchAgent, leader: boolean, dispatch: DispatchLaunch | null): string[] {
-  return leader && canLead(agent) ? leaderLaunchArgs(agent, dispatch?.env.WAVI_DIR ?? null) : []
+export async function leaderArgsFor(agent: DispatchAgent, leader: boolean, dispatch: DispatchLaunch | null): Promise<string[]> {
+  if (!leader || !canLead(agent)) return []
+  const args = leaderLaunchArgs(agent, dispatch?.env.WAVI_DIR ?? null)
+  return agent === 'codex' ? [...args, ...codexLeaderSandboxArgs(await leaderCheck())] : args
 }
 
 /** A GUI session's own input (PRD F23): null when the session is not one; else whether the message went in. */

@@ -181,7 +181,7 @@ export async function sendHeld(sessionId: SessionId): Promise<string | null> {
   const items = takeHeld(sessionId)
   if (items.length === 0) return null
   try {
-    await submitPrompt(sessionId, await heldText(sessionId, items))
+    await submitPrompt(sessionId, await heldText(sessionId, items), { user: true })
     return null
   } catch (error) {
     addHeld(sessionId, items)

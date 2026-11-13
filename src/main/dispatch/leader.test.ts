@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { codexConfigPath, leaderCheck, setsSandboxMode } from './leader'
+import { codexConfigPath, codexLeaderSandboxArgs, leaderCheck, setsSandboxMode } from './leader'
 
 describe('Codex as a leader (PRD F21 v1.177 · 不改代码)', () => {
   let dir: string | null = null
@@ -33,5 +33,10 @@ describe('Codex as a leader (PRD F21 v1.177 · 不改代码)', () => {
     expect(await leaderCheck(file)).toEqual({ codexSandboxMode: false })
     writeFileSync(file, 'sandbox_mode = "workspace-write"\n')
     expect(await leaderCheck(file)).toEqual({ codexSandboxMode: true })
+  })
+
+  it('pins a Codex leader read-only on its command line when the config sets sandbox_mode, else adds nothing', () => {
+    expect(codexLeaderSandboxArgs({ codexSandboxMode: true })).toEqual(['-c', 'sandbox_mode="read-only"'])
+    expect(codexLeaderSandboxArgs({ codexSandboxMode: false })).toEqual([])
   })
 })

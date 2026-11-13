@@ -360,7 +360,7 @@ async function hostLaunch(
   const script = options.script ? await approvedScript(realCwd, options.script) : null
   const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
   if (options.script === 'run' && script) return { command: shell, args: runShellArgs(script) }
-  const leader = agent ? leaderArgsFor(agent, options.leader === true, dispatch) : []
+  const leader = agent ? await leaderArgsFor(agent, options.leader === true, dispatch) : []
   const extraArgs = [...(hooks?.extraArgs ?? []), ...leader, ...(dispatch?.extraArgs ?? [])]
   const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),

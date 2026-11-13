@@ -136,3 +136,17 @@ export function setWoken(id: SessionId, at: number | null): void {
   if ((useDispatch.getState().woken[id] ?? null) === at) return
   useDispatch.setState((s) => ({ woken: { ...s.woken, [id]: at ?? undefined } }))
 }
+
+/**
+ * The session is no longer its project's leader (closed, or no longer the leader): its decision for the user and the
+ * time a report last woke it go (PRD F21 v1.177), so nothing of it as leader remains.
+ */
+export function forgetLeader(id: SessionId): void {
+  const { tells, woken } = useDispatch.getState()
+  if (!(id in tells) && !(id in woken)) return
+  useDispatch.setState((s) => {
+    const { [id]: _tell, ...keptTells } = s.tells
+    const { [id]: _woken, ...keptWoken } = s.woken
+    return { tells: keptTells, woken: keptWoken }
+  })
+}

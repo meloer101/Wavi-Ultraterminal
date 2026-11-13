@@ -46,6 +46,19 @@ describe('sanitizeWorkspaceFile', () => {
     }
   })
 
+  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.177)', () => {
+    const sessions = [
+      ...valid.sessions,
+      { id: 's3', worktreeId: 'w1', kind: 'gemini', title: 'Gemini', startedAt: 150, lastActivityAt: 150 },
+      { id: 's4', worktreeId: 'w1', kind: 'claude', ui: 'gui', title: 'Claude Code', startedAt: 150, lastActivityAt: 150 }
+    ]
+    for (const leaderSessions of [{ p1: 's3' }, { p1: 's4' }]) {
+      const file = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions }, 0)!
+      expect(file.sessions.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4'])
+      expect(file).not.toHaveProperty('leaderSessions')
+    }
+  })
+
   it('round-trips a valid file', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })

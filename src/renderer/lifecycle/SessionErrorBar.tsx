@@ -14,11 +14,11 @@ import styles from './SessionErrorBar.module.css'
 
 async function askToFix(sessionId: SessionId, summary: string): Promise<void> {
   await ensureAgentUp(sessionId)
-  await submitPrompt(sessionId, fixPrompt(summary))
+  await submitPrompt(sessionId, fixPrompt(summary), { user: true })
 }
 
 async function retry(sessionId: SessionId, kind: RetryKind): Promise<void> {
-  if (kind === 'continue') await submitPrompt(sessionId, CONTINUE_PROMPT)
+  if (kind === 'continue') await submitPrompt(sessionId, CONTINUE_PROMPT, { user: true })
   else await startSession(sessionId, { resume: true })
 }
 

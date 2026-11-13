@@ -2,6 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { CLI_AGENTS } from './agents'
+import { canLead } from './dispatch'
 import { sanitizeGuiPicks, type GuiPicks } from './gui-chat'
 import { archiveRefName, type WorktreeArchive } from './archive'
 import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
@@ -390,17 +391,24 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
   }
 }
 
-/** A leader whose session is gone, is in another project's worktree or is a plain terminal is dropped (PRD F21 v1.177 · 存盘). */
+/**
+ * A leader whose session is gone, is in another project's worktree or cannot lead (`canLead`: a plain terminal, a GUI
+ * session, an agent not measured as leader) is dropped (PRD F21 v1.177 · 存盘).
+ */
 export function sanitizeLeaders(
   raw: unknown,
-  workspace: { sessions: readonly Pick<PersistedSession, 'id' | 'worktreeId' | 'kind'>[]; worktrees: readonly Pick<PersistedWorktree, 'id' | 'projectId'>[]; projectIds: ReadonlySet<string> }
+  workspace: {
+    sessions: readonly (Pick<PersistedSession, 'id' | 'worktreeId' | 'kind'> & { ui?: SessionUi })[]
+    worktrees: readonly Pick<PersistedWorktree, 'id' | 'projectId'>[]
+    projectIds: ReadonlySet<string>
+  }
 ): Record<string, string> {
   const out: Record<string, string> = {}
   if (!isRecord(raw)) return out
   for (const [projectId, sessionId] of Object.entries(raw)) {
     if (!workspace.projectIds.has(projectId) || !isText(sessionId)) continue
     const session = workspace.sessions.find((s) => s.id === sessionId)
-    if (!session || session.kind === 'shell') continue
+    if (!session || !canLead(session.kind, session.ui ?? 'cli')) continue
     if (workspace.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) continue
     out[projectId] = sessionId
   }

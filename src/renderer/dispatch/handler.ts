@@ -4,7 +4,7 @@
 // agent later as a message; one a dispatched session starts begins right away. Children start in new worktrees — a
 // branch off the dispatcher's, or a snapshot of its working tree — with Wavi's brief as their first message (§6.14).
 import { CLI_AGENTS } from '@shared/agents'
-import { diffSummary, diffSummaryText } from '@shared/attempt-groups'
+import { diffSummary, diffSummaryText, groupOfSession } from '@shared/attempt-groups'
 import {
   ackReport,
   adoptBrief,
@@ -33,6 +33,7 @@ import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { binaryInstalled } from '../new-session/model'
 import { interruptAgent } from '../session-io'
+import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { handleScheduleCommand } from '../schedules/agent-requests'
@@ -262,6 +263,7 @@ async function adopt(caller: Place, request: DispatchRequest, command: Extract<W
     self: target?.session.id === caller.session.id,
     kind: target?.session.kind ?? 'shell',
     dispatchedBy: target?.session.dispatchedBy !== undefined,
+    attemptMember: target ? groupOfSession(useAttemptGroups.getState().groups, target.session.id) !== undefined : false,
     archived: Boolean(target?.worktree.archived),
     exited: target ? gone(target.session) : false,
     subtreeSize: target ? treeOf(target.session.id).length : 0,

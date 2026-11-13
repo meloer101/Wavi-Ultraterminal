@@ -499,6 +499,8 @@ export function adoptRefusal(input: {
   self: boolean
   kind: AgentKind
   dispatchedBy: boolean
+  /** A member of a 同任务多解 group (PRD F4): it reports to the session the task came from. Absent: not one. */
+  attemptMember?: boolean
   archived: boolean
   exited: boolean
   subtreeSize: number
@@ -512,6 +514,7 @@ export function adoptRefusal(input: {
   if (input.self) return waviFail('not_allowed', 'That is your own session.')
   if (input.kind === 'shell') return waviFail('not_allowed', 'That is a plain terminal, not an agent session; it cannot take a task.')
   if (input.dispatchedBy) return waviFail('not_allowed', 'That session already reports to a dispatcher (wavi ls --all shows which); it cannot be adopted.')
+  if (input.attemptMember) return waviFail('not_allowed', 'That session is one of several trying the same task (同任务多解); it reports to the session the task came from and cannot be adopted.')
   if (input.archived || input.exited) return waviFail('not_allowed', 'That session is archived or its agent has exited.')
   if (input.subtreeDepth + 1 > DISPATCH_LIMITS.depth) {
     return waviFail('not_allowed', `That session's own sessions dispatch further, so adopting it would make the tree deeper than ${DISPATCH_LIMITS.depth} levels.`)

@@ -5,8 +5,9 @@ import { handleWaviRequest, resumeConfirmTimers, setDispatchSettings } from './h
 import { startAttemptReports } from '../attempts/report'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { resumeReports, startReports } from './reports'
+import { useWorkspace } from '../state/workspace'
 import { onUserSubmit } from '../terminal/typing'
-import { restoreDispatch, savedDispatch, setTell, useDispatch } from './store'
+import { forgetLeader, restoreDispatch, savedDispatch, setTell, useDispatch } from './store'
 
 let started = false
 /** The saved waits are taken up once per window (not again on a remount). */
@@ -40,7 +41,14 @@ export function startDispatchBridge(): () => void {
   const offAttempts = startAttemptReports()
   // A leader's `wavi tell` is answered when the user sends a line in its terminal (PRD F21 v1.177 · 交给用户).
   const offSubmits = onUserSubmit((id) => setTell(id, null))
+  // A leader closed or no longer the leader (its project's `leaderSessions` entry gone or changed) leaves nothing behind.
+  const offLeaders = useWorkspace.subscribe((s, prev) => {
+    if (s.leaderSessions === prev.leaderSessions) return
+    const now = new Set(Object.values(s.leaderSessions ?? {}))
+    for (const id of Object.values(prev.leaderSessions ?? {})) if (!now.has(id)) forgetLeader(id)
+  })
   return () => {
+    offLeaders()
     offSubmits()
     offAttempts()
     offSaves()

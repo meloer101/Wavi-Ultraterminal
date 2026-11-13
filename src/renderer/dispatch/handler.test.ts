@@ -28,6 +28,8 @@ let ids = 0
 vi.mock('../state/workspace-model', () => ({ randomId: (prefix: string) => `${prefix}-new${++ids}` }))
 vi.mock('../new-session/creation', () => ({ createWorktreeFor: async () => true, holdForWorktree: () => {}, startEagerly: () => {} }))
 vi.mock('../session-io', () => ({ interruptAgent: () => {} }))
+let attemptGroups: { id: string; members: string[]; reportTo?: string }[] = []
+vi.mock('../state/attempt-groups', () => ({ useAttemptGroups: { getState: () => ({ groups: attemptGroups }) } }))
 vi.mock('../session-meta/store', () => ({ useSessionMeta: { getState: () => ({ bySession: {} }) } }))
 vi.mock('../conflict-radar/store', () => ({ markFor: () => null, useRadar: { getState: () => ({ byRoot: {} }) } }))
 vi.mock('./reports', () => ({ deliverMessage: (...args: unknown[]) => deliverMessage(...(args as [])), queueReport: (...args: unknown[]) => queueReport(...args) }))
@@ -297,6 +299,16 @@ describe('wavi for a project’s leader (PRD F21 v1.177)', () => {
     sessions[1] = { ...sessions[1]!, phase: 'exited' }
     expect(await adopt('user1')).toMatchObject({ ok: false, failure: 'not_allowed' })
     expect(useDispatch.getState().confirms).toHaveLength(0)
+  })
+
+  it('refuses to adopt a member of a 同任务多解 group: it reports to the session the task came from', async () => {
+    attemptGroups = [{ id: 'g1', members: ['user1'], reportTo: 'top' }]
+    try {
+      expect(await call('lead', { name: 'adopt', id: 'user1', task: 'Do it' })).toMatchObject({ ok: false, failure: 'not_allowed', text: expect.stringContaining('同任务多解') })
+      expect(useDispatch.getState().confirms).toHaveLength(0)
+    } finally {
+      attemptGroups = []
+    }
   })
 
   it('tells its sessions to ask in their reply, and puts a decision in front of the user with tell', async () => {
