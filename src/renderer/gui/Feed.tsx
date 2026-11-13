@@ -313,7 +313,7 @@ function AgentTurn({ agent, start, faded, end, children }: { agent: AgentKind; s
     <div className={styles.agentTurn} data-start={start || undefined} data-faded={faded || undefined}>
       {start && (
         <span className={styles.agentAvatar} data-agent-mark aria-hidden>
-          <AgentIcon kind={agent} size={16} />
+          <AgentIcon kind={agent} size={22} />
         </span>
       )}
       {children}

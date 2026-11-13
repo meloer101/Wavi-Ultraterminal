@@ -334,6 +334,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] GUI 发出的图片留在消息上（PRD v1.169，Figma 71A）：`ChatItem` 用户消息加 `attachments`；`KeepImage`（`transcript-chat.ts`）由 `src/main/files.ts` `keepInlineImage` 实现，经 `DriverOptions.keepImage` 和读历史传进 Claude / Codex / Pi 的解析，ACP 发出时带附件路径、`session/load` 回放的图片块存成文件；`Feed.tsx` 复用输入框的 `Attachment`；e2e `gui-session.spec.ts` 粘贴一张图发出后气泡上方是 `sent-*.png`。没测：真 Claude / Codex / Pi / ACP agent 发图后的样子（只有假 Claude 和单测）；ACP 续上会话时的图片
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
+- [x] 对话头像和单行气泡一样高（PRD v1.178）：`--avatar` = 8 + 行高 + 8、列两侧留「头像 + 12」至少 40（`src/renderer/gui/Chat.module.css`）；e2e `reads like a chat` 量了高度和对齐
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流

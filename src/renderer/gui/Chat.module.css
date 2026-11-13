@@ -27,8 +27,11 @@
   --gap-turn: calc(var(--chat-px) * 24 / 14);
   --gap-block: calc(var(--chat-px) * 12 / 14);
   --gap-step: calc(var(--chat-px) * 8 / 14);
-  /* The agent's mark and the user's picture, outside the column. */
-  --avatar: 28px;
+  /* The agent's mark and the user's picture, outside the column: as tall as a one-line bubble (8 + line + 8), so the
+     picture's top and bottom are the bubble's and its middle is the first line's (38 at 14 / 22). */
+  --avatar: calc(var(--chat-line) + 2 * var(--space-8));
+  /* Each side of the column: room for a picture and its gap (38 + 12), at least 40. The scroller clips anything wider. */
+  --gutter: max(var(--space-40), var(--avatar) + var(--space-12));
   /* Figma 65H: the empty session's welcome — the agent's mark and the line. */
   --avatar-welcome: 36px;
   --type-welcome: 500 calc(var(--chat-px) * 24 / 14) / calc(var(--chat-px) * 32 / 14) var(--chat-family);
@@ -97,9 +100,9 @@
   flex-direction: column;
   gap: var(--gap-block);
   box-sizing: border-box;
-  max-width: calc(var(--column) + 2 * var(--space-40));
+  max-width: calc(var(--column) + 2 * var(--gutter));
   margin: 0 auto;
-  padding: var(--space-24) var(--space-40) calc(3 * var(--space-40));
+  padding: var(--space-24) var(--gutter) calc(3 * var(--space-40));
   user-select: text;
 }
 
@@ -183,6 +186,13 @@
 /* The mark (AgentIcon) draws in the circle's colour, not its own text colour. */
 .agentAvatar.agentAvatar > * {
   color: inherit;
+}
+
+/* In a turn the mark keeps its 16 : 28 share of the circle as the circle follows 对话 · 字号; AgentIcon sizes itself
+   inline, hence !important. */
+.agentTurn > .agentAvatar > * {
+  width: calc(var(--avatar) * 16 / 28) !important;
+  height: calc(var(--avatar) * 16 / 28) !important;
 }
 
 /* The bubble and, under it, its actions (Figma 54A), right-aligned. */
@@ -784,8 +794,8 @@
   gap: var(--space-8);
   box-sizing: border-box;
   width: 100%;
-  max-width: calc(var(--column) + 2 * var(--space-40));
-  padding: 0 var(--space-40);
+  max-width: calc(var(--column) + 2 * var(--gutter));
+  padding: 0 var(--gutter);
 }
 
 /* Figma 59G: a session with nothing in it yet — the agent's mark and name over the composer, the two in the middle of
