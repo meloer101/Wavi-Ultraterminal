@@ -188,6 +188,7 @@ export function Sidebar() {
           }
           onClick={onOverview}
         />
+        <NavItem icon={<Gauge {...ICON} />} label="额度" shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
         <SelectionDrops ids={inPanes} />
@@ -247,7 +248,6 @@ export function Sidebar() {
       <div className={styles.footer}>
         <UpdateEntry />
         <NavItem icon={<Clock {...ICON} />} label="定时任务" shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
-        <NavItem icon={<Gauge {...ICON} />} label="额度" shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
         <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
       </div>
     </>

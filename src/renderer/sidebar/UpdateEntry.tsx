@@ -1,4 +1,4 @@
-// The sidebar's 更新 (Figma 36G / 36I, PRD v1.93): above 额度, it opens a small panel with the running version and
+// The sidebar's 更新 (Figma 36G / 36I, PRD v1.93): above 定时任务, it opens a small panel with the running version and
 // 检查更新. A newer GitHub release turns the button into 下载 <version>, which opens the release page — Wavi never
 // downloads or installs anything itself (PRD §7). Replaces settings' 关于 pane.
 import { useCallback, useRef, useState } from 'react'
