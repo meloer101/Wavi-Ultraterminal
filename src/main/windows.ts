@@ -216,7 +216,7 @@ export function installAppMenu(): void {
       label: '会话',
       submenu: [
         { label: '跳转到…', accelerator: SHORTCUTS['command-palette'], ...command('command-palette') },
-        { label: '总览', accelerator: SHORTCUTS['toggle-overview'], ...command('toggle-overview') },
+        { label: '看板', accelerator: SHORTCUTS['toggle-overview'], ...command('toggle-overview') },
         { label: '下一个需要你的会话', accelerator: SHORTCUTS['next-attention'], ...command('next-attention') },
         { type: 'separator' },
         { label: '重命名会话', ...command('rename-session') },

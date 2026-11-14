@@ -28,7 +28,7 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+KeyW', accelerator: 'CmdOrCtrl+W', item: ['文件', '关闭会话'] },
   { key: 'Meta+KeyF', accelerator: 'CmdOrCtrl+F', item: ['编辑', '在终端中查找…'] },
   { key: 'Meta+KeyK', accelerator: 'CmdOrCtrl+K', item: ['会话', '跳转到…'] },
-  { key: 'Meta+Shift+KeyA', accelerator: 'CmdOrCtrl+Shift+A', item: ['会话', '总览'] },
+  { key: 'Meta+Shift+KeyA', accelerator: 'CmdOrCtrl+Shift+A', item: ['会话', '看板'] },
   { key: 'Meta+KeyJ', accelerator: 'CmdOrCtrl+J', item: ['会话', '下一个需要你的会话'] },
   { key: 'Meta+Shift+KeyM', accelerator: 'Shift+CmdOrCtrl+M', item: ['会话', '合并到基线…'] },
   { key: 'Meta+Shift+KeyN', accelerator: 'Shift+CmdOrCtrl+N', item: ['会话', '同任务多解…'] },

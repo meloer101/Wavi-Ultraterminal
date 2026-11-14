@@ -162,7 +162,7 @@ class Rig {
   }
 
   async overview(): Promise<void> {
-    await this.page.locator('[data-region="sidebar"] nav button', { hasText: '总览' }).click()
+    await this.page.locator('[data-region="sidebar"] nav button', { hasText: '看板' }).click()
   }
 
   /** Terminals spawn on first view: shows every session once and waits for its agent. */

@@ -99,13 +99,13 @@
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  /* No rules anywhere in the list: groups are set apart by space and a quieter label, not lines. */
   gap: var(--space-16);
   padding: var(--space-8) var(--space-12) var(--space-24);
   outline: none;
 }
 
-.body[data-view='board'] {
+.body[data-view='board'],
+.body[data-view='github'] {
   padding: var(--space-4) var(--space-16) var(--space-16);
 }
 
@@ -113,48 +113,6 @@
   margin: var(--space-24) var(--space-12);
   font: var(--text-body);
   color: var(--text-tertiary);
-}
-
-/* ---- list (Figma 11v2-A / B) ---- */
-
-.group {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-}
-
-/* OverviewGroupHeader v3: 32 high, no rule; a 12/500 secondary label so it reads as a section, not a row. */
-.groupHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--space-16) 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: default;
-}
-
-.groupHeader:hover .chevron,
-.groupHeader:hover h2 {
-  color: var(--text-primary);
-}
-
-.groupHeader:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-
-.groupHeader h2 {
-  margin: 0;
-  font: var(--text-caption-strong);
-  line-height: 20px;
-  color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 .columnHeader h2 {
@@ -165,274 +123,10 @@
   white-space: nowrap;
 }
 
-.chevron {
-  display: flex;
-  color: var(--text-tertiary);
-}
-
 .count {
   font: var(--text-mono-s);
   line-height: 20px;
   color: var(--text-tertiary);
-}
-
-/* OverviewRow v2 (104:191) */
-.row {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  height: 40px;
-  padding: 0 var(--space-12) 0 var(--space-16);
-  border-radius: var(--radius-md);
-  cursor: default;
-}
-
-.row:hover,
-.row[data-selected='true'] {
-  background: var(--bg-hover);
-}
-
-.statusCell {
-  flex: none;
-  width: 88px;
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.statusLabel {
-  font: var(--text-caption);
-  line-height: 20px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-[data-tone='attention'] .statusLabel {
-  color: var(--status-attention);
-}
-
-[data-tone='error'] .statusLabel {
-  color: var(--status-error);
-}
-
-.rowTitle,
-.where,
-.summaryCell {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rowTitle {
-  flex: none;
-  width: 240px;
-  font: var(--text-body);
-  line-height: 20px;
-  color: var(--text-primary);
-}
-
-.where {
-  flex: none;
-  width: 200px;
-  font: var(--text-caption);
-  line-height: 20px;
-  color: var(--text-tertiary);
-}
-
-.summaryCell {
-  flex: 1;
-  font: var(--text-caption);
-  line-height: 20px;
-  color: var(--text-secondary);
-}
-
-.stat,
-.time {
-  flex: none;
-  font: var(--text-mono-s);
-  line-height: 20px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  text-align: right;
-}
-
-.stat {
-  width: 64px;
-}
-
-/* Figma 17C TodoCell 48 / ContextCell 100: the chip's 6px inset, mono; a high context is heavier, never colored. */
-.todoCell,
-.contextCell {
-  flex: none;
-  padding: 0 var(--space-6);
-  overflow: hidden;
-  font: var(--text-mono-s);
-  line-height: 20px;
-  white-space: nowrap;
-}
-
-.todoCell {
-  width: 48px;
-  color: var(--text-secondary);
-}
-
-.contextCell {
-  width: 100px;
-  color: var(--text-tertiary);
-}
-
-/* Conflict radar: "和 jacob/otter 会冲突"; the full list is in the tag's tooltip. */
-.radarCell {
-  flex: none;
-  display: flex;
-  align-items: center;
-  width: 168px;
-  padding: 0 var(--space-6);
-  overflow: hidden;
-}
-
-/* PR (F16): `#123 ✓`, or `#123 已合并`. */
-.prCell {
-  flex: none;
-  display: flex;
-  align-items: center;
-  width: 88px;
-  padding: 0 var(--space-6);
-  overflow: hidden;
-  line-height: 20px;
-}
-
-.contextCell[data-level='high'] {
-  font: var(--text-mono-s-medium);
-  line-height: 20px;
-  color: var(--text-primary);
-}
-
-.time {
-  width: 56px;
-}
-
-/* ⌄ appears on hover: a click opens the terminal under the row. */
-.trailing {
-  flex: none;
-  display: flex;
-  color: var(--text-tertiary);
-  visibility: hidden;
-}
-
-.row:hover .trailing,
-.row[data-selected='true'] .trailing {
-  visibility: visible;
-}
-
-/* Expanded: the row and its terminal share one tray (bg/hover, r5, p4; the row keeps its 16 / 12 text inset). */
-.tray {
-  flex: none;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 0 var(--space-4) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--bg-hover);
-}
-
-.tray .row {
-  padding: 0 var(--space-8) 0 var(--space-12);
-}
-
-.tray .row:hover,
-.tray .row[data-selected='true'] {
-  background: transparent;
-}
-
-.trailingExpanded {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.collapse {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: default;
-}
-
-.collapse:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.collapse:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-
-.trayTerminal {
-  flex: none;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-}
-
-/* Drag the tray's bottom edge: 240 – 70% of the window. */
-.resize {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(-1 * var(--space-4));
-  height: var(--space-8);
-  cursor: ns-resize;
-  touch-action: none;
-}
-
-.resize::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 32px;
-  height: 2px;
-  margin: -1px 0 0 -16px;
-  border-radius: 1px;
-  background: var(--border-strong);
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.resize:hover::after,
-.resize[data-dragging='true']::after {
-  opacity: 1;
-}
-
-/* Narrow list (small window) — drop the place and diff columns first. */
-@container (max-width: 860px) {
-  .row .where,
-  .row .stat,
-  .row .prCell {
-    display: none;
-  }
-}
-
-@container (max-width: 560px) {
-  .row .summaryCell,
-  .row .radarCell {
-    display: none;
-  }
-
-  .row .rowTitle {
-    flex: 1;
-    width: auto;
-  }
 }
 
 /* ---- board (Figma 11v2-C) ---- */
@@ -530,7 +224,6 @@
 }
 
 /* A wait over five minutes is heavier, never louder (PRD F10). */
-.time[data-emphasis='true'],
 .cardMeta[data-emphasis='true'] {
   font: var(--text-mono-s-medium);
   line-height: 20px;

@@ -1,4 +1,4 @@
-/* Figma 11 v2 — the session terminal inside the list tray (B) and the board overlay (D). */
+/* Figma 11 v2 — the session terminal inside the board overlay (D). */
 
 /* No padding here: xterm's fit addon measures this element's content box. */
 .host {

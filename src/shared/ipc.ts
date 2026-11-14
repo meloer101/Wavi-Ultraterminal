@@ -12,6 +12,7 @@ import type { CliPermission } from './gui-chat'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
+import type { GitHubBoardApi } from './github-board'
 import type { ShipApi } from './ship'
 import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
@@ -440,6 +441,8 @@ export interface TrApi {
   archive: ArchiveApi
   /** PR / CI status and 创建 PR through the user's gh login (PRD F16); channels in PR_IPC. */
   pr: PullRequestApi
+  /** 看板 · GitHub: open issues and PRs, one item, a PR's head for its worktree (PRD F9 v1.184); channels in GITHUB_BOARD_IPC. */
+  githubBoard: GitHubBoardApi
   /** The merge chain's two exits, agent handoff files, brakes and base CI (PRD F16 v1.78); channels in SHIP_IPC. */
   ship: ShipApi
   /** Background pairwise / base merge-tree checks of active worktrees (冲突雷达); channels in RADAR_IPC. */

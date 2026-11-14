@@ -115,7 +115,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
       )}
       {/* With the sidebar hidden nothing else says another session is waiting (B9). */}
       {showTitle && sidebarCollapsed && waiting > 0 && mostUrgent && (
-        <button type="button" className={styles.waiting} title="打开总览 · ⇧⌘A" onClick={openOverview}>
+        <button type="button" className={styles.waiting} title="打开看板 · ⇧⌘A" onClick={openOverview}>
           <span aria-hidden className={styles.waitingGlyph}>
             <StatusGlyph status={mostUrgent} />
           </span>

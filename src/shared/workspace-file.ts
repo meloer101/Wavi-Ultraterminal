@@ -9,7 +9,8 @@ import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeReviewMarks, type ViewedMarks } from './review-progress'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
-import type { AgentKind, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
+import { parseGitHubLink } from './github-board'
+import type { AgentKind, GitHubLink, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
 import { isScheduleId } from './schedule'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedDispatch, type SavedFixRun, type SavedShipRun } from './saved-runs'
@@ -77,6 +78,8 @@ export interface PersistedSession {
   dispatchModel?: string
   /** The 定时任务 run that opened it (PRD F24). */
   scheduledBy?: ScheduledBy
+  /** The issue or PR it was started on (看板 · GitHub). */
+  github?: GitHubLink
 }
 
 /** A saved 定时任务 origin (PRD F24), or null. */
@@ -264,7 +267,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
                 ...(isString(s.dispatchModel) && MODEL_NAME.test(s.dispatchModel) ? { dispatchModel: s.dispatchModel } : {})
               }
             : {}),
-          ...(s.kind !== 'shell' && scheduledBy(s.scheduledBy) ? { scheduledBy: scheduledBy(s.scheduledBy) as NonNullable<PersistedSession['scheduledBy']> } : {})
+          ...(s.kind !== 'shell' && scheduledBy(s.scheduledBy) ? { scheduledBy: scheduledBy(s.scheduledBy) as NonNullable<PersistedSession['scheduledBy']> } : {}),
+          ...(s.kind !== 'shell' && parseGitHubLink(s.github) ? { github: parseGitHubLink(s.github) as GitHubLink } : {})
         }
       })
   )

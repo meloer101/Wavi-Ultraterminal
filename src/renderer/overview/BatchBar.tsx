@@ -1,4 +1,4 @@
-// 总览批量操作 (PRD F9 v1.59; no Figma frame yet): with sessions picked (⌘ / ⇧ click) a bar at the bottom of the
+// 看板批量操作 (PRD F9 v1.59; no Figma frame yet): with sessions picked (⌘ / ⇧ click) a bar at the bottom of the
 // overview offers 发送消息… · 停止 N 个 · 关闭 N 个. Every button names how many it reaches; 发送消息 first opens a box
 // for the text, which lists exactly who gets it, and nothing is typed into any agent before the confirmation that
 // quotes the text and names every recipient (PRD §2). Sessions an action cannot reach are skipped and said so.

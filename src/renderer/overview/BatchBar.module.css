@@ -1,4 +1,4 @@
-/* 总览批量操作: a strip at the bottom of the overview while sessions are picked — a hairline above it, ghost buttons,
+/* 看板批量操作: a strip at the bottom of 看板 · 进度 while sessions are picked — a hairline above it, ghost buttons,
  * and the message box under the line when 发送消息… is open. No Figma frame yet. */
 .bar {
   flex: none;

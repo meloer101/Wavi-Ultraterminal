@@ -134,20 +134,6 @@ test.describe('continue after the plan limit resets', () => {
     await expect(errorBar().getByRole('button', { name: '重试这一轮' })).toBeVisible()
   })
 
-  test('the overview row says the same and has the same toggle', async () => {
-    await page.locator('[data-region="sidebar"]').getByText('总览').click()
-    const overviewRow = page.locator(`[data-region="overview"] [data-session-id="${ID}"]`)
-    await expect(overviewRow.getByTestId('limit-resume-summary')).toContainText(`Claude 额度用完 · ${clock(reset1)} 恢复`, WITHIN)
-    await overviewRow.getByTestId('limit-resume').click()
-    await expect(overviewRow.getByTestId('limit-resume')).toHaveAttribute('aria-pressed', 'true')
-    // The click did not expand the row.
-    await expect(overviewRow).toHaveAttribute('aria-expanded', 'false')
-    await overviewRow.getByTestId('limit-resume').click()
-    await expect(overviewRow.getByTestId('limit-resume')).toHaveAttribute('aria-pressed', 'false')
-    await row().click()
-    await expect(toggle()).toBeVisible()
-  })
-
   test('the toggle shows when it will type, and a second click calls it off', async () => {
     await toggle().click()
     await expect(toggle()).toHaveAttribute('aria-pressed', 'true')

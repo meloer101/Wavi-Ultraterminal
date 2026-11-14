@@ -238,7 +238,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   entries.push(
     action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),
     action('schedules', '定时任务', 'clock', 'schedule scheduled task cron loop automation 定时 dingshi renwu'),
-    action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
+    action('toggle-overview', input.mainView === 'overview' ? '关闭看板' : '打开看板', 'overview', 'overview kanban board github issue pr 状态 总览 进度 kanban zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
     action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree terminal shell ios simulator 文件 终端 模拟器 youcelan'),
     action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),
