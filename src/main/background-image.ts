@@ -2,7 +2,7 @@
 // hash and serves it to every window on the wavi-bg: scheme. The page encodes the picked file itself (a JPEG, long edge
 // capped), so main never decodes an image; it checks the bytes, writes them and keeps only the picture in use.
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, ipcMain, net, protocol } from 'electron'
@@ -20,8 +20,20 @@ export function registerBackgroundScheme(): void {
   protocol.registerSchemesAsPrivileged([{ scheme: BACKGROUND_SCHEME, privileges: { standard: true, secure: true } }])
 }
 
-/** Removes every stored picture but `keep` (none when ''). Files that are not ours are left alone. */
-async function prune(keep: string): Promise<void> {
+/**
+ * Stores and prunes run one at a time: a prune between another store's write and its settings update would delete the
+ * picture the settings are about to name (two pictures picked in quick succession).
+ */
+let queue: Promise<unknown> = Promise.resolve()
+function serially<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task, task)
+  queue = run.catch(() => undefined)
+  return run
+}
+
+/** Removes every stored picture but the one the settings name now (none when ''). Files that are not ours are left alone. */
+async function prune(): Promise<void> {
+  const keep = getSettings().appearance.backgroundImage
   let names: string[]
   try {
     names = await readdir(folder())
@@ -58,14 +70,26 @@ export function registerBackgroundImage(): void {
     if (!name) return new Response(null, { status: 404 })
     return net.fetch(pathToFileURL(join(folder(), name)).toString())
   })
-  ipcMain.handle(IPC.settingsSetBackgroundImage, (_event, payload: unknown) => store(payload))
+  ipcMain.handle(IPC.settingsSetBackgroundImage, (_event, payload: unknown) => serially(() => store(payload)))
+  // A name whose file is gone (a settings write that failed after its picture was replaced, a hand-cleared folder) would
+  // draw nothing: forget it.
+  void serially(async () => {
+    const named = getSettings().appearance.backgroundImage
+    if (!named) return
+    try {
+      await access(join(folder(), named))
+    } catch {
+      console.warn('[background] the stored picture is missing; clearing 背景图片')
+      await updateSettings({ appearance: { backgroundImage: '' } })
+    }
+  })
   // 更换… and 移除 leave the old file behind; drop it once the settings no longer name it.
   let shown = getSettings().appearance.backgroundImage
-  void prune(shown)
+  void serially(prune)
   onSettingsChange((settings) => {
     const next = settings.appearance.backgroundImage
     if (next === shown) return
     shown = next
-    void prune(next)
+    void serially(prune)
   })
 }

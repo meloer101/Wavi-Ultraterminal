@@ -63,8 +63,9 @@
 :global(:root[data-fs-backdrop='auto'][data-theme='dark']) { --fs-field: var(--fsb-ember); }
 :global(:root[data-fs-backdrop='plum']) { --fs-field: var(--fsb-plum); }
 
-/* 实色 (PRD v1.139) stays solid in full screen: no field, the shell's own colour. */
-:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] {
+/* 实色 (PRD v1.139) stays solid in full screen: no field, the shell's own colour. A 背景图片 (PRD v1.189) takes the field's
+   place, cards' lit edge included. */
+:global(:root:not([data-material='solid']):not([data-bg-image='on'])) .shell[data-fullscreen='true'] {
   --card-edge: var(--fs-card-edge);
   background: var(--fs-sheen), linear-gradient(var(--fs-veil), var(--fs-veil)), var(--fs-grain), var(--fs-field);
   background-blend-mode: normal, normal, overlay, normal;

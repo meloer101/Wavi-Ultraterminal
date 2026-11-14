@@ -1,7 +1,7 @@
 // 设置 · 外观 · 背景图片 (PRD v1.189, Figma 86): the picture is stored by main, served on wavi-bg:, drawn under the base
 // layer on 玻璃 (not under 实色), the settings page shows it, and 移除 deletes the stored file.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdirSync, readdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SettingsPatch } from '../src/shared/settings'
 import { launchApp, setWindowSize } from './launch'
@@ -15,7 +15,7 @@ let page: Page
 
 interface Tr {
   tr: {
-    settings: { update(p: unknown): Promise<unknown>; setBackgroundImage(jpeg: Uint8Array): Promise<boolean> }
+    settings: { get(): Promise<unknown>; update(p: unknown): Promise<unknown>; setBackgroundImage(jpeg: Uint8Array): Promise<boolean> }
     ui: { openSettings(): void }
   }
 }
@@ -41,9 +41,9 @@ interface Dom {
 const update = (patch: SettingsPatch) => page.evaluate((p) => (globalThis as unknown as Tr).tr.settings.update(p), patch)
 const bgAttr = () => page.evaluate(() => (globalThis as unknown as Dom).document.documentElement.dataset.bgImage)
 
-/** A warm-to-cool gradient with stripes, encoded as a JPEG in the page, as the settings page sends one. */
-const sendPicture = () =>
-  page.evaluate(async () => {
+/** A warm gradient with stripes (in `stripe`), encoded as a JPEG in the page, as the settings page sends one. */
+const sendPicture = (stripe = '#7a1fff') =>
+  page.evaluate(async (stripe) => {
     const g = globalThis as unknown as Dom & Tr
     const canvas = g.document.createElement('canvas')
     canvas.width = 1600
@@ -54,12 +54,12 @@ const sendPicture = () =>
     sky.addColorStop(1, '#ff9a1f')
     ctx.fillStyle = sky
     ctx.fillRect(0, 0, 1600, 1000)
-    ctx.fillStyle = '#7a1fff'
+    ctx.fillStyle = stripe
     for (let x = 0; x < 1600; x += 200) ctx.fillRect(x, 0, 40, 1000)
     const blob = await new Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
     if (!blob) throw new Error('no blob')
     return g.tr.settings.setBackgroundImage(new Uint8Array(await blob.arrayBuffer()))
-  })
+  }, stripe)
 
 const stored = async (): Promise<string[]> => {
   const dir = await app.evaluate(({ app: a }) => a.getPath('userData'))
@@ -194,4 +194,28 @@ test('设置 · 外观 shows the picture in place of 全屏背景; 移除 delete
   await expect.poll(bgAttr).toBe('on')
   await expect.poll(stored).toHaveLength(1)
   await expect.poll(() => thumb.evaluate((el) => (el as unknown as { naturalWidth: number }).naturalWidth)).toBe(Math.min(width, 5120))
+})
+
+test('two pictures sent at once leave one file: the one the settings name', async () => {
+  const [a, b] = await Promise.all([sendPicture('#1fb0ff'), sendPicture('#1fff6a')])
+  expect(a && b).toBe(true)
+  const named = () =>
+    page.evaluate(async () => ((await (globalThis as unknown as Tr).tr.settings.get()) as { appearance: { backgroundImage: string } }).appearance.backgroundImage)
+  await expect.poll(stored).toHaveLength(1)
+  expect(await stored()).toEqual([await named()])
+})
+
+test('a picture whose file is gone is forgotten at launch', async () => {
+  const userData = await app.evaluate(({ app: a }) => a.getPath('userData'))
+  expect(await stored()).toHaveLength(1)
+  await app.close()
+  rmSync(join(userData, 'backgrounds'), { recursive: true, force: true })
+  app = await launchApp({}, { userDataDir: userData })
+  page = await app.firstWindow()
+  await expect
+    .poll(() =>
+      page.evaluate(async () => ((await (globalThis as unknown as Tr).tr.settings.get()) as { appearance: { backgroundImage: string } }).appearance.backgroundImage)
+    )
+    .toBe('')
+  await expect.poll(bgAttr).toBe('off')
 })
