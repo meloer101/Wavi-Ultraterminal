@@ -89,24 +89,29 @@ test.describe('F23 GUI session (Claude)', () => {
         return m ? Number(m[1]) : 1
       })
     // Figma 84A: the base layer is cut out where each shown card is, so the card sits on the bare glass. Returns the
-    // number of holes and the first one's top-left corner against the card's, in the base layer's coordinates.
+    // number of holes (data-holes) and how far the first one's start (the end of its top-left arc: left + radius, top)
+    // is from the chat card's, in the base layer's coordinates.
     const baseHoles = () =>
       page.evaluate((selector) => {
         const base = document.querySelector<HTMLElement>('[data-glass-base]')!
-        const card = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect()
+        const cardEl = document.querySelector<HTMLElement>(selector)!
+        const card = cardEl.getBoundingClientRect()
         const origin = base.getBoundingClientRect()
-        const path = getComputedStyle(base).clipPath
-        const n = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number)
-        // The outer box is M0 0 H w V h H 0 Z; the first hole starts at its top-left arc's end (left + radius, top).
-        const radius = parseFloat(getComputedStyle(document.querySelector(selector)!).borderTopLeftRadius)
-        return { holes: (path.match(/Z/gi) ?? []).length - 1, x: n[5]! - radius - (card.left - origin.left), y: n[6]! - (card.top - origin.top) }
+        // The first subpath after the outer box's close.
+        const start = /Z\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/i.exec(getComputedStyle(base).clipPath)
+        const radius = parseFloat(getComputedStyle(cardEl).borderTopLeftRadius)
+        return {
+          holes: Number(base.dataset.holes),
+          dx: start ? Number(start[1]) - radius - (card.left - origin.left) : NaN,
+          dy: start ? Number(start[2]) - (card.top - origin.top) : NaN
+        }
       }, '[data-glass-card][data-session-id="s1"]')
     await setLook({ appearance: { terminalOpacity: 0.5, chat: { opacity: 0.3 } } })
     await expect.poll(baseAlpha).toBeCloseTo(0.4)
     await expect.poll(async () => (await baseHoles()).holes).toBe(1)
     const hole = await baseHoles()
-    expect(Math.abs(hole.x)).toBeLessThan(1)
-    expect(Math.abs(hole.y)).toBeLessThan(1)
+    expect(Math.abs(hole.dx)).toBeLessThan(1)
+    expect(Math.abs(hole.dy)).toBeLessThan(1)
     await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
     await expect.poll(baseAlpha).toBeCloseTo(0.6)
     await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
@@ -135,6 +140,27 @@ test.describe('F23 GUI session (Claude)', () => {
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[]; entrypoint: string | null }
     expect(launched.entrypoint).toBe('wavi')
     expect(launched.args).toEqual(expect.arrayContaining(['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--permission-prompt-tool', 'stdio']))
+    // The right panel is a second card on the same base layer: a second hole, where its card is once it has opened.
+    const panelCard = page.locator('[data-region="panel"]').getByTestId('right-panel')
+    await page.keyboard.press('Meta+Shift+KeyB')
+    await expect(panelCard).toBeVisible(WITHIN)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(2)
+    // Read once the panel has finished opening: mid-motion its card is cut out only as far as the drawer shows it.
+    const panelHole = () => page.evaluate(() => {
+      const base = document.querySelector<HTMLElement>('[data-glass-base]')!
+      const cardEl = document.querySelector<HTMLElement>('[data-region="panel"] [data-testid="right-panel"]')!
+      const card = cardEl.getBoundingClientRect()
+      const radius = parseFloat(getComputedStyle(cardEl).borderTopLeftRadius)
+      const origin = base.getBoundingClientRect()
+      // Each hole's start (left + radius, top), in DOM order: the chat card, then the panel's.
+      const starts = [...getComputedStyle(base).clipPath.matchAll(/Z\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/gi)].map((m) => [Number(m[1]), Number(m[2])])
+      return { x: starts[1]![0]! - radius - (card.left - origin.left), y: starts[1]![1]! - (card.top - origin.top) }
+    })
+    await expect.poll(async () => Math.abs((await panelHole()).x), WITHIN).toBeLessThan(1)
+    expect(Math.abs((await panelHole()).y)).toBeLessThan(1)
+    await page.keyboard.press('Meta+Shift+KeyB')
+    await expect(panelCard).toHaveCount(0, WITHIN)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(1)
   })
 
   /** How far below the top of the feed a sent message's bubble sits. */

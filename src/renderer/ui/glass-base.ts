@@ -40,6 +40,18 @@ export function visibleHole(card: Box, radius: number, clips: readonly Box[]): H
   }
 }
 
+/**
+ * The holes to cut, in DOM order, without a card that overlaps one already cut: such a card floats over the other (the
+ * right panel as an overlay over the main card), and an even-odd path would tint the overlap again.
+ */
+export function withoutOverlaps(holes: readonly Hole[]): Hole[] {
+  const kept: Hole[] = []
+  for (const h of holes) {
+    if (!kept.some((k) => h.left < k.right && k.left < h.right && h.top < k.bottom && k.top < h.bottom)) kept.push(h)
+  }
+  return kept
+}
+
 const n = (v: number): string => `${Math.round(v * 100) / 100}`
 
 /** One hole as a closed subpath, clockwise from its top-left corner. */

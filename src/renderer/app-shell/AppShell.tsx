@@ -35,7 +35,7 @@ import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
 import { claimBoot } from './boot'
 import './menu-commands'
-import { panelMode, panelWidthFor, sidebarWidthFor } from './layout'
+import { GLASS_WATCH, panelMode, panelWidthFor, sidebarWidthFor } from './layout'
 import { drawerIsWide, useDrawer } from './drawer-motion'
 import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
@@ -122,7 +122,7 @@ export function AppShell() {
 
   return (
     <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen} data-session-ui={sessionUi}>
-      <GlassBase />
+      <GlassBase watch={GLASS_WATCH} />
       <SidebarDrawer collapsed={sidebarCollapsed} width={sidebarWidth} resizable />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">

@@ -11,7 +11,7 @@ import { CommandPalette } from '../command-palette/CommandPalette'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
-import { sidebarWidthFor } from './layout'
+import { GLASS_WATCH, sidebarWidthFor } from './layout'
 import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
@@ -36,7 +36,7 @@ export function SecondaryShell() {
 
   return (
     <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'} data-session-ui={sessionUi}>
-      <GlassBase />
+      <GlassBase watch={GLASS_WATCH} />
       <SidebarDrawer collapsed={collapsed} width={sidebarWidth} />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">

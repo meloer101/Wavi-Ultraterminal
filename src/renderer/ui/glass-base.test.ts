@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { basePath, visibleHole } from './glass-base'
+import { basePath, visibleHole, withoutOverlaps } from './glass-base'
 
 const card = { left: 264, top: 6, right: 994, bottom: 894 }
 
@@ -42,5 +42,18 @@ describe('basePath', () => {
     expect(basePath(1486, 900, [hole])).toBe(
       'path(evenodd, "M0 0H1486V900H0ZM1280 6H1470A10 10 0 0 1 1480 16V884A10 10 0 0 1 1470 894H1280V6Z")'
     )
+  })
+})
+
+describe('withoutOverlaps', () => {
+  const at = (left: number, right: number) => visibleHole({ left, top: 6, right, bottom: 894 }, 10, [])!
+
+  it('keeps cards side by side, touching edges included', () => {
+    expect(withoutOverlaps([at(264, 600), at(606, 900), at(900, 1434)])).toHaveLength(3)
+  })
+
+  it('drops a card floating over one already cut (the right panel as an overlay)', () => {
+    const main = at(264, 1434)
+    expect(withoutOverlaps([main, at(950, 1430)])).toEqual([main])
   })
 })
