@@ -4,6 +4,7 @@
 // shared so the renderer and the tests read the same state. Measured on 2.1.325 (PRD §6.20 agent teams): a teammate
 // sends SubagentStart for each message it takes up and SubagentStop + TeammateIdle when that turn ends, so a stop is
 // "idle", never "gone"; only a new or ended conversation dissolves the team.
+import type { SessionStatus } from './types'
 
 /** The lead's own lane: the session's main thread. */
 export const TEAM_LEAD = 'lead'
@@ -112,7 +113,8 @@ const lead = (): TeamMember => ({ name: TEAM_LEAD, agentId: '', state: 'idle', s
 export function reduceTeam(team: TeamState | null, hook: TeamHook, at: number): TeamState | null {
   if (hook.kind === 'reset') return null
   if (hook.kind === 'spawned') {
-    const base = team ?? { startedAt: at, members: [lead()], messages: [] }
+    // The spawn is the lead's own Agent call: it is mid-turn when its team forms.
+    const base = team ?? { startedAt: at, members: [moveTo(lead(), 'working', at)], messages: [] }
     if (base.members.some((m) => m.agentId === hook.agentId)) return team
     const member: TeamMember = { name: hook.name, agentId: hook.agentId, ...(hook.model ? { model: hook.model } : {}), state: 'idle', spans: [] }
     return { ...base, members: [...base.members, member] }
@@ -152,6 +154,9 @@ export function reduceTeam(team: TeamState | null, hook: TeamHook, at: number): 
 
 /** Whether an `agent_id` is one of the team's teammates (their hooks are not a plain subagent's). */
 export const isTeammate = (team: TeamState | null, agentId: string): boolean => !!agentId && !!team?.members.some((m) => m.agentId === agentId)
+
+/** A member's state drawn as a session's (status is never colour only: each glyph has its own shape). */
+export const TEAM_GLYPH: Readonly<Record<TeamMemberState, SessionStatus>> = { working: 'running', asking: 'needs_you', idle: 'idle' }
 
 /** A member's second line (Figma 83″B / 82′F): what it waits on you for, what it is doing, or 空闲. */
 export function memberLine(member: TeamMember): string {

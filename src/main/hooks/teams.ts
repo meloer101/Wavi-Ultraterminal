@@ -28,8 +28,10 @@ export function teamHooksOf(event: string, payload: Rec): TeamHook[] {
     case 'SubagentStart':
       return agentId ? [{ kind: 'start', agentId }] : []
     case 'SubagentStop':
-    case 'TeammateIdle':
       return agentId ? [{ kind: 'idle', agentId }] : []
+    // The idle notice goes to the lead, which runs a turn on it (ended by its Stop) with no UserPromptSubmit (2.1.325).
+    case 'TeammateIdle':
+      return agentId ? [{ kind: 'idle', agentId }, { kind: 'lead', working: true }] : []
     case 'PermissionRequest':
       return agentId ? [{ kind: 'asking', agentId }] : []
     case 'PreToolUse': {
@@ -101,6 +103,11 @@ export class TeamWatcher {
     if (team === before) return
     this.teams.set(sessionId, team)
     this.emit(sessionId, agent, team)
+  }
+
+  /** Whether the session's team has this agent as a teammate (SubagentWatcher leaves it out). */
+  isTeammate(sessionId: string, agentId: string): boolean {
+    return isTeammate(this.teams.get(sessionId) ?? null, agentId)
   }
 
   /** The session's PTY ended or was re-spawned: stop following it. */

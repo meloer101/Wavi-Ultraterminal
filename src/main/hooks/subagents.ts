@@ -9,6 +9,7 @@ import { join, sep } from 'node:path'
 import type { HookAgent, SubagentInfo } from '@shared/agent-events'
 import { claudeTranscriptPath, cleanTitle, defaultAgentDataDirs, type AgentDataDirs } from './agent-title'
 import { readHead } from './codex-usage'
+import { claudeModelLabel as sharedModelLabel } from '@shared/terminal-settings'
 
 /**
  * The meta file is a few hundred bytes. The model is in the subagent transcript's `model` attachment, which sits after
@@ -34,13 +35,10 @@ export function subagentIdOf(payload: Rec): string | null {
   return typeof id === 'string' && SAFE_ID.test(id) && !id.startsWith('acompact-') ? id : null
 }
 
-/** `claude-opus-5-5` → `Opus 5.5`, `claude-haiku-4-5-20251001` → `Haiku 4.5`; anything else as written. */
+/** A Claude model id as the CLI names it (shared/terminal-settings, one rule for main and renderer); anything else as written. */
 export function claudeModelLabel(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined
-  const match = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:\[[^\]]*\])?$/.exec(raw)
-  if (!match) return cleanTitle(raw) ?? undefined
-  const [, family = '', major = '', minor] = match
-  return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${major}${minor ? `.${minor}` : ''}`
+  return /^claude-[a-z]+-\d/.test(raw) ? sharedModelLabel(raw) : (cleanTitle(raw) ?? undefined)
 }
 
 export interface SubagentMeta {
@@ -130,11 +128,20 @@ export class SubagentWatcher {
   private readonly read: HeadReader
   private readonly now: () => number
   private readonly schedule: (fn: () => void, ms: number) => void
+  private readonly isTeammate: (sessionId: string, agentId: string) => boolean
 
   constructor(
     private readonly emit: (sessionId: string, agent: HookAgent, items: SubagentInfo[]) => void,
-    options: { dirs?: AgentDataDirs; read?: HeadReader; now?: () => number; schedule?: (fn: () => void, ms: number) => void } = {}
+    options: {
+      dirs?: AgentDataDirs
+      read?: HeadReader
+      now?: () => number
+      schedule?: (fn: () => void, ms: number) => void
+      /** Whether the session's team (./teams.ts) has this agent as a teammate: then it is never listed. */
+      isTeammate?: (sessionId: string, agentId: string) => boolean
+    } = {}
   ) {
+    this.isTeammate = options.isTeammate ?? (() => false)
     this.dirs = options.dirs ?? defaultAgentDataDirs()
     this.read = options.read ?? readHead
     this.now = options.now ?? Date.now
@@ -226,7 +233,8 @@ export class SubagentWatcher {
 
   private publish(sessionId: string, tracked: Tracked): void {
     const items: SubagentInfo[] = []
-    for (const sub of tracked.subs.values()) if (sub.title) items.push({ id: sub.id, title: sub.title, ...(sub.model ? { model: sub.model } : {}) })
+    // Two sources say "teammate": its meta (readSub; there before the spawn names it) and the team's own list.
+    for (const sub of tracked.subs.values()) if (sub.title && !this.isTeammate(sessionId, sub.id)) items.push({ id: sub.id, title: sub.title, ...(sub.model ? { model: sub.model } : {}) })
     const key = JSON.stringify(items)
     if (key === tracked.sent) return
     tracked.sent = key

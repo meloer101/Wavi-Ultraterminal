@@ -2,11 +2,11 @@
 // one line — members, how many work / wait on you / idle, and the one that needs you; open, a lane per member over
 // time with the messages they sent as arrows between lanes, so a loop (write → review → back → write) reads as one.
 // Display only: a teammate's ask is answered in the lead's terminal, so 去处理 puts the keyboard there.
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { ChevronDown, ChevronUp, Users } from 'lucide-react'
-import { memberLine as progress, teamCounts, TEAM_LEAD, type TeamMemberState, type TeamState } from '@shared/agent-team'
+import { memberLine as progress, teamCounts, TEAM_GLYPH as GLYPH, TEAM_LEAD, type TeamState } from '@shared/agent-team'
 import { claudeModelLabel } from '@shared/terminal-settings'
-import type { SessionId, SessionStatus } from '@shared/types'
+import type { SessionId } from '@shared/types'
 import { useSessionMeta } from '../session-meta/store'
 import { getSurface } from '../terminal/registry'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -14,7 +14,6 @@ import { laneLayout } from './lane-layout'
 import styles from './TeamStrip.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
-const GLYPH: Readonly<Record<TeamMemberState, SessionStatus>> = { working: 'running', asking: 'needs_you', idle: 'idle' }
 /** Height of one lane, and where its line runs (the name line's centre), in px (Figma 83″B). */
 const LANE = 46
 const LINE = 9
@@ -29,12 +28,14 @@ export function TeamStrip({ sessionId }: { sessionId: SessionId }) {
   const leadModelId = useSessionMeta((s) => s.bySession[sessionId]?.settings?.model)
   // The session reports its model as an id (`claude-opus-5-5`); lanes name it the way the CLI shows it.
   const leadModel = leadModelId?.startsWith('claude-') ? claudeModelLabel(leadModelId) : leadModelId
-  const [open, setOpen] = useState(() => !folded.has(sessionId))
+  // Read from the set each render: a pane can show another session without remounting this.
+  const [, redraw] = useReducer((n: number) => n + 1, 0)
+  const open = !folded.has(sessionId)
   if (!team || team.members.length < 2) return null
   const toggle = () => {
     if (open) folded.add(sessionId)
     else folded.delete(sessionId)
-    setOpen(!open)
+    redraw()
   }
   const counts = teamCounts(team)
   const asking = team.members.find((m) => m.state === 'asking')

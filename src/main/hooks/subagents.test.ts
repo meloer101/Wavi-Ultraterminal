@@ -76,7 +76,8 @@ describe('SubagentWatcher', () => {
         reads.push(path)
         return files[path] ?? ''
       },
-      now: () => now
+      now: () => now,
+      isTeammate: (_id, agentId) => agentId.startsWith('amate-')
     })
     const hook = (event: string, extra: Record<string, unknown> = {}) => watcher.observe('s1', 'claude', event, { transcript_path: transcript, ...extra })
     const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -110,6 +111,14 @@ describe('SubagentWatcher', () => {
     await settle()
     expect(sent.flat()).toEqual([])
     expect(reads.filter((r) => r.includes('acoder-1'))).toHaveLength(1)
+  })
+
+  it('also leaves out an agent the team already names, whatever its meta says', async () => {
+    const { sent, hook, settle } = setup({ [`${dir}/agent-amate-1.meta.json`]: JSON.stringify(META) })
+    hook('SessionStart')
+    hook('PreToolUse', { agent_id: 'amate-1', tool_name: 'Grep' })
+    await settle()
+    expect(sent.flat()).toEqual([])
   })
 
   it('reads a missing meta again on a later hook, at most every 2 s, and sends only changes', async () => {

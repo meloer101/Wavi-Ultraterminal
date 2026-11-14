@@ -312,9 +312,13 @@ const titles = new AgentTitleWatcher((sessionId, agent, title) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
 )
 
+/** Claude's agent team in each terminal session, from the lead's hooks (PRD §6.20, Figma 83″B). */
+const teams = new TeamWatcher((sessionId, agent, team) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'team', team } }))
+
 /** The subagents running inside each Claude session, read from its own files after hooks (PRD F21 v1.109). */
-const subagents = new SubagentWatcher((sessionId, agent, items) =>
-  emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'subagents', items } })
+const subagents = new SubagentWatcher(
+  (sessionId, agent, items) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'subagents', items } }),
+  { isTeammate: (sessionId, agentId) => teams.isTeammate(sessionId, agentId) }
 )
 
 /**
@@ -325,9 +329,6 @@ const workflows = new WorkflowWatcher(
   (sessionId, agent, runs) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'workflows', runs } }),
   { skip: (sessionId) => guiSessions.has(sessionId) }
 )
-
-/** Claude's agent team in each terminal session, from the lead's hooks (PRD §6.20, Figma 83″B). */
-const teams = new TeamWatcher((sessionId, agent, team) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'team', team } }))
 
 /** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
 const transcripts = new TranscriptMeter()

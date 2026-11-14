@@ -4,7 +4,7 @@ import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } 
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
 import type { SidebarGroupBy } from '@shared/workspace-file'
 import type { PendingStart } from '@shared/dispatch'
-import { memberLine, type TeamMemberState, type TeamState } from '@shared/agent-team'
+import { memberLine, TEAM_GLYPH, type TeamState } from '@shared/agent-team'
 import { phaseLine } from '../lifecycle/present'
 import { currentPhase, isLiveRun, phaseViews, runOutcome, type WorkflowPhaseView, type WorkflowRun } from '@shared/workflow-run'
 
@@ -242,8 +242,6 @@ export function workflowItems(runs: readonly WorkflowRun[], { unread, folded }: 
   }
   return items
 }
-
-const TEAM_GLYPH: Readonly<Record<TeamMemberState, SessionStatus>> = { working: 'running', asking: 'needs_you', idle: 'idle' }
 
 /**
  * Figma 82′F: Claude's agent team under its lead — a 队伍 · N 人 line, then a row per teammate (name · model / what it

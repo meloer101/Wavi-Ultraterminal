@@ -17,7 +17,8 @@ describe('reduceTeam (agent teams, Figma 83″B)', () => {
       [120, spawn('coder')]
     ])
     expect(team?.startedAt).toBe(100)
-    expect(team?.members.map((m) => `${m.name}:${m.model ?? '-'}:${m.state}`)).toEqual([`${TEAM_LEAD}:-:idle`, 'reviewer:Haiku 5.5:idle', 'coder:Sonnet 5.5:idle'])
+    expect(team?.members.map((m) => `${m.name}:${m.model ?? '-'}:${m.state}`)).toEqual([`${TEAM_LEAD}:-:working`, 'reviewer:Haiku 5.5:idle', 'coder:Sonnet 5.5:idle'])
+    expect(team?.members[0]?.spans).toEqual([{ from: 100, kind: 'working' }])
   })
 
   // The measured order (PRD §6.20, 2.1.325): a teammate starts a turn per message it takes up and goes idle after it.

@@ -23,6 +23,9 @@ describe('TeamWatcher (agent teams, PRD §6.20)', () => {
       'coder>reviewer:v2 ready',
       'reviewer>coder:approved'
     ])
+    // The lead is mid-turn when its team forms (the spawn is its call), then runs a turn for a teammate's idle notice
+    // (its Stop ends it) with no UserPromptSubmit; a notice that comes while it is still at work joins that turn.
+    expect(team.members[0]!.spans.map((s) => `${s.from}-${s.to}`)).toEqual(['23535-28521', '34783-37316', '41132-43077', '43170-45328', '47233-49763'])
     // Each message taken up is one working stretch: reviewer read v1, v2; coder started, read "needs fix", "approved".
     expect(team.members.find((m) => m.name === 'reviewer')!.spans).toHaveLength(3)
     expect(team.members.find((m) => m.name === 'coder')!.spans.every((s) => s.to !== undefined && s.kind === 'working')).toBe(true)
