@@ -28,19 +28,31 @@ export function radarTargets(state: { projects: readonly Project[]; worktrees: r
   return targets
 }
 
+/** One detail line of a mark in the Worktree view (Figma 85B″): the text, then the files in the mono face. */
+export interface RadarDetailLine {
+  text: string
+  files: string
+  /** Hover: each file with why it conflicts. */
+  title: string
+}
+
 /** The Worktree view's detail lines for a mark: one per conflicting worktree, one for the base, one for a moved base. */
-export function radarDetailLines(mark: RadarMark): { label: string; value: string; title: string }[] {
+export function radarDetailLines(mark: RadarMark): RadarDetailLine[] {
   const files = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => c.path).join('、')
   const reasons = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => `${c.path}（${conflictReason(c)}）`).join('\n')
-  const lines = mark.pairs.map((pair) => ({ label: '冲突', value: `${pair.name} · ${files(pair.conflicts)}`, title: `和 ${pair.name} 会冲突：\n${reasons(pair.conflicts)}` }))
+  const lines: RadarDetailLine[] = mark.pairs.map((pair) => ({
+    text: `和 ${pair.name} 冲突`,
+    files: files(pair.conflicts),
+    title: `和 ${pair.name} 会冲突：\n${reasons(pair.conflicts)}`
+  }))
   const { self } = mark
   if (self.baseConflicts.length > 0) {
-    lines.push({ label: '冲突', value: `${self.base} · ${files(self.baseConflicts)}`, title: `合并到 ${self.base} 会冲突：\n${reasons(self.baseConflicts)}` })
+    lines.push({ text: `和 ${self.base} 冲突`, files: files(self.baseConflicts), title: `合并到 ${self.base} 会冲突：\n${reasons(self.baseConflicts)}` })
   }
   if (self.behind > 0 && (self.baseMoved || self.baseConflicts.length > 0)) {
     const text = `${self.base} 已前进，落后 ${self.behind} 个提交`
-    lines.push({ label: '落后', value: text, title: text })
+    lines.push({ text, files: '', title: text })
   }
-  if (lines.length > 0 && self.uncommitted) lines.push({ label: '', value: '含未提交的改动', title: '冲突检查包括还没提交的改动' })
+  if (lines.length > 0 && self.uncommitted) lines.push({ text: '含未提交的改动', files: '', title: '冲突检查包括还没提交的改动' })
   return lines
 }

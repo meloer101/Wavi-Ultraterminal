@@ -1,25 +1,9 @@
-// Worktree view (PRD F17, Figma 13C): the project's git worktrees joined with the workspace's sessions, grouped
+// Worktree view (PRD F17, Figma 13C / 85B″): the project's git worktrees joined with the workspace's sessions, grouped
 // into the working list, 可清理 (bulk) and 没有会话 (one by one), plus the delete guard. Pure; WorktreeView renders it.
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
 import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import { isActiveStatus } from '@shared/lifecycle'
-import { PORT_BLOCK } from '@shared/ports'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
-
-export const AGENT_LABEL: Record<AgentKind, string> = {
-  ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>),
-  claude: 'Claude',
-  shell: '终端'
-}
-
-/** What the session line adds after the agent; running and idle say nothing (the glyph shows it). */
-const STATE_TEXT: Partial<Record<SessionStatus, string>> = {
-  needs_you: '等你确认',
-  done_unread: '待审阅',
-  error: '出错',
-  exited: '已退出'
-}
 
 export interface WorktreeRow {
   /** Resolved path: stable identity across refreshes. */
@@ -33,13 +17,18 @@ export interface WorktreeRow {
   status: SessionStatus | null
   /** The workspace's records for this folder. */
   worktreeIds: WorktreeId[]
-  /** Path new sessions should use (and the one shown): the workspace's spelling when known, else git's. */
+  /** Path new sessions should use: the workspace's spelling when known, else git's. */
   openPath: string
-  sessionLine: string
+  /** What the row is called: the most urgent session's title, else the branch (Figma 85B″). */
+  title: string
+  /** Shown after the title, quieter: the branch and what is odd about the checkout; '' when the title already is it. */
+  where: string
+  /** Agent of the most urgent session, drawn before `where`; null without a session. */
+  agent: AgentKind | null
   /** `+N −M` uncommitted, '' when clean, '?' when git could not tell. */
   diff: string
-  /** `↑ahead ↓behind`, '—' without a base. */
-  sync: string
+  /** `↑N` commits of its own, 已合并 once they are all in the base, '' otherwise. */
+  ahead: string
 }
 
 export interface WorktreeGroups {
@@ -68,30 +57,29 @@ export function formatDiff(info: Pick<GitWorktreeInfo, 'added' | 'removed' | 'di
   return info.dirtyCount > 0 || info.added > 0 || info.removed > 0 ? `+${info.added} −${info.removed}` : ''
 }
 
-export function formatSync(info: Pick<GitWorktreeInfo, 'ahead' | 'behind'>): string {
-  return info.ahead === null || info.behind === null ? '—' : `↑${info.ahead} ↓${info.behind}`
+/** Commits of its own: `↑N`; 已合并 once they are all in the base; nothing at 0 or without a base. Behind is left out. */
+export function formatAhead(info: Pick<GitWorktreeInfo, 'ahead' | 'merged' | 'base'>): string {
+  if (info.merged && info.base) return '已合并'
+  return info.ahead ? `↑${info.ahead}` : ''
 }
 
-/** Nothing of its own yet: no commits ahead of the base, and not merged (an agent that has not committed). */
-export function hasNoNewCommits(info: Pick<GitWorktreeInfo, 'isMain' | 'ahead' | 'merged'>): boolean {
-  return !info.isMain && info.ahead === 0 && !info.merged
+/** What is odd about the checkout, said after its branch: main, a rebase, a detached HEAD, a lock, a missing folder. */
+function checkoutNotes(info: GitWorktreeInfo): string[] {
+  const notes: string[] = []
+  if (info.isMain) notes.push('主目录')
+  if (info.rebasing) notes.push('变基中')
+  else if (info.branch === null) notes.push(info.unreachableCommits ? `分离的 HEAD · ${info.unreachableCommits} 个提交不在分支上` : '分离的 HEAD')
+  if (info.locked) notes.push('已锁定')
+  if (info.prunable !== null) notes.push('文件夹已不在')
+  return notes
 }
 
-/** "title · agent · state", the other sessions counted, then the merge state. */
-export function sessionLine(sessions: readonly Session[], info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'base' | 'ahead'>): string {
-  const parts: string[] = []
+/** Title and the quieter text after it (Figma 85B″): a session's title is followed by the branch; else the branch leads. */
+export function rowLabels(name: string, sessions: readonly Session[], info: GitWorktreeInfo): { title: string; where: string } {
+  const notes = checkoutNotes(info)
   const top = sessions[0]
-  if (top) {
-    parts.push(top.title, AGENT_LABEL[top.kind])
-    const state = STATE_TEXT[top.status]
-    if (state) parts.push(state)
-    if (sessions.length > 1) parts.push(`另有 ${sessions.length - 1} 个会话`)
-  } else {
-    parts.push('无会话')
-  }
-  if (info.merged && info.base) parts.push(`已合并到 ${info.base}`)
-  else if (hasNoNewCommits(info)) parts.push('无新提交')
-  return parts.join(' · ')
+  if (top) return { title: top.title, where: [name, ...notes].join(' · ') }
+  return { title: name, where: notes.join(' · ') }
 }
 
 /** Which group a worktree goes in. Any session keeps it in the working list. */
@@ -143,18 +131,19 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
     const matched = recordsOf(listing, info, worktrees)
     const ids = new Set(matched.map((w) => w.id))
     const inside = sessions.filter((s) => ids.has(s.worktreeId)).sort(compareByUrgency)
-    const line = sessionLine(inside, info)
+    const name = info.branch ?? info.rebasing ?? shortSha(info.head)
     groups[groupOf(info, inside.length)].push({
       key: info.realPath,
       info,
-      name: info.branch ?? info.rebasing ?? shortSha(info.head),
+      name,
       sessions: inside,
       status: inside[0]?.status ?? null,
       worktreeIds: matched.map((w) => w.id),
       openPath: matched[0]?.path ?? info.path,
-      sessionLine: info.isMain ? `主目录 · ${line}` : line,
+      ...rowLabels(name, inside, info),
+      agent: inside[0]?.kind ?? null,
       diff: formatDiff(info),
-      sync: formatSync(info)
+      ahead: formatAhead(info)
     })
   }
   return groups
@@ -199,49 +188,6 @@ export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
   return info.branch ? `分支 ${info.branch} 保留` : '它的提交都已在其他分支上'
-}
-
-export interface DetailLine {
-  label: string
-  value: string
-  /** Port block, shown in the mono face. */
-  mono?: boolean
-}
-
-/** The reserved block, TR_PORT through the last port of the ten. */
-export function portBlockLabel(port: number): string {
-  return `${port}\u2013${port + PORT_BLOCK - 1}`
-}
-
-const MAX_LISTED_FILES = 3
-
-/** The selected row's key–value lines (Figma 13C "Details"). `port` is the directory's TR_PORT, when it has a block. */
-export function detailLines(info: GitWorktreeInfo, port: number | null = null): DetailLine[] {
-  let branch = info.branch ?? (info.rebasing ? `变基中 · ${info.rebasing}` : `分离的 HEAD · ${shortSha(info.head)}`)
-  if (info.branch === null && info.unreachableCommits) branch += ` · ${info.unreachableCommits} 个提交不在分支上`
-  if (info.locked) branch += ' · 已锁定'
-  const files = info.dirtyFiles.slice(0, MAX_LISTED_FILES).join(', ')
-  const lines: DetailLine[] = [
-    { label: '分支', value: branch },
-    {
-      label: '基线',
-      value: info.base && info.ahead !== null && info.behind !== null ? `${info.base} · 领先 ${info.ahead}，落后 ${info.behind}` : '—'
-    },
-    {
-      label: '未提交',
-      value:
-        info.dirtyCount === null
-          ? '无法读取'
-          : info.dirtyCount === 0
-            ? '无'
-            : info.dirtyCount > MAX_LISTED_FILES
-              ? `${files} 等 ${info.dirtyCount} 个`
-              : files
-    }
-  ]
-  if (port !== null) lines.push({ label: '端口段', value: portBlockLabel(port), mono: true })
-  if (info.prunable !== null) lines.push({ label: '文件夹', value: '已不存在' })
-  return lines
 }
 
 /** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */

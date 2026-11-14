@@ -1,7 +1,7 @@
 // F17 right panel · Worktree view on a real repository: a main checkout plus linked worktrees — one with a session and
 // uncommitted work, one merged into main without a session, one merged but still with a session, one detached with a
 // commit no branch has. Checks the rows and groups, switching sessions, the selected row's details, the delete guards
-// and that 可清理 › 清理 never touches a worktree with a session. Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13C).
+// and that 可清理 › 全部清理 never touches a worktree with a session. Screenshots in both themes go to test-results/right-panel/ (compare with Figma 85B″).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
@@ -123,37 +123,38 @@ test.describe('F17 right panel · Worktree', () => {
     await app?.close().catch(() => {})
   })
 
-  test('lists every worktree with its session, uncommitted stats and ahead / behind', async () => {
+  test('lists every worktree on one line: session title, branch, uncommitted and its own commits (Figma 85B″)', async () => {
     await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: 'Worktree' }).click()
     await expect(panel().getByRole('heading', { name: 'Worktree' })).toBeVisible()
     await expect(panel()).toContainText('demo')
 
     await expect(working().locator(':scope > li')).toHaveCount(3)
     const main = item(repo.project)
-    await expect(main).toContainText('main')
-    await expect(main).toContainText('主目录 · 主终端 · 终端')
-    await expect(main).toContainText('—')
+    await expect(main).toContainText('主终端')
+    await expect(main).toContainText('main · 主目录')
     // The main row is the active session's worktree: it starts expanded.
     await expect(main.getByRole('button', { name: /main/ }).first()).toHaveAttribute('aria-expanded', 'true')
 
     const feature = item(repo.feature)
     await expect(feature).toContainText('jacob/feature')
     await expect(feature).toContainText('+1 −0')
-    await expect(feature).toContainText('↑1 ↓4')
-    await expect(feature).toContainText('Cookie 会话迁移 · 终端')
+    await expect(feature).toContainText('↑1')
+    await expect(feature).not.toContainText('↓')
+    await expect(feature).toContainText('Cookie 会话迁移')
 
     await expect(panel().getByRole('heading', { name: '可清理' })).toBeVisible()
     await expect(cleanable().locator(':scope > li')).toHaveCount(1)
     await expect(item(repo.merged)).toContainText('jacob/merged')
-    await expect(item(repo.merged)).toContainText('无会话 · 已合并到 main')
-    await expect(item(repo.merged)).toContainText('↑0 ↓3')
-    // Merged, but a session works there: it stays in the working list.
-    await expect(item(repo.busy)).toContainText('还在看的 · 终端 · 已合并到 main')
+    // The group says it is merged; the row does not repeat it.
+    await expect(item(repo.merged)).not.toContainText('已合并')
+    // Merged, but a session works there: it stays in the working list and says so.
+    await expect(item(repo.busy)).toContainText('还在看的')
+    await expect(item(repo.busy)).toContainText('已合并')
     await expect(working().locator(`li[data-path="${real.get(repo.busy)}"]`)).toHaveCount(1)
 
     await expect(panel().getByRole('heading', { name: '没有会话' })).toBeVisible()
     await expect(idle().locator(':scope > li')).toHaveCount(1)
-    await expect(item(repo.detached)).toContainText('无会话')
+    await expect(item(repo.detached)).toContainText('分离的 HEAD · 1 个提交不在分支上')
   })
 
   test("clicking a row switches to its session and expands the details", async () => {
@@ -161,9 +162,9 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(page.locator('header h1')).toHaveText('Cookie 会话迁移')
     const feature = item(repo.feature)
     await expect(feature.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
-    await expect(feature).toContainText('基线main · 领先 1，落后 4')
-    await expect(feature).toContainText('未提交README.md')
-    await expect(feature).toContainText(/端口段\d+\u2013\d+/)
+    // No detail table and no port block any more: only conflicts (none here) and the actions.
+    await expect(feature).not.toContainText('基线')
+    await expect(feature).not.toContainText('端口段')
     await expect(feature.getByRole('button', { name: /合并到 main/ })).toBeEnabled()
     await shoot('13c-worktree')
 
@@ -178,12 +179,12 @@ test.describe('F17 right panel · Worktree', () => {
     const busy = item(repo.busy)
     await expect(page.locator('header h1')).toHaveText('还在看的')
     await expect(busy.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
-    // The row's own button reads “… · 已合并到 main”; the action starts with 合并到.
+    // The row's own button reads “… 已合并”; the action starts with 合并到.
     await expect(busy.getByRole('button', { name: /^合并到/ })).toHaveCount(0)
-    // The action is a gray block whose left edge is the label column (Figma 30D).
+    // The action is a gray block whose left edge is the title's (Figma 30D / 85B″).
     const open = busy.getByRole('button', { name: '打开文件夹' })
     expect(await open.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
-    const labelX = await busy.getByText('基线', { exact: true }).evaluate((el) => el.getBoundingClientRect().left)
+    const labelX = await busy.getByText('还在看的', { exact: true }).evaluate((el) => el.getBoundingClientRect().left)
     const openX = await open.evaluate((el) => el.getBoundingClientRect().left)
     expect(Math.abs(openX - labelX)).toBeLessThan(0.5)
     await shoot('30d-worktree-merged')
@@ -219,7 +220,7 @@ test.describe('F17 right panel · Worktree', () => {
   })
 
   test('清理 asks once, removes only the session-less merged worktree, never one with a session', async () => {
-    await panel().getByRole('button', { name: '清理' }).click()
+    await panel().getByRole('button', { name: '全部清理' }).click()
     await expect(panel().getByRole('status')).toHaveText('已清理 1 个 worktree')
     const asked = await dialogs()
     expect(asked).toHaveLength(1)

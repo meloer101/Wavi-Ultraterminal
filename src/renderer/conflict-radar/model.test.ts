@@ -47,7 +47,7 @@ describe('radarTargets', () => {
 })
 
 describe('radarDetailLines', () => {
-  it('one line per partner and for the base, files in the value and reasons in the tooltip', () => {
+  it('one line per partner and for the base, files after the text and reasons in the tooltip (Figma 85B″)', () => {
     const self = {
       worktree: '/a',
       branch: 'jacob/a',
@@ -66,10 +66,10 @@ describe('radarDetailLines', () => {
       self
     })
     expect(lines).toEqual([
-      { label: '冲突', value: 'jacob/b · x.ts、y.ts', title: '和 jacob/b 会冲突：\nx.ts（两边都改了同一处）\ny.ts（两边都新增了这个文件）' },
-      { label: '冲突', value: 'main · app.txt', title: '合并到 main 会冲突：\napp.txt（两边都改了同一处）' },
-      { label: '落后', value: 'main 已前进，落后 2 个提交', title: 'main 已前进，落后 2 个提交' },
-      { label: '', value: '含未提交的改动', title: '冲突检查包括还没提交的改动' }
+      { text: '和 jacob/b 冲突', files: 'x.ts、y.ts', title: '和 jacob/b 会冲突：\nx.ts（两边都改了同一处）\ny.ts（两边都新增了这个文件）' },
+      { text: '和 main 冲突', files: 'app.txt', title: '合并到 main 会冲突：\napp.txt（两边都改了同一处）' },
+      { text: 'main 已前进，落后 2 个提交', files: '', title: 'main 已前进，落后 2 个提交' },
+      { text: '含未提交的改动', files: '', title: '冲突检查包括还没提交的改动' }
     ])
   })
 })
