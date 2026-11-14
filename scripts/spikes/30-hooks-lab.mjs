@@ -24,7 +24,9 @@ const EVENTS = [
   'Notification',
   'Stop',
   'StopFailure',
-  'SessionEnd'
+  'SessionEnd',
+  // Agent teams (PRD §6.6, Figma 83″): EXTRA_EVENTS=SubagentStart,SubagentStop,TeammateIdle,TaskCreated,TaskCompleted
+  ...(process.env.EXTRA_EVENTS ?? '').split(',').filter(Boolean)
 ]
 
 const scenario = process.argv[2] ?? 'ok'
@@ -92,7 +94,7 @@ const extraArgs = (process.env.CLAUDE_ARGS ?? '').split(' ').filter(Boolean)
 const debugFile = join(OUT, `${scenario}.debug.log`)
 const c = launch('claude', ['--settings', settingsFile, '--debug-file', debugFile, ...extraArgs], {
   cwd: LAB,
-  env: { TR_SESSION_ID: 'lab-1', TR_HOOK_SOCK: sock, TR_HOOK_TOKEN: token }
+  env: { TR_SESSION_ID: 'lab-1', TR_HOOK_SOCK: sock, TR_HOOK_TOKEN: token, ...(process.env.TEAMS ? { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' } : {}) }
 })
 
 async function ready() {
@@ -218,6 +220,17 @@ const SCENARIOS = {
     show('screen', c.visible())
     held.splice(0).forEach((h) => h.decide('allow'))
     await waitStop(30000)
+  },
+  // Agent teams (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1): two named teammates pass a review back and forth; log the
+  // order of SubagentStart / SubagentStop / TeammateIdle / Task* and what each carries.
+  async team() {
+    await prompt(
+      process.env.PROMPT ??
+        'Start two teammates with the Agent tool, named "coder" and "reviewer". coder: send reviewer the message "v1 ready" with SendMessage, then wait. reviewer: when you get "v1 ready", send coder "needs fix"; when you get "v2 ready", send coder "approved". coder: when you get "needs fix", send reviewer "v2 ready". Nobody edits files or runs commands. When reviewer has sent "approved", reply DONE.'
+    )
+    await sleep(Number(process.env.OBSERVE_MS ?? 150000))
+    show('screen', c.visible())
+    log({ dir: 'screen', screen: c.visible() })
   },
   async startup() {
     await sleep(4000)
