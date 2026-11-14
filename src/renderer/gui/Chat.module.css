@@ -117,7 +117,7 @@
   margin-top: calc(var(--gap-turn) - var(--gap-block));
 }
 
-/* The row reaches out over the picture's place (28 + 8), so the bubble ends at the column's edge and the picture,
+/* The row reaches out over the picture's place (--avatar + 8), so the bubble ends at the column's edge and the picture,
    inside the row, is not cut by its paint containment. */
 .userRow {
   display: flex;
@@ -145,7 +145,7 @@
 }
 
 /* Figma 51A / 59J: the agent's mark 12 left of the column, beside the first line of its part of a turn. The block
-   reaches out over the mark's place (28 + 12) and keeps it as padding: its words start at the column's edge and the
+   reaches out over the mark's place (--avatar + 12) and keeps it as padding: its words start at the column's edge and the
    mark, inside the block, is not cut by its paint containment. The first block is at least the mark's height, its
    first line's middle on the mark's. */
 .agentTurn {
@@ -796,6 +796,19 @@
   width: 100%;
   max-width: calc(var(--column) + 2 * var(--gutter));
   padding: 0 var(--gutter);
+}
+
+/* The session's strips (lifecycle/PaneStrips, Figma 80B′): items of the dock like its cards, and drawn as one — a
+   bg/section block, no edge or shadow. Their own CSS draws them on the window's glass under a terminal. */
+.dockStrips {
+  display: contents;
+}
+
+/* Two classes: a strip's own module loads after this one and would win a tie. */
+.dock > .dockStrips > * {
+  border: 0;
+  background: var(--bg-section);
+  box-shadow: none;
 }
 
 /* Figma 59G: a session with nothing in it yet — the agent's mark and name over the composer, the two in the middle of

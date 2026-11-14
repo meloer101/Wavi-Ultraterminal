@@ -3,7 +3,7 @@ import styles from './NavItem.module.css'
 
 /**
  * Figma component `NavItem` (11:81): 32px row, 16px icon, label, ⌘ hint on the right (none for 更新). `badge` (Figma
- * `Show count`) replaces the hint, e.g. 总览's glyph + count of sessions that need the user.
+ * `Show count`) replaces the hint, e.g. 看板's glyph + count of sessions that need the user.
  */
 export function NavItem({
   icon,

@@ -5,19 +5,15 @@
 import { useEffect } from 'react'
 import { useWorkspace } from '../state/workspace'
 import { useIsKeyWindow, usePaneView, useSecondaryWindow, useSidebarCollapsed, useWindowScope } from '../state/window-scope'
-import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
-import { SetupStrip } from '../scripts/SetupStrip'
-import { DispatchStrip } from '../dispatch/DispatchStrip'
-import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
-import { PlanStrip } from '../attempts/PlanStrip'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
-import { sidebarWidthFor } from './layout'
+import { GLASS_WATCH, sidebarWidthFor } from './layout'
 import { SidebarDrawer } from './SidebarDrawer'
+import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
 
@@ -28,6 +24,8 @@ export function SecondaryShell() {
   const isKey = useIsKeyWindow()
   const view = usePaneView()
   const hasSession = useWorkspace((s) => view.activeSessionId !== null && s.sessions.some((x) => x.id === view.activeSessionId))
+  // The sidebar follows the shown session's card opacity, as in the main window (PRD v1.179).
+  const sessionUi = useWorkspace((s) => (s.sessions.find((x) => x.id === view.activeSessionId)?.ui === 'gui' ? 'gui' : 'cli'))
   const project = useWorkspace((s) => (record?.projectId ? s.projects.find((p) => p.id === record.projectId) : undefined))
   const sidebarWidth = sidebarWidthFor(win.innerWidth, useWorkspace((s) => s.sidebarWidth))
 
@@ -37,7 +35,8 @@ export function SecondaryShell() {
   }, [win])
 
   return (
-    <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'}>
+    <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'} data-session-ui={sessionUi}>
+      <GlassBase watch={GLASS_WATCH} />
       <SidebarDrawer collapsed={collapsed} width={sidebarWidth} />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
@@ -45,17 +44,12 @@ export function SecondaryShell() {
           <section className={styles.terminal} data-region="split">
             <SplitArea />
             {!hasSession && (
-              <div className={empty.empty}>
+              <div className={empty.empty} data-glass-card="">
                 <p className={empty.title}>{project ? `${project.name} 没有在这里显示的会话` : '这个窗口没有在显示的会话'}</p>
                 <p className={empty.hint}>从侧栏选一个会话，或按 ⌘N 新建。关掉这个窗口，会话照常运行。</p>
               </div>
             )}
           </section>
-          <SessionErrorBar />
-          <SetupStrip />
-          <DispatchStrip />
-          <ScheduleConfirmStrip />
-          <PlanStrip />
         </main>
       </div>
       {/* Sheets and the palette open in the window with the keyboard. */}

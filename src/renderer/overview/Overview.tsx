@@ -1,50 +1,35 @@
-// Status overview (PRD F9 · Figma 11 v2: list 106:3640 / 106:4038, board 108:4091 / 108:4366). Replaces the
-// terminal in the main area; the terminals stay mounted behind it. A row opens the session's own terminal in place
-// (list) or in an overlay (board). Keyboard: ↑↓ move · Space opens / closes · ↵ enter · Esc closes, then leaves.
-// ⌘ / ⇧ click picks sessions for a batch action (BatchBar); 一题多解 groups sit above the status groups and open the
-// overlay with their members side by side (in either view).
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, ChevronUp, PanelLeft, Search } from 'lucide-react'
+// 看板 (PRD F9 v1.184 · Figma 77): two tabs over the main area, the terminals mounted behind it. 进度 is the status
+// board (Figma 11v2-C / D): a card opens the session's own terminal in an overlay; ↑↓ move · Space opens / closes ·
+// ↵ enter · Esc closes, then leaves. ⌘ / ⇧ click picks sessions for a batch action (BatchBar); 一题多解 groups sit
+// above the columns and open the overlay with their members side by side. GitHub lists each project's open issues and
+// PRs (GitHubBoard). The list view and its in-place terminal were removed in v1.184.
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from 'react'
+import { Check, PanelLeft, RefreshCw, Search } from 'lucide-react'
 import { rangeBetween, togglePicked } from '@shared/batch-actions'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
-import { contextHigh, orderVendors } from '@shared/session-meta'
-import { todoProgress } from '@shared/todo-progress'
+import { orderVendors } from '@shared/session-meta'
 import type { SessionId } from '@shared/types'
 import { subscribeClock } from '../sidebar/clock'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
 import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
-import { EnterButton } from './EnterButton'
+import { TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { PortTags } from '../panels/browser/PortTags'
-import { ReviewButton } from '../review/ReviewButton'
-import { LimitResumeSummary } from '../limit-resume/LimitResumeButton'
-import { SessionPrTag } from '../pull-requests/PrTag'
-import { usePullRequests } from '../pull-requests/store'
-import { SessionRadarTag } from '../conflict-radar/RadarTag'
-import { anyRadarMark, useRadar } from '../conflict-radar/store'
 import { TurnChecksTag } from '../turn-checks/TurnChecksTag'
 import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
-import { useSessionMeta } from '../session-meta/store'
 import metaStyles from '../session-meta/SessionMeta.module.css'
-import enterStyles from './EnterButton.module.css'
-import {
-  buildOverview,
-  clampTrayHeight,
-  moveSelection,
-  orderedIds,
-  overviewSummary,
-  type OverviewGroup,
-  type OverviewRow
-} from './model'
+import { buildOverview, moveSelection, orderedIds, overviewSummary, type OverviewGroup, type OverviewRow } from './model'
 import { layoutIds } from './pane-layout'
 import { SessionOverlay } from './SessionOverlay'
 import { BatchBar } from './BatchBar'
 import { AttemptGroups } from '../attempts/AttemptGroups'
 import { DispatchGroups } from '../dispatch/DispatchGroups'
-import { enterSession, useOverviewStore, type OverviewView } from './store'
+import { GitHubBoard } from './GitHubBoard'
+import { githubSummary } from './github-model'
+import { refreshGitHub, useGitHubBoard } from './github-store'
+import { enterSession, useOverviewStore, type BoardTab } from './store'
 import styles from './Overview.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
@@ -53,15 +38,15 @@ const ICON = { size: 16, strokeWidth: 1.75 } as const
 
 const TICK_MS = 15_000
 
-/**
- * Which metric columns the list draws (Figma 17C TodoCell / ContextCell, and the PR of F16): a column appears once any
- * session has that metric and then keeps its place in every row, blank where a session has none (Codex has no todo;
- * shells have neither; a branch without a PR has no PR). The conflict radar's mark comes first, by the same rule.
- */
-const MetaColumns = createContext<{ radar: boolean; todo: boolean; context: boolean; pr: boolean }>({ radar: false, todo: false, context: false, pr: false })
+const NONE = new Set<never>()
 
-/** The sessions picked for a batch action; rows draw a check while any is picked. */
+/** The sessions picked for a batch action; cards draw a check while any is picked. */
 const Picked = createContext<ReadonlySet<SessionId>>(new Set())
+
+const TABS: ReadonlyArray<{ value: BoardTab; label: string }> = [
+  { value: 'progress', label: '进度' },
+  { value: 'github', label: 'GitHub' }
+]
 
 /** "Now" on the shared 15 s clock, so "已等 3m" keeps counting without re-rendering on every frame. */
 function useClockNow(): number {
@@ -80,18 +65,17 @@ export function Overview() {
     }))
   )
   const now = useClockNow()
-  const { view, collapsed, selectedId, openId, layout, filter, picked, pickAnchor, setView, toggleGroup, select, setOpen, openOverlay, closePane, setFilter, setPicked } =
-    useOverviewStore()
+  const { tab, selectedId, layout, filter, picked, pickAnchor, setTab, select, openOverlay, closePane, setFilter, setPicked } = useOverviewStore()
+  const github = useGitHubBoard(useShallow((g) => ({ loading: Object.values(g.byRoot).some((p) => p?.loading), summary: githubSummary(g.byRoot) })))
   const bodyRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
 
   const groups = useMemo(
-    () => buildOverview({ projects, worktrees, sessions, now, filter }),
-    [projects, worktrees, sessions, filter, now]
+    () => buildOverview({ projects, worktrees, sessions, now, filter: tab === 'progress' ? filter : '' }),
+    [projects, worktrees, sessions, filter, now, tab]
   )
-  const collapsedSet = useMemo(() => new Set(view === 'board' ? [] : collapsed), [collapsed, view])
-  const ids = useMemo(() => orderedIds(groups, collapsedSet), [groups, collapsedSet])
-  // Archived worktrees' sessions are not on the overview (PRD F15).
+  const ids = useMemo(() => orderedIds(groups, NONE), [groups])
+  // Archived worktrees' sessions are not on 看板 (PRD F15).
   const shown = useMemo(() => {
     const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
     return sessions.filter((s) => !archived.has(s.worktreeId))
@@ -99,29 +83,12 @@ export function Overview() {
   const attention = shown.filter((s) => needsAttention(s.status)).length
   const rows = useMemo(() => groups.flatMap((g) => g.rows), [groups])
   const paneIds = useMemo(() => (layout ? layoutIds(layout) : []), [layout])
-  const metrics = useSessionMeta(
-    useShallow((m) => {
-      const live = shown.map((x) => m.bySession[x.id])
-      return { todo: live.some((x) => x?.todos !== undefined), context: live.some((x) => x?.context !== undefined) }
-    })
-  )
-  const prColumn = usePullRequests((p) => {
-    if (p.gh !== 'ready') return false
-    const paths = new Map(worktrees.map((w) => [w.id, w.path]))
-    return shown.some((x) => Boolean(p.byWorktree[paths.get(x.worktreeId) ?? '']?.pr))
-  })
-  const radarColumn = useRadar((r) => anyRadarMark(r.byRoot, { projects, worktrees }, shown))
-  const metaColumns = useMemo(() => ({ ...metrics, pr: prColumn, radar: radarColumn }), [metrics, prColumn, radarColumn])
 
-  // Keep a selection that exists; default to the first row so ↵ / Space work right away.
+  // Keep a selection that exists; default to the first card so ↵ / Space work right away.
   useEffect(() => {
     if (selectedId === null || !ids.includes(selectedId)) select(ids[0] ?? null)
   }, [ids, selectedId, select])
-  // A session that was closed or filtered out takes its open terminal with it. One that changes status keeps it
-  // open and moves with it, even into a folded group (answering in the tray moves 等你处理 → 运行中).
-  useEffect(() => {
-    if (openId && !rows.some((r) => r.session.id === openId)) setOpen(null)
-  }, [openId, rows, setOpen])
+  // A session that was closed or filtered out takes its overlay tile with it.
   useEffect(() => {
     for (const id of paneIds) if (!rows.some((r) => r.session.id === id)) closePane(id)
   }, [paneIds, rows, closePane])
@@ -139,10 +106,6 @@ export function Overview() {
     if (selectedId) bodyRef.current?.querySelector(`[data-session-id="${CSS.escape(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [selectedId])
 
-  const closeOpen = () => {
-    setOpen(null)
-    bodyRef.current?.focus()
-  }
   const closeOverlay = () => {
     openOverlay(null)
     bodyRef.current?.focus()
@@ -152,21 +115,27 @@ export function Overview() {
     if (e.defaultPrevented || e.nativeEvent.isComposing || e.metaKey || e.ctrlKey || e.altKey) return
     const target = e.target as HTMLElement
     // Keys typed in a session's terminal are the session's — Esc included, which agents use to interrupt or
-    // decline. The overlay handles its own keys.
+    // decline. The overlays handle their own keys.
     if (target.closest(TERMINAL_HOST_SELECTOR) || target.closest('[role="dialog"]')) return
     const inText = target.closest('input, textarea') !== null
     if (e.key === 'Escape') {
       e.preventDefault()
-      if (openId) setOpen(null)
-      else if (layout) openOverlay(null)
+      if (layout) openOverlay(null)
       else if (picked.length > 0 && !inText) setPicked([])
       else if (inText && filter) setFilter('')
       else setMainView('session')
       bodyRef.current?.focus()
       return
     }
+    if (e.key === '/' && !inText) {
+      e.preventDefault()
+      filterRef.current?.focus()
+      return
+    }
+    // GitHub's rows are buttons: Tab, ↵ and Space are theirs.
+    if (tab !== 'progress') return
     if (inText && !(e.target === filterRef.current && (e.key === 'ArrowDown' || e.key === 'Enter'))) return
-    // Space / ↵ on a group header, the view switch or a row's buttons keep their own meaning.
+    // Space / ↵ on a tab or a card's buttons keep their own meaning.
     if ((e.key === ' ' || e.key === 'Enter') && target.closest('button') !== null) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
@@ -177,15 +146,11 @@ export function Overview() {
       enterSession(selectedId)
     } else if (e.key === ' ' && selectedId) {
       e.preventDefault()
-      if (view === 'board') openOverlay(selectedId)
-      else setOpen(openId === selectedId ? null : selectedId)
-    } else if (e.key === '/') {
-      e.preventDefault()
-      filterRef.current?.focus()
+      openOverlay(selectedId)
     }
   }
 
-  const onRowClick = (id: SessionId, e: MouseEvent) => {
+  const onCardClick = (id: SessionId, e: MouseEvent) => {
     // ⌘ toggles one session in the batch, ⇧ picks the range from the last one clicked (F9 批量操作).
     if (e.metaKey || e.shiftKey) {
       setPicked(e.shiftKey ? [...new Set([...picked, ...rangeBetween(ids, pickAnchor ?? selectedId, id)])] : togglePicked(picked, id), id)
@@ -194,76 +159,72 @@ export function Overview() {
       return
     }
     useOverviewStore.setState({ pickAnchor: id })
-    // A click opens the session's terminal (in place, or in the overlay); 进入会话 / ↵ / a double-click go there.
-    if (view === 'board') openOverlay(id)
-    else setOpen(openId === id ? null : id)
+    // A click opens the session's terminal in the overlay; 进入会话 / ↵ / a double-click go there.
+    openOverlay(id)
     bodyRef.current?.focus()
   }
 
   return (
-    <MetaColumns.Provider value={metaColumns}>
-      <Picked.Provider value={pickedSet}>
-      <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
+    <Picked.Provider value={pickedSet}>
+      <div className={styles.overview} data-region="overview" data-glass-card="" data-tab={tab} onKeyDown={onKeyDown}>
         <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
           {sidebarCollapsed && (
             <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
               <PanelLeft {...ICON} />
             </IconButton>
           )}
-          <h1 className={styles.title}>总览</h1>
-          <span className={styles.summary}>{overviewSummary(shown, attention)}</span>
+          <h1 className={styles.title}>看板</h1>
+          <Segmented label="看板" variant="outline" semantics="tab" value={tab} options={TABS} onChange={setTab} />
+          <span className={styles.summary}>{tab === 'progress' ? overviewSummary(shown, attention) : github.summary}</span>
           <span className={styles.spacer} />
-          <PlanUsage />
+          {tab === 'progress' ? (
+            <PlanUsage />
+          ) : (
+            <IconButton label="刷新" title="刷新" disabled={github.loading} onClick={() => refreshGitHub(true)}>
+              <RefreshCw {...ICON} />
+            </IconButton>
+          )}
           <label className={styles.filter}>
             <Search {...ICON} />
             <input
               ref={filterRef}
               type="search"
               value={filter}
-              placeholder="过滤  p:项目  s:状态"
-              aria-label="过滤会话"
+              placeholder={tab === 'progress' ? '过滤  p:项目  s:状态' : '过滤  #编号  标签'}
+              aria-label={tab === 'progress' ? '过滤会话' : '过滤 issue 和 PR'}
               onChange={(e) => setFilter(e.target.value)}
             />
           </label>
-          <ViewSwitch view={view} onChange={setView} />
         </header>
-        <div
-          ref={bodyRef}
-          className={styles.body}
-          data-view={view}
-          tabIndex={-1}
-          role="listbox"
-          aria-label="会话"
-          aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
-        >
-          {sessions.length > 0 && !filter && <AttemptGroups />}
-          {sessions.length > 0 && !filter && <DispatchGroups />}
-          {sessions.length === 0 ? (
-            <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
-          ) : view === 'list' ? (
-            // Empty groups are left out of the list (a stack of "0" headers is noise); the board keeps every column.
-            groups.filter((g) => g.rows.length > 0).map((g) => (
-              <ListGroup
-                key={g.key}
-                group={g}
-                collapsed={collapsedSet.has(g.key)}
-                selectedId={selectedId}
-                openId={openId}
-                onToggle={() => toggleGroup(g.key)}
-                onClick={onRowClick}
-                onCollapse={closeOpen}
-              />
-            ))
-          ) : (
-            <div className={styles.board}>
-              {groups.map((g) => (
-                <BoardColumn key={g.key} group={g} selectedId={selectedId} onClick={onRowClick} />
-              ))}
-            </div>
-          )}
-          {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
-        </div>
-        {picked.length > 0 && (
+        {tab === 'github' ? (
+          <div ref={bodyRef} className={styles.body} data-view="github" tabIndex={-1}>
+            <GitHubBoard filter={filter} />
+          </div>
+        ) : (
+          <div
+            ref={bodyRef}
+            className={styles.body}
+            data-view="board"
+            tabIndex={-1}
+            role="listbox"
+            aria-label="会话"
+            aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
+          >
+            {sessions.length > 0 && !filter && <AttemptGroups />}
+            {sessions.length > 0 && !filter && <DispatchGroups />}
+            {sessions.length === 0 ? (
+              <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
+            ) : (
+              <div className={styles.board}>
+                {groups.map((g) => (
+                  <BoardColumn key={g.key} group={g} selectedId={selectedId} onClick={onCardClick} />
+                ))}
+              </div>
+            )}
+            {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
+          </div>
+        )}
+        {tab === 'progress' && picked.length > 0 && (
           <BatchBar
             ids={picked}
             onClear={() => {
@@ -273,13 +234,12 @@ export function Overview() {
             onSettled={() => bodyRef.current?.focus()}
           />
         )}
-        {/* The board's overlay; also 一题多解's comparison, which opens from either view. */}
+        {/* The board's overlay; also 一题多解's comparison. */}
         {layout && (
           <SessionOverlay layout={layout} rows={rows} candidates={rows.filter((r) => !paneIds.includes(r.session.id))} onClose={closeOverlay} />
         )}
       </div>
-      </Picked.Provider>
-    </MetaColumns.Provider>
+    </Picked.Provider>
   )
 }
 
@@ -299,215 +259,10 @@ function PlanUsage() {
   )
 }
 
-/**
- * The conflict radar's mark; TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context
- * without /compact; then the PR (F16).
- */
-function MetaCells({ sessionId }: { sessionId: SessionId }) {
-  const columns = useContext(MetaColumns)
-  const metrics = useSessionMeta((m) => m.bySession[sessionId])
-  const progress = metrics?.todos ? todoProgress(metrics.todos) : null
-  const context = metrics?.context
-  return (
-    <>
-      {columns.radar && (
-        <span className={styles.radarCell} data-testid="overview-radar">
-          <SessionRadarTag sessionId={sessionId} />
-        </span>
-      )}
-      {columns.todo && (
-        <span className={styles.todoCell} data-testid="overview-todo">
-          {progress && `${progress.done}/${progress.total}`}
-        </span>
-      )}
-      {columns.context && (
-        <span className={styles.contextCell} data-level={context && contextHigh(context) ? 'high' : 'normal'} data-testid="overview-context">
-          {context && `context ${context.percent}%`}
-        </span>
-      )}
-      {columns.pr && (
-        <span className={styles.prCell} data-testid="overview-pr">
-          <SessionPrTag sessionId={sessionId} />
-        </span>
-      )}
-    </>
-  )
-}
-
-const VIEWS = [
-  { value: 'list', label: '列表' },
-  { value: 'board', label: '看板' }
-] as const
-
-function ViewSwitch({ view, onChange }: { view: OverviewView; onChange(view: OverviewView): void }) {
-  return (
-    <Segmented label="视图" variant="outline" value={view} options={VIEWS} onChange={onChange} />
-  )
-}
-
-function ListGroup({
-  group,
-  collapsed,
-  selectedId,
-  openId,
-  onToggle,
-  onClick,
-  onCollapse
-}: {
-  group: OverviewGroup
-  collapsed: boolean
-  selectedId: SessionId | null
-  openId: SessionId | null
-  onToggle(): void
-  onClick(id: SessionId, e: MouseEvent): void
-  onCollapse(): void
-}) {
-  return (
-    <section className={styles.group} aria-label={group.label}>
-      <button type="button" className={styles.groupHeader} aria-expanded={!collapsed} onClick={onToggle}>
-        <span className={styles.chevron}>{collapsed ? <ChevronRight {...ICON} /> : <ChevronDown {...ICON} />}</span>
-        <h2>{group.label}</h2>
-        <span className={styles.count}>{group.rows.length}</span>
-      </button>
-      {group.rows
-        .filter((row) => !collapsed || row.session.id === openId)
-        .map((row) =>
-          row.session.id === openId ? (
-            <ExpandedRow key={row.session.id} row={row} selected={row.session.id === selectedId} onClick={onClick} onCollapse={onCollapse} />
-          ) : (
-            <ListRow key={row.session.id} row={row} selected={row.session.id === selectedId} onClick={onClick} />
-          )
-        )}
-    </section>
-  )
-}
-
 interface RowProps {
   row: OverviewRow
   selected: boolean
   onClick(id: SessionId, e: MouseEvent): void
-}
-
-/** OverviewRow v2 (104:191): 40 high, every cell 20 high and centered. */
-function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProps & { expanded?: boolean; trailing?: ReactNode }) {
-  const id = row.session.id
-  const picked = useContext(Picked)
-  return (
-    <div
-      id={`overview-row-${id}`}
-      className={styles.row}
-      role="option"
-      aria-selected={selected}
-      aria-expanded={expanded}
-      data-selected={selected}
-      data-expanded={expanded}
-      data-session-id={id}
-      data-tone={row.tone}
-      data-picked={picked.has(id)}
-      onClick={(e) => onClick(id, e)}
-      onDoubleClick={(e) => !e.metaKey && !e.shiftKey && enterSession(id)}
-    >
-      {picked.size > 0 && <PickMark picked={picked.has(id)} />}
-      <span className={styles.statusCell}>
-        <StatusGlyph status={row.status} />
-        <span className={styles.statusLabel}>{row.statusLabel}</span>
-      </span>
-      <span className={styles.rowTitle}>{row.title}</span>
-      <span className={styles.where}>{row.where}</span>
-      <span className={styles.summaryCell}>
-        <LimitResumeSummary sessionId={id} fallback={row.summary} />
-      </span>
-      {/* 待审阅: what the agent ran this turn, next to what it said (PRD F9). */}
-      {row.session.status === 'done_unread' && <TurnChecksTag sessionId={id} />}
-      <PortTags sessionId={id} />
-      <MetaCells sessionId={id} />
-      {trailing ?? (
-        <>
-          <span className={styles.stat}>{row.stat}</span>
-          <span className={styles.time} data-emphasis={row.timeEmphasis}>
-            {row.time}
-          </span>
-          <span className={styles.trailing} aria-hidden>
-            <ChevronDown {...ICON} />
-          </span>
-        </>
-      )}
-    </div>
-  )
-}
-
-/** Figma 11v2-B: the row and the session's full terminal below it, in one tray; the rows after it move down. */
-function ExpandedRow({ row, selected, onClick, onCollapse }: RowProps & { onCollapse(): void }) {
-  const trayRef = useRef<HTMLDivElement>(null)
-  const stored = useOverviewStore((s) => s.trayHeight)
-  const setTrayHeight = useOverviewStore((s) => s.setTrayHeight)
-  const [dragging, setDragging] = useState<number | null>(null)
-  const height = clampTrayHeight(dragging ?? stored, window.innerHeight)
-
-  // Block body on purpose: Chromium's scrollIntoView returns a promise, which must not become the effect cleanup.
-  useEffect(() => {
-    trayRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [])
-
-  const onResizeStart = (e: PointerEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    const handle = e.currentTarget
-    const startY = e.clientY
-    const start = height
-    handle.setPointerCapture(e.pointerId)
-    const next = (y: number) => clampTrayHeight(start + y - startY, window.innerHeight)
-    const move = (ev: globalThis.PointerEvent) => setDragging(next(ev.clientY))
-    const end = (ev: globalThis.PointerEvent) => {
-      handle.removeEventListener('pointermove', move)
-      handle.removeEventListener('pointerup', end)
-      handle.removeEventListener('pointercancel', end)
-      setTrayHeight(next(ev.clientY))
-      setDragging(null)
-    }
-    handle.addEventListener('pointermove', move)
-    handle.addEventListener('pointerup', end)
-    handle.addEventListener('pointercancel', end)
-  }
-
-  return (
-    <div ref={trayRef} className={styles.tray} role="group" aria-label={`${row.title} 的终端`}>
-      <ListRow
-        row={row}
-        selected={selected}
-        onClick={onClick}
-        expanded
-        trailing={
-          <span className={styles.trailingExpanded}>
-            {row.session.status === 'done_unread' && <ReviewButton sessionId={row.session.id} className={enterStyles.enter} />}
-            <EnterButton sessionId={row.session.id} />
-            <button
-              type="button"
-              className={styles.collapse}
-              aria-label="收起"
-              title="收起"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCollapse()
-              }}
-            >
-              <ChevronUp {...ICON} />
-            </button>
-          </span>
-        }
-      />
-      <div className={styles.trayTerminal} style={{ height }}>
-        <BorrowedTerminal session={row.session} variant="tray" />
-      </div>
-      <div
-        className={styles.resize}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="调整终端高度"
-        data-dragging={dragging !== null}
-        onPointerDown={onResizeStart}
-      />
-    </div>
-  )
 }
 
 function BoardColumn({ group, selectedId, onClick }: { group: OverviewGroup; selectedId: SessionId | null; onClick(id: SessionId, e: MouseEvent): void }) {

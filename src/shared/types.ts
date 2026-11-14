@@ -100,6 +100,15 @@ export interface Session {
   dispatchModel?: string
   /** The 定时任务 run that opened this session (PRD F24): its task, the task's name then, and the time it was due. Persisted. */
   scheduledBy?: ScheduledBy
+  /** The GitHub issue or PR it was started on from 看板 · GitHub (PRD F9 v1.184). Persisted. */
+  github?: GitHubLink
+}
+
+/** An issue or PR of a repository (`host/owner/name`); mirrors github-board.ts's GitHubLink. */
+export interface GitHubLink {
+  repo: string
+  kind: 'issue' | 'pr'
+  number: number
 }
 
 export interface ScheduledBy {

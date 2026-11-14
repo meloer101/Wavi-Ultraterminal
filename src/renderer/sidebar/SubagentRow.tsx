@@ -18,7 +18,9 @@ interface Props {
  */
 export const SubagentRow = memo(
   function SubagentRow({ row, onSelect, onToggle }: Props) {
-    // Figma 74D: a workflow run (state · name · current phase done / all) and its phases hang here like subagents.
+    // Figma 74D: a workflow run (state · name · current phase done / all) and its phases hang here like subagents;
+    // Figma 83B: so does a session a `wavi run` asked for, until the user answers (a click opens the session that asked);
+    // Figma 82′F: and Claude's agent team, a 队伍 · N 人 line and two lines per teammate.
     const folds = row.kind === 'workflow' && onToggle
     return (
       <div
@@ -32,12 +34,19 @@ export const SubagentRow = memo(
         onClick={() => (folds ? onToggle(row.id) : onSelect(row.sessionId))}
       >
         <span className={styles.line}>
-          <span className={styles.glyph}>
-            <StatusGlyph status={row.glyph ?? (row.attention ? 'needs_you' : 'running')} />
-          </span>
+          {row.kind !== 'team' && (
+            <span className={styles.glyph}>
+              {row.kind === 'pending' ? (
+                <span className={styles.pendingGlyph} aria-label="待开始" />
+              ) : (
+                <StatusGlyph status={row.glyph ?? (row.attention ? 'needs_you' : 'running')} />
+              )}
+            </span>
+          )}
           <span className={styles.title}>{row.title}</span>
           {(row.right ?? row.model) && <span className={styles.model}>{row.right ?? row.model}</span>}
         </span>
+        {row.detail !== undefined && <span className={styles.detail}>{row.detail}</span>}
         {row.pass && <span className={styles.pass} aria-hidden />}
       </div>
     )

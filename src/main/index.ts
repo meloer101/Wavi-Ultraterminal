@@ -37,6 +37,7 @@ import { registerArchiveHandlers } from './archive'
 import { registerPrWriter } from './pr-writer'
 import { registerShipHandlers } from './ship'
 import { registerPullRequestHandlers } from './pull-requests'
+import { registerGitHubBoardHandlers } from './github-board'
 import { registerConflictRadarHandlers } from './conflict-radar'
 import { registerSecondaryWindowHandlers } from './secondary-windows'
 import { followSystemProxy, scutilDeps } from './system-proxy'
@@ -104,6 +105,7 @@ function boot(): void {
   registerBackgroundReviewHandlers()
   registerArchiveHandlers()
   registerPullRequestHandlers()
+  registerGitHubBoardHandlers()
   registerPrWriter()
   registerShipHandlers()
   registerConflictRadarHandlers()

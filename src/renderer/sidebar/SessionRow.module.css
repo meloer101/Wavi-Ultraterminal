@@ -38,9 +38,10 @@
 }
 
 /*
- * Figma 40C: a hairline down the glyph column (centre 16, under the dispatcher's glyph) ties a dispatcher to its
- * children. It starts 4 below the dispatcher's glyph and runs through the 2 gap between rows; each child gets a tick
- * on its title line (centre 15) that stops 3 short of its glyph (from 25), and the last one turns into its tick.
+ * Figma 40C / 83B: a hairline down the glyph column (centre 16, under the dispatcher's glyph) ties a dispatcher to its
+ * children. It starts 4 below the dispatcher's glyph and runs through the 2 gap between rows; for each child it bends
+ * (--radius-tree) into the title line (centre 15) and stops 3 short of its glyph (from 25); the last child's is the
+ * line's end.
  */
 .row[data-tree]::after,
 .row[data-tree='child']::before {
@@ -63,9 +64,12 @@
 }
 
 .row[data-tree='child']::before {
-  top: calc(var(--space-6) + 9px);
+  top: calc(var(--space-6) + 9px - var(--radius-tree));
   width: calc(var(--space-6) + 1px);
-  border-top: 1px solid var(--border-default);
+  height: calc(var(--radius-tree) + 1px);
+  border-bottom: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+  border-bottom-left-radius: var(--radius-tree);
 }
 
 .row[data-tree='last']::after {
@@ -74,7 +78,7 @@
   height: calc(var(--space-6) + 9px + 1px);
   border-bottom: 1px solid var(--border-default);
   border-left: 1px solid var(--border-default);
-  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-tree);
 }
 
 /* A dispatched session whose agent runs subagents (Figma 44B): their line starts under its glyph, one column in. */

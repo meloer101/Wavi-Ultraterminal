@@ -1,4 +1,4 @@
-// 总览批量操作 (PRD F9 v1.59): sessions picked with ⌘ / ⇧ in the overview get the same message, are stopped or are
+// 看板批量操作 (PRD F9 v1.59): sessions picked with ⌘ / ⇧ in the overview get the same message, are stopped or are
 // closed together. Pure: which picked sessions each action reaches and why the others are skipped, the bar's button
 // labels and the confirmation that names what will be sent and to whom (PRD §2 — nothing is sent before it).
 import type { ConfirmOptions } from './lifecycle'

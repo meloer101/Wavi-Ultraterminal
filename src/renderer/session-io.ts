@@ -131,7 +131,7 @@ export async function insertSlashCommand(sessionId: SessionId, command: string):
 }
 
 /**
- * 总览 · 停止 (PRD F9 batch): one Esc to the agent, as the user would press it in the terminal — it ends the turn and
+ * 看板 · 停止 (PRD F9 batch): one Esc to the agent, as the user would press it in the terminal — it ends the turn and
  * keeps the conversation. Queued behind any send in flight. Not for plain terminals (no agent to interrupt).
  */
 export async function interruptAgent(sessionId: SessionId): Promise<void> {

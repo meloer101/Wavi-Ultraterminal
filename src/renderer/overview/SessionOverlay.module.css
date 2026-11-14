@@ -35,8 +35,18 @@
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-window);
-  background: var(--tr-term-surface, var(--term-bg));
+  /* Glass like the main area (PRD v1.185): the board blurred away, the window's base layer (ui/GlassBase, a step more
+     opaque than the cards), and the terminal at its own opacity over that. Opaque under 实色 like the base layer. */
+  background: var(--tr-sidebar-cli, var(--glass-shell));
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
   box-shadow: var(--shadow-overlay);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .tile {
+    background: var(--glass-shell-color);
+    backdrop-filter: none;
+  }
 }
 
 .bar {

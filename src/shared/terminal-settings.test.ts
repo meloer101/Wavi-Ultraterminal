@@ -33,6 +33,9 @@ describe('Claude terminal settings', () => {
   it('names models as Claude reports them', () => {
     expect(claudeModelLabel('claude-opus-5-5')).toBe('Opus 5.5')
     expect(claudeModelLabel('claude-fable-5-1')).toBe('Fable 5.1')
+    // A dated id is no minor version (one label for main and renderer: teammates and the lead share a lane list).
+    expect(claudeModelLabel('claude-sonnet-4-20250514')).toBe('Sonnet 4')
+    expect(claudeModelLabel('claude-haiku-4-5-20251001')).toBe('Haiku 4.5')
     expect(claudeFamily('claude-sonnet-5-5')).toBe('sonnet')
     expect(claudeFamily('gpt-6')).toBeUndefined()
   })

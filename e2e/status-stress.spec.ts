@@ -114,7 +114,7 @@ test('the sidebar follows simulated Claude Code and Codex sessions', async () =>
       await expect.poll(() => existsSync(join(run.dir, '.sim-start')), { timeout: 30_000 }).toBe(true)
     }
     // Nobody is looking at any of them from now on (an unread reply stays unread).
-    await page.locator('[data-region="sidebar"] nav button', { hasText: '总览' }).click()
+    await page.locator('[data-region="sidebar"] nav button', { hasText: '看板' }).click()
     const starts = new Map(runs.map((run) => [run.id, Number(readFileSync(join(run.dir, '.sim-start'), 'utf8'))]))
 
     const wrong = new Map<string, { since: number; truth: Truth; status: SessionStatus } | null>()

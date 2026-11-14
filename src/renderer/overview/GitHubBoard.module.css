@@ -1,0 +1,498 @@
+/* 看板 · GitHub (Figma 77′B–77′F): rows 36 high, one left edge (24 from the card), fixed columns at the row's end;
+ * color only for what needs the user (待你审阅, 要求修改, 失败). */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}
+
+.scope {
+  display: flex;
+  gap: var(--space-20);
+  padding: 0 var(--space-8);
+}
+
+/* Text tabs under the header's segmented 进度 | GitHub: the chosen one in primary with a 1px underline. */
+.scopeTab {
+  height: 28px;
+  padding: var(--space-4) 0 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font: var(--text-body);
+  line-height: 20px;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.scopeTab:hover {
+  color: var(--text-primary);
+}
+
+.scopeTab[aria-checked='true'] {
+  font-weight: 500;
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+
+.project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.projectHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.projectHeader:hover {
+  background: var(--bg-hover);
+}
+
+.projectHeader h2 {
+  margin: 0;
+  font: var(--text-body-heading);
+  white-space: nowrap;
+}
+
+.chevron {
+  display: flex;
+  color: var(--text-tertiary);
+}
+
+.repo {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.columns {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-24);
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 32px;
+  padding: 0 var(--space-8);
+}
+
+.groupHeader h3 {
+  margin: 0;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.count {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row[data-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.icon {
+  flex: none;
+  display: flex;
+  color: var(--text-primary);
+}
+
+.number {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-body);
+}
+
+.tag {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tag[data-tone='quiet'] {
+  color: var(--text-tertiary);
+}
+
+.tag[data-tone='attention'] {
+  color: var(--status-attention);
+}
+
+.checks,
+.comments,
+.time {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.checks {
+  width: 64px;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.checks[data-state='failing'] {
+  color: var(--status-error);
+}
+
+.checks[data-state='pending'] {
+  color: var(--text-tertiary);
+}
+
+.comments {
+  width: 36px;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.time {
+  width: 32px;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+/* Takes the 评论 + 时间 slot (36 + 8 + 32) and grows to the left with a longer name. */
+.linked {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+  min-width: 76px;
+  max-width: 45%;
+  height: 28px;
+  margin-right: var(--space-4);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.linked span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked:hover {
+  background: var(--bg-hover);
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 36px;
+  margin: 0;
+  padding: 0 var(--space-8);
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.state[data-tone='error'] {
+  color: var(--status-error);
+}
+
+.empty {
+  margin: var(--space-24) var(--space-12);
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.problem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  min-height: 60%;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.problem p {
+  margin: 0;
+}
+
+.ghost,
+.secondary,
+.primary {
+  flex: none;
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--text-body-strong);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.ghost:hover {
+  background: var(--bg-hover);
+}
+
+.secondary {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.primary {
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.4;
+}
+
+:is(.ghost, .secondary, .primary, .rowMain, .linked, .projectHeader):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ---- detail overlay (Figma 77C / 77D): the session overlay's window, sized for reading ---- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-scrim);
+  -webkit-app-region: no-drag;
+}
+
+/* As tall as its content, up to the session overlay's height (Figma 77′C / 77′D). */
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(100vw - 96px), 880px);
+  max-height: min(calc(100vh - 64px), 1040px);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-app);
+  box-shadow: var(--shadow-overlay);
+  outline: none;
+}
+
+.dialogBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 48px;
+  padding: 0 var(--space-12) 0 var(--space-20);
+}
+
+.dialogTitle {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-body-heading);
+  color: var(--text-primary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.handError {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--status-error);
+}
+
+.dialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  /* The text starts under the bar's #number (20 + icon 16 + gap 8). */
+  padding: var(--space-4) var(--space-40) var(--space-32) calc(var(--space-20) + var(--space-24));
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.sep {
+  color: var(--text-tertiary);
+}
+
+.metaStrong {
+  font: var(--text-caption-strong);
+  color: var(--text-primary);
+}
+
+.mono {
+  font: var(--text-mono-s);
+}
+
+.markdown {
+  padding: 0;
+}
+
+/* GitHub's headings stay under the overlay's title: all of them 13/600, no rules under h1 / h2 (Figma 77′C). */
+.dialogBody .markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-16) 0 var(--space-8);
+  padding-bottom: 0;
+  border-bottom: 0;
+  font: var(--text-body-heading);
+  color: var(--text-primary);
+}
+
+.rule {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.checkList {
+  display: flex;
+  flex-direction: column;
+}
+
+/* In the overlay the headers sit on the text's left edge, as the body does. */
+.dialogBody .groupHeader {
+  height: 28px;
+  padding: 0;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.checkRow[data-state='passed'] > svg {
+  color: var(--text-secondary);
+}
+
+.checkRow[data-state='failed'] > svg {
+  color: var(--status-error);
+}
+
+.checkRow[data-state='pending'] > svg {
+  color: var(--text-tertiary);
+}
+
+.checkName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkTime {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.checkRow[data-state='failed'] .checkTime {
+  color: var(--status-error);
+}
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.commentWho {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}

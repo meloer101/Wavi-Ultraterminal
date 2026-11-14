@@ -45,13 +45,15 @@ export function GuiCard({ sessionId, cwd, agent, active, rect }: { sessionId: Se
     <div
       className={styles.pane}
       data-active={active}
+      data-glass-card=""
       data-shown={rect !== undefined}
       data-session-id={sessionId}
+      data-pane-box
       style={place(rect)}
       // The keyboard went into this pane: its session becomes the active one (PRD F20).
       onFocus={() => useWorkspace.getState().focusPane(sessionId)}
     >
-      {rect && <ChatPane sessionId={sessionId} agent={agent} cwd={cwd} />}
+      {rect && <ChatPane sessionId={sessionId} agent={agent} cwd={cwd} active={active} />}
     </div>
   )
 }

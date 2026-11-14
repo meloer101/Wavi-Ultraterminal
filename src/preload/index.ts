@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { PR_IPC } from '@shared/pull-requests'
+import { GITHUB_BOARD_IPC } from '@shared/github-board'
 import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
@@ -246,6 +247,11 @@ const api: TrApi = {
     failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree),
     merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
     cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target)
+  },
+  githubBoard: {
+    list: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.list, request),
+    detail: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.detail, request),
+    prStart: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.prStart, request)
   },
   ship: {
     preflight: (target) => ipcRenderer.invoke(SHIP_IPC.preflight, target),

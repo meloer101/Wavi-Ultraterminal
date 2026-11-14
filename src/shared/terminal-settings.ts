@@ -17,9 +17,9 @@ const PERMISSION_LABELS: Record<string, string> = { default: '询问', acceptEdi
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-/** `claude-opus-5-5` → `Opus 5.5`; the family name alone when there is no version. */
+/** `claude-opus-5-5` → `Opus 5.5`, `claude-haiku-4-5-20251001` → `Haiku 4.5` (a date is no minor version); the family name alone when there is no version. */
 export function claudeModelLabel(id: string): string {
-  const m = /claude-([a-z]+)-(\d+)(?:-(\d+))?/.exec(id)
+  const m = /claude-([a-z]+)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(id)
   if (m) return `${cap(m[1] ?? '')} ${m[2]}${m[3] ? `.${m[3]}` : ''}`
   return cap(id)
 }

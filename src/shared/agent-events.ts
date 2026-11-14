@@ -1,5 +1,6 @@
 // Normalized agent signals (PRD §3, F2, F3). Claude Code hooks feed these in M2; Codex hooks in M3.
 // main/hooks turns raw hook payloads into these shapes; the renderer never sees raw hook JSON.
+import type { TeamState } from './agent-team'
 import type { AllowAlwaysScope } from './permission-scope'
 import type { ContextUsage } from './session-meta'
 import type { TodoItem } from './todo-progress'
@@ -77,6 +78,12 @@ export type AgentEvent =
    * conversation restarts. Not activity, except that the last live run ending settles a session left 运行中 by it.
    */
   | { type: 'workflows'; runs: WorkflowRun[] }
+  /**
+   * Claude's agent team in a terminal session (PRD §6.20, Figma 83″B): members, when each worked, who sent whom what;
+   * the whole team each time it changes, null once it is gone. Read by main from the lead's hooks. Display only. Not
+   * activity.
+   */
+  | { type: 'team'; team: TeamState | null }
   /**
    * The model, effort and permission mode the agent reports (Claude statusLine `model.id` / `effort.level`, SessionStart
    * `model`, `permission_mode` on prompt and stop hooks; Codex `model`), for the phone's 会话设置 (PRD F22 v1.144). Only

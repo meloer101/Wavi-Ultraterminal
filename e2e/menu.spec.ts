@@ -84,9 +84,9 @@ test('menu commands reach the renderer: sidebar, find, rename, overview', async 
   await expect(page.locator('header input')).toBeFocused()
   await page.keyboard.press('Escape')
 
-  await clickMenu('会话', '总览')
+  await clickMenu('会话', '看板')
   await expect(page.locator('[data-region="overview"]')).toBeVisible()
-  await clickMenu('会话', '总览')
+  await clickMenu('会话', '看板')
   await expect(page.locator('[data-region="overview"]')).toHaveCount(0)
 })
 
@@ -122,7 +122,7 @@ test('放大 / 缩小 / 实际大小 step the terminal font size', async () => {
 test('⌘K rows carry the same shortcuts', async () => {
   await page.keyboard.press('Meta+k')
   const palette = page.getByTestId('command-palette')
-  await expect(palette.getByRole('option', { name: /打开总览/ })).toContainText('⇧⌘A')
+  await expect(palette.getByRole('option', { name: /打开看板/ })).toContainText('⇧⌘A')
   await expect(palette.getByRole('option', { name: /切换侧栏/ })).toContainText('⌘B')
   await expect(palette.getByRole('option', { name: /右侧栏/ })).toContainText('⇧⌘B')
   await page.keyboard.press('Escape')

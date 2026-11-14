@@ -26,6 +26,8 @@
   --radius-sheet: 16px;
   --radius-popover: 12px;
   --radius-button-glass: 8px;
+  /* The bend where the sidebar's dispatch line turns into a child's glyph (Figma 83B, like 68′'s fan-out curves). */
+  --radius-tree: 8px;
   --glass-scrim-blur: 4px;
   --glass-blur: 28px;
 
@@ -198,9 +200,9 @@
   --shadow-glass: 0 24px 64px #0000008c, 0 4px 12px #00000059;
   --shadow-glass-menu: 0 16px 40px #00000080;
   --shadow-glass-button: 0 2px 8px #00000059;
-  /* Glass shell (Figma 28): the fixed tint over the window's native blur, and the edge of the cards on it. */
+  /* Glass shell (Figma 28): the base layer's tint before the settings arrive (ui/GlassBase), and the edge of the cards on it. */
   --glass-shell: #1e1e209e;
-  /* The shell's color; appearance/map.ts lays it over the base layer at 窗口底层不透明度 (PRD §5 v1.127). */
+  /* The shell's color; appearance/map.ts sets the base layer to it one step more opaque than the cards (PRD v1.183). */
   --glass-shell-color: #1e1e20;
   /* Menus and popovers over the shell: solid (a backdrop blur there darkens the window's glass around it), the shell's
      hue a step lighter, with the glass's top light and an edge. */

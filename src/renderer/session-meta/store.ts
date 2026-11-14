@@ -9,6 +9,7 @@ import type { TodoItem } from '@shared/todo-progress'
 import type { TurnChecks } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
 import type { WorkflowRun } from '@shared/workflow-run'
+import type { TeamState } from '@shared/agent-team'
 import { useWorkspace } from '../state/workspace'
 
 export interface SessionMetrics {
@@ -28,6 +29,8 @@ export interface SessionMetrics {
   crons?: SessionCron[]
   /** Claude's workflow runs in the session (ultracode, PRD F25, Figma 74), live and ended; absent when none. */
   workflows?: WorkflowRun[]
+  /** Claude's agent team in the session (PRD §6.20, Figma 83″B); absent when none. */
+  team?: TeamState
 }
 
 interface SessionMetaState {
@@ -45,6 +48,7 @@ interface SessionMetaState {
   setSubagents(sessionId: SessionId, items: SubagentInfo[]): void
   setCrons(sessionId: SessionId, items: SessionCron[]): void
   setWorkflows(sessionId: SessionId, runs: WorkflowRun[]): void
+  setTeam(sessionId: SessionId, team: TeamState | null): void
   setUsage(usage: VendorUsage): void
   setAccount(account: UsageAccount): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
@@ -114,6 +118,15 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
             return runs.length > 0 ? { ...rest, workflows: runs } : rest
           })
     ),
+  setTeam: (sessionId, team) =>
+    set((s) =>
+      !team && !s.bySession[sessionId]?.team
+        ? s
+        : patchSession(s, sessionId, (m) => {
+            const { team: _team, ...rest } = m
+            return team ? { ...rest, team } : rest
+          })
+    ),
   setSettings: (sessionId, settings) =>
     set((s) => {
       const current = s.bySession[sessionId]?.settings ?? {}
@@ -173,6 +186,7 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   else if (event.type === 'subagents') state.setSubagents(sessionId, event.items)
   else if (event.type === 'crons') state.setCrons(sessionId, event.items)
   else if (event.type === 'workflows') state.setWorkflows(sessionId, event.runs)
+  else if (event.type === 'team') state.setTeam(sessionId, event.team)
   else if (event.type === 'agent-settings') {
     const { type: _type, ...settings } = event
     state.setSettings(sessionId, settings)
