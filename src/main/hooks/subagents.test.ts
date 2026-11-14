@@ -98,6 +98,20 @@ describe('SubagentWatcher', () => {
     expect(sent.at(-1)).toEqual([])
   })
 
+  it('never lists an agent-teams teammate: its stop ends a turn, the team draws it (PRD §6.20)', async () => {
+    const meta = JSON.stringify({ agentType: 'coder', name: 'coder', taskKind: 'in_process_teammate', teamName: 'session-1' })
+    const { sent, hook, reads, settle } = setup({ [`${dir}/agent-acoder-1.meta.json`]: meta })
+    hook('SessionStart')
+    hook('SubagentStart', { agent_id: 'acoder-1', agent_type: 'coder' })
+    await settle()
+    hook('SubagentStop', { agent_id: 'acoder-1' })
+    hook('SubagentStart', { agent_id: 'acoder-1', agent_type: 'coder' })
+    hook('PreToolUse', { agent_id: 'acoder-1', tool_name: 'SendMessage' })
+    await settle()
+    expect(sent.flat()).toEqual([])
+    expect(reads.filter((r) => r.includes('acoder-1'))).toHaveLength(1)
+  })
+
   it('reads a missing meta again on a later hook, at most every 2 s, and sends only changes', async () => {
     const files: Record<string, string> = {}
     const { sent, reads, hook, settle, tick } = setup(files)

@@ -270,3 +270,51 @@ export const claudeFixtures = {
     "duration_ms": 2
   }
 } as const
+
+/**
+ * An agent-teams run (Claude Code 2.1.325, `30-hooks-lab.mjs team`, Haiku; PRD §6.20): the lead starts `reviewer` and
+ * `coder`, who pass a review back and forth twice. `[ms since launch, event, payload]`, only the fields teams.ts reads;
+ * a teammate's `agent_type` is its name. Session ids and paths dropped.
+ */
+export const claudeTeamRun: ReadonlyArray<readonly [number, string, Record<string, unknown>]> = [
+  [1273, "SessionStart", {}],
+  [9791, "UserPromptSubmit", {}],
+  [22323, "PreToolUse", {"tool_name": "Agent", "tool_input": {"name": "reviewer"}}],
+  [23239, "PreToolUse", {"tool_name": "Agent", "tool_input": {"name": "coder"}}],
+  [23534, "SubagentStart", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [23535, "PostToolUse", {"tool_name": "Agent", "tool_input": {"name": "reviewer"}, "tool_response": {"status": "teammate_spawned", "agent_id": "areviewer-d82305fe5f853f50", "name": "reviewer", "model": "haiku", "resolvedModel": "claude-haiku-5-5"}}],
+  [23560, "PostToolUse", {"tool_name": "Agent", "tool_input": {"name": "coder"}, "tool_response": {"status": "teammate_spawned", "agent_id": "acoder-3cf0f06b7183081b", "name": "coder", "model": "haiku", "resolvedModel": "claude-haiku-5-5"}}],
+  [23561, "SubagentStart", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [26610, "PreToolUse", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "tool_name": "SendMessage", "tool_input": {"to": "reviewer", "message": "v1 ready", "summary": "Notify reviewer v1 is ready"}}],
+  [26642, "PostToolUse", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "tool_name": "SendMessage", "tool_input": {"to": "reviewer", "message": "v1 ready", "summary": "Notify reviewer v1 is ready"}}],
+  [27684, "SubagentStop", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [27710, "TeammateIdle", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "teammate_name": "reviewer"}],
+  [27774, "SubagentStart", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [28471, "SubagentStop", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [28513, "TeammateIdle", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "teammate_name": "coder"}],
+  [28521, "Stop", {}],
+  [31705, "Stop", {}],
+  [31716, "PreToolUse", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "tool_name": "SendMessage", "tool_input": {"to": "coder", "message": "needs fix", "summary": "Reply to v1 ready with needs fix"}}],
+  [31774, "PostToolUse", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "tool_name": "SendMessage", "tool_input": {"to": "coder", "message": "needs fix", "summary": "Reply to v1 ready with needs fix"}}],
+  [32064, "SubagentStart", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [34739, "Stop", {}],
+  [34759, "SubagentStop", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [34783, "TeammateIdle", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "teammate_name": "reviewer"}],
+  [37316, "Stop", {}],
+  [39599, "PreToolUse", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "tool_name": "SendMessage", "tool_input": {"to": "reviewer", "message": "v2 ready", "summary": "Notify reviewer v2 is ready"}}],
+  [39626, "PostToolUse", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "tool_name": "SendMessage", "tool_input": {"to": "reviewer", "message": "v2 ready", "summary": "Notify reviewer v2 is ready"}}],
+  [39838, "SubagentStart", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [41108, "SubagentStop", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [41132, "TeammateIdle", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "teammate_name": "coder"}],
+  [42102, "PreToolUse", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "tool_name": "SendMessage", "tool_input": {"to": "coder", "message": "approved", "summary": "Approve v2 ready"}}],
+  [42126, "PostToolUse", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "tool_name": "SendMessage", "tool_input": {"to": "coder", "message": "approved", "summary": "Approve v2 ready"}}],
+  [42166, "SubagentStart", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [43077, "Stop", {}],
+  [43146, "SubagentStop", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer"}],
+  [43170, "TeammateIdle", {"agent_id": "areviewer-d82305fe5f853f50", "agent_type": "reviewer", "teammate_name": "reviewer"}],
+  [45328, "Stop", {}],
+  [47211, "SubagentStop", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder"}],
+  [47233, "TeammateIdle", {"agent_id": "acoder-3cf0f06b7183081b", "agent_type": "coder", "teammate_name": "coder"}],
+  [49763, "Stop", {}],
+  [163816, "SessionEnd", {}]
+]

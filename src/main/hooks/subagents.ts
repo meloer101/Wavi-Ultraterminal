@@ -48,6 +48,8 @@ export interface SubagentMeta {
   model?: string
   /** A foreground subagent cannot outlive its turn; a background one can. */
   foreground: boolean
+  /** An agent-teams teammate (`taskKind: in_process_teammate`): drawn in the team's lanes (./teams.ts), not as a subagent. */
+  teammate?: true
 }
 
 /** What `agent-<id>.meta.json` says. The task is `description`, else the agent's `name`, else its type. */
@@ -61,7 +63,12 @@ export function parseSubagentMeta(text: string): SubagentMeta | null {
   if (!isRec(value)) return null
   const title = cleanTitle(value.description) ?? cleanTitle(value.name) ?? cleanTitle(value.agentType) ?? undefined
   const model = claudeModelLabel(value.model)
-  return { ...(title ? { title } : {}), ...(model ? { model } : {}), foreground: value.requestShape === 'foreground' }
+  return {
+    ...(title ? { title } : {}),
+    ...(model ? { model } : {}),
+    foreground: value.requestShape === 'foreground',
+    ...(value.taskKind === 'in_process_teammate' ? { teammate: true as const } : {})
+  }
 }
 
 /**
@@ -190,6 +197,13 @@ export class SubagentWatcher {
     const dir = join(tracked.transcript.slice(0, -'.jsonl'.length), 'subagents')
     try {
       const meta = parseSubagentMeta(await this.read(join(dir, `agent-${sub.id}.meta.json`), META_BYTES))
+      // A teammate ends each turn with a SubagentStop and starts the next with a SubagentStart (PRD §6.20): it is no
+      // subagent, and never listed as one (its row is the team's).
+      if (meta?.teammate) {
+        if (tracked.subs.get(sub.id) === sub) tracked.subs.delete(sub.id)
+        tracked.ended.add(sub.id)
+        return
+      }
       if (meta) {
         sub.foreground = meta.foreground
         sub.title = meta.title ?? sub.title

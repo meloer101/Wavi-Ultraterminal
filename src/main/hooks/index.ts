@@ -15,6 +15,7 @@ import { cliAdapterLaunch } from './cli-adapters'
 import { CodexAccountClient, readClaudeAccountUsage } from './account-usage'
 import { AgentTitleWatcher } from './agent-title'
 import { SubagentWatcher } from './subagents'
+import { TeamWatcher } from './teams'
 import { WorkflowWatcher } from './workflows'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
@@ -325,6 +326,9 @@ const workflows = new WorkflowWatcher(
   { skip: (sessionId) => guiSessions.has(sessionId) }
 )
 
+/** Claude's agent team in each terminal session, from the lead's hooks (PRD §6.20, Figma 83″B). */
+const teams = new TeamWatcher((sessionId, agent, team) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'team', team } }))
+
 /** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
 const transcripts = new TranscriptMeter()
 
@@ -368,7 +372,7 @@ async function start(): Promise<Runtime | null> {
   if (!relayHolds) console.warn('[hooks] the pty daemon answers permission relays before a phone could; nothing is held for the phone')
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, scripts })
+      const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, teams, scripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -393,7 +397,7 @@ async function start(): Promise<Runtime | null> {
     })
     // No in-app answering UI: permission requests are announced and answered in the TUI; held only while a paired
     // phone is connected (PRD F22), and the TUI dialog shows meanwhile all the same.
-    const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, scripts })
+    const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, teams, scripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => route(bridge, request),
