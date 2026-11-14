@@ -1,11 +1,11 @@
 // 合并到 <base> (PRD F4, Figma 05 19:814): the precheck as a short checklist (ahead, behind, conflicts, uncommitted
-// work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
-// worktree, push the base to its remote). With conflicts the only way forward is the worktree's agent: the instructions go into its
-// input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
+// work, an upstream the base has not pulled), then two options (remove the worktree, push the base to its remote).
+// Always a squash (PRD v1.185): one commit on the base, titled after the session. With conflicts the only way forward
+// is the worktree's agent: the instructions go into its input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
 import { headlessAgent } from '@shared/agents'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
-import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import type { MergePrecheck, MergeResult } from '@shared/git-merge'
 import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { severityCounts } from '@shared/background-review'
@@ -31,8 +31,6 @@ import {
   conflictPrompt,
   conflictReason,
   failureText,
-  METHOD_NOTE,
-  methodOptions,
   nothingToMerge,
   removeBlocker,
   pushSwitchLabel,
@@ -87,7 +85,6 @@ type Phase =
 
 function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: ReactNode }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
-  const [method, setMethod] = useState<MergeMethod>('squash')
   const [removeAfter, setRemoveAfter] = useState(true)
   const [push, setPush] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -121,7 +118,6 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       .then((next) => {
         if (!live) return
         setPhase({ kind: 'ready', check: next })
-        if (next.uncommitted !== 0) setMethod((m) => (m === 'rebase' ? 'squash' : m))
       })
       .catch((error: unknown) => live && setPhase({ kind: 'failed-check', message: error instanceof Error ? error.message : String(error) }))
     return () => {
@@ -222,11 +218,11 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       result = await window.tr.gitWorktrees.merge({
         root: target.root,
         worktree: target.worktreePath,
-        method,
+        method: 'squash',
         head: ready.head,
         baseHead: ready.baseHead,
         push: willPush,
-        ...(method === 'squash' && title ? { title } : {})
+        ...(title ? { title } : {})
       })
     } catch (error) {
       result = { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
@@ -391,15 +387,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
 
         {shown && phase.kind !== 'done' && mergeable && (
           <div className={styles.options}>
-            <div className={styles.field} role="group" aria-label="合并方式">
-              <span className={styles.label}>合并方式</span>
-              <div className={styles.control}>
-                <Segmented label="合并方式" value={method} options={methodOptions(shown)} onChange={setMethod} />
-                <p className={styles.note}>{shown.uncommitted !== 0 && method !== 'rebase' ? `${METHOD_NOTE[method]}；有未提交的改动时不能 rebase` : METHOD_NOTE[method]}</p>
-              </div>
-            </div>
             <div className={styles.field}>
-              <span className={styles.label} />
               <div className={styles.control}>
                 <Checkbox
                   checked={willRemove}

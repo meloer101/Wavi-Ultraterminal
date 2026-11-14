@@ -167,6 +167,17 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(feature.getByRole('button', { name: /合并到 main/ })).toBeEnabled()
     await shoot('13c-worktree')
 
+    // The local merge is always a squash (PRD v1.185): the sheet has no 合并方式 row, only the two options.
+    await feature.getByRole('button', { name: /合并到 main/ }).click()
+    const sheet = page.getByTestId('merge-sheet')
+    await expect(sheet.getByRole('button', { name: /^合并 / })).toBeVisible({ timeout: 15_000 })
+    await expect(sheet.getByRole('group', { name: '合并方式' })).toHaveCount(0)
+    await expect(sheet).not.toContainText('Rebase')
+    await expect(sheet).toContainText('合并后删除 worktree（保留分支）')
+    await shoot('05-merge-squash-only')
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+
     // A worktree without a session only expands; the active session stays.
     await item(repo.merged).locator('button[aria-expanded]').click()
     await expect(item(repo.merged).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')

@@ -1,5 +1,5 @@
 // What the merge sheet (PRD F4, Figma 05) says about a precheck, its options and a result. Pure.
-import type { GitOperation, MergeBlocker, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import type { GitOperation, MergeBlocker, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 import { shortAgentName } from '@shared/agents'
@@ -129,22 +129,6 @@ export function testBlocksMerge(state: MergeTestState | null, hasTest: boolean):
 
 // How a file conflicts and the hand-off length cap live with the merge chain's hand-offs (src/shared/ship-chain.ts).
 export { conflictReason, MAX_PROMPT_CHARS }
-
-/** Methods the sheet offers, with why one is off. */
-export function methodOptions(check: MergePrecheck): { value: MergeMethod; label: string; disabled: boolean }[] {
-  const dirty = check.uncommitted !== 0
-  return [
-    { value: 'squash', label: 'Squash', disabled: false },
-    { value: 'merge', label: 'Merge', disabled: false },
-    { value: 'rebase', label: 'Rebase', disabled: dirty }
-  ]
-}
-
-export const METHOD_NOTE: Record<MergeMethod, string> = {
-  squash: '分支上的提交压成一个提交',
-  merge: '保留分支上的每个提交，再加一个合并提交',
-  rebase: '把分支接到最新的基线上，历史是一条直线'
-}
 
 const BUSY: ReadonlySet<Session['status']> = new Set(['running', 'needs_you'])
 

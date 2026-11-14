@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, nothingToMerge, pushSwitchLabel, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, nothingToMerge, pushSwitchLabel, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
 import { turnCheckView } from '@shared/turn-checks'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
@@ -82,12 +82,6 @@ describe('checkLines', () => {
 })
 
 describe('options', () => {
-  it('rebase is off with uncommitted changes', () => {
-    expect(methodOptions(check()).find((o) => o.value === 'rebase')?.disabled).toBe(false)
-    expect(methodOptions(check({ uncommitted: 1 })).find((o) => o.value === 'rebase')?.disabled).toBe(true)
-    expect(methodOptions(check({ uncommitted: null })).find((o) => o.value === 'rebase')?.disabled).toBe(true)
-  })
-
   it('keeps the worktree when it has work or a running session', () => {
     expect(removeBlocker(check(), [{ status: 'done_unread' }], false)).toBeNull()
     expect(removeBlocker(check(), [], true)).toMatch('主目录')

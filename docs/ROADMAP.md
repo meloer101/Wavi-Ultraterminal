@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-14：本地合并面板去掉「合并方式」一行，一律 squash（PRD v1.185）。依据是竞品里能本地合并的 Paseo、Vibe Kanban 都只用一种方式。PR 合并面板和出口 A 不变。
 - 2026-11-14：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.184，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。
 - 2026-11-14：一层底（PRD v1.183，Figma 84A）：侧栏那层色调铺满整个窗口（侧栏、卡片之间的缝、四周留边），在每张卡片处挖空，卡片按自己的不透明度浮在上面；设置 · 外观的小窗口预览同样画法。e2e 核对了底层的不透明度和挖洞的位置；玻璃上的实际效果还没在作者的 Mac 上看过。
 - 2026-11-14：CLI 会话的 agent teams（PRD v1.182，Figma 83″B / 83′C / 82′F）：lead 终端下面的队伍条，展开是按时间的泳道（谁在干活、谁给谁发了消息）；侧栏 lead 下面列队友，队友不再被当成 subagent 删掉。数据来自 hooks（2.1.325 实测）；GUI 会话没有队伍（`claude -p` 不起队友）。没在作者的 Mac 上跑过真实队伍。
