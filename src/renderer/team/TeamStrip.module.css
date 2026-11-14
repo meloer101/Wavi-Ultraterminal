@@ -89,6 +89,8 @@
 }
 
 .lanes {
+  /* The who column (Figma 83″B): glyph · name · model over what now. */
+  --who-width: 210px;
   display: flex;
   flex-direction: column;
   padding-top: var(--space-8);
@@ -96,7 +98,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: 210px minmax(0, 1fr);
+  grid-template-columns: var(--who-width) minmax(0, 1fr);
   column-gap: var(--space-20);
   max-height: calc(6 * 46px);
   overflow-y: auto;
@@ -149,7 +151,7 @@
 
 .progress {
   overflow: hidden;
-  padding-left: calc(12px + var(--space-6));
+  padding-left: calc(var(--space-12) + var(--space-6));
   text-overflow: ellipsis;
   white-space: nowrap;
   font: var(--text-caption);
@@ -230,7 +232,7 @@
   position: relative;
   height: 16px;
   margin-top: var(--space-4);
-  margin-left: calc(210px + var(--space-20));
+  margin-left: calc(var(--who-width) + var(--space-20));
   font: var(--text-caption);
   color: var(--text-tertiary);
 }

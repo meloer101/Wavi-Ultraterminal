@@ -156,7 +156,7 @@
 }
 
 .row[data-kind='team'] {
-  padding-left: calc(var(--row-text-inset) - 16px - var(--space-8));
+  padding-left: calc(var(--row-text-inset) - var(--space-16) - var(--space-8));
 }
 
 .row[data-kind='team'] .title {

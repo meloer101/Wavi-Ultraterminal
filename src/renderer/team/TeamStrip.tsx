@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Users } from 'lucide-react'
 import { memberLine as progress, teamCounts, TEAM_LEAD, type TeamMemberState, type TeamState } from '@shared/agent-team'
+import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionId, SessionStatus } from '@shared/types'
 import { useSessionMeta } from '../session-meta/store'
 import { getSurface } from '../terminal/registry'
@@ -25,7 +26,9 @@ const folded = new Set<SessionId>()
 
 export function TeamStrip({ sessionId }: { sessionId: SessionId }) {
   const team = useSessionMeta((s) => s.bySession[sessionId]?.team)
-  const leadModel = useSessionMeta((s) => s.bySession[sessionId]?.settings?.model)
+  const leadModelId = useSessionMeta((s) => s.bySession[sessionId]?.settings?.model)
+  // The session reports its model as an id (`claude-opus-5-5`); lanes name it the way the CLI shows it.
+  const leadModel = leadModelId?.startsWith('claude-') ? claudeModelLabel(leadModelId) : leadModelId
   const [open, setOpen] = useState(() => !folded.has(sessionId))
   if (!team || team.members.length < 2) return null
   const toggle = () => {

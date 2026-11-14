@@ -24,7 +24,7 @@ export interface LaneArrow {
   latest: boolean
   /** The gap the label sits in: between lane `gap` and `gap + 1`, the last one before the arrow's head. */
   gap: number
-  /** How much of the axis the label may take before the next arrow (percent). */
+  /** How much of the axis the label may take before the next arrow through its gap (percent). */
   room: number
 }
 
@@ -60,12 +60,13 @@ export function laneLayout(team: TeamState, now: number): LaneLayout {
 
   const laneOf = new Map(team.members.map((m, i) => [m.name, i]))
   const shown = team.messages.filter((m) => m.at >= from && laneOf.has(m.from) && laneOf.has(m.to) && m.from !== m.to)
-  const arrows: LaneArrow[] = shown.map((m, i) => {
-    const a = laneOf.get(m.from)!
-    const b = laneOf.get(m.to)!
-    const x = pct(m.at)
-    const next = shown[i + 1]
-    return { x, from: a, to: b, label: m.text, latest: i === shown.length - 1, gap: b > a ? b - 1 : b, room: (next ? pct(next.at) : 100) - x }
+  const placed = shown.map((m) => ({ m, a: laneOf.get(m.from)!, b: laneOf.get(m.to)!, x: pct(m.at) }))
+  // An arrow between lanes a and b passes through the gaps min(a, b) … max(a, b) - 1.
+  const crosses = (p: (typeof placed)[number], gap: number): boolean => Math.min(p.a, p.b) <= gap && gap < Math.max(p.a, p.b)
+  const arrows: LaneArrow[] = placed.map((p, i) => {
+    const gap = p.b > p.a ? p.b - 1 : p.b
+    const next = placed.slice(i + 1).find((q) => crosses(q, gap))
+    return { x: p.x, from: p.a, to: p.b, label: p.m.text, latest: i === placed.length - 1, gap, room: (next ? next.x : 100) - p.x }
   })
 
   const ticks: LaneTick[] = [

@@ -34,7 +34,8 @@ describe('laneLayout (Figma 83″B)', () => {
   it('draws a message from the sender’s lane to the receiver’s, its label in the gap before the head, up to the next arrow', () => {
     const { arrows } = laneLayout(team(), 10 * min)
     expect(arrows.map((a) => `${a.from}>${a.to} gap${a.gap} @${a.x} room${a.room}${a.latest ? ' latest' : ''}`)).toEqual([
-      '0>3 gap2 @1 room39',
+      // lead → docs crosses no later arrow's gaps: its label may run to the edge.
+      '0>3 gap2 @1 room99',
       '1>2 gap1 @40 room20',
       '2>1 gap1 @60 room20',
       '1>2 gap1 @80 room20 latest'
