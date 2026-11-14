@@ -147,7 +147,9 @@ export async function writeShipText(raw: unknown): Promise<WriteResult> {
   const info = await branchInfo(request)
   if (!info) return fail('不是这个项目的 worktree')
   if (!info.branch) return fail('处于分离 HEAD')
-  if (!info.base || info.base === info.branch) return fail('这是基线分支本身')
+  // A commit message describes only the ticked files: it is written on the base too (提交 in the main checkout).
+  if (request.kind === 'pr' && (!info.base || info.base === info.branch)) return fail('这是基线分支本身')
+  const base = info.base ?? info.branch
 
   const path = await searchPath()
   const order: WriterAgent[] = [request.agent, ...HEADLESS_AGENTS.filter((a) => a !== request.agent)]
@@ -158,7 +160,7 @@ export async function writeShipText(raw: unknown): Promise<WriteResult> {
   const model = agent === 'claude' ? settings.writerClaudeModel : settings.writerCodexModel
 
   // The base as exit A and 创建 PR read it: on its own remote, not the one the branch was published to (a fork).
-  const facts = await material(request, info.cwd, info.branch, info.base, await baseRemoteFor(info.cwd, info.branch, info.base))
+  const facts = await material(request, info.cwd, info.branch, base, await baseRemoteFor(info.cwd, info.branch, base))
   if (!facts.diff.trim()) return fail(request.kind === 'commit' ? '勾选的文件没有改动' : '分支没有比基线新的改动')
 
   let dir: string | null = null

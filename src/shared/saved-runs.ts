@@ -97,7 +97,7 @@ export interface SavedShipContext {
   base: string
   branch: string
   remote: string | null
-  /** Uncommitted paths to commit (null: nothing). */
+  /** Uncommitted paths 提交 commits (null: nothing; the exits commit nothing). */
   paths: string[] | null
   openPr: { number: number; url: string } | null
   checksLine: string | null
@@ -116,12 +116,14 @@ export interface SavedShipRun {
   committed: boolean
   /** The merge commit 合并到 main 并推送 kept although its push failed. */
   merged?: string
-  /** The commit the run made of `ctx.paths` (its hash), once known: a retry does not commit them again. */
+  /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry does not commit them again. */
   commit?: string
   state: ShipState
 }
 
 const SHIP_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr', 'commit', 'sync', 'pull'])
+/** Runs that ship only what is committed: one saved by an older build with a 提交 step of its own is not taken up. */
+const EXIT_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr'])
 const STEP_IDS: ReadonlySet<unknown> = new Set(['review', 'write', 'commit', 'merge', 'push', 'create', 'sync'])
 const METHODS: ReadonlySet<unknown> = new Set(['squash', 'merge', 'rebase'])
 const FAILURE_KINDS: ReadonlySet<unknown> = new Set(GIT_FAILURE_KINDS)
@@ -211,6 +213,7 @@ export function sanitizeShipRuns(raw: unknown, worktrees: ReadonlySet<string>): 
     const ctx = sanitizeContext(item.ctx)
     const state = sanitizeShipState(item.state)
     if (!ctx || !state || !worktrees.has(ctx.worktree) || seen.has(ctx.worktree)) continue
+    if (EXIT_KINDS.has(item.kind) && state.steps.some((s) => s.id === 'commit')) continue
     if (item.merged !== undefined && !(typeof item.merged === 'string' && SHA.test(item.merged))) continue
     if (item.commit !== undefined && !(typeof item.commit === 'string' && SHA.test(item.commit))) continue
     seen.add(ctx.worktree)

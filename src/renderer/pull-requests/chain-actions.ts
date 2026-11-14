@@ -62,7 +62,7 @@ export interface ChainSources {
 
 export interface ChainPlan {
   plan: ExitPlan
-  /** The chain, with the panel's ticks as its input (an exit commits only ticked files; 提交… needs one). */
+  /** The chain, with the panel's ticks as its input (提交 commits only ticked files and needs one). */
   chain: ChainState
   ticked: string[]
 }
@@ -201,7 +201,8 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     if (text) await handTo(place, text)
     return
   }
-  if (!preflight?.ok) return say(path, preflight?.message ?? CHAIN_TEXT.checking)
+  // 提交 runs without a preflight that answers (the main checkout on its base); the rest need one.
+  if (command !== 'commit' && !preflight?.ok) return say(path, preflight?.message ?? CHAIN_TEXT.checking)
 
   const settings = await window.tr.settings.get()
   const checks = turnCheckView(place.agent ? useSessionMeta.getState().bySession[place.agent.id]?.checks : undefined)
@@ -214,15 +215,18 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     agentSession: place.agent?.id ?? null,
     openIn: openIn ?? place.agent?.id ?? null,
     checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
-    settings: { review: settings.review, pr: settings.pr },
-    ticked
+    settings: { review: settings.review, pr: settings.pr }
   })
   const label = chain.actions.find((a) => a.id === command)?.label ?? ''
-  // The tip the run starts from: the preflight just read (after a reload the run's own commit is told by it).
+  if (command === 'commit') {
+    // The tip it starts from (after a reload the run's own commit is told by it): the preflight's, else the change list's.
+    const tip = preflight?.ok ? preflight.head : sources.changes.head
+    return startShip({ ...ctx, paths: ticked }, 'commit', commitTitle(ticked.length), tip ? { head: tip } : {})
+  }
+  if (!preflight?.ok) return
+  // The tip the run starts from: the preflight just read.
   const head = preflight.head
   switch (command) {
-    case 'commit':
-      return startShip(ctx, 'commit', commitTitle(ticked.length), { head })
     case 'sync':
       return startShip({ ...ctx, paths: null }, 'sync', label, { syncMode: preflight.pushed ? 'merge' : 'rebase', behind: preflight.behindBase, head })
     case 'pull':

@@ -23,8 +23,6 @@ export interface FlowInput {
   pullFrom?: string | null
   /** The background review runs first (推送前 / 合并前审阅 is on and the diff has none). */
   review: boolean
-  /** Uncommitted paths exist: the agent also writes a commit message and Wavi commits. */
-  uncommitted: boolean
   /** 合并到 main 并推送's method (default squash). */
   method?: MergeMethod
   /** 同步 <base>: a branch never pushed is rebased onto the base, a pushed one merges it (default rebase). */
@@ -98,18 +96,15 @@ export function flowSteps(input: FlowInput): FlowStep[] {
   }
   if (kind === 'pull') return [step('sync', `拉取 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`)]
   if (input.review) steps.push(step('review', '审阅'))
+  // The exits ship only what is committed: 提交 is a run of its own, never a step of theirs.
   if (kind === 'main') {
-    // Figma 73E: the commit of the ticked files is a step of its own (main runs it inside the merge call).
+    // The squash merge's message.
     steps.push(write('写提交说明'))
-    if (input.uncommitted) steps.push(step('commit', '提交'))
     const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
     steps.push(step('merge', `合并到 ${base} · ${METHOD_LABEL[input.method ?? 'squash']}`), step('push', `推送 ${pushTo ?? 'origin'}/${base}`))
   } else if (kind === 'pr') {
-    steps.push(write('写标题和正文'))
-    if (input.uncommitted) steps.push(step('commit', '提交'))
-    steps.push(step('push', `推送 ${branch}`), step('create', '创建 PR'))
+    steps.push(write('写标题和正文'), step('push', `推送 ${branch}`), step('create', '创建 PR'))
   } else {
-    if (input.uncommitted) steps.push(write('写提交说明'), step('commit', '提交'))
     steps.push(step('push', `推送 ${branch}`))
   }
   return steps
@@ -131,8 +126,8 @@ export function syncOnto(state: ShipState, onto: string | undefined, mode?: 'reb
 /** A new ship: the first step is under way. */
 export function startState(input: FlowInput, title: string): ShipState {
   const steps = flowSteps(input)
-  // A push to an open PR with nothing to commit has no text to write: it goes straight to running. 提交… without anyone
-  // to write the message opens on the empty field.
+  // A push to an open PR has no text to write: it goes straight to running. 提交 without anyone to write the message
+  // opens on the empty field.
   const writes = steps.some((s) => s.id === 'write' || s.id === 'review')
   if (!writes && input.kind === 'commit') return { kind: 'commit', title, agent: input.agent, steps, stage: 'glance', texts: EMPTY_TEXTS, error: null, failedIn: null }
   const state: ShipState = {
@@ -238,7 +233,8 @@ export function setTexts(state: ShipState, patch: Partial<ShipTexts>): ShipState
 
 /** Why the glance cannot go ahead, or null. */
 export function submitBlocker(state: Pick<ShipState, 'kind' | 'texts' | 'steps'>): string | null {
-  const needsCommit = state.kind === 'main' || state.steps.some((s) => s.id === 'commit')
+  // 提交's message, and 合并到 <base> 并推送's squash message.
+  const needsCommit = state.kind === 'main' || state.kind === 'commit'
   if (needsCommit && !commitSubjectOf(state.texts.commit)) return '写一句提交说明'
   if (state.kind === 'pr' && !state.texts.title.trim()) return '写一个标题'
   return null
@@ -258,7 +254,7 @@ export function submitLabel(kind: ShipKind): string {
     case 'pull':
       return '拉取'
     case 'push-pr':
-      return '提交并推送'
+      return '推送'
   }
 }
 
@@ -271,11 +267,9 @@ export function writeFailedToGlance(state: ShipState, message: string): ShipStat
 export type GlanceField = 'commit' | 'title' | 'body' | 'base' | 'draft'
 
 export function glanceFields(state: Pick<ShipState, 'kind' | 'steps'>): GlanceField[] {
-  const commit = state.steps.some((s) => s.id === 'commit')
   if (state.kind === 'main' || state.kind === 'commit') return ['commit']
-  if (state.kind === 'sync' || state.kind === 'pull') return []
-  if (state.kind === 'push-pr') return commit ? ['commit'] : []
-  return [...(commit ? (['commit'] as const) : []), 'title', 'body', 'base', 'draft']
+  if (state.kind === 'pr') return ['title', 'body', 'base', 'draft']
+  return []
 }
 
 export const commitSubjectOf = (text: string): string => text.trim().split('\n')[0]?.trim() ?? ''
@@ -286,9 +280,8 @@ export function formatCommit(text: { subject: string; body: string }): string {
   return body ? `${text.subject.trim()}\n\n${body}` : text.subject.trim()
 }
 
-/** The step a failed shipToMain stopped at: 提交 when the run shows it (older runs commit inside 合并). */
-export function mainFailureStep(step: Extract<ShipMainResult, { ok: false }>['step'], steps: readonly Pick<FlowStep, 'id'>[] = []): StepId {
-  if (step === 'commit' && steps.some((s) => s.id === 'commit')) return 'commit'
+/** The step a failed shipToMain stopped at: the run sends no paths, so nothing is committed before the merge. */
+export function mainFailureStep(step: Extract<ShipMainResult, { ok: false }>['step']): StepId {
   return step === 'push' ? 'push' : 'merge'
 }
 

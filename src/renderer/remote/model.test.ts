@@ -32,7 +32,7 @@ describe('remoteSessions', () => {
 })
 
 describe('remoteShip', () => {
-  const input = { kind: 'main' as const, agent: 'Claude Code', base: 'main', branch: 'jacob/x', remote: 'origin', review: false, uncommitted: true }
+  const input = { kind: 'main' as const, agent: 'Claude Code', base: 'main', branch: 'jacob/x', remote: 'origin', review: false }
 
   it('shows a run on the session row with its glance worked out, and how the last one ended', () => {
     const glance = toGlance(startState(input, '合并到 main 并推送'), { ...EMPTY_TEXTS, commit: 'feat: refresh\n\nBody' })

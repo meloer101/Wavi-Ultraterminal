@@ -63,7 +63,6 @@ const input = (patch: Partial<FlowInput> = {}): FlowInput => ({
   branch: 'feat/x',
   remote: 'origin',
   review: false,
-  uncommitted: false,
   ...patch
 })
 
@@ -74,14 +73,18 @@ describe('flowSteps', () => {
     expect(labels({})).toEqual(['Claude 写提交说明', '合并到 main · Squash', '推送 origin/main'])
   })
 
-  it('exit B: write title and body, push the branch, create the PR; 提交 only with uncommitted work', () => {
+  // 提交 is its own run: no exit has a 提交 step, whatever is left uncommitted.
+  it('exit B: write title and body, push the branch, create the PR', () => {
     expect(labels({ kind: 'pr', agent: 'Codex' })).toEqual(['Codex 写标题和正文', '推送 feat/x', '创建 PR'])
-    expect(labels({ kind: 'pr', uncommitted: true })).toEqual(['Claude 写标题和正文', '提交', '推送 feat/x', '创建 PR'])
   })
 
-  it('pushing to an open PR: just the push, or message → commit → push', () => {
+  it('pushing to an open PR: just the push', () => {
     expect(labels({ kind: 'push-pr' })).toEqual(['推送 feat/x'])
-    expect(labels({ kind: 'push-pr', uncommitted: true })).toEqual(['Claude 写提交说明', '提交', '推送 feat/x'])
+  })
+
+  it('no exit commits: 提交 is a step of the 提交 run only', () => {
+    for (const kind of ['main', 'pr', 'push-pr'] as const) expect(flowSteps(input({ kind })).some((s) => s.id === 'commit')).toBe(false)
+    expect(flowSteps(input({ kind: 'commit' })).map((s) => s.id)).toEqual(['write', 'commit'])
   })
 
   it('a review comes first when it is asked for', () => {
@@ -187,8 +190,7 @@ describe('glance', () => {
     const main = startState(input(), 't')
     expect(glanceFields(main)).toEqual(['commit'])
     expect(glanceFields(startState(input({ kind: 'pr' }), 't'))).toEqual(['title', 'body', 'base', 'draft'])
-    expect(glanceFields(startState(input({ kind: 'pr', uncommitted: true }), 't'))).toEqual(['commit', 'title', 'body', 'base', 'draft'])
-    expect(glanceFields(startState(input({ kind: 'push-pr', uncommitted: true }), 't'))).toEqual(['commit'])
+    expect(glanceFields(startState(input({ kind: 'push-pr' }), 't'))).toEqual([])
   })
 
   it('wants a subject, and for a PR a title', () => {
@@ -203,6 +205,7 @@ describe('glance', () => {
   it('labels the primary button after the exit', () => {
     expect(submitLabel('main')).toBe('合并并推送')
     expect(submitLabel('pr')).toBe('推送并创建 PR')
+    expect(submitLabel('push-pr')).toBe('推送')
   })
 
   it('joins and reads the commit message', () => {
@@ -224,7 +227,6 @@ describe('helpers', () => {
 
   it('maps a failed ship to the step that shows it', () => {
     expect(mainFailureStep('commit')).toBe('merge')
-    expect(mainFailureStep('commit', [{ id: 'commit' }])).toBe('commit')
     expect(mainFailureStep('merge')).toBe('merge')
     expect(mainFailureStep('push')).toBe('push')
     expect(createFailureStep('remote rejected')).toBe('push')
@@ -241,7 +243,7 @@ describe('helpers', () => {
 
   // R60 / R71: the push step names the remote the base goes to; 拉取 names what it fetches.
   it('names where 合并到 main 并推送 pushes the base and what 拉取 fetches', () => {
-    const base = { agent: 'Claude', base: 'main', branch: 'feat', remote: 'fork', review: false, uncommitted: false }
+    const base = { agent: 'Claude', base: 'main', branch: 'feat', remote: 'fork', review: false }
     expect(flowSteps({ ...base, kind: 'main', baseRemote: 'upstream' }).at(-1)?.label).toBe('推送 upstream/main')
     expect(flowSteps({ ...base, kind: 'main' }).at(-1)?.label).toBe('推送 fork/main')
     expect(flowSteps({ ...base, kind: 'pull', pullFrom: 'origin/jacoy/feat' })[0]?.label).toBe('拉取 origin/jacoy/feat')
@@ -272,7 +274,7 @@ describe('helpers', () => {
 
 describe('a Ship block taken up after a reload (architecture review, batch 6)', () => {
   const running: ShipState = {
-    ...startState({ kind: 'main', agent: 'Claude', base: 'main', branch: 'feat', remote: 'origin', review: false, uncommitted: true }, '合并到 main 并推送'),
+    ...startState({ kind: 'main', agent: 'Claude', base: 'main', branch: 'feat', remote: 'origin', review: false }, '合并到 main 并推送'),
     stage: 'running'
   }
 
@@ -292,9 +294,9 @@ describe('a Ship block taken up after a reload (architecture review, batch 6)', 
 
 describe('合入链路 v2 runs (Figma 73D–73F)', () => {
   it('提交…: the agent writes the message, then 提交; without a writer only 提交, opened on the empty field', () => {
-    expect(labels({ kind: 'commit', uncommitted: true })).toEqual(['Claude 写提交说明', '提交'])
-    expect(labels({ kind: 'commit', uncommitted: true, writer: false })).toEqual(['提交'])
-    const typed = startState(input({ kind: 'commit', uncommitted: true, writer: false }), commitTitle(2))
+    expect(labels({ kind: 'commit' })).toEqual(['Claude 写提交说明', '提交'])
+    expect(labels({ kind: 'commit', writer: false })).toEqual(['提交'])
+    const typed = startState(input({ kind: 'commit', writer: false }), commitTitle(2))
     expect(typed).toMatchObject({ title: '提交 2 个文件', stage: 'glance', texts: { commit: '' } })
     expect(typed.steps[0]!.state).toBe('pending')
     expect(submitBlocker(typed)).toBe('写一句提交说明')
@@ -304,7 +306,7 @@ describe('合入链路 v2 runs (Figma 73D–73F)', () => {
   })
 
   it('a write that failed in 提交… still shows the field: a typed message commits', () => {
-    const writing = startState(input({ kind: 'commit', uncommitted: true }), commitTitle(1))
+    const writing = startState(input({ kind: 'commit' }), commitTitle(1))
     const next = writeFailedToGlance(writing, 'Claude 退出了')
     expect(next.stage).toBe('glance')
     expect(next.error).toBeNull()
@@ -323,12 +325,8 @@ describe('合入链路 v2 runs (Figma 73D–73F)', () => {
     expect(flowSteps(input({ kind: 'pull' }))[0]!.id).toBe('sync')
   })
 
-  it('exit A shows the commit of the ticked files as a step of its own (Figma 73E)', () => {
-    expect(labels({ uncommitted: true })).toEqual(['Claude 写提交说明', '提交', '合并到 main · Squash', '推送 origin/main'])
-  })
-
   it('提交… without a writer drops the write step and opens on the empty field', () => {
-    const next = withoutWriter(startState(input({ kind: 'commit', uncommitted: true }), commitTitle(1)))
+    const next = withoutWriter(startState(input({ kind: 'commit' }), commitTitle(1)))
     expect(next.steps.map((s) => s.id)).toEqual(['commit'])
     expect(next.stage).toBe('glance')
   })
@@ -350,7 +348,6 @@ describe('the block’s title icon and a step held before it started', () => {
   it('draws a plain 推送 with the push icon, a push to a PR with the PR icon', () => {
     expect(titleIcon(startState(input({ kind: 'push-pr' }), '推送'))).toBe('push')
     expect(titleIcon(startState(input({ kind: 'push-pr' }), '推送到 PR #7'))).toBe('push-pr')
-    expect(titleIcon(startState(input({ kind: 'push-pr', uncommitted: true }), '提交并推送到 PR #7'))).toBe('push-pr')
     expect(titleIcon(startState(input({ kind: 'sync' }), '同步 main'))).toBe('sync')
   })
 

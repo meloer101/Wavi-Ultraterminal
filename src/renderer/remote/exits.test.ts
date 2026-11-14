@@ -74,13 +74,14 @@ beforeEach(() => {
 const untick = (...paths: string[]): void => useGit.setState({ roots: { [tree.path]: { ...gitOf(tree.path), unticked: new Set(paths) } } })
 
 describe('the phone’s exits', () => {
-  // R16 / R27: the files unticked on the Mac stay out of what the phone commits and pushes.
-  it('commits only the files ticked on the Mac, and starts from the tip the preflight read', async () => {
+  // 提交 is its own action (not on the phone yet): the phone's exit ships the branch's commits and commits nothing,
+  // ticked files included.
+  it('commits nothing, and starts from the tip the preflight read', async () => {
     untick('notes.md', '.env.local')
     expect(await remoteShipAction('s1', { do: 'start', exit: 'main' })).toEqual({ ok: true })
     expect(startShip).toHaveBeenCalledTimes(1)
     const [ctx, kind, , options] = startShip.mock.calls[0]!
-    expect(ctx).toMatchObject({ paths: ['a.ts'] })
+    expect(ctx).toMatchObject({ paths: null })
     expect(kind).toBe('main')
     // L11 / R31 / R60: the tip it starts from and where the base is pushed come from the preflight it just read.
     expect(options).toMatchObject({ head: 'h1h1h1h', baseRemote: 'upstream' })

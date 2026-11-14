@@ -1,5 +1,6 @@
-// Runs Git · 变更's two exits (PRD F16 v1.78, Figma 29C–29I): the session's agent writes the text (a handoff file, or a
-// headless run when the session cannot take a message), the user looks at it, then Wavi runs the mechanical steps.
+// Runs Git · 变更's two exits (PRD F16 v1.78, Figma 29C–29I) and the chain's other runs: the session's agent writes the
+// text (a handoff file, or a headless run when the session cannot take a message), the user looks at it, then Wavi runs
+// the mechanical steps. Only 提交 commits; the exits ship what is committed.
 // The state lives here, per worktree, so the Ship block can close and open (图谱 ↔ 变更) without losing a run; the
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
@@ -69,14 +70,14 @@ interface Run {
   ctx: ShipContext
   kind: ShipKind
   token: number
-  /** The commit went in inside a shipToMain that then failed: a retry does not commit again. */
+  /** 提交's commit went in (saved with the run). */
   committed: boolean
   /** The merge commit a shipToMain kept although its push failed: the retry pushes it (if the base still has it). */
   merged?: string
-  /** The commit this run made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
+  /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
   commit?: string
-  /** Taken up after a reload while its commit (or 合并到 main 并推送's merge) was under way: main may have committed or
-   *  merged meanwhile, so the first retry asks before it acts. */
+  /** Taken up after a reload while 提交's commit (or 合并到 main 并推送's merge) was under way: main may have committed
+   *  or merged meanwhile, so the first retry asks before it acts. */
   resumed?: boolean
   /** Taken up after a reload at all: a commit main refuses because the ticked files have nothing left to commit went in
    *  while no window watched. */
@@ -195,9 +196,8 @@ export function savedShipRuns(): SavedShipRun[] {
   return saved
 }
 
-/** The step that was under way when the block was saved: where main may have gone on without a window. Only a commit
- *  (or 合并到 main 并推送's merge, which commits inside it) can have landed then; at the glance, the writing or a failed
- *  step nothing ran. */
+/** The step that was under way when the block was saved: where main may have gone on without a window. Only 提交's
+ *  commit (or 合并到 main 并推送's merge) can have landed then; at the glance, the writing or a failed step nothing ran. */
 function interruptedAtCommit(item: SavedShipRun): boolean {
   const working = item.state.steps.find((s) => s.state === 'working')?.id
   return working === 'commit' || (item.kind === 'main' && working === 'merge')
@@ -259,7 +259,6 @@ export function startShip(ctx: ShipContext, kind: ShipKind, title: string, optio
       ...(options.baseRemote !== undefined ? { baseRemote: options.baseRemote } : {}),
       ...(options.pullFrom !== undefined ? { pullFrom: options.pullFrom } : {}),
       review: reviewWanted(ctx, kind),
-      uncommitted: (ctx.paths?.length ?? 0) > 0,
       ...(ctx.method ? { method: ctx.method } : {}),
       ...(options.syncMode ? { syncMode: options.syncMode } : {})
     },
@@ -482,9 +481,9 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
   const sessionId = ctx.sessionId!
   const agent = agentLabelFor(ctx)
   const target: PrTarget = { root: ctx.root, worktree: ctx.worktree }
-  const withCommit = (ctx.paths?.length ?? 0) > 0
   const wantsPr = kind === 'pr'
-  const wantsCommit = kind === 'main' || withCommit
+  // 提交's message, or 合并到 main 并推送's squash message.
+  const wantsCommit = kind === 'main' || kind === 'commit'
   try {
     const slots: Partial<Record<HandoffKind, string>> = {}
     for (const slot of [...(wantsPr ? (['pr'] as const) : []), ...(wantsCommit ? (['commit'] as const) : [])]) {
@@ -505,9 +504,7 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
       base: ctx.base,
       template,
       evidence: primary === 'pr' ? evidenceLines(ctx) : [],
-      // Exit B with uncommitted work: the same message also asks for the commit message.
-      ...(wantsPr && slots.commit ? { commitPath: slots.commit } : {}),
-      // The commit takes the ticked files only: the message describes those.
+      // 提交 takes the ticked files only: the message describes those.
       ...(slots.commit && ctx.paths && ctx.paths.length > 0 ? { files: ctx.paths } : {})
     }
     // The agent may be busy with its own work: wait for it, and say so.
@@ -625,19 +622,15 @@ async function writeHeadless(worktree: string, token: number, ctx: ShipContext, 
   }
   const texts: ShipTexts = { commit: '', title: '', body: '', draft: false }
   try {
-    if (paths.length > 0) {
+    if (kind === 'commit') {
       const made = await window.tr.pr.write({ ...base, kind: 'commit' })
       if (!made.ok) return { ok: false, message: made.message }
       if (made.kind === 'commit') texts.commit = made.message
     }
     if (!alive(worktree, token)) return { ok: false, message: '已取消' }
-    // A branch with nothing uncommitted has no diff to describe as a commit: the merge takes the PR text's title and body.
-    if (kind === 'pr' || (kind === 'main' && paths.length === 0)) {
-      const made = await window.tr.pr.write({
-        ...base,
-        kind: 'pr',
-        ...(texts.commit ? { pendingMessage: texts.commit } : {})
-      })
+    // The exits ship what is committed: the squash merge takes the PR text's title and body as its message.
+    if (kind === 'pr' || kind === 'main') {
+      const made = await window.tr.pr.write({ ...base, kind: 'pr' })
       if (!made.ok) return { ok: false, message: made.message }
       if (made.kind === 'pr') {
         if (kind === 'main') texts.commit = formatCommit({ subject: made.title, body: made.body })
@@ -775,22 +768,15 @@ async function resumeCommit(worktree: string, token: number, run: Run, state: Sh
   return true
 }
 
-/** Exit A: commit what is uncommitted, squash into the base, push it — main does all three in one call. */
+/** Exit A: squash what the branch committed into the base and push it — main does both in one call. Nothing is
+ *  committed: files left uncommitted stay as they are. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
-  // Taken up after a reload: main may have finished what the old window started (shipToMain goes on without it).
+  // Taken up after a reload: main may have finished the merge the old window started (shipToMain goes on without it).
   if (run.resumed && !stepDone(state, 'merge')) {
     run.resumed = false
     const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
     if (!alive(worktree, token)) return
-    const made = ctx.paths && !run.committed ? await landedCommit(run, now) : null
-    if (!alive(worktree, token)) return
-    if (made) run.commit = made
-    // An older saved run (no start tip): nothing uncommitted means its commit went in.
-    if (made || (made === undefined && now?.ok && now.uncommitted === 0)) {
-      run.committed = true
-      patch(worktree, token, (s) => (s.steps.some((step) => step.id === 'commit') ? complete(s, 'commit') : s))
-    }
     if (now?.ok && now.merged) {
       patch(worktree, token, (s) => complete(s, 'merge'))
       state = current(worktree) ?? state
@@ -798,52 +784,30 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
   }
   // After a failed push the merge stands on the local base: only the push is left.
   const mergeDone = stepDone(state, 'merge')
-  const ship = () =>
-    window.tr.ship.shipToMain({
-      root: ctx.root,
-      worktree: ctx.worktree,
-      message: state.texts.commit,
-      method: ctx.method ?? 'squash',
-      paths: run.committed ? null : ctx.paths
-    })
-  let result = mergeDone ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) }) : await ship()
+  const result = mergeDone
+    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) })
+    : await window.tr.ship.shipToMain({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, method: ctx.method ?? 'squash', paths: null })
   if (!alive(worktree, token)) return
-  const hasCommit = state.steps.some((s) => s.id === 'commit')
-  // Main refused the commit (nothing classified) in a run taken up after a reload: the ticked files may have gone in
-  // while no window watched (as in runPr / runCommit). Then the merge goes on with nothing to commit.
-  if (!result.ok && result.step === 'commit' && result.reason === 'blocked' && !result.failure && !run.committed) {
-    const landed = await committedMeanwhile(run)
-    if (!alive(worktree, token)) return
-    if (landed) {
-      run.commit = landed
-      run.committed = true
-      if (hasCommit) patch(worktree, token, (s) => begin(complete(s, 'commit', landed.slice(0, 7)), 'merge'))
-      result = await ship()
-      if (!alive(worktree, token)) return
-    }
-  }
   if (!result.ok) {
     if (result.reason === 'declined') {
       patch(worktree, token, backToGlance)
       return
     }
-    if (result.committed) run.committed = true
-    const step = mainFailureStep(result.step, state.steps)
-    patch(worktree, token, (s) => {
-      const committed = hasCommit && step !== 'commit' && (result.committed || run.committed) ? complete(s, 'commit') : s
-      return fail(
-        committed,
-        stepError(committed, run, step, result.message, result.failure, {
+    const step = mainFailureStep(result.step)
+    patch(worktree, token, (s) =>
+      fail(
+        s,
+        stepError(s, run, step, result.message, result.failure, {
           ...(result.output ? { output: result.output } : {}),
           ...(result.conflicts && result.conflicts.length > 0
             ? { conflicts: result.conflicts, prompt: mergeConflictPrompt({ base: ctx.base, branch: ctx.branch, conflicts: result.conflicts }) }
             : {})
         })
       )
-    })
+    )
     return
   }
-  if (!mergeDone) patch(worktree, token, (s) => complete(hasCommit && !stepDone(s, 'commit') ? complete(s, 'commit') : s, 'merge'))
+  if (!mergeDone) patch(worktree, token, (s) => complete(s, 'merge'))
   run.merged = result.commit
   if (result.pushError) {
     // 改为创建 PR only where a PR can be made; the merge Wavi kept on the local base is said with the class's words.
@@ -867,30 +831,10 @@ async function prPossible(ctx: ShipContext): Promise<boolean> {
   return Boolean(now?.ok && now.remote !== null && now.remoteOnGitHub === true && now.gh === 'ready')
 }
 
-/** Exit B, and a push to the branch's open PR: commit if needed, then push (and create). */
+/** Exit B, and a push to the branch's open PR: push what is committed (and create). */
 async function runPr(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx, kind } = run
   const target: PrTarget = { root: ctx.root, worktree: ctx.worktree }
-  if (state.steps.some((s) => s.id === 'commit') && !stepDone(state, 'commit') && !(await resumeCommit(worktree, token, run, state))) {
-    if (!alive(worktree, token)) return
-    patch(worktree, token, (s) => begin(s, 'commit'))
-    const made = await window.tr.pr.commit({
-      ...target,
-      message: state.texts.commit,
-      paths: ctx.paths ?? []
-    })
-    if (!alive(worktree, token)) return
-    const landed = !made.ok && !made.failure ? await committedMeanwhile(run) : null
-    if (!alive(worktree, token)) return
-    if (!made.ok && !landed) {
-      patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
-      return
-    }
-    const hash = made.ok ? made.commit : landed!
-    run.commit = hash
-    patch(worktree, token, (s) => complete(s, 'commit', hash.slice(0, 7)))
-  }
-  if (!alive(worktree, token)) return
   if (kind === 'push-pr') {
     patch(worktree, token, (s) => begin(s, 'push'))
     const pushed = await window.tr.pr.push(target)
@@ -933,7 +877,7 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
   finish(worktree, token, created.number ? `已创建 PR #${created.number}` : '已创建 PR')
 }
 
-/** 提交… (Figma 73F1): commit the ticked files with the message. */
+/** 提交 (Figma 73F1): commit the ticked files with the message — the only run that commits. */
 async function runCommit(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
   if (await resumeCommit(worktree, token, run, state)) return finish(worktree, token, `已提交 · ${run.commit!.slice(0, 7)}`)

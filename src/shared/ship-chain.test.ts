@@ -94,9 +94,10 @@ describe('shipChain · actions', () => {
 
   it('labels each action with the base and the PR', () => {
     const plain = shipChain(input({ preflight: ok({ base: 'develop' }) }))
-    expect(plain.actions.map((a) => a.label)).toEqual(['提交…', '同步 develop', '拉取', '推送', '创建 PR', '合并到 develop 并推送', '合并 PR…', '归档…'])
+    expect(plain.actions.map((a) => a.label)).toEqual(['提交', '同步 develop', '拉取', '推送', '创建 PR', '合并到 develop 并推送', '合并 PR…', '归档…'])
     const withPr = shipChain(input({ pr: pr(), local: dirty(1) }))
-    expect(action(withPr, 'pr').label).toBe('提交并推送到 PR #5')
+    // 提交 is its own action: uncommitted work never renames the push.
+    expect(action(withPr, 'pr').label).toBe('推送到 PR #5')
     expect(action(withPr, 'merge-pr').label).toBe('合并 PR #5…')
     expect(action(shipChain(input({ pr: pr({ unpushed: true }) })), 'pr').label).toBe('推送到 PR #5')
     expect(action(shipChain(input({ preflight: ok({ remote: null }) })), 'main').label).toBe('合并到 main')
@@ -158,7 +159,57 @@ describe('shipChain · actions', () => {
   })
 })
 
-// Review findings 17 / 43: Git · 变更's ticks decide what an exit commits.
+// 提交 is its own node: ticked files are committed by 提交, never inside an exit; the exits ship only commits.
+describe('shipChain · 提交 apart from the exits', () => {
+  it('puts 提交 first while files are ticked', () => {
+    const state = shipChain(input({ local: dirty(2), ticked: 1 }))
+    expect(state.next).toEqual({ id: 'commit', label: '提交', blocker: null })
+    expect(state.headline).toBeNull()
+    // The exits stay beside it: the branch has commits of its own.
+    expect(state.second).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+    expect(CHAIN_LABEL.commit).toBe('提交')
+  })
+
+  it('blocks an exit with no commits of its own until the ticked files are committed', () => {
+    const fresh = shipChain(input({ preflight: ok({ ahead: 0 }), local: { ...dirty(2), ahead: 0 }, ticked: 2 }))
+    expect(fresh.next).toEqual({ id: 'commit', label: '提交', blocker: null })
+    expect(fresh.second).toBeNull()
+    expect(action(fresh, 'main').blocker).toBe('先提交改动')
+    expect(action(fresh, 'pr').blocker).toBe('先提交改动')
+  })
+
+  it('leaves unticked files out: with commits of its own, the exit is the primary move', () => {
+    const state = shipChain(input({ local: dirty(2), ticked: 0 }))
+    expect(state.next).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+    expect(state.second).toEqual({ id: 'pr', label: '创建 PR', blocker: null })
+  })
+
+  it('with an open PR: ticked files → 提交, then the unpushed commits → 推送到 PR #N', () => {
+    const ticked = shipChain(input({ pr: pr(), local: dirty(1), ticked: 1 }))
+    expect(ticked.next).toEqual({ id: 'commit', label: '提交', blocker: null })
+    expect(action(ticked, 'pr')).toEqual({ id: 'pr', label: '推送到 PR #5', blocker: '先提交改动' })
+    const unpushed = shipChain(input({ pr: pr({ unpushed: true }), local: dirty(1), ticked: 1 }))
+    expect(unpushed.next?.id).toBe('commit')
+    expect(action(unpushed, 'pr')).toEqual({ id: 'pr', label: '推送到 PR #5', blocker: null })
+    expect(shipChain(input({ pr: pr({ unpushed: true }) })).next).toEqual({ id: 'pr', label: '推送到 PR #5', blocker: null })
+  })
+
+  it('commits in the main checkout on its base; every other action stays blocked there', () => {
+    const local = { ...dirty(2), branch: 'main', base: 'main' }
+    const failed: ShipPreflight = { ok: false, message: '这是基线分支本身，没有可以合并的改动', operation: null }
+    const state = shipChain(input({ isMain: true, local, preflight: failed, ticked: 1 }))
+    expect(state.next).toEqual({ id: 'commit', label: '提交', blocker: null })
+    expect(state.headline).toEqual({ tone: 'info', text: CHAIN_TEXT.onBase })
+    for (const id of ['sync', 'pull', 'push', 'pr', 'main', 'merge-pr'] as const) expect(action(state, id).blocker).toBe(CHAIN_TEXT.onBase)
+    // While the preflight runs, too; with nothing ticked there is no move.
+    expect(shipChain(input({ isMain: true, local, preflight: null, ticked: 1 })).next).toEqual({ id: 'commit', label: '提交', blocker: null })
+    const unticked = shipChain(input({ isMain: true, local, preflight: failed, ticked: 0 }))
+    expect(unticked.next).toBeNull()
+    expect(action(unticked, 'commit').blocker).toBe('没有勾选文件')
+  })
+})
+
+// Review findings 17 / 43: Git · 变更's ticks decide what 提交 commits.
 describe('shipChain · ticked files', () => {
   const unticked = (patch: Partial<ChainInput> = {}) => input({ local: dirty(2), ticked: 0, ...patch })
 
@@ -169,7 +220,7 @@ describe('shipChain · ticked files', () => {
 
   it('keeps today\'s behaviour when the ticks are not known: every file counts as ticked', () => {
     expect(action(shipChain(input({ local: dirty(2) })), 'commit').blocker).toBeNull()
-    expect(action(shipChain(input({ pr: pr(), local: dirty(2) })), 'pr').label).toBe('提交并推送到 PR #5')
+    expect(shipChain(input({ pr: pr(), local: dirty(2) })).next?.id).toBe('commit')
   })
 
   it('runs an exit with commits of its own without a commit step', () => {
@@ -181,16 +232,17 @@ describe('shipChain · ticked files', () => {
     expect(action(exits, 'pr').blocker).toBeNull()
   })
 
+  // Unticked files are never shipped: an exit with nothing else says so, not that no file is ticked.
   it('blocks an exit with nothing else to ship', () => {
     const withPr = shipChain(unticked({ pr: pr() }))
-    expect(action(withPr, 'pr')).toEqual({ id: 'pr', label: '推送到 PR #5', blocker: '没有勾选文件' })
+    expect(action(withPr, 'pr')).toEqual({ id: 'pr', label: '推送到 PR #5', blocker: '没有要推送的提交' })
     // R22: with an open PR fully pushed and every leftover file unticked, merging the PR is what can run.
     expect(withPr.next).toEqual({ id: 'merge-pr', label: '合并 PR #5…', blocker: null })
     expect(withPr.headline).toBeNull()
     const fresh = shipChain(unticked({ preflight: ok({ ahead: 0 }), local: { ...dirty(2), ahead: 0 } }))
-    expect(action(fresh, 'main').blocker).toBe('没有勾选文件')
-    expect(action(fresh, 'pr').blocker).toBe('没有勾选文件')
-    expect(fresh.headline).toEqual({ tone: 'blocked', text: '没有勾选文件' })
+    expect(action(fresh, 'main').blocker).toBe('没有要合并的改动')
+    expect(action(fresh, 'pr').blocker).toBe('没有比 main 新的提交')
+    expect(fresh.headline).toEqual({ tone: 'blocked', text: '没有要合并的改动' })
   })
 })
 
@@ -234,7 +286,7 @@ describe('shipChain · a. an operation in progress', () => {
 describe('shipChain · b. nowhere to go', () => {
   it('says the main checkout is on its base', () => {
     const state = shipChain(input({ isMain: true, local: { ...dirty(0), branch: 'main', base: 'origin/main' } }))
-    expect(state).toMatchObject({ stage: 'stuck', headline: { tone: 'info', text: CHAIN_TEXT.onBase }, next: null, second: null, blocked: CHAIN_TEXT.onBase })
+    expect(state).toMatchObject({ stage: 'base', headline: { tone: 'info', text: CHAIN_TEXT.onBase }, next: null, second: null, blocked: CHAIN_TEXT.onBase })
     expect(action(state, 'pr').blocker).toBe(CHAIN_TEXT.onBase)
   })
 
@@ -264,9 +316,10 @@ describe('shipChain · while the preflight runs', () => {
 })
 
 describe('shipChain · c. an open PR', () => {
-  it('commits and pushes uncommitted work to it', () => {
+  // 提交 is its own move: uncommitted work is committed first, then pushed to the PR by 推送到 PR #N.
+  it('commits uncommitted work first, apart from the push', () => {
     const state = shipChain(input({ pr: pr(), local: dirty(3) }))
-    expect(state).toMatchObject({ stage: 'pr', headline: null, next: { id: 'pr', label: '提交并推送到 PR #5', blocker: null }, second: null })
+    expect(state).toMatchObject({ stage: 'pr', headline: null, next: { id: 'commit', label: '提交', blocker: null }, second: null })
   })
 
   it('pushes commits it does not have yet', () => {
@@ -398,13 +451,14 @@ describe('shipChain · f. conflicts with the base', () => {
     expect(shipChain(input({ preflight: ok({ baseConflicts: [] }), radarConflicts: ['a.ts'] })).stage).toBe('exits')
   })
 
-  it('puts 提交… first while tracked files are uncommitted (同步 refuses them), keeping the conflict headline', () => {
+  it('puts 提交 first while tracked files are uncommitted (同步 refuses them), keeping the conflict headline', () => {
     const state = shipChain(input({ preflight: ok({ baseConflicts: ['a.ts'] }), local: dirty(1) }))
-    expect(state.next).toEqual({ id: 'commit', label: '提交…', blocker: null })
+    expect(state.next).toEqual({ id: 'commit', label: '提交', blocker: null })
     expect(state.headline).toEqual({ tone: 'blocked', text: '和 main 会冲突 · 1 个文件' })
     expect(action(state, 'sync').blocker).toBe('先提交改动')
-    // Untracked files do not stop 同步.
-    expect(shipChain(input({ preflight: ok({ baseConflicts: ['a.ts'] }), local: dirty(1, 0) })).next).toEqual({ id: 'sync', label: '同步 main', blocker: null })
+    // Untracked files left unticked do not stop 同步; ticked ones are committed first.
+    expect(shipChain(input({ preflight: ok({ baseConflicts: ['a.ts'] }), local: dirty(1, 0), ticked: 0 })).next).toEqual({ id: 'sync', label: '同步 main', blocker: null })
+    expect(shipChain(input({ preflight: ok({ baseConflicts: ['a.ts'] }), local: dirty(1, 0) })).next?.id).toBe('commit')
   })
 })
 
@@ -710,7 +764,7 @@ describe('shipChain · second review round', () => {
   // R22: what is sent to the PR is the ticked files; an untracked nested repository cannot be ticked.
   it('offers 合并 PR #N… when the only uncommitted files are unticked', () => {
     expect(shipChain(input({ pr: pr(), local: dirty(1), ticked: 0 })).next).toEqual({ id: 'merge-pr', label: '合并 PR #5…', blocker: null })
-    expect(shipChain(input({ pr: pr(), local: dirty(1), ticked: 1 })).next?.id).toBe('pr')
+    expect(shipChain(input({ pr: pr(), local: dirty(1), ticked: 1 })).next?.id).toBe('commit')
   })
 
   // R18: the change list and the preflight agree by HEAD, not by counts that two base pickers may disagree on.

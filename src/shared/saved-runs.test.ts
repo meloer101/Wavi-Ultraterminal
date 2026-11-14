@@ -116,6 +116,20 @@ describe('sanitizeShipRuns', () => {
     expect(GIT_FAILURE_KINDS).toContain('identity')
   })
 
+  // The exits no longer commit: a saved exit run that would still commit is dropped; 提交's own run is kept.
+  it('drops an exit run saved with a 提交 step', () => {
+    const steps = [
+      { id: 'write', label: 'Claude 写提交说明', state: 'done' },
+      { id: 'commit', label: '提交', state: 'working' },
+      { id: 'push', label: '推送 feat', state: 'pending' }
+    ]
+    for (const kind of ['main', 'pr', 'push-pr'] as const) {
+      expect(sanitizeShipRuns([{ ...shipRun, kind, state: { ...shipState, kind, steps } }], worktrees)).toEqual([])
+    }
+    const commit = { ...shipRun, kind: 'commit', state: { ...shipState, kind: 'commit', steps: steps.slice(0, 2) } }
+    expect(sanitizeShipRuns([commit], worktrees)).toEqual([commit])
+  })
+
   it('drops a run whose state is not one the block can draw', () => {
     const bad = [
       { ...shipRun, kind: 'deploy' },

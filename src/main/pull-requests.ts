@@ -703,7 +703,8 @@ async function pushCounts(cwd: string, branch: string, upstream: { remote: strin
 /**
  * Commits the ticked uncommitted files of a session's branch with the user's message: `git add -A` then
  * `git commit --only` on exactly those paths (whatever else the agent staged stays staged), hooks and all, with the
- * login shell's PATH so hooks find their tools. Never on the base branch or a detached HEAD, never with conflicts.
+ * login shell's PATH so hooks find their tools. The base branch too (提交 in the project's main checkout); never a
+ * detached HEAD, never with conflicts.
  */
 export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
   const request = parsePrCommitRequest(raw)
@@ -715,7 +716,6 @@ export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
     const info = await branchInfo(request)
     if (!info) return blockedCommit('不是这个项目的 worktree')
     if (!info.branch) return blockedCommit('处于分离 HEAD：先切到一个分支再提交')
-    if (!info.base || info.base === info.branch) return blockedCommit('这是基线分支本身：在会话的 worktree 里提交')
     const files = await uncommittedFiles(info.cwd)
     if (files.some((f) => f.status === 'U')) return blockedCommit('有没解决的冲突：先解决再提交')
     const known = new Map(files.map((f) => [f.path, f]))
@@ -726,7 +726,7 @@ export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
     const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
     const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
     const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
-    const context = { base: info.base, remote: info.remote }
+    const context = { base: info.base ?? info.branch, remote: info.remote }
     if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added), failure: classified('commit', added, context) }
     const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
       cwd: info.cwd,

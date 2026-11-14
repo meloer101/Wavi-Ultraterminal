@@ -680,10 +680,17 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     expect(git(wt, 'rev-parse', 'HEAD').trim()).toBe(head)
   })
 
-  it('refuses the base branch, a detached HEAD, conflicts, files with no changes and bad input', async () => {
-    const { root, wt } = setup()
+  // 提交 in the project's main checkout: the base branch takes a commit like any branch.
+  it('commits on the base branch in the main checkout', async () => {
+    const { root } = setup()
     writeFileSync(join(root, 'a.txt'), 'a2\n')
-    expect(await commitWorktree({ root, worktree: root, message: 'x', paths: ['a.txt'] })).toMatchObject({ ok: false, message: '这是基线分支本身：在会话的 worktree 里提交' })
+    const result = await commitWorktree({ root, worktree: root, message: 'docs: a', paths: ['a.txt'] })
+    expect(result).toEqual({ ok: true, commit: git(root, 'rev-parse', '--short', 'HEAD').trim(), subject: 'docs: a' })
+    expect(git(root, 'status', '--porcelain=v1').trim()).toBe('')
+  })
+
+  it('refuses a detached HEAD, conflicts, files with no changes and bad input', async () => {
+    const { root, wt } = setup()
     expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['nothing.txt'] })).toMatchObject({ ok: false, message: '勾选的文件已经没有改动了' })
     for (const bad of [{ message: '  \n', paths: ['b.txt'] }, { message: 'x', paths: [] }, { message: 'x', paths: ['../a.txt'] }, { message: 'x', paths: ['/etc/hosts'] }]) {
       expect(await commitWorktree({ root, worktree: wt, ...bad })).toMatchObject({ ok: false, message: '请求无效' })

@@ -112,7 +112,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
   vi.stubGlobal('window', {
     tr: {
-      pr: { write: async () => ({ ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit, create, push: async () => ({ ok: true, message: '已推送' }) },
+      pr: { write: async (r: { kind: string }) => (r.kind === 'pr' ? { ok: true, kind: 'pr', agent: 'claude', title: 'feat: new', body: '' } : { ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit, create, push: async () => ({ ok: true, message: '已推送' }) },
       git: { changes },
       ship: { shipToMain, pushBase, preflight, sync, pull, diffSince, diffSinceWithCut, handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }), readHandoff },
       agent: { onEvent: () => () => {} },
@@ -158,15 +158,19 @@ describe('合并到 main 并推送 after its push failed', () => {
     expect(failureWay(state().error!)).toBeNull()
     expect(state().steps.map((s) => [s.id, s.state])).toEqual([
       ['write', 'done'],
-      ['commit', 'done'],
       ['merge', 'done'],
       ['push', 'failed']
     ])
   })
 
+  // 提交 is its own run now: the hook that fails is its commit's, never the merge's.
   it('a commit hook that failed keeps its output and has the hand-off ready (Figma 73E3)', async () => {
     const failure = { kind: 'commit-hook' as const, message: 'pre-commit hook 没通过', next: 'handoff' as const, tail: 'eslint: 1 error' }
-    await shipUntilPushFails({ ok: false, step: 'commit', reason: 'failed', message: '提交失败', output: 'eslint: 1 error', failure })
+    commit.mockResolvedValueOnce({ ok: false, reason: 'failed', message: '提交失败', output: 'eslint: 1 error', failure })
+    startShip(ctx, 'commit', '提交 1 个文件')
+    await settle()
+    submitShip(ctx.worktree)
+    await settle()
     expect(state().error).toMatchObject({ step: 'commit', message: 'pre-commit hook 没通过', output: 'eslint: 1 error' })
     expect(state().error!.prompt).toContain('Wavi 运行「提交」时失败了：pre-commit hook 没通过。')
     expect(state().error!.prompt).toContain('eslint: 1 error')
@@ -210,20 +214,13 @@ describe('合并到 main 并推送 after its push failed', () => {
     expect(shipToMain).toHaveBeenCalledTimes(1)
   })
 
-  it('does not commit the ticked files twice when main says they went in before the step that failed', async () => {
-    await shipUntilPushFails({ ok: false, step: 'merge', reason: 'conflicts', message: '1 个文件和 main 冲突', conflicts: ['a.txt'], committed: true })
-    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c2', pushed: true })
-    retryShip(ctx.worktree)
-    await settle()
-    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
-  })
-
-  it('commits the ticked files again on a retry when main says they were not committed', async () => {
+  it('retries the merge with nothing to commit either', async () => {
     await shipUntilPushFails({ ok: false, step: 'merge', reason: 'blocked', message: '正在合并这个分支' })
     shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c2', pushed: true })
     retryShip(ctx.worktree)
     await settle()
-    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
+    expect(shipToMain).toHaveBeenCalledTimes(2)
+    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
   })
 })
 
@@ -244,24 +241,23 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
 
   it('is saved without the settings, and comes back with the step under way failed, ready for 重试', async () => {
     shipToMain.mockReturnValueOnce(new Promise(() => {}))
-    startShip(ctx, 'main', 'feat: new')
+    startShip({ ...ctx, paths: null }, 'main', 'feat: new')
     await settle()
     submitShip(ctx.worktree)
     await settle()
     const [saved] = savedShipRuns()
-    expect(saved).toMatchObject({ kind: 'main', committed: false, ctx: { root: '/repo', worktree: '/repo-wt', paths: ['new.txt'] } })
+    expect(saved).toMatchObject({ kind: 'main', committed: false, ctx: { root: '/repo', worktree: '/repo-wt', paths: null } })
     expect(saved!.ctx).not.toHaveProperty('settings')
-    // The ticked files are committed inside main's merge call: 提交 is the step under way (Figma 73E).
-    expect(saved!.state.steps.find((s) => s.id === 'commit')?.state).toBe('working')
+    expect(saved!.state.steps.find((s) => s.id === 'merge')?.state).toBe('working')
 
     // A new window.
     cancelShip(ctx.worktree)
     restoreShipRuns([saved!], ctx.settings)
-    expect(state().error).toEqual({ step: 'commit', message: '窗口重新加载时这一步还没有结果，点重试' })
+    expect(state().error).toEqual({ step: 'merge', message: '窗口重新加载时这一步还没有结果，点重试' })
     shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
     retryShip(ctx.worktree)
     await settle()
-    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'], message: 'feat: new' }))
+    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null, message: 'feat: new' }))
     expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c3' })
   })
 
@@ -287,9 +283,9 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
   describe('the run’s own commit', () => {
     const DIFF_A = 'diff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+x\n'
     /** A run that was under way when the window went, taken up again in a new one. */
-    async function reloaded(kind: 'main' | 'commit', hang: () => void): Promise<void> {
+    async function reloaded(hang: () => void): Promise<void> {
       hang()
-      startShip(ctx, kind, kind === 'main' ? 'feat: new' : '提交 1 个文件', { head: 'h0' })
+      startShip(ctx, 'commit', '提交 1 个文件', { head: 'h0' })
       await settle()
       submitShip(ctx.worktree)
       await settle()
@@ -299,38 +295,31 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       restoreShipRuns([saved!], ctx.settings)
     }
 
-    it('合并到 main 并推送: a commit of the ticked files on top of where the run started is not made again, although unticked files are left', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
-      preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 2, head: 'h1' })
-      diffSince.mockResolvedValueOnce(DIFF_A)
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
-      retryShip(ctx.worktree)
-      await settle()
-      expect(diffSince).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', since: 'h0' })
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
-    })
-
-    it('合并到 main 并推送: a branch still where the run started commits again, although nothing is uncommitted', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
+    it('a branch still where the run started commits again, although nothing is uncommitted', async () => {
+      await reloaded(() => commit.mockReturnValueOnce(new Promise(() => {})))
       preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 0, head: 'h0' })
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
       retryShip(ctx.worktree)
       await settle()
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
+      expect(commit).toHaveBeenCalledTimes(2)
+      expect(commit).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
     })
 
     it('a commit of other files on top is not the run’s', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
+      await reloaded(() => commit.mockReturnValueOnce(new Promise(() => {})))
       preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 1, head: 'h1' })
       diffSince.mockResolvedValueOnce('diff --git a/other.txt b/other.txt\n')
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      changes.mockResolvedValue({ uncommitted: [{ path: 'new.txt' }], untrackedOmitted: 0 })
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
       retryShip(ctx.worktree)
       await settle()
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
+      expect(diffSince).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', since: 'h0' })
+      expect(commit).toHaveBeenCalledTimes(2)
+      expect(commit).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
     })
 
     it('提交…: the commit that went in while no window watched finishes the run instead of committing again', async () => {
-      await reloaded('commit', () => commit.mockReturnValueOnce(new Promise(() => {})))
+      await reloaded(() => commit.mockReturnValueOnce(new Promise(() => {})))
       expect(state().error).toMatchObject({ step: 'commit' })
       preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 1, head: 'h1abcdef' })
       diffSince.mockResolvedValueOnce(DIFF_A)
@@ -339,16 +328,6 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       expect(commit).toHaveBeenCalledTimes(1)
       expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
       expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已提交 · h1abcde' })
-    })
-
-    it('remembers the hash it made and saves it', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
-      preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 0, head: 'h1' })
-      diffSince.mockResolvedValueOnce(DIFF_A)
-      shipToMain.mockResolvedValueOnce({ ok: false, step: 'merge', reason: 'conflicts', message: '1 个文件和 main 冲突', conflicts: ['a.txt'] })
-      retryShip(ctx.worktree)
-      await settle()
-      expect(savedShipRuns()[0]).toMatchObject({ commit: 'h1' })
     })
 
     // R26: the agent, still running in its terminal, committed some of the ticked files while the window reloaded.
@@ -391,7 +370,7 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
     // R30: the run's commit went in, then the branch moved again: the landed-commit check cannot tell, main refuses
     // the commit for having nothing left; the step is done instead of a 重试 that repeats the refusal.
     it('a commit main refuses for having nothing left, after a reload, is the one that went in', async () => {
-      await reloaded('commit', () => commit.mockReturnValueOnce(new Promise(() => {})))
+      await reloaded(() => commit.mockReturnValueOnce(new Promise(() => {})))
       preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 0, head: 'h2abcdef' })
       diffSince.mockResolvedValueOnce('diff --git a/new.txt b/new.txt\ndiff --git a/z.ts b/z.ts\n')
       commit.mockResolvedValueOnce({ ok: false, reason: 'blocked', message: '勾选的文件已经没有改动了' })
@@ -401,50 +380,35 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已提交 · h2abcde' })
     })
 
-    // U1: the same for 合并到 main 并推送: main refuses the commit inside its merge call; the run goes on to the merge
-    // with nothing to commit instead of a 重试 that repeats the refusal.
-    it('合并到 main 并推送: a commit main refuses for having nothing left, after a reload, is the one that went in', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
-      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 0, head: 'h2abcdef' })
-      diffSince.mockResolvedValueOnce('diff --git a/new.txt b/new.txt\ndiff --git a/z.ts b/z.ts\n')
-      shipToMain.mockResolvedValueOnce({ ok: false, step: 'commit', reason: 'blocked', message: '勾选的文件已经没有改动了' })
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
-      retryShip(ctx.worktree)
-      await settle()
-      expect(shipToMain).toHaveBeenCalledTimes(3)
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
-      expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
-      expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c3' })
-    })
-
-    it('合并到 main 并推送: a refusal of a run not taken up after a reload stays a failure', async () => {
-      shipToMain.mockResolvedValueOnce({ ok: false, step: 'commit', reason: 'blocked', message: '勾选的文件已经没有改动了' })
-      startShip(ctx, 'main', 'feat: new', { head: 'h0' })
+    it('a refusal of a run not taken up after a reload stays a failure', async () => {
+      commit.mockResolvedValueOnce({ ok: false, reason: 'blocked', message: '勾选的文件已经没有改动了' })
+      startShip(ctx, 'commit', '提交 1 个文件', { head: 'h0' })
       await settle()
       submitShip(ctx.worktree)
       await settle()
       expect(state().error).toMatchObject({ step: 'commit', message: '勾选的文件已经没有改动了' })
-      expect(shipToMain).toHaveBeenCalledTimes(1)
+      expect(commit).toHaveBeenCalledTimes(1)
     })
 
     // U11: a diff cut at its cap names only some files: whether the run's commit landed is not decided from it.
     it('a diff cut at the cap does not tell that the run’s commit went in', async () => {
-      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
+      await reloaded(() => commit.mockReturnValueOnce(new Promise(() => {})))
       preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 0, head: 'h1' })
       diffSince.mockResolvedValueOnce(DIFF_A)
       diffCut = true
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
       retryShip(ctx.worktree)
       await settle()
       expect(diffSince).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', since: 'h0' })
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
+      expect(commit).toHaveBeenCalledTimes(2)
+      expect(commit).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
     })
 
     // R58: a known limit of the legacy check (no start tip): a partial tick whose commit went in is committed again
     // (main refuses it); such a save exists once, from before the start tip was kept.
-    it('an older saved run without the start tip keeps the old check', async () => {
-      shipToMain.mockReturnValueOnce(new Promise(() => {}))
-      startShip(ctx, 'main', 'feat: new')
+    it('an older saved run without the start tip commits as before', async () => {
+      commit.mockReturnValueOnce(new Promise(() => {}))
+      startShip(ctx, 'commit', '提交 1 个文件')
       await settle()
       submitShip(ctx.worktree)
       await settle()
@@ -452,12 +416,11 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       const { head: _head, ...old } = saved!.ctx
       cancelShip(ctx.worktree)
       restoreShipRuns([{ ...saved!, ctx: old }], ctx.settings)
-      preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 0, head: 'h1' })
-      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
       retryShip(ctx.worktree)
       await settle()
       expect(diffSince).not.toHaveBeenCalled()
-      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
+      expect(commit).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -471,6 +434,40 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
     retryShip(ctx.worktree)
     await settle()
     expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', commit: 'c1' })
+  })
+})
+
+// 提交 is never bundled: an exit ships only what is committed, whatever files are left uncommitted.
+describe('the exits commit nothing', () => {
+  it('合并到 main 并推送 has no 提交 step and never sends paths to main', async () => {
+    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: true })
+    startShip(ctx, 'main', '合并到 main 并推送')
+    await settle()
+    expect(state().steps.map((s) => s.id)).toEqual(['write', 'merge', 'push'])
+    submitShip(ctx.worktree)
+    await settle()
+    expect(shipToMain).toHaveBeenCalledWith(expect.objectContaining({ paths: null }))
+    expect(commit).not.toHaveBeenCalled()
+  })
+
+  it('创建 PR writes only the title and body, and pushes without committing', async () => {
+    create.mockResolvedValueOnce({ ok: true, url: 'https://github.com/o/r/pull/9', number: 9 })
+    startShip(ctx, 'pr', '创建 PR')
+    await settle()
+    expect(state().steps.map((s) => s.id)).toEqual(['write', 'push', 'create'])
+    expect(state().stage).toBe('glance')
+    submitShip(ctx.worktree)
+    await settle()
+    expect(commit).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('推送到 PR #N goes straight to the push', async () => {
+    startShip({ ...ctx, openPr: { number: 9, url: 'u' } }, 'push-pr', '推送到 PR #9')
+    expect(state().steps.map((s) => s.id)).toEqual(['push'])
+    await settle()
+    expect(commit).not.toHaveBeenCalled()
+    expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
   })
 })
 

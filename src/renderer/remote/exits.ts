@@ -111,7 +111,7 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
 async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<RemoteResult> {
   const found = await planFor(place)
   if (!found) return remoteFail('不是 git 仓库')
-  const { changes, preflight, plan, ticked } = found
+  const { changes, preflight, plan } = found
   const exit = [plan.exits.primary, plan.exits.secondary].find((e) => e?.kind === kind)
   if (!exit || plan.nothingToShip) return remoteFail('这个出口现在不能用')
   if (useShips.getState().byWorktree[place.worktree.path]) return remoteFail('这个 worktree 已经有一个出口在进行')
@@ -133,8 +133,7 @@ async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<Rem
       agentSession: agent?.id ?? null,
       openIn: session.id,
       checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
-      settings: { review: settings.review, pr: settings.pr },
-      ticked
+      settings: { review: settings.review, pr: settings.pr }
     }),
     exit.kind === 'open-pr' ? 'push-pr' : exit.kind,
     exit.label,

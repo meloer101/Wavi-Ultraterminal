@@ -223,6 +223,10 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toEqual({ ok: false, message: 'Claude 没写出来：Credit balance is too low' })
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['b.txt'] })).toEqual({ ok: false, message: '勾选的文件没有改动' })
     expect(await writeShipText({ root, worktree: root, kind: 'pr', agent: 'claude', paths: [] })).toEqual({ ok: false, message: '这是基线分支本身' })
+    // 提交 in the main checkout: a commit message is written on the base too.
+    writeFileSync(join(root, 'a.txt'), 'a on main\n')
+    writeFileSync(join(log, 'claude-answer'), JSON.stringify({ type: 'result', structured_output: { message: 'docs: a' } }))
+    expect(await writeShipText({ root, worktree: root, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toMatchObject({ ok: true, kind: 'commit', message: 'docs: a' })
     expect(await writeShipText({ root: '/elsewhere', worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toEqual({ ok: false, message: '请求无效' })
     expect(existsSync(join(log, 'claude-stdin'))).toBe(true)
   })

@@ -50,7 +50,8 @@ const input = (patch: Partial<ChainInput> = {}, pf: ShipPreflight | null = prefl
 
 describe('zoneHeadline', () => {
   it('is the reason the other exit is blocked when the chain has no headline (73C1), split at its colon', () => {
-    const chain = shipChain(input({ gh: 'signed-out' }))
+    // The uncommitted files are left unticked: the exits are the moves.
+    const chain = shipChain(input({ gh: 'signed-out', ticked: 0 }))
     expect(chain.next?.id).toBe('main')
     expect(zoneHeadline(chain)).toEqual({ tone: 'blocked', strong: 'gh 还没有登录', rest: '在终端运行 gh auth login 后可以创建 PR' })
   })
@@ -121,7 +122,7 @@ describe('zoneMenu (73B)', () => {
   it('lists the fixed order, 合并到 <base>… opening the merge sheet, a blocked item with its short reason', () => {
     const chain = shipChain(input({ sessions: [{ status: 'running' }] }, preflight({ behindBase: 0 })))
     const menu = zoneMenu(chain)
-    expect(menu.map((m) => m.label)).toEqual(['提交…', '同步 main', '拉取', '推送', '创建 PR', '合并到 main…', '归档…'])
+    expect(menu.map((m) => m.label)).toEqual(['提交', '同步 main', '拉取', '推送', '创建 PR', '合并到 main…', '归档…'])
     expect(menu.find((m) => m.id === 'main')).toMatchObject({ command: 'merge-sheet', blocker: null })
     expect(menu.find((m) => m.id === 'sync')!.blocker).toBe(CHAIN_TEXT.commitFirst)
     expect(menu.find((m) => m.id === 'pull')!.blocker).toBe(CHAIN_TEXT.neverPushed)
@@ -132,7 +133,7 @@ describe('zoneMenu (73B)', () => {
     const pf = preflight({ openPr: 12, upstream: { ahead: 1, behind: 0 }, pushed: true })
     const chain = shipChain(input({ pr: { number: 12, draft: false, unpushed: true, remoteAhead: false, details: true, conflicting: false } }, pf))
     const labels = zoneMenu(chain).map((m) => m.label)
-    expect(labels).toContain('提交并推送到 PR #12')
+    expect(labels).toContain('推送到 PR #12')
     expect(labels).toContain('合并 PR #12…')
     expect(labels).not.toContain('合并到 main…')
   })
@@ -158,11 +159,12 @@ describe('paletteGitActions (73H)', () => {
     const pf = preflight({ behindBase: 4, baseConflicts: [], uncommitted: 0 })
     const chain = shipChain(input({ remembered: 'pr', local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 3, trackedUncommitted: 0 } }, pf))
     const rows = paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'session-cookie', remote: 'origin', reviewFiles: 12, pr: null, exitRegistered: true })
+    // Ticked files: 提交 is the chain's primary move now.
     expect(rows.map((r) => [r.label, r.detail, r.primary])).toEqual([
-      ['提交…', '3 个文件', false],
+      ['提交', '3 个文件', true],
       ['同步 main', '落后 4', false],
       ['推送', 'session-cookie → origin', false],
-      ['创建 PR', '', true],
+      ['创建 PR', '', false],
       ['合并到 main 并推送', '', false],
       ['审阅全部改动', '12 个文件', false]
     ])
@@ -172,7 +174,7 @@ describe('paletteGitActions (73H)', () => {
   // R23: ⇧⌘M runs an exit only while Git · 变更 has registered it; 合并 PR #N… it runs through the chain anyway.
   it('marks the primary exit with ⇧⌘M only where the shortcut runs it', () => {
     const facts = { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: false }
-    const chain = shipChain(input({ remembered: 'pr' }, preflight({ uncommitted: 0, behindBase: 4 })))
+    const chain = shipChain(input({ remembered: 'pr', ticked: 0 }, preflight({ uncommitted: 0, behindBase: 4 })))
     expect(chain.next?.id).toBe('pr')
     expect(paletteGitActions(chain, facts).find((r) => r.command === 'pr')?.primary).toBe(false)
     const pr = { number: 5, draft: false, unpushed: false, remoteAhead: false, details: true, conflicting: false }
@@ -216,7 +218,7 @@ describe('zoneShortcut', () => {
   })
 
   it('runs an exit that can run, does nothing for a blocked one or while busy, and leaves the rest to the merge sheet', () => {
-    const exits = shipChain(input())
+    const exits = shipChain(input({ ticked: 0 }))
     expect(zoneShortcut(exits, true)).toBe('main')
     expect(zoneShortcutShown(exits)).toBe(true)
     expect(zoneShortcut(exits, false)).toBe('nothing')
@@ -235,7 +237,7 @@ describe('zoneShortcut', () => {
 describe('prRunKind', () => {
   it('pushes to the chain’s open PR, also one only the preflight knows', () => {
     const chain = shipChain(input({ gh: 'signed-out', pr: { number: 5, draft: false, unpushed: false, remoteAhead: false, details: false, conflicting: false } }, preflight({ openPr: 5 })))
-    expect(chain.actions.find((a) => a.id === 'pr')?.label).toBe('提交并推送到 PR #5')
+    expect(chain.actions.find((a) => a.id === 'pr')?.label).toBe('推送到 PR #5')
     expect(prRunKind(chain)).toBe('push-pr')
     expect(prRunKind(shipChain(input()))).toBe('pr')
   })
