@@ -563,6 +563,8 @@ test.describe('session metrics: todo · context · usage', () => {
   test('the sidebar’s 额度 opens 设置 · 额度: the fullest vendor first, with its plan and every window (F11 · 额度页)', async () => {
     await fromMain('agent:usage-account', { vendor: 'codex', state: 'ok', plan: 'plus', at: Date.now() })
     await fromMain('agent:usage-account', { vendor: 'claude', state: 'ok', plan: 'max', at: Date.now() })
+    // 额度 sits under 看板 at the top (PRD v1.187); the foot keeps 更新 · 定时任务 · 设置.
+    await expect(page.locator('[data-region="sidebar"]').getByRole('navigation', { name: '导航' }).getByRole('button')).toHaveText([/^打开项目/, /^跳转到/, /^看板/, /^额度/])
     await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^额度/ }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
     await expect(dialog.getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')

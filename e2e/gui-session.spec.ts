@@ -736,8 +736,9 @@ test.describe('F23 GUI session (Claude)', () => {
     const bubble = feed().locator('[data-item]').last()
     await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
     expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
-    // The column is the composer's (960 for 中) with 40 each side for the pictures (Figma 59J).
-    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1040px')
+    // The column is the composer's (960 for 中) with room each side for a picture and its gap: at 16 / 25 the picture is
+    // a one-line bubble's height, 8 + 25 + 8 = 41, and 41 + 12 = 53 each side.
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1066px')
     // The agent's words start at the composer's left edge, its mark 12 outside; the bubble ends at its right edge, the
     // picture 8 outside.
     await feed().evaluate((el) => el.scrollTo(0, 0))
@@ -752,6 +753,12 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.round(mark!.x + mark!.width + 12)).toBe(Math.round(boxEdge!.x))
     expect(Math.round(sent!.x + sent!.width)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
     expect(Math.round(picture!.x - 8)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
+    // Both pictures are as tall as a one-line bubble; the user's shares its bubble's top, the agent's middle is its
+    // first line's.
+    expect(Math.round(picture!.height)).toBe(41)
+    expect(Math.round(mark!.height)).toBe(41)
+    expect(Math.round(picture!.y)).toBe(Math.round(sent!.y))
+    expect(Math.round(mark!.y + mark!.height / 2)).toBe(Math.round(words!.y + words!.height / 2))
     expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })

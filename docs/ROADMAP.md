@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-14：Worktree 视图减负（PRD v1.186，Figma 85B″）：每个 worktree 一行——状态 · 会话名 · agent 标志和分支 · 未提交 / 领先 / 冲突三个固定列；去掉路径、落后数、选中行的 kv 表和端口段，选中行只列冲突和文件；冲突雷达图标换八角形感叹号 octagon-alert（看板浮层同步）。e2e `worktree-panel.spec.ts`、`conflict-radar.spec.ts` 和两种主题截图核对过；没在作者的真实仓库上看过。
+- 2026-11-14：Worktree 视图减负（PRD v1.188，Figma 85B″）：每个 worktree 一行——状态 · 会话名 · agent 标志和分支 · 未提交 / 领先 / 冲突三个固定列；去掉路径、落后数、选中行的 kv 表和端口段，选中行只列冲突和文件；冲突雷达图标换八角形感叹号 octagon-alert（看板浮层同步）。e2e `worktree-panel.spec.ts`、`conflict-radar.spec.ts` 和两种主题截图核对过；没在作者的真实仓库上看过。
 - 2026-11-14：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.184，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。同日修复 issue #7：看板浮层里半透明终端四周的边距露出一圈看板、和终端底色不一样（借用的终端没带上主区域的边距着色规则，`BorrowedTerminal.module.css` 补上，e2e `overview.spec.ts` 断言）。随后作者定浮层窗口改玻璃底（PRD v1.185）：背景磨砂 + 窗口底层色调，不再透出看板（`SessionOverlay.module.css`）。同日修复：「进度 / GitHub」页签点不动——看板顶栏是窗口拖拽区，免拖拽规则只放行 `radiogroup`，页签改成 `tablist` 后点击被系统当成拖窗口（`Overview.module.css` 补上 `[role='tablist']`；e2e 的合成点击不经过拖拽区，测不到）。
 - 2026-11-14：一层底（PRD v1.183，Figma 84A）：侧栏那层色调铺满整个窗口（侧栏、卡片之间的缝、四周留边），在每张卡片处挖空，卡片按自己的不透明度浮在上面；设置 · 外观的小窗口预览同样画法。e2e 核对了底层的不透明度和挖洞的位置；玻璃上的实际效果还没在作者的 Mac 上看过。
 - 2026-11-14：CLI 会话的 agent teams（PRD v1.182，Figma 83″B / 83′C / 82′F）：lead 终端下面的队伍条，展开是按时间的泳道（谁在干活、谁给谁发了消息）；侧栏 lead 下面列队友，队友不再被当成 subagent 删掉。数据来自 hooks（2.1.325 实测）；GUI 会话没有队伍（`claude -p` 不起队友）。没在作者的 Mac 上跑过真实队伍。
@@ -342,6 +342,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] GUI 发出的图片留在消息上（PRD v1.169，Figma 71A）：`ChatItem` 用户消息加 `attachments`；`KeepImage`（`transcript-chat.ts`）由 `src/main/files.ts` `keepInlineImage` 实现，经 `DriverOptions.keepImage` 和读历史传进 Claude / Codex / Pi 的解析，ACP 发出时带附件路径、`session/load` 回放的图片块存成文件；`Feed.tsx` 复用输入框的 `Attachment`；e2e `gui-session.spec.ts` 粘贴一张图发出后气泡上方是 `sent-*.png`。没测：真 Claude / Codex / Pi / ACP agent 发图后的样子（只有假 Claude 和单测）；ACP 续上会话时的图片
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
+- [x] 对话头像和单行气泡一样高（PRD v1.186）：`--avatar` = 8 + 行高 + 8、列两侧留「头像 + 12」至少 40（`src/renderer/gui/Chat.module.css`）；e2e `reads like a chat` 量了高度和对齐
+- [x] 侧栏「额度」挪到「看板」下面（PRD v1.187，`src/renderer/sidebar/Sidebar.tsx`）；e2e `the sidebar’s 额度 opens 设置 · 额度` 量了上方顺序
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
