@@ -81,6 +81,8 @@ export class TeamWatcher {
     // A workflow's agents are the run's (workflows.ts), never teammates.
     if (payload.agent_type === 'workflow-subagent') return
     const before = this.teams.get(sessionId) ?? null
+    // Every hook of every Claude session comes here: without a team, only a spawn or an early start matters.
+    if (!before && event !== 'PostToolUse' && event !== 'SubagentStart' && event !== 'SubagentStop') return
     let team = before
     for (const hook of teamHooksOf(event, payload)) {
       if (hook.kind === 'reset') this.early.delete(sessionId)
