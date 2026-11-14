@@ -21,8 +21,9 @@ import { SelectionDrops } from './SelectionDrop'
 import { SessionRow } from './SessionRow'
 import { SubagentRow } from './SubagentRow'
 import { useSessionMeta } from '../session-meta/store'
+import { useDispatch } from '../dispatch/store'
 import type { SubagentInfo } from '@shared/agent-events'
-import { adjacentSessionId, buildSidebarGroups, visibleSessionIds, workflowItems, type SideItem } from './model'
+import { adjacentSessionId, buildSidebarGroups, pendingItems, visibleSessionIds, workflowItems, type SideItem } from './model'
 import type { WorkflowRun } from '@shared/workflow-run'
 import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
@@ -125,6 +126,8 @@ export function Sidebar() {
       return next
     })
   }, [])
+  // Figma 83B: the sessions a `wavi run` asked for hang under the session that asked until the user answers.
+  const confirms = useDispatch((s) => s.confirms)
   const subagents = useMemo(() => {
     const out: Record<string, SideItem[]> = { ...subagentLists }
     for (const [id, runs] of Object.entries(runLists)) {
@@ -132,8 +135,9 @@ export function Sidebar() {
       const lines = workflowItems(runs, { unread, folded })
       if (lines.length > 0) out[id] = [...lines, ...(subagentLists[id] ?? [])]
     }
+    for (const [id, waiting] of Object.entries(pendingItems(confirms))) out[id] = [...waiting, ...(out[id] ?? [])]
     return out
-  }, [subagentLists, runLists, sessions, folded])
+  }, [subagentLists, runLists, sessions, folded, confirms])
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
     [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]

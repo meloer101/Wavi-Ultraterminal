@@ -5,6 +5,7 @@ import {
   buildSidebarGroups,
   nestedTitle,
   nextAttentionSessionId,
+  pendingItems,
   sameRow,
   sameSubagent,
   workflowItems,
@@ -258,6 +259,26 @@ describe('subagents under their session (PRD F21 v1.109, Figma 44B)', () => {
     expect(rows[2]!.title).toBe('review')
     expect(rows[2]!.branch).toBe('快照')
     expect(visibleSessionIds(groups)).toEqual(['parent', 'c1', 'g1', 'c2'])
+  })
+
+  it('hangs the sessions a wavi run waits to start after the dispatcher’s children, on its line (Figma 83B)', () => {
+    const plan = (title: string) => ({ item: { title } }) as never
+    const waiting = pendingItems([
+      { childId: 'n1', parentId: 'parent', plan: plan('登录页 e2e') },
+      { childId: 'n2', parentId: 'parent', plan: plan('Safari 用例') },
+      { childId: 'n3', parentId: 'c1', plan: plan('review') }
+    ])
+    expect(waiting.parent?.map((w) => `${w.id} ${w.title} ${w.kind} ${w.right}`)).toEqual(['pending:n1 登录页 e2e pending 待开始', 'pending:n2 Safari 用例 pending 待开始'])
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [session('parent', 'wam', 'needs_you'), session('c1', 'wa1', 'running', 0, { dispatchedBy: 'parent' })],
+      subagents: { parent: [...(waiting.parent ?? []), sub('p1')], c1: waiting.c1 ?? [] }
+    })
+    expect(draw(groups[0]!.rows)).toEqual(['parent:0:parent', 'c1:1:child:opens', '  pending:n3:2:last:pass', '  pending:n1:1:child', '  pending:n2:1:child', '  p1:1:last'])
+    // Waiting is not asking: the row is never the attention variant, and no keyboard stop.
+    expect(groups[0]!.rows[1]!.after?.[0]).toMatchObject({ kind: 'pending', attention: false })
+    expect(visibleSessionIds(groups)).toEqual(['parent', 'c1'])
   })
 
   it('ends the dispatcher’s line at its last child when it has no subagents of its own', () => {

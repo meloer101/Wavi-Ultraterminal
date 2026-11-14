@@ -3,15 +3,17 @@ import type { SubagentInfo } from '@shared/agent-events'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
 import type { SidebarGroupBy } from '@shared/workspace-file'
+import type { PendingStart } from '@shared/dispatch'
 import { phaseLine } from '../lifecycle/present'
 import { currentPhase, isLiveRun, phaseViews, runOutcome, type WorkflowPhaseView, type WorkflowRun } from '@shared/workflow-run'
 
 /**
- * A line hung under a session: a subagent (Figma 44B), or a Claude workflow run and its phases (Figma 74D, PRD F25).
- * `glyph` and `right` are the run's and phases' own; a subagent's glyph comes from its asks.
+ * A line hung under a session: a subagent (Figma 44B), a Claude workflow run and its phases (Figma 74D, PRD F25), or a
+ * session it asked to start that waits for 开始 (Figma 83B). `glyph` and `right` are the run's and phases' own; a
+ * subagent's glyph comes from its asks; a waiting one has a dashed ring instead.
  */
 export interface SideItem extends SubagentInfo {
-  kind?: 'workflow' | 'phase'
+  kind?: 'workflow' | 'phase' | 'pending'
   glyph?: SessionStatus
   /** Right-hand figure: a run's or phase's done / all. */
   right?: string
@@ -66,8 +68,8 @@ export interface SubagentRowModel {
   tree: 'child' | 'last'
   /** Depth 2: its session is not the last of its dispatcher's line, so that line runs on past this row. */
   pass: boolean
-  /** A workflow run's row, or one of its phases (Figma 74D); absent for a subagent. */
-  kind?: 'workflow' | 'phase'
+  /** A workflow run's row, one of its phases (Figma 74D), or a session waiting for 开始 (Figma 83B); absent for a subagent. */
+  kind?: 'workflow' | 'phase' | 'pending'
   glyph?: SessionStatus
   right?: string
 }
@@ -228,6 +230,16 @@ export function workflowItems(runs: readonly WorkflowRun[], { unread, folded }: 
     )
   }
   return items
+}
+
+/**
+ * Figma 83B: each `wavi run` waiting for 开始, as a line under the session that asked (after the sessions it already
+ * started), in the order they were asked. They go when the user answers: 开始 makes them real child rows, 拒绝 drops them.
+ */
+export function pendingItems(confirms: ReadonlyArray<Pick<PendingStart, 'childId' | 'parentId' | 'plan'>>): Record<SessionId, SideItem[]> {
+  const out: Record<SessionId, SideItem[]> = {}
+  for (const c of confirms) (out[c.parentId] ??= []).push({ id: `pending:${c.childId}`, title: c.plan.item.title, kind: 'pending', right: '待开始' })
+  return out
 }
 
 /**

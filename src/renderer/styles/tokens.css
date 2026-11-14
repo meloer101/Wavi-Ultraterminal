@@ -26,6 +26,8 @@
   --radius-sheet: 16px;
   --radius-popover: 12px;
   --radius-button-glass: 8px;
+  /* The bend where the sidebar's dispatch line turns into a child's glyph (Figma 83B, like 68′'s fan-out curves). */
+  --radius-tree: 8px;
   --glass-scrim-blur: 4px;
   --glass-blur: 28px;
 

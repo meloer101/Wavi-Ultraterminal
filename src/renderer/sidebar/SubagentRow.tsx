@@ -18,7 +18,8 @@ interface Props {
  */
 export const SubagentRow = memo(
   function SubagentRow({ row, onSelect, onToggle }: Props) {
-    // Figma 74D: a workflow run (state · name · current phase done / all) and its phases hang here like subagents.
+    // Figma 74D: a workflow run (state · name · current phase done / all) and its phases hang here like subagents;
+    // Figma 83B: so does a session a `wavi run` asked for, until the user answers (a click opens the session that asked).
     const folds = row.kind === 'workflow' && onToggle
     return (
       <div
@@ -33,7 +34,11 @@ export const SubagentRow = memo(
       >
         <span className={styles.line}>
           <span className={styles.glyph}>
-            <StatusGlyph status={row.glyph ?? (row.attention ? 'needs_you' : 'running')} />
+            {row.kind === 'pending' ? (
+              <span className={styles.pendingGlyph} aria-label="待开始" />
+            ) : (
+              <StatusGlyph status={row.glyph ?? (row.attention ? 'needs_you' : 'running')} />
+            )}
           </span>
           <span className={styles.title}>{row.title}</span>
           {(row.right ?? row.model) && <span className={styles.model}>{row.right ?? row.model}</span>}
