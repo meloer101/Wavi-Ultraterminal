@@ -13,6 +13,7 @@ import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
 import { sidebarWidthFor } from './layout'
 import { SidebarDrawer } from './SidebarDrawer'
+import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
 
@@ -35,6 +36,7 @@ export function SecondaryShell() {
 
   return (
     <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'} data-session-ui={sessionUi}>
+      <GlassBase />
       <SidebarDrawer collapsed={collapsed} width={sidebarWidth} />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
@@ -42,7 +44,7 @@ export function SecondaryShell() {
           <section className={styles.terminal} data-region="split">
             <SplitArea />
             {!hasSession && (
-              <div className={empty.empty}>
+              <div className={empty.empty} data-glass-card="">
                 <p className={empty.title}>{project ? `${project.name} 没有在这里显示的会话` : '这个窗口没有在显示的会话'}</p>
                 <p className={empty.hint}>从侧栏选一个会话，或按 ⌘N 新建。关掉这个窗口，会话照常运行。</p>
               </div>

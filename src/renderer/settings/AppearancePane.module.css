@@ -162,7 +162,8 @@
 
 /*
  * 外观's preview (Figma 66A): a small window over the desktop field, on a blurred base layer as the real window. The cards
- * are the terminal and the chat at their own opacities; the sidebar is the shown session's tint (AppShell's --tr-sidebar-bg).
+ * are the terminal and the chat at their own opacities, on the base layer (ui/GlassBase: the shown session's tint, cut out
+ * at the cards, PRD v1.181).
  */
 .windowPreview {
   position: relative;
@@ -194,6 +195,8 @@
 
 .miniSidebar,
 .miniCard {
+  /* Over the base layer (an absolute sibling). */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -203,7 +206,6 @@
 .miniSidebar {
   flex: 0 0 26%;
   border-radius: var(--radius-sm);
-  background: var(--tr-sidebar-bg, var(--glass-shell));
 }
 
 .miniCard {

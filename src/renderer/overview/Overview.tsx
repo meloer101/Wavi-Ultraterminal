@@ -203,7 +203,7 @@ export function Overview() {
   return (
     <MetaColumns.Provider value={metaColumns}>
       <Picked.Provider value={pickedSet}>
-      <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
+      <div className={styles.overview} data-region="overview" data-glass-card="" onKeyDown={onKeyDown}>
         <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
           {sidebarCollapsed && (
             <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>

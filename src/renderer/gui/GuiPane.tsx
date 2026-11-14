@@ -45,6 +45,7 @@ export function GuiCard({ sessionId, cwd, agent, active, rect }: { sessionId: Se
     <div
       className={styles.pane}
       data-active={active}
+      data-glass-card=""
       data-shown={rect !== undefined}
       data-session-id={sessionId}
       data-pane-box

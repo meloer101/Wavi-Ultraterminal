@@ -222,6 +222,7 @@ export function EmptyMain() {
       ref={cardRef}
       className={styles.empty}
       data-testid="empty-main"
+      data-glass-card=""
       data-dragging={dragging}
       onDragOver={onDragOver}
       onDragLeave={() => setDragging(false)}

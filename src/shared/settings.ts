@@ -91,8 +91,9 @@ export interface AppearanceSettings {
   /** GUI sessions (Figma 51D). */
   chat: ChatAppearance
   /**
-   * The window's base layer. On 玻璃 the sidebar is the theme's shell color one step (10%) more opaque than the shown
-   * session's card (terminalOpacity or chat.opacity, PRD v1.179); 实色 is opaque throughout.
+   * The window's base layer. On 玻璃 the base layer under the sidebar and between the cards is the theme's shell color one
+   * step (10%) more opaque than the shown session's card (terminalOpacity or chat.opacity, PRD v1.179 / v1.181); 实色 is
+   * opaque throughout.
    */
   windowMaterial: WindowMaterial
 }

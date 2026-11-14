@@ -1,0 +1,9 @@
+/* The window's base layer (PRD v1.181, Figma 84A): the shown session's shell tint, one step more opaque than the cards,
+   under everything in its parent; GlassBase cuts it out where the cards are. */
+.base {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--tr-sidebar-bg, var(--glass-shell));
+}

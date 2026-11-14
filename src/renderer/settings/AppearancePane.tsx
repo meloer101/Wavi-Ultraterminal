@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { FULLSCREEN_BACKDROPS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
+import { GlassBase } from '../ui/GlassBase'
 import { PreviewPage, Row, Section, ThemeSwatches } from './controls'
 import { MATERIAL_OPTIONS, THEME_OPTIONS, isPageDefault, pageDefaults } from './appearance-form'
 import styles from './AppearancePane.module.css'
@@ -39,22 +40,23 @@ const BACKDROP_OPTIONS: ReadonlyArray<{ value: FullscreenBackdrop; label: string
 
 /**
  * A small window over a desktop field, drawn with the variables the app applies (appearance/map.ts, AppShell): the
- * cards are the terminal and the chat at their opacities, the sidebar one step more opaque than the shown session's.
+ * cards are the terminal and the chat at their opacities on the base layer, one step more opaque than the shown session's.
  */
 function WindowPreview() {
   return (
     <div className={styles.windowPreview} data-testid="window-preview" aria-hidden>
       <div className={styles.miniWindow}>
+        <GlassBase />
         <div className={styles.miniSidebar}>
           <span />
           <span />
           <span />
         </div>
-        <div className={`${styles.miniCard} ${styles.miniTerminal}`}>
+        <div className={`${styles.miniCard} ${styles.miniTerminal}`} data-glass-card="">
           <span />
           <span />
         </div>
-        <div className={`${styles.miniCard} ${styles.miniChat}`}>
+        <div className={`${styles.miniCard} ${styles.miniChat}`} data-glass-card="">
           <span />
           <span />
         </div>

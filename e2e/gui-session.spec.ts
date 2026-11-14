@@ -80,21 +80,39 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
     expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
     await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
-    // PRD v1.179: beside a GUI session the sidebar is the chat card's opacity + 10%; the overview (which keeps this
-    // session active) takes the terminal's.
+    // PRD v1.179 / v1.181: beside a GUI session the base layer (the sidebar, the gaps and margins round the cards) is the
+    // chat card's opacity + 10%; the overview (which keeps this session active) takes the terminal's.
     const setLook = (p: unknown) => page.evaluate((x) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(x), p)
-    const sidebarAlpha = () =>
-      page.locator('[data-region="sidebar"]').evaluate((el) => {
+    const baseAlpha = () =>
+      page.locator('[data-glass-base]').first().evaluate((el) => {
         const m = /\/\s*([\d.]+)\)$/.exec(getComputedStyle(el).backgroundColor)
         return m ? Number(m[1]) : 1
       })
+    // Figma 84A: the base layer is cut out where each shown card is, so the card sits on the bare glass. Returns the
+    // number of holes and the first one's top-left corner against the card's, in the base layer's coordinates.
+    const baseHoles = () =>
+      page.evaluate((selector) => {
+        const base = document.querySelector<HTMLElement>('[data-glass-base]')!
+        const card = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect()
+        const origin = base.getBoundingClientRect()
+        const path = getComputedStyle(base).clipPath
+        const n = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number)
+        // The outer box is M0 0 H w V h H 0 Z; the first hole starts at its top-left arc's end (left + radius, top).
+        const radius = parseFloat(getComputedStyle(document.querySelector(selector)!).borderTopLeftRadius)
+        return { holes: (path.match(/Z/gi) ?? []).length - 1, x: n[5]! - radius - (card.left - origin.left), y: n[6]! - (card.top - origin.top) }
+      }, '[data-glass-card][data-session-id="s1"]')
     await setLook({ appearance: { terminalOpacity: 0.5, chat: { opacity: 0.3 } } })
-    await expect.poll(sidebarAlpha).toBeCloseTo(0.4)
+    await expect.poll(baseAlpha).toBeCloseTo(0.4)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(1)
+    const hole = await baseHoles()
+    expect(Math.abs(hole.x)).toBeLessThan(1)
+    expect(Math.abs(hole.y)).toBeLessThan(1)
     await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
-    await expect.poll(sidebarAlpha).toBeCloseTo(0.6)
+    await expect.poll(baseAlpha).toBeCloseTo(0.6)
     await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
     await expect(chat()).toBeVisible(WITHIN)
-    await expect.poll(sidebarAlpha).toBeCloseTo(0.4)
+    await expect.poll(baseAlpha).toBeCloseTo(0.4)
+    await page.screenshot({ path: join(SHOTS, 'base-layer-dark.png') })
     await setLook({ appearance: { terminalOpacity: 0.85, chat: { opacity: 0.85 } } })
     // Figma 65B: nothing said yet — the model button lists the agents first, the current one's models beside them.
     await composer().locator('[data-picker="model"]').click()
