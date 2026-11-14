@@ -6,6 +6,7 @@ import {
   removeProjectConfirmation,
   removeProjectMenuLabel
 } from '@shared/lifecycle'
+import { batchConfirmation, batchPlan } from '@shared/batch-actions'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
 import { hereChoice, hereMenu } from '../new-session/model'
@@ -105,7 +106,35 @@ export async function closeSessionInteractive(sessionId: SessionId): Promise<boo
   if (!session) return false
   const prompt = closeSessionConfirmation(session.title, session.status)
   if (prompt && !(await window.tr.ui.confirm(prompt))) return false
+  return closeSessionNow(sessionId)
+}
+
+/**
+ * Closes the sessions picked in the sidebar (⇧ / ⌘ click) after one confirmation that names how many and how many of
+ * them are running or waiting (the overview's 关闭 N 个). Resolves to whether they were closed.
+ */
+export async function closeSessionsInteractive(ids: readonly SessionId[]): Promise<boolean> {
+  const sessions = useWorkspace.getState().sessions
+  const candidates = ids
+    .flatMap((id) => sessions.filter((s) => s.id === id))
+    .map(({ id, kind, title, status, phase }) => ({ id, kind, title, status, ...(phase ? { phase } : {}) }))
+  const prompt = batchConfirmation(batchPlan('close', candidates))
+  if (!prompt || !(await window.tr.ui.confirm(prompt))) return false
+  // One at a time: the last session of a snapshot worktree takes the worktree with it (closeSessionNow).
+  for (const { id } of candidates) await closeSessionNow(id)
+  return true
+}
+
+/** Right-click on one of several sessions picked in the sidebar. */
+export async function openPickedSessionsMenu(ids: readonly SessionId[], anchor: MenuAnchor): Promise<boolean> {
+  const choice = await popupMenu([{ type: 'item', id: 'close', label: `关闭 ${ids.length} 个会话` }], anchor)
+  return choice === 'close' && closeSessionsInteractive(ids)
+}
+
+async function closeSessionNow(sessionId: SessionId): Promise<boolean> {
   const state = useWorkspace.getState()
+  const session = state.sessions.find((s) => s.id === sessionId)
+  if (!session) return false
   const worktree = state.worktrees.find((w) => w.id === session.worktreeId)
   const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
   // A read-only snapshot of a dispatcher's working tree (PRD F21 --base snapshot) goes with its last session.

@@ -1,11 +1,18 @@
-import { Fragment, useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { Clock, Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
 import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'
 import { usePaneView, useSecondaryWindow, useWindowKey } from '../state/window-scope'
 import { pressSession } from '../split/drag'
-import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
+import {
+  closeSessionsInteractive,
+  newSessionInProject,
+  openPickedSessionsMenu,
+  openProjectInteractive,
+  openProjectMenu,
+  openSessionContextMenu
+} from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import { popupMenu, type MenuAnchor } from '../ui/menu'
 import { NavItem } from './NavItem'
@@ -23,7 +30,8 @@ import { SubagentRow } from './SubagentRow'
 import { useSessionMeta } from '../session-meta/store'
 import { useDispatch } from '../dispatch/store'
 import type { SubagentInfo } from '@shared/agent-events'
-import { adjacentSessionId, buildSidebarGroups, pendingItems, teamItems, visibleSessionIds, workflowItems, type SideItem } from './model'
+import type { SessionId } from '@shared/types'
+import { adjacentSessionId, buildSidebarGroups, pendingItems, pickSessions, teamItems, visibleSessionIds, workflowItems, type SideItem } from './model'
 import type { WorkflowRun } from '@shared/workflow-run'
 import type { TeamState } from '@shared/agent-team'
 import './shortcuts-runtime'
@@ -99,7 +107,6 @@ export function Sidebar() {
     toggleOverview()
   }, [windowKey])
   const listRef = useRef<HTMLDivElement>(null)
-  const onRowContextMenu = useCallback((id: string, anchor: MenuAnchor) => void openSessionContextMenu(id, anchor), [])
   const onRowPress = useCallback((e: PointerEvent<HTMLElement>, id: string) => pressSession(e, id, 'sidebar'), [])
 
   // Only the subagent lists: the context readings that change every second elsewhere in session-meta do not rebuild rows.
@@ -156,12 +163,49 @@ export function Sidebar() {
     [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
+  // Rows picked with ⇧ / ⌘ click (issue #6), closed together after one confirmation. A closed or folded row drops out.
+  const [picks, setPicks] = useState<{ ids: readonly SessionId[]; anchor: SessionId | null }>({ ids: [], anchor: null })
+  const picked = useMemo(() => picks.ids.filter((id) => ids.includes(id)), [picks.ids, ids])
+  // Read by the row handlers, which stay the same functions so the memoized rows do not redraw on every store change.
+  const latest = useRef({ ids, activeSessionId, picked })
+  useLayoutEffect(() => {
+    latest.current = { ids, activeSessionId, picked }
+  })
+  const onPick = useCallback((id: SessionId, how: 'range' | 'toggle') => {
+    const { ids: ordered, activeSessionId: active, picked: now } = latest.current
+    setPicks((p) => ({ ids: pickSessions({ ordered, picked: now, anchor: p.anchor, active, id, how }), anchor: id }))
+  }, [])
+  const onRowSelect = useCallback(
+    (id: SessionId) => {
+      setPicks({ ids: [], anchor: id })
+      setActiveSession(id)
+    },
+    [setActiveSession]
+  )
+  const closePicked = useCallback(async (ids: readonly SessionId[], anchor?: MenuAnchor) => {
+    const closed = await (anchor ? openPickedSessionsMenu(ids, anchor) : closeSessionsInteractive(ids))
+    if (closed) setPicks({ ids: [], anchor: null })
+  }, [])
+  const onRowContextMenu = useCallback(
+    (id: SessionId, anchor: MenuAnchor) => {
+      const now = latest.current.picked
+      if (now.length > 1 && now.includes(id)) void closePicked(now, anchor)
+      else void openSessionContextMenu(id, anchor)
+    },
+    [closePicked]
+  )
   const waiting = useMemo(() => sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency), [sessions])
   // Roving tabindex: the selected row if it is listed, else the first one.
   const tabStopId = activeSessionId !== null && ids.includes(activeSessionId) ? activeSessionId : (ids[0] ?? null)
 
   const onListKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
+      if (picked.length > 0 && (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault()
+        if (e.key === 'Escape') setPicks((p) => ({ ...p, ids: [] }))
+        else void closePicked(picked)
+        return
+      }
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
       const focusedId = (e.target as HTMLElement).closest<HTMLElement>('[data-session-id]')?.dataset.sessionId ?? null
@@ -171,7 +215,7 @@ export function Sidebar() {
       setActiveSession(next)
       listRef.current?.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(next)}"]`)?.focus()
     },
-    [groups, activeSessionId, setActiveSession]
+    [groups, activeSessionId, setActiveSession, picked, closePicked]
   )
 
   return (
@@ -236,9 +280,11 @@ export function Sidebar() {
                   row={row}
                   selected={!overview && row.session.id === activeSessionId}
                   shown={!overview && !inPanes.includes(row.session.id) && shown.split('\n').includes(row.session.id)}
+                  picked={picked.includes(row.session.id)}
+                  onPick={onPick}
                   onPress={onRowPress}
                   tabStop={row.session.id === tabStopId}
-                  onSelect={setActiveSession}
+                  onSelect={onRowSelect}
                   onContextMenu={onRowContextMenu}
                 />
                 {row.after?.map((sub) => <SubagentRow key={sub.id} row={sub} onSelect={setActiveSession} onToggle={toggleRun} />)}

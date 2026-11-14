@@ -2,6 +2,7 @@
 import type { SubagentInfo } from '@shared/agent-events'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
+import { rangeBetween, togglePicked } from '@shared/batch-actions'
 import type { SidebarGroupBy } from '@shared/workspace-file'
 import type { PendingStart } from '@shared/dispatch'
 import { memberLine, TEAM_GLYPH, type TeamState } from '@shared/agent-team'
@@ -400,6 +401,32 @@ export function buildStatusGroups({ projects, worktrees, sessions, collapsedStat
 /** Session ids in the order they appear on screen. */
 export function visibleSessionIds(groups: SidebarGroup[]): SessionId[] {
   return groups.flatMap((g) => g.rows.map((r) => r.session.id))
+}
+
+/**
+ * ⇧ / ⌘ click on a session row (the overview's F9 picking, in the sidebar): ⇧ adds every row between the anchor and
+ * the clicked one in drawn order, across groups; ⌘ toggles one. The row the user is in counts as picked when picking
+ * starts, as a selection does in Finder. Returned in drawn order; ids no longer drawn drop out.
+ */
+export function pickSessions(input: {
+  ordered: readonly SessionId[]
+  picked: readonly SessionId[]
+  /** Where a ⇧ range starts: the last row clicked; the active session until one was. */
+  anchor: SessionId | null
+  active: SessionId | null
+  id: SessionId
+  how: 'range' | 'toggle'
+}): SessionId[] {
+  const { ordered, anchor, active, id, how } = input
+  const drawn = (x: SessionId | null): x is SessionId => x !== null && ordered.includes(x)
+  const start = input.picked.filter(drawn)
+  if (start.length === 0 && drawn(active) && active !== id) start.push(active)
+  const next =
+    how === 'range'
+      ? [...start, ...rangeBetween(ordered, drawn(anchor) ? anchor : drawn(active) ? active : null, id)]
+      : togglePicked(start, id)
+  const set = new Set(next)
+  return ordered.filter((x) => set.has(x))
 }
 
 /** ⌘1–⌘9: the nth visible session (1-based), or null when there are fewer. */
