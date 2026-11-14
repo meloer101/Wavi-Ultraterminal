@@ -1,11 +1,13 @@
-// 设置 · 外观 (Figma 66A / 66B): what the whole window looks like — theme, material, 全屏背景. The terminal's and the
-// chat's own settings are on 终端 and 对话.
-import type { ReactNode } from 'react'
-import { FULLSCREEN_BACKDROPS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
+// 设置 · 外观 (Figma 66A / 66B, 86): what the whole window looks like — theme, material, 背景图片, 全屏背景. The
+// terminal's and the chat's own settings are on 终端 and 对话.
+import { useRef, type ReactNode } from 'react'
+import { backgroundImageUrl } from '@shared/background-image'
+import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { GlassBase } from '../ui/GlassBase'
-import { PreviewPage, Row, Section, ThemeSwatches } from './controls'
-import { MATERIAL_OPTIONS, THEME_OPTIONS, isPageDefault, pageDefaults } from './appearance-form'
+import { Button, PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
+import { MATERIAL_OPTIONS, THEME_OPTIONS, formatPercent, isPageDefault, pageDefaults } from './appearance-form'
+import { backgroundFromFile } from './background-image'
 import styles from './AppearancePane.module.css'
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
@@ -67,6 +69,8 @@ function WindowPreview() {
 
 export function AppearancePane({ appearance, update }: { appearance: AppearanceSettings; update: (patch: AppearancePatch) => void }) {
   const solid = appearance.windowMaterial === 'solid'
+  const image = appearance.backgroundImage
+  const picker = useRef<HTMLInputElement>(null)
   return (
     <PreviewPage
       title="外观"
@@ -84,8 +88,54 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
         </Row>
       </Section>
 
-      {/* 实色 (Figma 57C) draws no field in full screen, so there is nothing to choose. */}
+      {/* 背景图片 (Figma 86A / 86B): drawn under the base layer on 玻璃 only; 实色 is opaque. */}
       {!solid && (
+        <Section title="背景图片">
+          <Row label="图片" id="backgroundImage">
+            <div className={styles.avatarControl}>
+              {image && <img className={styles.backgroundThumb} src={backgroundImageUrl(image)} alt="背景图片" />}
+              <Button onClick={() => picker.current?.click()}>{image ? '更换…' : '选择图片…'}</Button>
+              {image && <Button onClick={() => update({ backgroundImage: '' })}>移除</Button>}
+            </div>
+            <input
+              ref={picker}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+              hidden
+              data-testid="background-file"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                e.currentTarget.value = ''
+                if (!file) return
+                void backgroundFromFile(file)
+                  .then((jpeg) => window.tr.settings.setBackgroundImage(jpeg))
+                  .then(
+                    (stored) => {
+                      if (!stored) console.warn('[settings] main refused the background picture')
+                    },
+                    (error: unknown) => console.warn('[settings] could not read the background picture:', error)
+                  )
+              }}
+            />
+          </Row>
+          {image && (
+            <Row label="模糊" id="backgroundBlur">
+              <Slider
+                label="模糊"
+                value={appearance.backgroundBlur}
+                min={LIMITS.backgroundBlur.min}
+                max={LIMITS.backgroundBlur.max}
+                step={0.01}
+                format={formatPercent}
+                onCommit={(backgroundBlur) => update({ backgroundBlur })}
+              />
+            </Row>
+          )}
+        </Section>
+      )}
+
+      {/* 实色 (Figma 57C) draws no field in full screen, and a 背景图片 takes its place (Figma 86B): nothing to choose. */}
+      {!solid && !image && (
         <Section title="全屏背景">
           <ThemeSwatches
             label="全屏背景"

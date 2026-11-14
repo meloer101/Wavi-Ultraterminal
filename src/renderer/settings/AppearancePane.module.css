@@ -153,6 +153,17 @@
   color: inherit;
 }
 
+/* 背景图片 (Figma 86B): a 48 × 28 thumbnail before 更换… / 移除, the same line as 我的头像's. */
+.backgroundThumb {
+  width: 48px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  /* An outline draws over the picture; an inset shadow would sit under it. */
+  outline: 1px solid var(--border-subtle);
+  outline-offset: -1px;
+}
+
 /* 我的头像 (Figma 66D): the picture and its buttons on one line, 28 high. */
 .avatarControl {
   display: flex;
@@ -186,6 +197,23 @@
 /* Liquid Glass barely blurs (PRD §5 v1.95); 实色's shell is opaque anyway. */
 :global(:root[data-material='liquid']) .miniWindow {
   backdrop-filter: blur(2px);
+}
+
+/* 背景图片 (Figma 86B): the small window has the user's picture under its base layer, as the real one; the blur is scaled
+   down with the window. */
+:global(:root[data-bg-image='on']) .miniWindow {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+:global(:root[data-bg-image='on']) .miniWindow::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(-0.5 * var(--tr-bg-blur, 0px));
+  pointer-events: none;
+  background: var(--tr-bg-image) center / cover no-repeat;
+  filter: blur(calc(0.25 * var(--tr-bg-blur, 0px)));
 }
 
 :global(:root[data-material='solid']) .miniWindow {

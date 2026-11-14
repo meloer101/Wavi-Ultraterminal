@@ -328,6 +328,11 @@ export interface SettingsApi {
    * resolves to what happened. A file that cannot be read is explained by a native dialog from main.
    */
   importTheme(): Promise<ThemeImportOutcome>
+  /**
+   * 背景图片 (PRD v1.189): stores a JPEG the settings page encoded from the picked file (shared/background-image.ts) and
+   * makes it the window's background. Resolves to false when main refused it (not a JPEG, too large, write failed).
+   */
+  setBackgroundImage(jpeg: Uint8Array): Promise<boolean>
   /** A settings write failed (disk full, permissions, …); the change is applied in memory but not saved. */
   onSaveError(listener: (error: SettingsSaveError) => void): Unsubscribe
 }
@@ -531,6 +536,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   settingsImportTheme: 'settings:import-theme',
+  settingsSetBackgroundImage: 'settings:set-background-image',
   /** main → every window, payload AppSettings */
   settingsChanged: 'settings:changed',
   /** main → every window, payload SettingsSaveError */
