@@ -92,11 +92,11 @@ export function chatPreviewCaption(c: Pick<ChatAppearance, 'latinFont' | 'cjkFon
 // --- Three pages (Figma 66) ------------------------------------------------------------------------------------------
 
 /**
- * What each page's 恢复默认 resets: that page's own settings. The theme and 全屏背景 are not reset anywhere; each is
- * one click away on 外观.
+ * What each page's 恢复默认 resets: that page's own settings. The theme, 全屏背景 and the 背景图片 itself are not reset
+ * anywhere (each is the user's pick, one click away on 外观); its 模糊 is.
  */
 export const RESET_KEYS = {
-  appearance: ['windowMaterial'],
+  appearance: ['windowMaterial', 'backgroundBlur'],
   terminal: ['latinFont', 'cjkFont', 'fontSize', 'lineHeight', 'ligatures', 'terminalBackground', 'terminalColors', 'terminalOpacity', 'screenReader'],
   chat: ['chat']
 } as const satisfies Record<string, ReadonlyArray<keyof AppearanceSettings>>
