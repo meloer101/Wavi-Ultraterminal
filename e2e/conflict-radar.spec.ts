@@ -148,13 +148,15 @@ test.describe('conflict radar', () => {
     await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: 'Worktree' }).click()
     await expect(panel().getByRole('heading', { name: 'Worktree' })).toBeVisible()
     const rowB = panel().locator(`li[data-path$="/wt-b"]`)
-    await expect(rowB.getByTestId('radar-tag')).toHaveText('和 main 会冲突', WITHIN)
-    await expect(panel().locator(`li[data-path$="/wt-c"]`).getByTestId('radar-tag')).toHaveText('main 已前进 · 落后 1')
+    // The row's last column says only 冲突 / 落后 (Figma 85B″); who and which files are in the hover.
+    await expect(rowB.getByTestId('radar-tag')).toHaveText('冲突', WITHIN)
+    await expect(rowB.getByTestId('radar-tag')).toHaveAttribute('title', /README\.md/)
+    await expect(panel().locator(`li[data-path$="/wt-c"]`).getByTestId('radar-tag')).toHaveText('落后')
     // The active session's row starts expanded, and clicking an expanded row collapses it: expand only when needed.
     const rowButton = rowB.getByRole('button').first()
     if ((await rowButton.getAttribute('aria-expanded')) !== 'true') await rowButton.click()
     await expect(rowButton).toHaveAttribute('aria-expanded', 'true')
-    await expect(rowB.getByTestId('radar-detail').first()).toHaveText(/冲突main · README\.md/)
+    await expect(rowB.getByTestId('radar-detail').first()).toHaveText(/和 main 冲突README\.md/)
     await shoot('worktree-view')
 
     const rebase = rowB.getByRole('button', { name: '让 agent rebase' })

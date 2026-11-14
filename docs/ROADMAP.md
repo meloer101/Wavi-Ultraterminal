@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-14：Worktree 视图减负（PRD v1.188，Figma 85B″）：每个 worktree 一行——状态 · 会话名 · agent 标志和分支 · 未提交 / 领先 / 冲突三个固定列；去掉路径、落后数、选中行的 kv 表和端口段，选中行只列冲突和文件；冲突雷达图标换八角形感叹号 octagon-alert（看板浮层同步）。e2e `worktree-panel.spec.ts`、`conflict-radar.spec.ts` 和两种主题截图核对过；没在作者的真实仓库上看过。
 - 2026-11-14：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.184，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。同日修复 issue #7：看板浮层里半透明终端四周的边距露出一圈看板、和终端底色不一样（借用的终端没带上主区域的边距着色规则，`BorrowedTerminal.module.css` 补上，e2e `overview.spec.ts` 断言）。随后作者定浮层窗口改玻璃底（PRD v1.185）：背景磨砂 + 窗口底层色调，不再透出看板（`SessionOverlay.module.css`）。同日修复：「进度 / GitHub」页签点不动——看板顶栏是窗口拖拽区，免拖拽规则只放行 `radiogroup`，页签改成 `tablist` 后点击被系统当成拖窗口（`Overview.module.css` 补上 `[role='tablist']`；e2e 的合成点击不经过拖拽区，测不到）。
 - 2026-11-14：一层底（PRD v1.183，Figma 84A）：侧栏那层色调铺满整个窗口（侧栏、卡片之间的缝、四周留边），在每张卡片处挖空，卡片按自己的不透明度浮在上面；设置 · 外观的小窗口预览同样画法。e2e 核对了底层的不透明度和挖洞的位置；玻璃上的实际效果还没在作者的 Mac 上看过。
 - 2026-11-14：CLI 会话的 agent teams（PRD v1.182，Figma 83″B / 83′C / 82′F）：lead 终端下面的队伍条，展开是按时间的泳道（谁在干活、谁给谁发了消息）；侧栏 lead 下面列队友，队友不再被当成 subagent 删掉。数据来自 hooks（2.1.325 实测）；GUI 会话没有队伍（`claude -p` 不起队友）。没在作者的 Mac 上跑过真实队伍。

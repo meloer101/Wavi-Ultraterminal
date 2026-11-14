@@ -6,15 +6,13 @@ import {
   buildRows,
   cleanupPlan,
   deleteBlocker,
-  detailLines,
-  portBlockLabel,
+  formatAhead,
   formatDiff,
-  formatSync,
   keptText,
   mergeListing,
   COLLAPSED,
+  rowLabels,
   selectedRow,
-  sessionLine,
   tildePath
 } from './model'
 
@@ -79,25 +77,24 @@ describe('buildRows', () => {
     const main = groups.working[0]!
     expect(main.sessions.map((s) => s.id)).toEqual(['shell'])
     expect(main.openPath).toBe('/repo')
-    expect(main.sessionLine).toBe('主目录 · main · 终端')
-    expect(main.sync).toBe('—')
-    expect(groups.working[2]!.sessionLine).toBe('已合并的 · Codex · 待审阅 · 已合并到 main')
+    expect(main).toMatchObject({ title: 'main', where: 'main · 主目录', agent: 'shell', ahead: '' })
+    expect(groups.working[2]).toMatchObject({ title: '已合并的', where: 'jacob/merged-busy', agent: 'codex', ahead: '已合并' })
   })
 
-  it('shows the most urgent session first, on the glyph and the session line', () => {
+  it('names the row after the most urgent session, its branch after it; ahead without behind', () => {
     const feature = groups.working[1]!
     expect(feature.status).toBe('needs_you')
     expect(feature.sessions.map((s) => s.id)).toEqual(['waiting', 'idle'])
-    expect(feature.sessionLine).toBe('Cookie 会话迁移 · Claude · 等你确认 · 另有 1 个会话')
-    expect(feature.diff).toBe('+5 −1')
-    expect(feature.sync).toBe('↑2 ↓1')
+    expect(feature).toMatchObject({ title: 'Cookie 会话迁移', where: 'jacob/feature', agent: 'claude', diff: '+5 −1', ahead: '↑2' })
   })
 
   it('puts session-less merged or missing worktrees in 可清理, other session-less ones in 没有会话', () => {
     expect(groups.cleanable.map((r) => r.name)).toEqual(['jacob/merged', 'jacob/gone'])
-    expect(groups.cleanable[0]!.sessionLine).toBe('无会话 · 已合并到 main')
+    // The group says merged; the row does not repeat it.
+    expect(groups.cleanable[0]).toMatchObject({ title: 'jacob/merged', where: '', agent: null, ahead: '' })
+    expect(groups.cleanable[1]).toMatchObject({ title: 'jacob/gone', where: '文件夹已不在', ahead: '↑1' })
     expect(groups.idle.map((r) => r.name)).toEqual(['jacob/fresh'])
-    expect(groups.idle[0]!.sessionLine).toBe('无会话 · 无新提交')
+    expect(groups.idle[0]).toMatchObject({ title: 'jacob/fresh', where: '', ahead: '' })
     expect(groups.idle[0]!.status).toBeNull()
   })
 
@@ -107,7 +104,10 @@ describe('buildRows', () => {
 
   it('names a detached worktree by its short commit, a rebasing one by its branch', () => {
     const odd = buildRows({ ...listing, worktrees: [info({ path: '/a', head: '0123456789ab' }), info({ path: '/b', rebasing: 'jacob/x' })] }, [], [])
-    expect(odd.idle.map((r) => r.name)).toEqual(['0123456', 'jacob/x'])
+    expect(odd.idle.map((r) => [r.title, r.where])).toEqual([
+      ['0123456', '分离的 HEAD'],
+      ['jacob/x', '变基中']
+    ])
   })
 })
 
@@ -200,12 +200,15 @@ describe('formatting', () => {
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: 0 })).toBe('')
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: 1 })).toBe('+0 −0')
     expect(formatDiff({ added: 42, removed: 18, dirtyCount: 3 })).toBe('+42 −18')
+    expect(formatDiff({ added: 12345, removed: 6789, dirtyCount: 40 })).toBe('+12345 −6789')
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: null })).toBe('?')
   })
 
-  it('shows ahead / behind, or a dash without a base', () => {
-    expect(formatSync({ ahead: 3, behind: 0 })).toBe('↑3 ↓0')
-    expect(formatSync({ ahead: null, behind: null })).toBe('—')
+  it('shows commits of its own, 已合并 once merged, nothing at 0 or without a base', () => {
+    expect(formatAhead({ ahead: 3, merged: false, base: 'main' })).toBe('↑3')
+    expect(formatAhead({ ahead: 0, merged: false, base: 'main' })).toBe('')
+    expect(formatAhead({ ahead: 0, merged: true, base: 'main' })).toBe('已合并')
+    expect(formatAhead({ ahead: null, merged: false, base: null })).toBe('')
   })
 
   it('abbreviates the home folder', () => {
@@ -214,37 +217,19 @@ describe('formatting', () => {
     expect(tildePath('/Users/meow/a', '/Users/me')).toBe('/Users/meow/a')
   })
 
-  it('session line: 无会话, the merge, or 无新提交', () => {
-    expect(sessionLine([], { isMain: false, merged: true, base: 'main', ahead: 0 })).toBe('无会话 · 已合并到 main')
-    expect(sessionLine([], { isMain: false, merged: false, base: 'main', ahead: 0 })).toBe('无会话 · 无新提交')
-    expect(
-      sessionLine([session('s', 'w', { status: 'running', kind: 'codex', title: '结算页性能优化' })], { isMain: false, merged: false, base: 'main', ahead: 3 })
-    ).toBe('结算页性能优化 · Codex')
+  it('labels: a session titles the row and the branch follows; without one the branch leads and only oddities follow', () => {
+    const one = [session('s', 'w', { title: '结算页性能优化', kind: 'codex' })]
+    expect(rowLabels('jacob/x', one, info({ path: '/x', branch: 'jacob/x' }))).toEqual({ title: '结算页性能优化', where: 'jacob/x' })
+    expect(rowLabels('main', [], info({ path: '/r', branch: 'main', isMain: true }))).toEqual({ title: 'main', where: '主目录' })
+    expect(rowLabels('abcdef1', [], info({ path: '/d', head: 'abcdef123', unreachableCommits: 1, locked: true }))).toEqual({
+      title: 'abcdef1',
+      where: '分离的 HEAD · 1 个提交不在分支上 · 已锁定'
+    })
   })
 
   it('says what deleting keeps', () => {
     expect(keptText({ branch: 'jacob/x' })).toBe('分支 jacob/x 保留')
     expect(keptText({ branch: null })).toBe('它的提交都已在其他分支上')
-  })
-
-  it('details: branch, base with ahead / behind, the first uncommitted files', () => {
-    const lines = detailLines(info({ path: '/x', branch: 'jacob/x', ahead: 2, behind: 0, dirtyCount: 5, dirtyFiles: ['a', 'b', 'c', 'd', 'e'] }))
-    expect(lines).toEqual([
-      { label: '分支', value: 'jacob/x' },
-      { label: '基线', value: 'main · 领先 2，落后 0' },
-      { label: '未提交', value: 'a, b, c 等 5 个' }
-    ])
-    expect(detailLines(info({ path: '/x', branch: 'jacob/x', ahead: 2, behind: 0, dirtyCount: 0, dirtyFiles: [] }), 41010)).toContainEqual({
-      label: '端口段',
-      value: portBlockLabel(41010),
-      mono: true
-    })
-    expect(portBlockLabel(41010)).toBe('41010\u201341019')
-    expect(detailLines(info({ path: '/x', head: 'abcdef123', base: null, ahead: null, behind: null, dirtyCount: null, unreachableCommits: 1 }))).toEqual([
-      { label: '分支', value: '分离的 HEAD · abcdef1 · 1 个提交不在分支上' },
-      { label: '基线', value: '—' },
-      { label: '未提交', value: '无法读取' }
-    ])
   })
 })
 
