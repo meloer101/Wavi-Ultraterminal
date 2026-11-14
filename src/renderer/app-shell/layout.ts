@@ -36,3 +36,10 @@ export function panelMode(windowWidth: number, sidebarWidth: number, panelWidth:
   const left = windowWidth - sidebarWidth - surfaceGutters(sidebarWidth) - panelWidth - PANEL_INSET
   return left >= MAIN_MIN_WIDTH ? 'docked' : 'overlay'
 }
+
+/**
+ * Attributes on the shell's elements whose changes show, hide or move a card without resizing it: a drawer's phase and
+ * mode, the hidden terminals behind the overview, the sidebar shown or hidden. The base layer re-cuts its holes on
+ * them (ui/GlassBase, PRD v1.183).
+ */
+export const GLASS_WATCH: readonly string[] = ['data-phase', 'data-mode', 'data-hidden', 'data-sidebar']

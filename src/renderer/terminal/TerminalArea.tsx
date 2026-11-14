@@ -181,6 +181,7 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
       <div
         className={styles.pane}
         data-active={active}
+        data-glass-card=""
         data-shown={placed}
         data-session-id={sessionId}
         onClick={() => getSurface(sessionId)?.focus()}
@@ -460,6 +461,7 @@ function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: Pan
       <div
         className={styles.pane}
         data-active={active}
+        data-glass-card=""
         data-shown
         data-session-id={sessionId}
         onClick={() => getSurface(sessionId)?.focus()}

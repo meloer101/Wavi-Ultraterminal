@@ -1,6 +1,7 @@
-/* The window's glass (PRD §5 玻璃外壳, Figma 28): native glass or vibrancy (main/appearance.ts). Only the sidebar is tinted
-   with the theme's shell colour, so the cards sit on the bare glass at their own opacity; nothing a theme import or
-   terminal colour changes. */
+/* The window's glass (PRD §5 玻璃外壳, Figma 28): native glass or vibrancy (main/appearance.ts). One base layer tints it
+   with the theme's shell colour — the sidebar, the gaps between the cards and the margins round them — and is cut out
+   where the cards are, so each card sits on the bare glass at its own opacity (ui/GlassBase, PRD v1.183, Figma 84A);
+   nothing a theme import or terminal colour changes. */
 :global(html),
 :global(body) {
   background: transparent;
@@ -9,8 +10,8 @@
 /* The cards sit --card-gap in from the window's top, right and bottom edges (PRD §5 窗口留边, Figma 75), the left one
    too once the sidebar is hidden, so a card's corner never lands on the window's own. */
 .shell {
-  /* The shown session's pair (appearance/map.ts, PRD v1.179): a CLI session's or a GUI session's opacity. The fallbacks
-     are the theme's tokens, before the settings arrive. */
+  /* The shown session's pair (appearance/map.ts, PRD v1.179): a CLI session's or a GUI session's opacity. The base layer
+     (ui/GlassBase) reads --tr-sidebar-bg. The fallbacks are the theme's tokens, before the settings arrive. */
   --tr-sidebar-bg: var(--tr-sidebar-cli, var(--glass-shell));
   --tr-panel-bg: var(--tr-panel-cli, var(--bg-app));
   position: relative;
@@ -63,15 +64,14 @@
   --text-mono-s-medium: var(--fs-text-mono-s-medium);
 }
 
-:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] .sidebar {
-  background: none;
+/* Full screen keeps the sidebar untinted on the field (Figma 42C): no base layer. */
+:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] > :global([data-glass-base]) {
+  display: none;
 }
 
 .sidebar {
   position: relative;
   flex: none;
-  /* One step more opaque than the card beside it (PRD v1.179). */
-  background: var(--tr-sidebar-bg);
   /* The user's width is set inline (AppShell); this is the default. */
   width: var(--sidebar-width);
   display: flex;

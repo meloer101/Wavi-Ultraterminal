@@ -24,7 +24,7 @@ export function RightPanel({ view }: { view: PanelView }) {
   return (
     <>
       <ResizeHandle />
-      <div className={styles.card} data-view={view} data-testid="right-panel">
+      <div className={styles.card} data-view={view} data-testid="right-panel" data-glass-card="">
         <SessionHeader part="tools" />
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />

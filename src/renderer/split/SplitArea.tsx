@@ -230,6 +230,7 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
     <section
       className={styles.picker}
       style={box(rect)}
+      data-glass-card=""
       data-pane-id={PICKER_PANE}
       aria-label="选择这一格显示的会话"
       onKeyDown={onKeyDown}
