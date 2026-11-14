@@ -153,6 +153,13 @@ export function reduceTeam(team: TeamState | null, hook: TeamHook, at: number): 
 /** Whether an `agent_id` is one of the team's teammates (their hooks are not a plain subagent's). */
 export const isTeammate = (team: TeamState | null, agentId: string): boolean => !!agentId && !!team?.members.some((m) => m.agentId === agentId)
 
+/** A member's second line (Figma 83″B / 82′F): what it waits on you for, what it is doing, or 空闲. */
+export function memberLine(member: TeamMember): string {
+  if (member.state === 'asking') return `等你确认${member.action ? `：${member.action}` : ''}`
+  if (member.state === 'working') return member.action ?? '在干活'
+  return '空闲'
+}
+
 /** Per state, how many teammates are in it (the strip's header, Figma 83′C); the lead is not counted. */
 export function teamCounts(team: TeamState): Record<TeamMemberState, number> {
   const counts: Record<TeamMemberState, number> = { working: 0, asking: 0, idle: 0 }

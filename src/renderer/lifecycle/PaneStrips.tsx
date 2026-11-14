@@ -8,6 +8,7 @@ import { DispatchStrip } from '../dispatch/DispatchStrip'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
 import { SetupStrip } from '../scripts/SetupStrip'
+import { TeamStrip } from '../team/TeamStrip'
 import { EngineRestartedCard } from './EngineRestartedCard'
 import { SessionErrorBar } from './SessionErrorBar'
 
@@ -23,6 +24,7 @@ export function PaneStrips({ sessionId, active }: { sessionId: SessionId; active
       <HeldReportsStrip sessionId={sessionId} />
       <HeldAttemptReportStrip sessionId={sessionId} />
       <PlanStrip sessionId={sessionId} />
+      <TeamStrip sessionId={sessionId} />
     </>
   )
 }

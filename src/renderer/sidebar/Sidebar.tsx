@@ -23,8 +23,9 @@ import { SubagentRow } from './SubagentRow'
 import { useSessionMeta } from '../session-meta/store'
 import { useDispatch } from '../dispatch/store'
 import type { SubagentInfo } from '@shared/agent-events'
-import { adjacentSessionId, buildSidebarGroups, pendingItems, visibleSessionIds, workflowItems, type SideItem } from './model'
+import { adjacentSessionId, buildSidebarGroups, pendingItems, teamItems, visibleSessionIds, workflowItems, type SideItem } from './model'
 import type { WorkflowRun } from '@shared/workflow-run'
+import type { TeamState } from '@shared/agent-team'
 import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -117,6 +118,14 @@ export function Sidebar() {
       return out
     })
   )
+  // Figma 82′F: Claude's agent team under its lead (PRD §6.20).
+  const teams = useSessionMeta(
+    useShallow((s) => {
+      const out: Record<string, TeamState> = {}
+      for (const [id, metrics] of Object.entries(s.bySession)) if (metrics.team) out[id] = metrics.team
+      return out
+    })
+  )
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
   const toggleRun = useCallback((rowId: string) => {
     const key = rowId.slice('workflow:'.length)
@@ -135,9 +144,13 @@ export function Sidebar() {
       const lines = workflowItems(runs, { unread, folded })
       if (lines.length > 0) out[id] = [...lines, ...(subagentLists[id] ?? [])]
     }
+    for (const [id, team] of Object.entries(teams)) {
+      const lines = teamItems(team)
+      if (lines.length > 0) out[id] = [...lines, ...(out[id] ?? [])]
+    }
     for (const [id, waiting] of Object.entries(pendingItems(confirms))) out[id] = [...waiting, ...(out[id] ?? [])]
     return out
-  }, [subagentLists, runLists, sessions, folded, confirms])
+  }, [subagentLists, runLists, sessions, folded, confirms, teams])
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
     [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]

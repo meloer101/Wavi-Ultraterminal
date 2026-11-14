@@ -6,6 +6,7 @@ import {
   nestedTitle,
   nextAttentionSessionId,
   pendingItems,
+  teamItems,
   sameRow,
   sameSubagent,
   workflowItems,
@@ -279,6 +280,33 @@ describe('subagents under their session (PRD F21 v1.109, Figma 44B)', () => {
     // Waiting is not asking: the row is never the attention variant, and no keyboard stop.
     expect(groups[0]!.rows[1]!.after?.[0]).toMatchObject({ kind: 'pending', attention: false })
     expect(visibleSessionIds(groups)).toEqual(['parent', 'c1'])
+  })
+
+  it('hangs an agent team under its lead after its tree, a head line then a row per teammate (Figma 82′F)', () => {
+    const team = {
+      startedAt: 0,
+      members: [
+        { name: 'lead', agentId: '', state: 'idle' as const, spans: [] },
+        { name: 'coder', agentId: 'acoder', model: 'Sonnet 5.5', state: 'working' as const, action: '编辑 refund.ts', spans: [] },
+        { name: 'docs', agentId: 'adocs', state: 'asking' as const, action: '写入 docs/pay.md', spans: [] }
+      ],
+      messages: []
+    }
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [session('lead', 'wam', 'running'), session('c1', 'wa1', 'running', 0, { dispatchedBy: 'lead' })],
+      subagents: { lead: [...teamItems(team), sub('p1')] }
+    })
+    expect(draw(groups[0]!.rows)).toEqual(['lead:0:parent', 'c1:1:child', '  p1:1:last', '  team:1:child', '  teammate:acoder:1:child', '  teammate:adocs:1:last:asks'])
+    const rows = groups[0]!.rows[1]!.after!
+    expect(rows.map((r) => `${r.kind}|${r.title}|${r.glyph ?? '-'}|${r.right ?? '-'}|${r.detail ?? '-'}`)).toEqual([
+      'undefined|p1|-|-|-',
+      'team|队伍 · 2 人|-|-|-',
+      'teammate|coder|running|Sonnet 5.5|编辑 refund.ts',
+      'teammate|docs|needs_you|-|等你确认：写入 docs/pay.md'
+    ])
+    expect(teamItems(undefined)).toEqual([])
   })
 
   it('ends the dispatcher’s line at its last child when it has no subagents of its own', () => {
