@@ -27,7 +27,7 @@ export interface WorktreeRow {
   agent: AgentKind | null
   /** `+N −M` uncommitted, '' when clean, '?' when git could not tell. */
   diff: string
-  /** `↑N` commits of its own, 已合并 once they are all in the base, '' otherwise. */
+  /** `↑N` commits of its own, 已合并 once they are all in the base (not in 可清理, which says it), '' otherwise. */
   ahead: string
 }
 
@@ -132,7 +132,8 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
     const ids = new Set(matched.map((w) => w.id))
     const inside = sessions.filter((s) => ids.has(s.worktreeId)).sort(compareByUrgency)
     const name = info.branch ?? info.rebasing ?? shortSha(info.head)
-    groups[groupOf(info, inside.length)].push({
+    const group = groupOf(info, inside.length)
+    groups[group].push({
       key: info.realPath,
       info,
       name,
@@ -143,7 +144,8 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
       ...rowLabels(name, inside, info),
       agent: inside[0]?.kind ?? null,
       diff: formatDiff(info),
-      ahead: formatAhead(info)
+      // In 可清理 the group already says merged.
+      ahead: group === 'cleanable' && info.merged ? '' : formatAhead(info)
     })
   }
   return groups

@@ -90,7 +90,8 @@ describe('buildRows', () => {
 
   it('puts session-less merged or missing worktrees in 可清理, other session-less ones in 没有会话', () => {
     expect(groups.cleanable.map((r) => r.name)).toEqual(['jacob/merged', 'jacob/gone'])
-    expect(groups.cleanable[0]).toMatchObject({ title: 'jacob/merged', where: '', agent: null, ahead: '已合并' })
+    // The group says merged; the row does not repeat it.
+    expect(groups.cleanable[0]).toMatchObject({ title: 'jacob/merged', where: '', agent: null, ahead: '' })
     expect(groups.cleanable[1]).toMatchObject({ title: 'jacob/gone', where: '文件夹已不在', ahead: '↑1' })
     expect(groups.idle.map((r) => r.name)).toEqual(['jacob/fresh'])
     expect(groups.idle[0]).toMatchObject({ title: 'jacob/fresh', where: '', ahead: '' })
@@ -199,6 +200,7 @@ describe('formatting', () => {
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: 0 })).toBe('')
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: 1 })).toBe('+0 −0')
     expect(formatDiff({ added: 42, removed: 18, dirtyCount: 3 })).toBe('+42 −18')
+    expect(formatDiff({ added: 12345, removed: 6789, dirtyCount: 40 })).toBe('+12345 −6789')
     expect(formatDiff({ added: 0, removed: 0, dirtyCount: null })).toBe('?')
   })
 

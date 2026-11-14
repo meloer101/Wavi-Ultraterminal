@@ -184,7 +184,7 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
 interface RowProps {
   row: WorktreeRow
   selected: boolean
-  /** In 可清理: quieter, and 已合并 goes unsaid (the group says it). */
+  /** In 可清理: the title is quieter. */
   cleanable?: boolean
   projectId: ProjectId
   root: string
@@ -221,9 +221,11 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
           {row.agent && <AgentIcon kind={row.agent} size={12} />}
           {row.where && <span className={styles.whereText}>{row.where}</span>}
         </span>
-        <span className={styles.diff}>{row.diff}</span>
+        <span className={styles.diff} title={row.diff ? `未提交 ${row.diff}` : undefined}>
+          {row.diff}
+        </span>
         <span className={styles.ahead} title={info.base && info.behind ? `落后 ${info.base} ${info.behind} 个提交` : undefined}>
-          {cleanable && info.merged ? '' : row.ahead}
+          {row.ahead}
         </span>
         <span className={styles.radar}>{radar && <RadarTag mark={radar} short />}</span>
       </button>

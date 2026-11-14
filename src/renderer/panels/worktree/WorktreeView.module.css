@@ -89,18 +89,21 @@
   white-space: nowrap;
 }
 
-/* Fixed columns, sized in the mono face's cells: `+210 −12`, `↑12` / 已合并, and the 冲突 / 落后 tag. */
+/* Fixed columns, sized in the mono face's cells: `+1234 −567`, `↑12` / 已合并, and the 冲突 / 落后 tag. Anything
+   longer is cut, never pushed into the next column; the full count is in the hover. */
 .diff,
 .ahead {
   flex: none;
+  overflow: hidden;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
   text-align: right;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .diff {
-  width: 9ch;
+  width: 11ch;
 }
 
 .ahead {
