@@ -52,7 +52,7 @@ const windowWidth = () => window.innerWidth
  * Window layout (Figma Screens 01–08, glass shell Figma 28):
  *   sidebar (264 by default, user-sized) │ main: header 36 / terminal — or the overview │ right panel (F17, 480 by default, user-sized)
  * The whole window is glass under one base layer — one step more opaque than the cards and cut out where they are
- * (ui/GlassBase, PRD v1.181, Figma 84A) — and content sits in cards on it: each pane's terminal, the right panel's
+ * (ui/GlassBase, PRD v1.183, Figma 84A) — and content sits in cards on it: each pane's terminal, the right panel's
  * body, the overview. Headers and the sidebar are on the
  * glass. The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The
  * terminal area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).

@@ -1,4 +1,4 @@
-// The window's base layer (PRD v1.181, Figma 84A): one tint over the whole window — the sidebar, the gaps between the
+// The window's base layer (PRD v1.183, Figma 84A): one tint over the whole window — the sidebar, the gaps between the
 // cards and the margins round them — with a hole where each card is, so a card sits on the bare glass at its own
 // opacity instead of stacking on the tint. Pure geometry here; GlassBase.tsx (same folder) measures the cards and applies the path.
 

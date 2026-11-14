@@ -92,7 +92,7 @@ export interface AppearanceSettings {
   chat: ChatAppearance
   /**
    * The window's base layer. On 玻璃 the base layer under the sidebar and between the cards is the theme's shell color one
-   * step (10%) more opaque than the shown session's card (terminalOpacity or chat.opacity, PRD v1.179 / v1.181); 实色 is
+   * step (10%) more opaque than the shown session's card (terminalOpacity or chat.opacity, PRD v1.179 / v1.183); 实色 is
    * opaque throughout.
    */
   windowMaterial: WindowMaterial

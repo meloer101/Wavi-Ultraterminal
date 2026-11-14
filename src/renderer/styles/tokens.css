@@ -200,7 +200,7 @@
   --shadow-glass-button: 0 2px 8px #00000059;
   /* Glass shell (Figma 28): the base layer's tint before the settings arrive (ui/GlassBase), and the edge of the cards on it. */
   --glass-shell: #1e1e209e;
-  /* The shell's color; appearance/map.ts sets the base layer to it one step more opaque than the cards (PRD v1.181). */
+  /* The shell's color; appearance/map.ts sets the base layer to it one step more opaque than the cards (PRD v1.183). */
   --glass-shell-color: #1e1e20;
   /* Menus and popovers over the shell: solid (a backdrop blur there darkens the window's glass around it), the shell's
      hue a step lighter, with the glass's top light and an edge. */

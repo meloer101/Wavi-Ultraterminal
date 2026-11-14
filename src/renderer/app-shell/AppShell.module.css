@@ -1,6 +1,6 @@
 /* The window's glass (PRD §5 玻璃外壳, Figma 28): native glass or vibrancy (main/appearance.ts). One base layer tints it
    with the theme's shell colour — the sidebar, the gaps between the cards and the margins round them — and is cut out
-   where the cards are, so each card sits on the bare glass at its own opacity (ui/GlassBase, PRD v1.181, Figma 84A);
+   where the cards are, so each card sits on the bare glass at its own opacity (ui/GlassBase, PRD v1.183, Figma 84A);
    nothing a theme import or terminal colour changes. */
 :global(html),
 :global(body) {

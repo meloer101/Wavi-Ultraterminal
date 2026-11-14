@@ -80,7 +80,7 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
     expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
     await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
-    // PRD v1.179 / v1.181: beside a GUI session the base layer (the sidebar, the gaps and margins round the cards) is the
+    // PRD v1.179 / v1.183: beside a GUI session the base layer (the sidebar, the gaps and margins round the cards) is the
     // chat card's opacity + 10%; the overview (which keeps this session active) takes the terminal's.
     const setLook = (p: unknown) => page.evaluate((x) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(x), p)
     const baseAlpha = () =>

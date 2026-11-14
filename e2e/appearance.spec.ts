@@ -196,7 +196,7 @@ test('a custom terminal background and imported colors reach a live terminal, an
   await expect.poll(async () => (await info(FIRST))?.background).toBe('#0a0a0a')
 })
 
-test('the window is glass: one base layer one step over the card, the main area is see-through, the opaque terminal card is not (PRD v1.181)', async () => {
+test('the window is glass: one base layer one step over the card, the main area is see-through, the opaque terminal card is not (PRD v1.183)', async () => {
   const background = (selector: string) => page.locator(selector).first().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor)
   // The tint is the base layer's, under the sidebar and the gaps alike (Figma 84A); beside an opaque card it is opaque too.
   expect(await background('[data-region="sidebar"]')).toBe('rgba(0, 0, 0, 0)')

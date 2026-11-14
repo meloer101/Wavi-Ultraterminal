@@ -85,7 +85,7 @@ export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liq
 const over = (color: string, opacity: number): string =>
   opacity >= 1 ? color : opacity <= 0 ? 'transparent' : `color-mix(in srgb, ${color} ${+(opacity * 100).toFixed(2)}%, transparent)`
 
-/** How much more opaque the base layer (sidebar, gaps, margins) is than the cards on it (PRD v1.179 / v1.181). */
+/** How much more opaque the base layer (sidebar, gaps, margins) is than the cards on it (PRD v1.179 / v1.183). */
 const SIDEBAR_STEP = 0.1
 
 /** The base layer's opacity under cards at `card`: one step more, at most opaque. */
@@ -101,7 +101,7 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
     vars: {
       // The base layer and the right panel follow the shown session's card (PRD v1.179; AppShell picks the cli or gui pair
       // by the session): the panel at the card's opacity, the base layer (ui/GlassBase: the sidebar, the gaps and margins
-      // round the cards, PRD v1.181) one step more opaque. Both are opaque under 实色.
+      // round the cards, PRD v1.183) one step more opaque. Both are opaque under 实色.
       '--tr-sidebar-cli': over('var(--glass-shell-color)', sidebarOpacity(cli)),
       '--tr-sidebar-gui': over('var(--glass-shell-color)', sidebarOpacity(gui)),
       '--tr-panel-cli': over('var(--bg-app)', cli),
