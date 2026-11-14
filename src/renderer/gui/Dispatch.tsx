@@ -419,7 +419,7 @@ function ReportCard({ report: r, time }: { report: Extract<WaviMessage, { kind: 
   return (
     <article className={styles.report} data-testid="dispatch-report">
       <span className={styles.reportAvatar} aria-hidden>
-        {kind && <AgentIcon kind={kind} size={16} />}
+        {kind && <AgentIcon kind={kind} size={22} />}
         <span className={styles.dot} data-state={state} />
       </span>
       <div className={styles.reportCard}>
