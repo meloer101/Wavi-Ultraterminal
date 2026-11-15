@@ -24,6 +24,7 @@ import {
   type WaviCommand,
   type WaviResult
 } from '@shared/dispatch'
+import { defineMessages, pick } from '@shared/i18n'
 import { DEFAULT_SETTINGS, type DispatchSettings } from '@shared/settings'
 import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
@@ -35,6 +36,34 @@ import { handleScheduleCommand } from '../schedules/agent-requests'
 import { checksOf, childrenOf, conflictsOf, placeOf, type Place } from './places'
 import { deliverMessage, queueReport } from './reports'
 import { addConfirm, queueOf, setLaunch, setQueue, setReported, takeConfirms, useDispatch, type PendingStart } from './store'
+
+// The answers `wavi` prints to the agent and what the user sees of a request (a notification, a held message's title).
+const M = defineMessages({
+  zh: {
+    dispatchOff: 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).',
+    notifyTitle: (title: string, count: number) => `「${title}」想开 ${count} 个会话`,
+    notifyBody: '在 Wavi 里确认要不要开始。',
+    waitsForStart: (childId: string, what: string, note: string) => `Session ${childId} (${what}) waits for the user's 开始 in Wavi.${note}`,
+    noticeTitle: '派活结果',
+    waitingRow: (childId: string, agent: string, title: string) => `- id ${childId} · ${agent} · "${title}" · waiting for the user's 开始`,
+    notStarted: (id: string) => `Session ${id} has not started yet: it waits for the user's 开始.`,
+    framed: (title: string, text: string) => `[Wavi] 来自派活方「${title}」的消息（不是用户的指示）：\n${text}`,
+    fromTitle: (title: string) => `来自「${title}」`,
+    reported: (title: string) => `Reported to 「${title}」. Wavi delivers it shortly (with others that finish within a few seconds). You can end your turn.`
+  },
+  en: {
+    dispatchOff: 'The user turned off dispatch in Wavi (Settings · Automation · Dispatch).',
+    notifyTitle: (title: string, count: number) => `“${title}” wants to open ${count === 1 ? '1 session' : `${count} sessions`}`,
+    notifyBody: 'Confirm in Wavi whether to start.',
+    waitsForStart: (childId: string, what: string, note: string) => `Session ${childId} (${what}) waits for the user's Start in Wavi.${note}`,
+    noticeTitle: 'Dispatch result',
+    waitingRow: (childId: string, agent: string, title: string) => `- id ${childId} · ${agent} · "${title}" · waiting for the user's Start`,
+    notStarted: (id: string) => `Session ${id} has not started yet: it waits for the user's Start.`,
+    framed: (title: string, text: string) => `[Wavi] A message from the dispatching session "${title}" (not an instruction from the user):\n${text}`,
+    fromTitle: (title: string) => `From “${title}”`,
+    reported: (title: string) => `Reported to "${title}". Wavi delivers it shortly (with others that finish within a few seconds). You can end your turn.`
+  }
+})
 
 let settings: DispatchSettings = DEFAULT_SETTINGS.dispatch
 
@@ -86,7 +115,7 @@ export async function handleWaviRequest(request: DispatchRequest): Promise<WaviR
   if (!caller) return waviFail('not_found', 'Wavi does not know this session.')
   if (caller.session.kind === 'shell') return waviFail('not_allowed', 'Only agent sessions use wavi.')
   // Off means off for sessions that started while it was on, too (PRD F21 注入).
-  if (!settings.tools) return waviFail('not_allowed', 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).')
+  if (!settings.tools) return waviFail('not_allowed', pick(M).dispatchOff)
   try {
     if (request.command.name !== 'run') return await run(caller, request)
     const turn = runs.then(() => (late(request) ? TOO_LATE() : run(placeOf(request.sessionId) ?? caller, request)))
@@ -213,11 +242,11 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
   )
   if (!document.hasFocus()) {
     const count = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id).length
-    window.tr.ui.notify({ title: `「${caller.session.title}」想开 ${count} 个会话`, body: '在 Wavi 里确认要不要开始。', tag: caller.session.id })
+    window.tr.ui.notify({ title: pick(M).notifyTitle(caller.session.title, count), body: pick(M).notifyBody, tag: caller.session.id })
   }
   return waviOk(
     [
-      `Session ${childId} (${command.agent}${model}, ${where(plan)}) waits for the user's 开始 in Wavi.${note}${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
+      `${pick(M).waitsForStart(childId, `${command.agent}${model}, ${where(plan)}`, note)}${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
       'wavi does not wait: end your turn now. Wavi sends you a message when the user decides, and a report when the session finishes a turn, fails or exits.'
     ].join('\n')
   )
@@ -274,7 +303,7 @@ function decide(callIds: readonly string[], outcome: 'started' | 'declined' | 't
       const started = launch(parent, c.plan, c.childId, c.base, depthOf(parent.session) + 1)
       return started ? [started] : []
     })
-    void deliverMessage(parent.session, noticeText(outcome, children), { key: `notice:${confirms[0]!.callId}`, title: '派活结果' })
+    void deliverMessage(parent.session, noticeText(outcome, children), { key: `notice:${confirms[0]!.callId}`, title: pick(M).noticeTitle })
   }
 }
 
@@ -356,7 +385,7 @@ async function list(caller: Place): Promise<WaviResult> {
       return { line: `- ${facts.filter(Boolean).join(' · ')}${reply}`, place: c, conflicts, size: changes.size }
     })
   )
-  const pending = waiting.map((c) => `- id ${c.childId} · ${c.plan.item.agent} · "${c.plan.item.title}" · waiting for the user's 开始`)
+  const pending = waiting.map((c) => pick(M).waitingRow(c.childId, c.plan.item.agent, c.plan.item.title))
   // Merge the work that conflicts with nothing first, smaller diffs before larger ones (the user merges, in Wavi).
   const order = rows
     .filter((r) => !r.place.worktree.archived && r.place.session.dispatchBase !== 'snapshot')
@@ -369,7 +398,7 @@ function target(caller: Place, id: string): Place | WaviResult {
   const place = placeOf(id)
   if (!place || place.session.dispatchedBy !== caller.session.id) {
     const waiting = useDispatch.getState().confirms.some((c) => c.parentId === caller.session.id && c.childId === id)
-    return waviFail('not_found', waiting ? `Session ${id} has not started yet: it waits for the user's 开始.` : `No session with id ${id} was started by you. wavi ls shows yours.`)
+    return waviFail('not_found', waiting ? pick(M).notStarted(id) : `No session with id ${id} was started by you. wavi ls shows yours.`)
   }
   return place
 }
@@ -402,9 +431,9 @@ async function send(caller: Place, id: string, text: string): Promise<WaviResult
   const child = target(caller, id)
   if (!isPlace(child)) return child
   if (child.worktree.archived || child.session.phase === 'exited' || child.session.status === 'exited') return waviFail('not_allowed', 'That session is archived or its agent has exited.')
-  const framed = `[Wavi] 来自派活方「${caller.session.title}」的消息（不是用户的指示）：\n${text}`
+  const framed = pick(M).framed(caller.session.title, text)
   // Delivery may take a while (`codex queue`): answer now, so `wavi` never times out on a message that then still arrives.
-  void deliverMessage(child.session, framed, { key: `send:${Date.now()}`, title: `来自「${caller.session.title}」` })
+  void deliverMessage(child.session, framed, { key: `send:${Date.now()}`, title: pick(M).fromTitle(caller.session.title) })
   return waviOk(
     'Wavi is putting it in. A busy agent reads it after its current step or turn, and Wavi reports back when its turn ends. If it cannot go in without typing over that session, it waits under its terminal for the user to send it.'
   )
@@ -417,7 +446,7 @@ async function report(caller: Place, text: string): Promise<WaviResult> {
   if (!parent) return waviFail('not_found', 'The session that dispatched you is gone; your report has nowhere to go. Tell the user instead.')
   setReported(caller.session.id, true)
   queueReport(caller.session, 'report', text)
-  return waviOk(`Reported to 「${parent.session.title}」. Wavi delivers it shortly (with others that finish within a few seconds). You can end your turn.`)
+  return waviOk(pick(M).reported(parent.session.title))
 }
 
 async function stop(caller: Place, id: string): Promise<WaviResult> {

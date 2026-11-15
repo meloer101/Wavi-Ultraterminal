@@ -11,9 +11,42 @@ import { Placeholder } from '@tiptap/extensions'
 import { Fragment, Slice } from '@tiptap/pm/model'
 import { Selection } from '@tiptap/pm/state'
 import { Bold, Code, Italic, List, ListOrdered, SquareCode, Strikethrough, TextQuote } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
 import { PATHS_DRAG_TYPE } from '../terminal/attachments'
 import { docText, textDoc } from './rich-text'
+import { useMessages } from '../i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: {
+    reply: '回复',
+    selectionFormat: '选中文字的格式',
+    formats: {
+      bold: '粗体',
+      italic: '斜体 ⌘I',
+      strike: '删除线 ⌘⇧S',
+      code: '行内代码 ⌘E',
+      bulletList: '无序列表',
+      orderedList: '有序列表',
+      blockquote: '引用',
+      codeBlock: '代码块'
+    }
+  },
+  en: {
+    reply: 'Reply',
+    selectionFormat: 'Format selected text',
+    formats: {
+      bold: 'Bold',
+      italic: 'Italic ⌘I',
+      strike: 'Strikethrough ⌘⇧S',
+      code: 'Inline code ⌘E',
+      bulletList: 'Bulleted list',
+      orderedList: 'Numbered list',
+      blockquote: 'Quote',
+      codeBlock: 'Code block'
+    }
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -47,7 +80,9 @@ export function insertNewline(editor: Editor, caret: CaretContext): void {
   else editor.commands.splitBlock({ keepMarks: false })
 }
 
-export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, label = '回复', autoFocus = false }: Props) {
+export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, label: labelProp, autoFocus = false }: Props) {
+  const m = useMessages(M)
+  const label = labelProp ?? m.reply
   // The text the editor last reported: a draft equal to it came from the editor itself.
   const reported = useRef(draft)
   // The editor's callbacks are set once; they reach the latest props through this.
@@ -152,19 +187,20 @@ function appendLines(editor: Editor, text: string): void {
 
 type Format = 'bold' | 'italic' | 'strike' | 'code' | 'bulletList' | 'orderedList' | 'blockquote' | 'codeBlock'
 
-const BUTTONS: readonly { format: Format; label: string; icon: typeof Bold; run(editor: Editor): boolean; can(editor: Editor): boolean }[] = [
-  { format: 'bold', label: '粗体', icon: Bold, run: (e) => e.chain().focus().toggleBold().run(), can: (e) => e.can().toggleBold() },
-  { format: 'italic', label: '斜体 ⌘I', icon: Italic, run: (e) => e.chain().focus().toggleItalic().run(), can: (e) => e.can().toggleItalic() },
-  { format: 'strike', label: '删除线 ⌘⇧S', icon: Strikethrough, run: (e) => e.chain().focus().toggleStrike().run(), can: (e) => e.can().toggleStrike() },
-  { format: 'code', label: '行内代码 ⌘E', icon: Code, run: (e) => e.chain().focus().toggleCode().run(), can: (e) => e.can().toggleCode() },
-  { format: 'bulletList', label: '无序列表', icon: List, run: (e) => e.chain().focus().toggleBulletList().run(), can: (e) => e.can().toggleBulletList() },
-  { format: 'orderedList', label: '有序列表', icon: ListOrdered, run: (e) => e.chain().focus().toggleOrderedList().run(), can: (e) => e.can().toggleOrderedList() },
-  { format: 'blockquote', label: '引用', icon: TextQuote, run: (e) => e.chain().focus().toggleBlockquote().run(), can: (e) => e.can().toggleBlockquote() },
-  { format: 'codeBlock', label: '代码块', icon: SquareCode, run: (e) => e.chain().focus().toggleCodeBlock().run(), can: (e) => e.can().toggleCodeBlock() }
+const BUTTONS: readonly { format: Format; icon: typeof Bold; run(editor: Editor): boolean; can(editor: Editor): boolean }[] = [
+  { format: 'bold', icon: Bold, run: (e) => e.chain().focus().toggleBold().run(), can: (e) => e.can().toggleBold() },
+  { format: 'italic', icon: Italic, run: (e) => e.chain().focus().toggleItalic().run(), can: (e) => e.can().toggleItalic() },
+  { format: 'strike', icon: Strikethrough, run: (e) => e.chain().focus().toggleStrike().run(), can: (e) => e.can().toggleStrike() },
+  { format: 'code', icon: Code, run: (e) => e.chain().focus().toggleCode().run(), can: (e) => e.can().toggleCode() },
+  { format: 'bulletList', icon: List, run: (e) => e.chain().focus().toggleBulletList().run(), can: (e) => e.can().toggleBulletList() },
+  { format: 'orderedList', icon: ListOrdered, run: (e) => e.chain().focus().toggleOrderedList().run(), can: (e) => e.can().toggleOrderedList() },
+  { format: 'blockquote', icon: TextQuote, run: (e) => e.chain().focus().toggleBlockquote().run(), can: (e) => e.can().toggleBlockquote() },
+  { format: 'codeBlock', icon: SquareCode, run: (e) => e.chain().focus().toggleCodeBlock().run(), can: (e) => e.can().toggleCodeBlock() }
 ]
 
 /** 50D / 50E: the eight format buttons, the one under the caret highlighted; marks | blocks. */
 function FormatButtons({ editor, className, label }: { editor: Editor; className: string | undefined; label: string }) {
+  const m = useMessages(M)
   // Drawn again after every transaction (the caret moved, a format changed).
   const [, redraw] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
@@ -176,14 +212,14 @@ function FormatButtons({ editor, className, label }: { editor: Editor; className
   const state = Object.fromEntries(BUTTONS.map((b) => [b.format, { active: editor.isActive(b.format), can: b.can(editor) }])) as Record<Format, { active: boolean; can: boolean }>
   return (
     <div className={className} role="toolbar" aria-label={label} data-testid="gui-format-bar">
-      {BUTTONS.map(({ format, label: name, icon: Icon, run }) => (
+      {BUTTONS.map(({ format, icon: Icon, run }) => (
         <span key={format} className={styles.formatGroup}>
           {format === 'bulletList' && <span className={styles.formatDivider} aria-hidden />}
           <button
             type="button"
             className={styles.formatButton}
-            aria-label={name}
-            title={name}
+            aria-label={m.formats[format]}
+            title={m.formats[format]}
             aria-pressed={state[format].active}
             disabled={!state[format].can}
             // The text keeps its selection and the keyboard.
@@ -200,6 +236,7 @@ function FormatButtons({ editor, className, label }: { editor: Editor; className
 
 /** 50E: over a selection, the same buttons, while the toolbar is closed. */
 function SelectionToolbar({ editor }: { editor: Editor }) {
+  const m = useMessages(M)
   const selection = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -228,7 +265,7 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
   if (!selection.show) return null
   return (
     <div ref={ref} className={styles.selectionBar} style={place ? { left: place.left, top: place.top } : { visibility: 'hidden' }}>
-      <FormatButtons editor={editor} className={styles.selectionButtons} label="选中文字的格式" />
+      <FormatButtons editor={editor} className={styles.selectionButtons} label={m.selectionFormat} />
     </div>
   )
 }

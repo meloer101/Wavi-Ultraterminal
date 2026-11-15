@@ -6,12 +6,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, CircleAlert, Split } from 'lucide-react'
 import { agentLabel } from '@shared/dispatch'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { useSessionView } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { decideConfirms } from './handler'
 import { useDispatch, type PendingStart } from './store'
+import { useMessages } from '../i18n'
 import styles from './DispatchStrip.module.css'
+
+const M = defineMessages({
+  zh: {
+    wants: (count: number) => `想开 ${count} 个会话`,
+    basedOn: '基于',
+    uncommitted: '未提交的改动不会带到新的 worktree 里',
+    snapshot: '当前改动的快照',
+    deny: '拒绝',
+    start: (count: number) => `开始 ${count} 个`
+  },
+  en: {
+    wants: (count: number) => (count === 1 ? 'Wants to open 1 session' : `Wants to open ${count} sessions`),
+    basedOn: 'Based on',
+    uncommitted: 'Uncommitted changes won’t be carried into the new worktree',
+    snapshot: 'Snapshot of current changes',
+    deny: 'Deny',
+    start: (count: number) => `Start ${count}`
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const NONE: PendingStart[] = []
@@ -27,6 +48,7 @@ export function DispatchStrip({ sessionId, active }: { sessionId: SessionId; act
 }
 
 function Strip({ parentId, pending, active }: { parentId: string; pending: readonly PendingStart[]; active: boolean }) {
+  const m = useMessages(M)
   const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<string | null>(null)
   const count = pending.length
@@ -55,20 +77,22 @@ function Strip({ parentId, pending, active }: { parentId: string; pending: reado
   }, [parentId, active])
 
   return (
-    <div ref={ref} className={styles.strip} role="region" aria-label={`想开 ${count} 个会话`} data-testid="dispatch-strip">
+    <div ref={ref} className={styles.strip} role="region" aria-label={m.wants(count)} data-testid="dispatch-strip">
       <div className={styles.row}>
         <span className={styles.gutter}>
           <Split {...ICON} />
         </span>
-        <span className={styles.title}>想开 {count} 个会话</span>
-        <span className={styles.base}>基于 {pending[0]!.base}</span>
+        <span className={styles.title}>{m.wants(count)}</span>
+        <span className={styles.base}>
+          {m.basedOn} {pending[0]!.base}
+        </span>
       </div>
       {uncommitted && (
         <div className={styles.row}>
           <span className={styles.gutter}>
             <CircleAlert {...ICON} />
           </span>
-          <span className={styles.note}>未提交的改动不会带到新的 worktree 里</span>
+          <span className={styles.note}>{m.uncommitted}</span>
         </div>
       )}
       {pending.map(({ callId, plan }) => {
@@ -81,7 +105,7 @@ function Strip({ parentId, pending, active }: { parentId: string; pending: reado
                 <AgentIcon kind={plan.item.agent} size={12} />
               </span>
               <span className={styles.name}>{plan.item.title}</span>
-              <span className={styles.branch}>{plan.branch || '当前改动的快照'}</span>
+              <span className={styles.branch}>{plan.branch || m.snapshot}</span>
               <span className={styles.task}>{plan.item.model ? `${plan.item.model} · ${firstLine}` : firstLine}</span>
               <span className={styles.chevron}>
                 <ChevronRight {...ICON} />
@@ -93,10 +117,11 @@ function Strip({ parentId, pending, active }: { parentId: string; pending: reado
       })}
       <div className={styles.footer}>
         <button type="button" className={styles.ghost} onClick={() => decideConfirms(parentId, false)}>
-          拒绝
+          {m.deny}
         </button>
         <button type="button" className={styles.primary} onClick={() => decideConfirms(parentId, true)} data-testid="dispatch-start">
-          开始 {count} 个<span className={styles.shortcut}>⌘↵</span>
+          {m.start(count)}
+          <span className={styles.shortcut}>⌘↵</span>
         </button>
       </div>
     </div>

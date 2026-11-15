@@ -2,9 +2,27 @@
 // pushed one, and 自动修复's state for that base push (keyed by worktree path, PrAutomation with number 0). main pushes
 // every change (auto-fix.ts subscribes and asks once per worktree, for a CI that settled before the window loaded).
 import { create } from 'zustand'
+import { defineMessages, pick } from '@shared/i18n'
 import type { ChecksState } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 import type { PrAutomation } from './auto-fix-model'
+
+const M = defineMessages({
+  zh: {
+    pending: (base: string, count: number) => `${base} 上的 CI · ${count} 项在跑`,
+    passing: (base: string) => `${base} 上的 CI 通过`,
+    failing: (base: string) => `${base} 上的 CI 失败`,
+    more: (count: number) => ` 等 ${count} 项`,
+    none: (base: string) => `${base} 上没有 CI 检查`
+  },
+  en: {
+    pending: (base: string, count: number) => `CI on ${base} · ${count} running`,
+    passing: (base: string) => `CI on ${base} passed`,
+    failing: (base: string) => `CI on ${base} failed`,
+    more: (count: number) => ` · ${count} in all`,
+    none: (base: string) => `No CI checks on ${base}`
+  }
+})
 
 /** A 推送 of the base that went through in this window: the commit and when (epoch ms). */
 export interface BasePush {
@@ -55,16 +73,17 @@ export function useBaseCiOf(worktreePath: string | null | undefined): BaseCi | n
 /** The CI row's words and mark: `main 上的 CI · 2 项在跑`, `main 上的 CI 通过`, `main 上的 CI 失败 · test · e2e/split.spec.ts`. */
 export function baseCiText(ci: Pick<BaseCi, 'base' | 'checks'>): { mark: ChecksState; text: string } {
   const { checks, base } = ci
+  const m = pick(M)
   switch (checks.state) {
     case 'pending':
-      return { mark: 'pending', text: `${base} 上的 CI · ${checks.pending} 项在跑` }
+      return { mark: 'pending', text: m.pending(base, checks.pending) }
     case 'passing':
-      return { mark: 'passing', text: `${base} 上的 CI 通过` }
+      return { mark: 'passing', text: m.passing(base) }
     case 'failing': {
       const names = checks.failing.map((c) => c.name)
-      return { mark: 'failing', text: [`${base} 上的 CI 失败`, ...names.slice(0, 3)].join(' · ') + (names.length > 3 ? ` 等 ${names.length} 项` : '') }
+      return { mark: 'failing', text: [m.failing(base), ...names.slice(0, 3)].join(' · ') + (names.length > 3 ? m.more(names.length) : '') }
     }
     case 'none':
-      return { mark: 'none', text: `${base} 上没有 CI 检查` }
+      return { mark: 'none', text: m.none(base) }
   }
 }

@@ -5,10 +5,17 @@
 import { memo } from 'react'
 import { Check, CircleDashed, CircleHelp, X } from 'lucide-react'
 import { prDescription, prStateLabel, type ChecksState, type PullRequestInfo } from '@shared/pull-requests'
-import { PR_QUERY_FAILED, useSessionPrStatus } from './store'
+import { defineMessages } from '@shared/i18n'
+import { prQueryFailed, useSessionPrStatus } from './store'
+import { useMessages } from '../i18n'
 import styles from './PrTag.module.css'
 
 const MARK_ICON = { size: 12, strokeWidth: 2, 'aria-hidden': true } as const
+
+const M = defineMessages({
+  zh: { failed: (number: number, failed: string, error: string) => `PR #${number} · ${failed}：${error}` },
+  en: { failed: (number: number, failed: string, error: string) => `PR #${number} · ${failed}: ${error}` }
+})
 
 export function ChecksMark({ state }: { state: ChecksState }) {
   if (state === 'none') return null
@@ -20,17 +27,19 @@ export function ChecksMark({ state }: { state: ChecksState }) {
 }
 
 export function PrTag({ pr, error }: { pr: PullRequestInfo; error?: string | null }) {
+  // Under SessionPrTag's memo: subscribes itself so a language switch redraws it.
+  const m = useMessages(M)
   const live = pr.state === 'open' || pr.state === 'draft'
   const description = prDescription(pr)
   if (error) {
-    const said = `PR #${pr.number} · ${PR_QUERY_FAILED}：${error}`
+    const said = m.failed(pr.number, prQueryFailed(), error)
     return (
       <span className={styles.tag} role="img" aria-label={said} title={said} data-testid="pr-tag" data-pr-state={pr.state} data-error="">
         <span className={styles.number}>#{pr.number}</span>
         <span className={styles.mark} data-checks="unknown">
           <CircleHelp {...MARK_ICON} />
         </span>
-        <span className={styles.state}>{PR_QUERY_FAILED}</span>
+        <span className={styles.state}>{prQueryFailed()}</span>
       </span>
     )
   }

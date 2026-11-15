@@ -5,11 +5,18 @@
 // several projects restarts the agent once.
 import { useEffect, useRef, useState } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { wheelSteps } from './model'
 import styles from './Chat.module.css'
 
 /** How long the wheel stays still before the session moves to the project shown. */
 const SETTLE_MS = 400
+
+const M = defineMessages({
+  zh: { project: (name: string) => `项目 ${name}` },
+  en: { project: (name: string) => `Project ${name}` }
+})
 
 export interface ProjectChoice {
   projectId: string
@@ -18,6 +25,7 @@ export interface ProjectChoice {
 }
 
 export function ProjectChip({ choices, current, onPick }: { choices: readonly ProjectChoice[]; current: string; onPick(choice: ProjectChoice): void }) {
+  const m = useMessages(M)
   const at = Math.max(0, choices.findIndex((c) => c.projectId === current))
   // What the wheel has stepped to, from where the session was (it moved, or the list changed: back to where it is).
   const [view, setView] = useState({ from: at, shown: at })
@@ -53,7 +61,7 @@ export function ProjectChip({ choices, current, onPick }: { choices: readonly Pr
       data-testid="gui-project"
       data-switchable={switchable || undefined}
       tabIndex={switchable ? 0 : undefined}
-      aria-label={switchable ? `项目 ${choice.name}` : undefined}
+      aria-label={switchable ? m.project(choice.name) : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onWheel={(e) => {
