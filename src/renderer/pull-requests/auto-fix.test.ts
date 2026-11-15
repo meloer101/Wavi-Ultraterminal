@@ -25,7 +25,8 @@ vi.mock('../state/workspace', () => ({
     subscribe: () => () => {}
   }
 }))
-vi.mock('../session-io', () => ({ interruptAgent: () => {}, submitPrompt: async () => {} }))
+const submitPrompt = vi.hoisted(() => vi.fn(async (_id: string, _text: string) => {}))
+vi.mock('../session-io', () => ({ interruptAgent: () => {}, submitPrompt }))
 vi.mock('../review/background', () => ({ useBackgroundReview: { getState: () => ({ byRoot: {} }) } }))
 
 describe('自动修复 after a reload (architecture review, batch 6)', () => {
@@ -104,6 +105,39 @@ describe('自动修复 of the base', () => {
     expect(useBaseCi.getState().automation['/repo-wt']).toMatchObject({ run: null, pushed: 1, pushedShas: ['f'.repeat(40)] })
     setBaseAutomation('/repo-wt', null)
     vi.unstubAllGlobals()
+  })
+})
+
+// PRD F16 v1.192: Wavi pushes 自动修复's fix (the brakes ran), then the agent replies on the threads in a turn of its own.
+describe('自动修复 of PR review threads', () => {
+  it('asks the agent to reply on the threads it was given once the fix is pushed', async () => {
+    const push = vi.fn(async (_target: unknown) => ({ ok: true, outcome: 'pushed', message: '' }))
+    vi.stubGlobal('window', {
+      tr: { ui: { confirm: async () => true, notify: () => {} }, pr: { push, refresh: () => {} }, git: { log: async () => ({ head: 'c'.repeat(40) }) } }
+    })
+    try {
+      const { pushAnyway } = await import('./auto-fix')
+      const { setAutomation, usePullRequests } = await import('./store')
+      const { freshAutomation } = await import('./auto-fix-model')
+      const run = { kind: 'stopped' as const, sessionId: 's1', since: 'abc1234', key: 'k', checks: [], baseFailing: null, decision: { kind: 'stop' as const, reason: 'limit' as const } }
+      submitPrompt.mockClear()
+      setAutomation('/repo-wt', { ...freshAutomation(0, true), attempts: 1, lastKey: 'k', lastHead: 'abc1234', lastThreads: ['PRRT_1', 'PRRT_2'], run })
+      await pushAnyway('pr', '/repo-wt')
+      expect(push).toHaveBeenCalledTimes(1)
+      expect(usePullRequests.getState().automation['/repo-wt']).toMatchObject({ run: null, pushed: 1 })
+      expect(submitPrompt).toHaveBeenCalledTimes(1)
+      const [id, text] = submitPrompt.mock.calls[0]!
+      expect(id).toBe('s1')
+      expect(text).toContain('（cccccc')
+      expect(text).toContain('PRRT_1、PRRT_2')
+      expect(text).toContain('不改代码、不提交、不推送')
+      // Wavi's own message: its prompt-submit must not read as the user taking over, which would reset the brakes.
+      const { isWaviPrompt } = await import('@shared/ship-handoff')
+      expect(isWaviPrompt(text)).toBe(true)
+      setAutomation('/repo-wt', null)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

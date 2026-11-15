@@ -5,7 +5,7 @@ import { attemptReportText } from '@shared/attempt-groups'
 import { selectAsked } from '@shared/background-review'
 import { reportText } from '@shared/dispatch'
 import { formatErrorsForAgent } from '@shared/browser'
-import { ciFixPrompt, prThreadsPrompt } from '@shared/pull-requests'
+import { ciFixPrompt, prThreadsPrompt, threadRepliesPrompt } from '@shared/pull-requests'
 import { findingsPrompt } from '@shared/review-comments'
 import { agentHandoffPrompt, isWaviText, MAX_PROMPT_CHARS, mergeConflictPrompt } from '@shared/ship-chain'
 import { handoffPrompt } from '@shared/ship-handoff'
@@ -506,7 +506,8 @@ describe('every text Wavi puts into an input line', () => {
       ['attempts report', attemptReportText({ base: 'main', members: [] })],
       ['dispatch report', reportText([{ childId: 's1', title: 't', agent: 'claude', event: 'done', branch: 'w' }])],
       // U10: built from other people's words (PR comments), a page's console output, an agent's error line.
-      ['PR comments', prThreadsPrompt(12, [{ id: 't', path: 'a.ts', line: 3, startLine: null, side: 'new', outdated: false, comments: [{ author: { login: 'octo', bot: false }, body: '改一下', url: 'u', createdAt: 'c' }] }])],
+      ['PR comments', prThreadsPrompt(12, [{ id: 't', path: 'a.ts', line: 3, startLine: null, side: 'new', outdated: false, comments: [{ author: { login: 'octo', bot: false }, body: '改一下', url: 'u', createdAt: 'c' }] }], { kind: 'push', agent: 'Claude' })],
+      ['PR comment replies', threadRepliesPrompt(12, 'abcdef1', ['t'], 'Claude')],
       ['browser console', formatErrorsForAgent({ errors: 1, warnings: 0, recentErrors: [{ level: 'error', message: 'boom', source: '', line: 0 }] }, 'http://localhost:5173/')],
       ['error bar fix', fixPrompt('pnpm build 失败')],
       // The review block's findings come from Wavi's background reviewer; the user's own comments (reviewPrompt) stay theirs.

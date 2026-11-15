@@ -54,6 +54,20 @@ describe('messages', () => {
     expect(squashMessage('b', [{ subject: 'fix', body: 'fix\n\ndetails\n' }], '  ')).toBe('fix\n\ndetails')
   })
 
+  // GitHub closes an issue when a closing keyword reaches the default branch: the list of subjects must not drop it.
+  it('squash keeps the closing-keyword lines of the commit bodies', () => {
+    const commits = [
+      { subject: 'fix: login', body: 'fix: login\n\nwhy it broke\nCloses #12\n' },
+      { subject: 'test: login', body: 'test: login\n\nFixes: acme/web#3, fixes #12\nCloses #12' },
+      { subject: 'fixes #7 in the subject', body: 'fixes #7 in the subject' }
+    ]
+    expect(squashMessage('b', commits, '修好登录')).toBe(
+      '修好登录\n\n- fix: login\n- test: login\n- fixes #7 in the subject\n\nCloses #12\nFixes: acme/web#3, fixes #12\n'
+    )
+    expect(squashMessage('b', [{ subject: 'a', body: 'a\n\nfixed the prefix (#4)\nprefix #5' }], 't')).toBe('t\n\n- a\n')
+    expect(squashMessage('b', [{ subject: 'a', body: 'a\n\nResolves https://github.com/acme/web/issues/4' }], 't')).toBe('t\n\n- a\n\nResolves https://github.com/acme/web/issues/4\n')
+  })
+
   it('oneLine strips control characters and newlines', () => {
     expect(oneLine(' a\n\tb\u001b[31m c ')).toBe('a b [31m c')
   })

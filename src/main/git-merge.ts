@@ -352,11 +352,16 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
     const body = await git(cwd, ['log', '-1', '--format=%B', head])
     return [{ subject: body.split('\n')[0] ?? '', body }]
   }
-  const subjects = await git(cwd, ['log', '--reverse', `--max-count=${MAX_SQUASH_SUBJECTS}`, '--format=%s', `${base}..${head}`])
-  return subjects
-    .split('\n')
-    .filter(Boolean)
-    .map((subject) => ({ subject, body: subject }))
+  // The bodies too: squashMessage keeps their closing-keyword lines (PRD F16 v1.192). \x1e opens a commit, \x1f ends its subject.
+  const log = await git(cwd, ['log', '--reverse', `--max-count=${MAX_SQUASH_SUBJECTS}`, '--format=%x1e%s%x1f%B', `${base}..${head}`])
+  return log
+    .split('\x1e')
+    .filter((record) => record.includes('\x1f'))
+    .map((record) => {
+      const [subject = '', body = ''] = record.split('\x1f')
+      return { subject, body: body.trimEnd() }
+    })
+    .filter((c) => c.subject !== '')
 }
 
 /** Pushes the local base to `remote` — `source` (a full commit id: the tip the review read) when given, so a commit that

@@ -10,7 +10,7 @@
 // send and what the rows say. 通过后合并 is GitHub auto-merge; a new allowed thread or a P0 / P1
 // review turns it off again, since GitHub would merge past them.
 import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
-import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
+import { prThreadsPrompt, threadRepliesPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import { defineMessages, pick } from '@shared/i18n'
 import { DEFAULT_SETTINGS, type PrSettings } from '@shared/settings'
 import { handoffPrompt, isWaviPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
@@ -51,6 +51,9 @@ const M = defineMessages({
     noHandoffFile: (message: string) => `自动修复已停：没能准备交接文件（${message}）`,
     noHead: '自动修复已停：没能读到当前提交',
     commitAndWrite: (path: string) => `修好后提交（不要推送），并把改了什么写到 ${path}。`,
+    repliesMark: '（Wavi 自动修复 · 回复评论）',
+    noReplies: (agent: string, why: string) => `没能请 ${agent} 回复评论：${why}`,
+    noPushedCommit: '没能读到推送的提交',
     sendFailed: (why: string) => `自动修复已停：没能发送（${why}）`,
     noDiff: '自动修复已停：没能读到这次修复的改动',
     pushFailed: '没能推送',
@@ -71,6 +74,9 @@ const M = defineMessages({
     noHandoffFile: (message: string) => `Auto-fix stopped: couldn’t prepare the hand-off file (${message})`,
     noHead: 'Auto-fix stopped: couldn’t read the current commit',
     commitAndWrite: (path: string) => `Once fixed, commit (don’t push) and write what you changed to ${path}.`,
+    repliesMark: '(Wavi auto-fix · replies)',
+    noReplies: (agent: string, why: string) => `Couldn’t ask ${agent} to reply to the comments: ${why}`,
+    noPushedCommit: 'couldn’t read the pushed commit',
     sendFailed: (why: string) => `Auto-fix stopped: couldn’t send (${why})`,
     noDiff: 'Auto-fix stopped: couldn’t read this fix’s changes',
     pushFailed: 'Couldn’t push',
@@ -318,7 +324,7 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
     }
     const parts = [pick(M).mark(state.attempts + 1)]
     parts.push(handoffPrompt(context))
-    if (send.threads.length > 0) parts.push(prThreadsPrompt(pr?.number ?? null, send.threads))
+    if (send.threads.length > 0) parts.push(prThreadsPrompt(pr?.number ?? null, send.threads, { kind: 'commit' }))
     if (!failure) parts.push(pick(M).commitAndWrite(slot.path))
 
     const run: FixRun = { kind: 'fixing', sessionId: c.session.id, since, key, checks: failure?.checks ?? [], baseFailing, sentAt: Date.now() }
@@ -441,7 +447,27 @@ async function pushFix(c: FixCtx, run: FixRun): Promise<void> {
   if (!latest) return
   const from = c.scope === 'pr' ? (usePullRequests.getState().byWorktree[c.worktree]?.pr?.details?.headOid ?? null) : (useBaseCi.getState().byWorktree[c.worktree]?.sha ?? null)
   write(c.scope, c.worktree, afterPushed(latest, run, from, sha))
-  if (c.scope === 'pr') window.tr.pr.refresh(c.worktree)
+  if (c.scope === 'pr') {
+    window.tr.pr.refresh(c.worktree)
+    await askForReplies(c, latest.lastThreads, sha)
+  }
+}
+
+/** The pushed fix answered review threads: now that its commit is on GitHub, the agent replies on them and resolves
+ *  the ones it changed (PRD F16 v1.192). Wavi pushes 自动修复's fixes itself (the brakes run first), so the replies
+ *  are a turn of their own. */
+async function askForReplies(c: FixCtx, threadIds: readonly string[], sha: string | undefined): Promise<void> {
+  if (threadIds.length === 0) return
+  const name = agentName(c.session)
+  const commit = sha ?? (await headOf(c.worktree))
+  if (!commit) return setPrNotice(c.worktree, { tone: 'error', text: pick(M).noReplies(name, pick(M).noPushedCommit) })
+  const number = usePullRequests.getState().byWorktree[c.worktree]?.pr?.number ?? null
+  try {
+    // Opens with Wavi's prompt mark like every fix it sends: the user's own prompt resets the brakes (takenOver), this must not.
+    await submitPrompt(c.session.id, `${pick(M).repliesMark}\n\n${threadRepliesPrompt(number, commit, threadIds, name)}`)
+  } catch (error) {
+    setPrNotice(c.worktree, { tone: 'error', text: pick(M).noReplies(name, errorText(error)) })
+  }
 }
 
 // ── the stopped row's buttons (Figma 29G) ───────────────────────────────────────────────────────────────────────

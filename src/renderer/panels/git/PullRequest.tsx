@@ -165,12 +165,13 @@ export function PrStatusLine({
   )
 }
 
-/** 让 Claude 处理: puts the unresolved comments 自动修复 may act on into the agent's input line; Enter stays with the user. */
+/** 让 Claude 处理: puts the unresolved comments 自动修复 may act on into the agent's input line; Enter stays with the user.
+ *  The agent pushes its fix to the PR's branch and replies on the threads itself (PRD F16 v1.192). */
 async function handleComments(worktreePath: string, target: Session, number: number, threads: PrThread[]): Promise<void> {
   try {
     useWorkspace.getState().setActiveSession(target.id)
     await ensureAgentUp(target.id)
-    await insertIntoTerminal(target.id, prThreadsPrompt(number, threads))
+    await insertIntoTerminal(target.id, prThreadsPrompt(number, threads, { kind: 'push', agent: agentLabel(target.kind) }))
     useWorkspace.getState().requestTerminalFocus()
   } catch (error) {
     setPrNotice(worktreePath, { tone: 'error', text: pick(M).handOffFailed(agentLabel(target.kind), error instanceof Error ? error.message : String(error)) })
