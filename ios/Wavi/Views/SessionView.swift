@@ -14,9 +14,9 @@ struct SessionView: View {
       if let session {
         feed(session)
       } else if model.isOpen {
-        EmptyState(title: "这个会话已经不在 Mac 上", action: "回到会话列表") { model.showList() }
+        EmptyState(title: String(localized: "这个会话已经不在 Mac 上"), action: String(localized: "回到会话列表")) { model.showList() }
       } else {
-        EmptyState(title: model.connection.text, action: "重试") { model.wake() }
+        EmptyState(title: model.connection.text, action: String(localized: "重试")) { model.wake() }
       }
     }
     .background(Color.bgApp)
@@ -47,7 +47,7 @@ struct SessionView: View {
 
   private func title(_ session: RemoteSession?) -> some View {
     VStack(spacing: 2) {
-      Text(session?.title ?? "会话").font(.ui(.headline)).foregroundStyle(Color.textPrimary).lineLimit(1)
+      Text(session?.title ?? String(localized: "会话")).font(.ui(.headline)).foregroundStyle(Color.textPrimary).lineLimit(1)
       if let session {
         HStack(spacing: 8) {
           StatusGlyph(status: session.status)
@@ -99,7 +99,7 @@ struct SessionView: View {
           if model.link == .connecting {
             Notice(tone: .info, message: model.connection.text)
           } else {
-            Notice(tone: .warning, message: model.connection.text, action: "重试") { model.wake() }
+            Notice(tone: .warning, message: model.connection.text, action: String(localized: "重试")) { model.wake() }
           }
         }
         .padding(.horizontal, Metric.margin)
@@ -212,7 +212,7 @@ private struct ToolGroupRow: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .accessibilityValue(expanded ? "已展开" : "已收起")
+      .accessibilityValue(expanded ? String(localized: "已展开") : String(localized: "已收起"))
       if expanded {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
@@ -287,7 +287,7 @@ struct FeedRow: View {
           .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .accessibilityValue(open ? "已展开" : "已收起")
+        .accessibilityValue(open ? String(localized: "已展开") : String(localized: "已收起"))
         if open, let text = item.text { Text(text).font(.ui(.subheadline)).lineSpacing(4).foregroundStyle(Color.textSecondary).padding(.leading, 24) }
       }
     case "tool":

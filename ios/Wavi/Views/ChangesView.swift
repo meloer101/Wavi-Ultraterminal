@@ -20,7 +20,7 @@ struct ChangesView: View {
   @State private var archiving = false
   @State private var alert: (title: String, message: String)?
 
-  private static let prState = ["open": "已打开", "draft": "草稿", "merged": "已合并", "closed": "已关闭"]
+  private static let prState = ["open": String(localized: "已打开"), "draft": String(localized: "草稿"), "merged": String(localized: "已合并"), "closed": String(localized: "已关闭")]
 
   var body: some View {
     let ship = model.session(id)?.ship
@@ -28,7 +28,7 @@ struct ChangesView: View {
       if let data {
         list(data)
       } else if let error {
-        EmptyState(title: error, action: "重试") { Task { await load() } }
+        EmptyState(title: error, action: String(localized: "重试")) { Task { await load() } }
       } else {
         Spinner(color: .textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityLabel("正在读取变更")
       }
@@ -59,7 +59,7 @@ struct ChangesView: View {
   private func list(_ data: GitChanges) -> some View {
     let all = data.uncommitted + data.committed
     if all.isEmpty {
-      EmptyState(title: "没有改动")
+      EmptyState(title: String(localized: "没有改动"))
     } else {
       changedFiles(data, all)
     }
@@ -77,11 +77,11 @@ struct ChangesView: View {
         .padding(.horizontal, Metric.margin)
         .padding(.top, 8)
         if !data.uncommitted.isEmpty {
-          GroupHeader(title: "未提交", count: data.uncommitted.count)
+          GroupHeader(title: String(localized: "未提交"), count: data.uncommitted.count)
           ForEach(data.uncommitted, id: \.path) { file($0, scope: "uncommitted") }
         }
         if !data.committed.isEmpty {
-          GroupHeader(title: "已提交", count: data.committed.count, countLabel: "\(data.ahead) 个提交")
+          GroupHeader(title: String(localized: "已提交"), count: data.committed.count, countLabel: String(localized: "\(data.ahead) 个提交"))
           ForEach(data.committed, id: \.path) { file($0, scope: "committed") }
         }
         if let exits, let pr = prLine(exits) {
@@ -132,7 +132,7 @@ struct ChangesView: View {
             StatusGlyph(status: ship.error != nil ? .error : ship.stage == .glance ? .needsYou : .running)
             Text(ship.title).font(.ui(.subheadline)).foregroundStyle(Color.textPrimary).lineLimit(1)
             Spacer(minLength: 0)
-            Text(ship.error != nil ? "没有完成" : ship.stage == .glance ? "等你看一眼" : ship.steps.first { $0.state == .working }?.label ?? "")
+            Text(ship.error != nil ? String(localized: "没有完成") : ship.stage == .glance ? String(localized: "等你看一眼") : ship.steps.first { $0.state == .working }?.label ?? "")
               .font(.ui(.footnote)).foregroundStyle(ship.error != nil ? Color.statusError : Color.textSecondary).lineLimit(1)
           }
           .padding(.horizontal, Metric.margin)
@@ -144,7 +144,7 @@ struct ChangesView: View {
         if let primary = exits.primary { exitButton(primary, primary: true) }
         ButtonRow {
           if let secondary = exits.secondary { exitButton(secondary) }
-          Button { exits.archive.blocker.map { alert = ("现在不能归档", $0) } ?? (archiving = true) } label: {
+          Button { exits.archive.blocker.map { alert = (String(localized: "现在不能归档"), $0) } ?? (archiving = true) } label: {
             if busy == "archive" { Spinner(color: .textPrimary) } else { Text("归档") }
           }
           .buttonStyle(.wavi(floating: true))
@@ -174,7 +174,7 @@ struct ChangesView: View {
   }
 
   private func subtitle(_ d: GitChanges) -> String {
-    [d.branch.map { b in d.base.map { "\(b) → \($0)" } ?? b }, d.ahead > 0 ? "领先 \(d.ahead)" : nil, d.behind > 0 ? "落后 \(d.behind)" : nil]
+    [d.branch.map { b in d.base.map { "\(b) → \($0)" } ?? b }, d.ahead > 0 ? String(localized: "领先 \(d.ahead)") : nil, d.behind > 0 ? String(localized: "落后 \(d.behind)") : nil]
       .compactMap { $0 }.joined(separator: " · ")
   }
 
@@ -183,7 +183,8 @@ struct ChangesView: View {
     if let pr = e.pr { return "PR #\(pr.number) · \(Self.prState[pr.state] ?? pr.state)" }
     let offersPr = [e.primary, e.secondary].contains { $0?.kind == "pr" }
     if !offersPr && e.baseProtected == nil { return nil }
-    return "还没有 PR\(e.baseProtected == true && e.base != nil ? " · \(e.base!) 有分支保护" : "")"
+    if e.baseProtected == true, let base = e.base { return String(localized: "还没有 PR · \(base) 有分支保护") }
+    return String(localized: "还没有 PR")
   }
 
   private func load() async {
@@ -196,7 +197,7 @@ struct ChangesView: View {
   }
 
   private func go(_ exit: RemoteExit) async {
-    if let blocker = exit.blocker { alert = ("现在不能\(exit.label)", blocker); return }
+    if let blocker = exit.blocker { alert = (String(localized: "现在不能\(exit.label)"), blocker); return }
     if exit.kind == "open-pr" {
       if let url = exit.url.flatMap(URL.init(string:)) { openURL(url) }
       return
@@ -204,7 +205,7 @@ struct ChangesView: View {
     busy = exit.kind
     let result = await model.call(.ship(session: id, action: .start(exit: exit.kind)))
     busy = nil
-    if let failure = result.error { alert = ("没有开始", failure) } else { sheet = true }
+    if let failure = result.error { alert = (String(localized: "没有开始"), failure) } else { sheet = true }
   }
 
   private func archive() async {
@@ -212,7 +213,7 @@ struct ChangesView: View {
     let result = await model.call(.archive(session: id))
     busy = nil
     // The session goes with its worktree: back to the list, not to a page about a session that is gone.
-    if let failure = result.error { alert = ("没有归档", failure) } else { model.showList() }
+    if let failure = result.error { alert = (String(localized: "没有归档"), failure) } else { model.showList() }
   }
 }
 
@@ -266,7 +267,7 @@ struct ShipSheet: View {
       ship.fields.contains(where: { $0 != "draft" && !(value(texts, $0)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
       ForEach(ship.fields.filter { $0 != "draft" }, id: \.self) { field in
         VStack(alignment: .leading, spacing: 8) {
-          if ship.fields.count > 1 { Text(["commit": "提交说明", "title": "标题", "body": "正文"][field] ?? field).font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary) }
+          if ship.fields.count > 1 { Text(["commit": String(localized: "提交说明"), "title": String(localized: "标题"), "body": String(localized: "正文")][field] ?? field).font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary) }
           TextField("", text: binding(field), axis: field == "title" ? .horizontal : .vertical)
             .font(.mono(field == "body" ? .caption : .footnote))
             .lineLimit(field == "title" ? 1...1 : 1...10)
@@ -320,19 +321,19 @@ struct ShipSheet: View {
     if let error { Notice(tone: .danger, message: error) }
     if let failure = ship.error {
       ButtonRow {
-        if failure.conflicts { action("交给 \(ship.agent) 解", "conflicts", .conflicts) }
-        if failure.pushRefused { action("改为创建 PR", "switch", .switchPr) }
-        action("重试", "retry", .retry, primary: true)
+        if failure.conflicts { action(String(localized: "交给 \(ship.agent) 解"), "conflicts", .conflicts) }
+        if failure.pushRefused { action(String(localized: "改为创建 PR"), "switch", .switchPr) }
+        action(String(localized: "重试"), "retry", .retry, primary: true)
       }
-      action("取消", "cancel", .cancel)
+      action(String(localized: "取消"), "cancel", .cancel)
     } else if ship.stage == .glance {
       HStack(spacing: 8) {
-        action("取消", "cancel", .cancel).frame(maxWidth: 120)
+        action(String(localized: "取消"), "cancel", .cancel).frame(maxWidth: 120)
         action(ship.submitLabel, "submit", .submit, primary: true)
       }
     } else if ship.stage == .writing {
       HStack(spacing: 8) {
-        action("取消", "cancel", .cancel).frame(maxWidth: 120)
+        action(String(localized: "取消"), "cancel", .cancel).frame(maxWidth: 120)
         Button("在后台继续") { close() }.buttonStyle(.wavi)
       }
     } else {
@@ -344,7 +345,7 @@ struct ShipSheet: View {
   private var finishedContent: some View {
     HStack(spacing: 8) {
       StatusGlyph(status: model.session(session)?.shipNotice != nil ? .doneUnread : .idle)
-      Text(model.session(session)?.shipNotice ?? "这个出口已经结束了").font(.ui(.callout)).foregroundStyle(Color.textPrimary)
+      Text(model.session(session)?.shipNotice ?? String(localized: "这个出口已经结束了")).font(.ui(.callout)).foregroundStyle(Color.textPrimary)
     }
   }
 

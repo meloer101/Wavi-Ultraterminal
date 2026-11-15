@@ -157,15 +157,15 @@ enum Link {
   }
 
   static func reason(_ error: Error) -> String {
-    if error is Timeout { return "超时（\(Int(openSeconds)) 秒没有回应）" }
+    if error is Timeout { return String(localized: "超时（\(Int(openSeconds)) 秒没有回应）") }
     if let url = error as? URLError {
       switch url.code {
-      case .notConnectedToInternet: return "没有网络"
-      case .cannotConnectToHost: return "连不上（端口没开或被拒绝）"
-      case .timedOut: return "超时"
-      case .cannotFindHost, .dnsLookupFailed: return "找不到这个地址"
-      case .networkConnectionLost: return "连接断了"
-      case .appTransportSecurityRequiresSecureConnection: return "被 iOS 的 ATS 拦下"
+      case .notConnectedToInternet: return String(localized: "没有网络")
+      case .cannotConnectToHost: return String(localized: "连不上（端口没开或被拒绝）")
+      case .timedOut: return String(localized: "超时")
+      case .cannotFindHost, .dnsLookupFailed: return String(localized: "找不到这个地址")
+      case .networkConnectionLost: return String(localized: "连接断了")
+      case .appTransportSecurityRequiresSecureConnection: return String(localized: "被 iOS 的 ATS 拦下")
       default: return "URLError \(url.code.rawValue)"
       }
     }
@@ -227,19 +227,19 @@ enum Link {
     (try? JSONSerialization.data(withJSONObject: value)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
   }
 
-  private static let pairErrors = ["no pairing code": "配对码已失效，在 Mac 上点「换一个」", "wrong code": "配对码不对"]
+  private static let pairErrors = ["no pairing code": String(localized: "配对码已失效，在 Mac 上点「换一个」"), "wrong code": String(localized: "配对码不对")]
 
   private static func pairOn(_ socket: Socket, macKey: String, code: String, phoneName: String, urls: [String]) async throws -> Pairing {
     let me = WaviCrypto.newKey()
-    guard let key = WaviCrypto.pairingKey(own: me, macPublic: macKey, code: code) else { throw PairError("二维码不对") }
+    guard let key = WaviCrypto.pairingKey(own: me, macPublic: macKey, code: code) else { throw PairError(String(localized: "二维码不对")) }
     let box = WaviCrypto.seal(key: key, counter: 0, Data(text(["name": phoneName]).utf8))
     try await socket.send(text: text(["t": "pair", "key": WaviCrypto.publicB64u(me), "box": WaviCrypto.b64u(box)]))
     let reply = try await nextText(socket)
-    guard reply["t"] as? String == "paired" else { throw PairError(pairErrors[reply["error"] as? String ?? ""] ?? "配对没有成功") }
+    guard reply["t"] as? String == "paired" else { throw PairError(pairErrors[reply["error"] as? String ?? ""] ?? String(localized: "配对没有成功")) }
     guard let sealed = (reply["box"] as? String).flatMap({ WaviCrypto.fromB64u($0) }), let body = WaviCrypto.open(key: key, counter: 1, sealed),
       let paired = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let device = paired["device"] as? String,
       let secret = paired["secret"] as? String, WaviCrypto.fromB64u(secret, count: 32) != nil
-    else { throw PairError("配对没有成功") }
+    else { throw PairError(String(localized: "配对没有成功")) }
     return Pairing(device: device, secret: secret, macName: paired["name"] as? String ?? "Mac", urls: urls)
   }
 
@@ -248,7 +248,7 @@ enum Link {
     do {
       socket = try await firstOpen(urls)
     } catch {
-      throw PairError("连不上这台 Mac：Mac 上的 Wavi 要开着，手机和 Mac 在同一个 Wi-Fi 或 Tailscale 里")
+      throw PairError(String(localized: "连不上这台 Mac：Mac 上的 Wavi 要开着，手机和 Mac 在同一个 Wi-Fi 或 Tailscale 里"))
     }
     defer { socket.close() }
     do {
@@ -256,7 +256,7 @@ enum Link {
     } catch let error as PairError {
       throw error
     } catch {
-      throw PairError("配对没有成功")
+      throw PairError(String(localized: "配对没有成功"))
     }
   }
 
@@ -266,13 +266,13 @@ enum Link {
 
   /// 输入配对码: the PAKE brings the Mac's public key, then the phone pairs as after a scan.
   static func pair(url: String, rawCode: String, phoneName: String) async throws -> Pairing {
-    guard let code = normalizeCode(rawCode) else { throw PairError("配对码是 6 位字母和数字") }
+    guard let code = normalizeCode(rawCode) else { throw PairError(String(localized: "配对码是 6 位字母和数字")) }
     return try await connectFor([url]) { socket in
-      guard let pake = WaviCrypto.pakeStart(code: code) else { throw PairError("配对没有成功") }
+      guard let pake = WaviCrypto.pakeStart(code: code) else { throw PairError(String(localized: "配对没有成功")) }
       try await socket.send(text: text(["t": "pake", "a": pake.a]))
       let reply = try await nextText(socket)
-      guard reply["t"] as? String == "pake" else { throw PairError(pairErrors[reply["error"] as? String ?? ""] ?? "配对没有成功") }
-      guard let macKey = pake.finish(b: reply["b"] as? String ?? "", box: reply["box"] as? String ?? "") else { throw PairError("配对码不对") }
+      guard reply["t"] as? String == "pake" else { throw PairError(pairErrors[reply["error"] as? String ?? ""] ?? String(localized: "配对没有成功")) }
+      guard let macKey = pake.finish(b: reply["b"] as? String ?? "", box: reply["box"] as? String ?? "") else { throw PairError(String(localized: "配对码不对")) }
       return try await pairOn(socket, macKey: macKey, code: code, phoneName: phoneName, urls: [url])
     }
   }

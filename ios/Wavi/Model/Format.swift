@@ -44,7 +44,7 @@ func groupSessions(_ list: RemoteSessionList) -> [SessionGroup] {
   let waiting = list.sessions.filter { $0.status == .needsYou }.sorted { ($0.since ?? $0.activity) > ($1.since ?? $1.activity) }
   var groups: [SessionGroup] = []
   if !waiting.isEmpty {
-    groups.append(SessionGroup(id: SessionGroup.needsYouId, title: "等你处理", rows: waiting.map { .init(session: $0, projectName: names[$0.projectId]) }))
+    groups.append(SessionGroup(id: SessionGroup.needsYouId, title: String(localized: "等你处理"), rows: waiting.map { .init(session: $0, projectName: names[$0.projectId]) }))
   }
   for project in list.projects {
     let rows = list.sessions.filter { $0.projectId == project.id && $0.status != .needsYou }.sorted { $0.activity > $1.activity }
@@ -64,16 +64,16 @@ func shortAge(_ ms: Double) -> String {
 
 /// The notice over a list that is not live (Figma 62B): how old what it shows is. Nothing heard yet: no age to give.
 func staleNotice(heardAt: Double?, now: Double) -> String {
-  guard let heardAt else { return "显示的不是最新的状态" }
+  guard let heardAt else { return String(localized: "显示的不是最新的状态") }
   let minutes = Int(max(0, now - heardAt) / 60000)
-  if minutes < 1 { return "显示的是 1 分钟内的状态" }
-  if minutes < 60 { return "显示的是 \(minutes) 分钟前的状态" }
-  return "显示的是 \(minutes / 60) 小时前的状态"
+  if minutes < 1 { return String(localized: "显示的是 1 分钟内的状态") }
+  if minutes < 60 { return String(localized: "显示的是 \(minutes) 分钟前的状态") }
+  return String(localized: "显示的是 \(minutes / 60) 小时前的状态")
 }
 
 /// The right-hand time of a session row: how long it has waited, or how long since it last did something.
 func rowTime(_ session: RemoteSession, now: Double) -> String {
-  if session.status == .needsYou { return "已等 \(shortAge(now - (session.since ?? session.activity)))" }
+  if session.status == .needsYou { return String(localized: "已等 \(shortAge(now - (session.since ?? session.activity)))") }
   return shortAge(now - session.activity)
 }
 
@@ -140,7 +140,7 @@ func lastLine(_ output: String?) -> String? {
 }
 
 /// Tailscale's CGNAT range 100.64.0.0/10: how the top of 45B names the way it is connected.
-func viaOf(_ url: String) -> String { Link.isTailscale(url) ? "Tailscale" : "局域网" }
+func viaOf(_ url: String) -> String { Link.isTailscale(url) ? "Tailscale" : String(localized: "局域网") }
 
 /// The connection under a screen title (Figma 59 Mobile/ConnectionTitle, 62A–62D): where the Mac is reached, or what is
 /// wrong in words; `dropped` once a link that was open went away.
@@ -153,17 +153,17 @@ struct ConnectionWords: Equatable, Sendable {
 func connectionWords(_ link: LinkState, mac: String, dropped: Bool) -> ConnectionWords {
   switch link {
   case .open(let url): return ConnectionWords(text: "\(mac) · \(viaOf(url))", tone: .quiet)
-  case .connecting: return ConnectionWords(text: dropped ? "连接断了，正在重连" : "正在连接 \(mac)", tone: .quiet)
-  case .refused: return ConnectionWords(text: "\(mac) 不认识这台手机", tone: .danger)
+  case .connecting: return ConnectionWords(text: dropped ? String(localized: "连接断了，正在重连") : String(localized: "正在连接 \(mac)"), tone: .quiet)
+  case .refused: return ConnectionWords(text: String(localized: "\(mac) 不认识这台手机"), tone: .danger)
   case .offline(let reason):
     let text = switch reason {
-    case .macAsleep: "\(mac) 已睡眠或离线"
-    case .waviNotRunning: "Mac 上的 Wavi 没有打开"
-    case .tailscaleOff: "连不上 · 检查这台手机的 Tailscale"
-    case .noNetwork: "这台手机没有网络"
-    case .macOutdated: "Mac 上的 Wavi 需要更新"
-    case .phoneOutdated: "这台手机上的 Wavi 需要更新"
-    case .unknown: "连不上 \(mac)"
+    case .macAsleep: String(localized: "\(mac) 已睡眠或离线")
+    case .waviNotRunning: String(localized: "Mac 上的 Wavi 没有打开")
+    case .tailscaleOff: String(localized: "连不上 · 检查这台手机的 Tailscale")
+    case .noNetwork: String(localized: "这台手机没有网络")
+    case .macOutdated: String(localized: "Mac 上的 Wavi 需要更新")
+    case .phoneOutdated: String(localized: "这台手机上的 Wavi 需要更新")
+    case .unknown: String(localized: "连不上 \(mac)")
     }
     return ConnectionWords(text: text, tone: .warning)
   }
@@ -172,11 +172,11 @@ func connectionWords(_ link: LinkState, mac: String, dropped: Bool) -> Connectio
 /// 45E's title: what the agent wants to do.
 func permissionTitle(_ tool: String) -> String {
   switch tool {
-  case "Bash": return "运行命令"
-  case "Edit", "MultiEdit", "Write", "NotebookEdit": return "修改文件"
-  case "WebFetch": return "访问网页"
-  case "WebSearch": return "搜索网页"
-  default: return "使用 \(tool)"
+  case "Bash": return String(localized: "运行命令")
+  case "Edit", "MultiEdit", "Write", "NotebookEdit": return String(localized: "修改文件")
+  case "WebFetch": return String(localized: "访问网页")
+  case "WebSearch": return String(localized: "搜索网页")
+  default: return String(localized: "使用 \(tool)")
   }
 }
 
@@ -190,9 +190,9 @@ func permissionSubject(_ input: [String: JSONValue], summary: String) -> String 
 
 /// 总是允许 pnpm add: what the rule the agent offered covers.
 func allowAlwaysLabel(_ rules: [PermissionRule]?) -> String {
-  guard let rules, let rule = rules.first else { return "总是允许" }
+  guard let rules, let rule = rules.first else { return String(localized: "总是允许") }
   let what = (rule.content ?? rule.tool).replacingOccurrences(of: ":*", with: "", options: [.anchored, .backwards]).replacingOccurrences(of: "domain:", with: "", options: .anchored)
-  return "总是允许 \(what)\(rules.count > 1 ? " 等 \(rules.count) 项" : "")"
+  return rules.count > 1 ? String(localized: "总是允许 \(what) 等 \(rules.count) 项") : String(localized: "总是允许 \(what)")
 }
 
 /// `<prefix>/<adjective>-<noun>` not in `taken` (src/shared/new-session.ts `generateBranchName`, its words from Shared.json).
