@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fastOption, matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
+import { fastOption, matchCommands, permissionOption, planOption, ultracodeOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import {
   appendToDraft,
@@ -588,12 +588,23 @@ describe('composer', () => {
     expect(pickerButtons([permissionOption(['ask'], 'ask')])).toEqual([])
   })
 
-  it('lists 询问 / 接受编辑 / 自动 / 计划 on one 模式 button, and 快速 is a switch (Figma 65)', () => {
+  it('lists 询问 / 接受编辑 / 自动 / 计划 on one 模式 button, with 快速 and Ultracode as switches under it (Figma 65 / 78)', () => {
     const levels = permissionOption(['ask', 'accept-edits', 'auto'], 'auto')
-    const [mode, fast] = pickerButtons([levels, planOption(false), fastOption(true, '快速没有生效：x')])
+    const buttons = pickerButtons([levels, ultracodeOption(false), planOption(false), fastOption(true, '快速没有生效：x')])
+    const [mode] = buttons
+    expect(buttons).toHaveLength(1)
     expect(mode).toMatchObject({ key: 'permission+plan', label: '自动', mode: { current: 'auto' } })
     expect(mode?.mode?.choices.map((c) => `${c.value}:${c.label}`)).toEqual(['ask:询问', 'accept-edits:接受编辑', 'auto:自动', 'plan:计划'])
-    expect(fast).toMatchObject({ key: 'fast', label: '快速', toggle: { on: true }, hint: '快速没有生效：x' })
+    // 快速 first, then Ultracode, whatever order they came in; only the ones the agent offers (78B: Codex has no Ultracode).
+    expect(mode?.switches?.map((s) => [s.option.id, s.on, s.hint])).toEqual([
+      ['fast', true, '快速没有生效：x'],
+      ['ultracode', false, undefined]
+    ])
+    expect(pickerButtons([levels, fastOption(false)])[0]?.switches?.map((s) => s.option.id)).toEqual(['fast'])
+    // 78B pi: no switches, no divider.
+    expect(pickerButtons([levels])[0]?.switches).toBeUndefined()
+    // No 模式 button (one level, no plan mode): 快速 stays a switch of its own.
+    expect(pickerButtons([permissionOption(['ask'], 'ask'), fastOption(true)])).toMatchObject([{ key: 'fast', toggle: { on: true } }])
     // An agent without a plan mode: three levels; one level and a plan mode (an ACP agent that only asks): two.
     expect(pickerButtons([levels])[0]?.mode?.choices).toHaveLength(3)
     expect(pickerButtons([permissionOption(['ask'], 'ask'), planOption(true)])[0]).toMatchObject({ label: '计划', mode: { current: 'plan', choices: [{ value: 'ask' }, { value: 'plan' }] } })
