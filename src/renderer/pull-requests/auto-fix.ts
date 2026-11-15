@@ -65,7 +65,7 @@ const M = defineMessages({
     threadsCancelled: '有没解决的评论，已取消检查通过后合并'
   },
   en: {
-    mark: (attempt: number) => `（Wavi auto-fix · attempt ${attempt}）`,
+    mark: (attempt: number) => `(Wavi auto-fix · attempt ${attempt})`,
     about: (place: string, why: string) => `${place}: ${why}`,
     noPrState: 'Couldn’t read the PR’s state',
     noHandoffFile: (message: string) => `Auto-fix stopped: couldn’t prepare the hand-off file (${message})`,
