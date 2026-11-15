@@ -11,7 +11,7 @@ import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
 import { DiffBlock } from './DiffBlock'
 import { permissionBody, permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

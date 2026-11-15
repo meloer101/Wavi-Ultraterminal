@@ -9,7 +9,7 @@ import { GlassBase } from '../ui/GlassBase'
 import { Button, PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
 import { MATERIAL_OPTIONS, THEME_OPTIONS, formatPercent, isPageDefault, pageDefaults } from './appearance-form'
 import { backgroundFromFile } from './background-image'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './AppearancePane.module.css'
 
 const M = defineMessages({

@@ -9,7 +9,7 @@ import { BOARD_SCOPES, type BoardItem, type BoardPr, type BoardProject } from '@
 import { STATUS_LABEL } from '@shared/session-status'
 import type { Project, Session } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { subscribeClock } from '../sidebar/clock'
 import { formatElapsed } from '../sidebar/format-elapsed'
 import { useWorkspace } from '../state/workspace'

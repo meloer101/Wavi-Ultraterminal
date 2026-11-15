@@ -5,7 +5,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { Check, X } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useRepoScripts } from '../scripts/run-script'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'

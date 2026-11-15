@@ -17,7 +17,7 @@ import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 
 const M = defineMessages({
   zh: {

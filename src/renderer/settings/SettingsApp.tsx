@@ -4,7 +4,7 @@ import { Bot, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTermin
 import { create } from 'zustand'
 import { defineMessages } from '@shared/i18n'
 import { IconButton } from '../ui/IconButton'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { AgentsPane } from './AgentsPane'
 import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'

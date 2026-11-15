@@ -5,7 +5,7 @@ import { armedLabel, RESUME_BUTTON, RESUME_PROMPT, resumeDueAt, resumeHint, stop
 import { formatClock } from '@shared/session-meta'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useMetaNow } from '../session-meta/MetaChips'
 import { timing, toggleLimitResume } from './bridge'
 import { useLimitResume, useLimitStop } from './store'

@@ -2,7 +2,7 @@
 // in the review block at the top of Git · 变更.
 import type { MouseEvent } from 'react'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import type { ReviewMark } from './marks'
 import { revealFinding, useReviewFlash } from './reveal'
 import styles from './ReviewBlock.module.css'

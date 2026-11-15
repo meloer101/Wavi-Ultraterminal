@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Smartphone } from
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { parseAddress, splitUrl, type BrowserPageState } from '@shared/browser'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { IconButton } from '../../ui/IconButton'
 import { ClosePanelButton } from '../PaneHeader'
 import styles from './BrowserView.module.css'

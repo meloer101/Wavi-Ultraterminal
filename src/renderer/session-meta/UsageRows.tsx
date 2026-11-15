@@ -17,7 +17,7 @@ import {
   type UsageWindow
 } from '@shared/session-meta'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { AgentIcon } from '../ui/AgentIcon'
 import { PaceMeter } from './MetaChips'
 import meta from './SessionMeta.module.css'

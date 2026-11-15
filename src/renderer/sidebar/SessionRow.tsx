@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, type PointerEvent } from 'react'
 import { agentName } from '@shared/agents'
-import { useLang } from '../i18n'
+import { useLang } from '../ui/i18n'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
 import { useBrowser } from '../panels/browser/store'

@@ -6,7 +6,7 @@ import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { clipCode, commentLocation, type ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
 import { defineMessages, pick } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import {
   cancelDraft,
   editComment,

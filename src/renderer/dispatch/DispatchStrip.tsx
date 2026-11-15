@@ -12,7 +12,7 @@ import { useSessionView } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { decideConfirms } from './handler'
 import { useDispatch, type PendingStart } from './store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './DispatchStrip.module.css'
 
 const M = defineMessages({

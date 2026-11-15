@@ -2,7 +2,7 @@
 // Click opens the built-in browser, ⌥-click the system browser, right-click asks main to end the process.
 import { portUrl } from '@shared/browser'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { openLink } from '../../state/link-actions'
 import { useBrowser } from './store'
 import styles from './PortTags.module.css'

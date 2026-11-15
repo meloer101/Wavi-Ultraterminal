@@ -10,7 +10,7 @@ import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { openLink } from '../state/link-actions'
 import { CopyButton } from './CopyButton'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

@@ -6,7 +6,7 @@ import { Check, CircleHelp, X } from 'lucide-react'
 import { checksDescription, KIND_LABEL, runNote, turnCheckView, type CheckOutcome, type CheckRun, type TurnCheckView } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
-import { useLang, useMessages } from '../i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import { useSessionMeta } from '../session-meta/store'
 import styles from './TurnChecks.module.css'
 

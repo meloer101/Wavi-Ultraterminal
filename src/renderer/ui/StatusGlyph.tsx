@@ -1,6 +1,6 @@
 import type { SessionStatus } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
-import { useLang } from '../i18n'
+import { useLang } from './i18n'
 import styles from './StatusGlyph.module.css'
 
 /**

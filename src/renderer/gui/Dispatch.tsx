@@ -17,7 +17,7 @@ import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { dispatchOutcomes, dispatchRows, elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
 import { useGuiSessions } from './store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Dispatch.module.css'
 
 const M = defineMessages({

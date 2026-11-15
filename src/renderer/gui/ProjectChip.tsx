@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { wheelSteps } from './model'
 import styles from './Chat.module.css'
 

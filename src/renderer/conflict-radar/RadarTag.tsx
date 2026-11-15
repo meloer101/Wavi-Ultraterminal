@@ -6,7 +6,7 @@ import { memo } from 'react'
 import { ArrowDown, OctagonAlert } from 'lucide-react'
 import type { RadarMark } from '@shared/conflict-radar'
 import { defineMessages } from '@shared/i18n'
-import { useLang, useMessages } from '../i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import { useSessionRadarMark } from './store'
 import styles from './RadarTag.module.css'
 

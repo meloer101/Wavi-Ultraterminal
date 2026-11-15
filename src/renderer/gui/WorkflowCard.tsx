@@ -21,7 +21,7 @@ import {
 } from '@shared/workflow-run'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { elapsedLabel } from './model'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './WorkflowCard.module.css'
 
 const M = defineMessages({

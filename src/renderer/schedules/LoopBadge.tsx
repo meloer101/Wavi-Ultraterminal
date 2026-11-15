@@ -6,7 +6,7 @@ import { cronLabel } from '@shared/agent-events'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
 import { useSessionMeta } from '../session-meta/store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './LoopBadge.module.css'
 
 const M = defineMessages({

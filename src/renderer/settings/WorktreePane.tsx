@@ -4,7 +4,7 @@
 import { useRef, useState } from 'react'
 import { PORT_BASE_LIMITS } from '@shared/ports'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { Row, Section, Toggle } from './controls'
 import styles from './WorktreePane.module.css'
 

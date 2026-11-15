@@ -6,7 +6,7 @@ import type { PrTarget } from '@shared/pull-requests'
 import { riskLabel, type RiskMarker } from '@shared/risk-markers'
 import type { TurnCheckView } from '@shared/turn-checks'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { checksRow } from './facts-model'
 import ci from './CiRows.module.css'
 

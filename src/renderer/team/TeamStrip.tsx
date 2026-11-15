@@ -8,7 +8,7 @@ import { memberLine as progress, teamCounts, TEAM_GLYPH as GLYPH, TEAM_LEAD, typ
 import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useSessionMeta } from '../session-meta/store'
 import { getSurface } from '../terminal/registry'
 import { StatusGlyph } from '../ui/StatusGlyph'

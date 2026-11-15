@@ -28,7 +28,7 @@ import type { WorkflowRun } from '@shared/workflow-run'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
 import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

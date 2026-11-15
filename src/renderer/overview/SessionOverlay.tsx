@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { Columns2, X } from 'lucide-react'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { getXtermSurface } from '../terminal/registry'

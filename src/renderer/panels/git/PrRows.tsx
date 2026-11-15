@@ -4,7 +4,7 @@
 // place of the exits (29G / 29J; shared with the base rows in BaseCiRow.tsx).
 import type { PrStatus } from '@shared/pull-requests'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import {
   agentIdle,
   agentName,

@@ -18,7 +18,7 @@ import {
 } from '@shared/batch-actions'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { interruptAgent, submitPrompt } from '../session-io'
 import { useWorkspace } from '../state/workspace'

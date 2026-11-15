@@ -14,7 +14,7 @@ import { Bold, Code, Italic, List, ListOrdered, SquareCode, Strikethrough, TextQ
 import { defineMessages } from '@shared/i18n'
 import { PATHS_DRAG_TYPE } from '../terminal/attachments'
 import { docText, textDoc } from './rich-text'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

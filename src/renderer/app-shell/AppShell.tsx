@@ -42,7 +42,7 @@ import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import { useMainFullScreen } from './full-screen'
 import styles from './AppShell.module.css'
-import { useLang } from '../i18n'
+import { useLang } from '../ui/i18n'
 
 const subscribeResize = (onChange: () => void) => {
   window.addEventListener('resize', onChange)

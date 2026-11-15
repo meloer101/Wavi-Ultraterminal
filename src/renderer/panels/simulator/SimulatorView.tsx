@@ -5,7 +5,7 @@ import { ChevronDown, Circle, CircleAlert, RotateCw, Smartphone } from 'lucide-r
 import { useEffect, useState, type MouseEvent } from 'react'
 import { findDevice, initialDevice, type SimRuntimeGroup, type SimulatorScreen as Screen } from '@shared/simulator'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { IconButton } from '../../ui/IconButton'
 import { popupMenu, type MenuEntry } from '../../ui/menu'
 import { ClosePanelButton } from '../PaneHeader'

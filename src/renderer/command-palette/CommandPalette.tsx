@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useWorkspace } from '../state/workspace'
 import { formatAccelerator } from '../ui/menu-model'
 import { StatusGlyph } from '../ui/StatusGlyph'

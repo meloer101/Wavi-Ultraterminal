@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useSessionView } from '../state/workspace'
 import { PromptStrip } from './PromptStrip'
 import { sendHeldAttemptReport, useAttemptReports } from './report'

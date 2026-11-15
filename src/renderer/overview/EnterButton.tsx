@@ -1,7 +1,7 @@
 // 进入会话 ↵ — Figma Button (9:33), ghost with its shortcut inline: the expanded list row and the overlay bar.
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { enterSession } from './store'
 import styles from './EnterButton.module.css'
 

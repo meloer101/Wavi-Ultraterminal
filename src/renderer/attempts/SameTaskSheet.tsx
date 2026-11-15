@@ -23,7 +23,7 @@ import { AGENT_SPECS, agentName, CLI_AGENTS, type CliAgent } from '@shared/agent
 import { generateBranchName, groupBranches, type NewSessionInfo } from '@shared/new-session'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useWorkspace } from '../state/workspace'
 import { Field, SelectButton } from '../new-session/NewSessionSheet'
 import { isElsewhere } from '../new-session/model'

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { lostSessionIds, recoverLostSessions, useHostRestart } from './host-restart'

@@ -28,7 +28,7 @@ import {
 import { todoProgress, todoRowState, type TodoItem } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { insertSlashCommand } from '../session-io'
 import { subscribeClock } from '../sidebar/clock'
 import { StatusGlyph } from '../ui/StatusGlyph'

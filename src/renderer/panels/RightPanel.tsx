@@ -6,7 +6,7 @@ import { useActiveSession, useWorkspace, type PanelView } from '../state/workspa
 import { PANEL_VIEW_LABEL } from '../state/workspace-model'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { BrowserView } from './browser/BrowserView'
 import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'

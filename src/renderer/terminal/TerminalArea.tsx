@@ -18,7 +18,7 @@ import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-moti
 import { HEADER_HEIGHT } from '../app-shell/layout'
 import { PaneStrips } from '../lifecycle/PaneStrips'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
-import { useLang } from '../i18n'
+import { useLang } from '../ui/i18n'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal, setTerminalShown } from './registry'

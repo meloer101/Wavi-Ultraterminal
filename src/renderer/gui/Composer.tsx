@@ -35,7 +35,7 @@ import {
 } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

@@ -7,7 +7,7 @@ import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-reque
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import type { Session, SessionId, Worktree } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
 import { baseBrokenChecks, prHeadline } from '../../pull-requests/auto-fix-model'

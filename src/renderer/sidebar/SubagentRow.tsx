@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { sameSubagent, type SubagentRowModel } from './model'
 import styles from './SubagentRow.module.css'

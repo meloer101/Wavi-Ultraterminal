@@ -13,7 +13,7 @@ import enterStyles from '../overview/EnterButton.module.css'
 import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from '../attempts/AttemptGroups.module.css'
 import local from './DispatchGroups.module.css'
 

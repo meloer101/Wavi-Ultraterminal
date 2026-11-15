@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { Session } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { borrowTerminal } from '../terminal/borrow'
 import { useLiveSessions } from '../terminal/live-sessions'
 import { getSurface } from '../terminal/registry'

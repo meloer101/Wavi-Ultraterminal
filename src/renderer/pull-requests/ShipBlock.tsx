@@ -41,7 +41,7 @@ import {
   type ShipState
 } from './ship-flow'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './ShipBlock.module.css'
 
 const M = defineMessages({

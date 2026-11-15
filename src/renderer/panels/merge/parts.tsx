@@ -2,7 +2,7 @@
 import { Check, CircleAlert, CircleX, Minus } from 'lucide-react'
 import { runNote, type TurnCheckView } from '@shared/turn-checks'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { CheckMark } from '../../turn-checks/TurnChecksTag'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { turnChecksLine, type CheckLine, type testLine } from './model'

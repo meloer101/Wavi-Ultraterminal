@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, typ
 import { Check, ChevronDown } from 'lucide-react'
 import { normalizeHex } from '@shared/color'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './controls.module.css'
 
 const M = defineMessages({

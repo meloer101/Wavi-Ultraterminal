@@ -7,7 +7,7 @@ import { Check, CircleDashed, CircleHelp, X } from 'lucide-react'
 import { prDescription, prStateLabel, type ChecksState, type PullRequestInfo } from '@shared/pull-requests'
 import { defineMessages } from '@shared/i18n'
 import { prQueryFailed, useSessionPrStatus } from './store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './PrTag.module.css'
 
 const MARK_ICON = { size: 12, strokeWidth: 2, 'aria-hidden': true } as const

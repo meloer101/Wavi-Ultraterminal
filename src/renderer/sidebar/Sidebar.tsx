@@ -31,7 +31,7 @@ import styles from './Sidebar.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
 import { defineMessages, pick } from '@shared/i18n'
-import { useLang, useMessages } from '../i18n'
+import { useLang, useMessages } from '../ui/i18n'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 

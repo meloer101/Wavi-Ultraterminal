@@ -9,7 +9,7 @@ import type { SessionId } from '@shared/types'
 import { useSessionView } from '../state/workspace'
 import { sendHeld } from './reports'
 import { useDispatch } from './store'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from '../scripts/SetupStrip.module.css'
 
 const M = defineMessages({

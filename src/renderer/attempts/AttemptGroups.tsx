@@ -19,7 +19,7 @@ import {
 } from '@shared/attempt-groups'
 import type { Session, SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { glyphStatus } from '../lifecycle/present'
 import { GROUP_LABEL } from '../overview/model'
 import { showCompare } from '../overview/store'

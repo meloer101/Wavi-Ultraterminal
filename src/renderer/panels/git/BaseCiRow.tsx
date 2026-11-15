@@ -5,7 +5,7 @@
 import { Check, CircleDashed, X } from 'lucide-react'
 import type { SessionId, Worktree } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { openPullRequest } from '../../pull-requests/actions'
 import { agentIdle, agentName, baseWantsFix, setBaseAutoFix } from '../../pull-requests/auto-fix'
 import { baseAutomationText, stopParts } from '../../pull-requests/auto-fix-model'

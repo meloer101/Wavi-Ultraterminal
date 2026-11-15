@@ -7,7 +7,7 @@ import { defineMessages } from '@shared/i18n'
 import type { ChatTodo } from '@shared/transcript-chat'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { todoProgress, todoStatus } from './model'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

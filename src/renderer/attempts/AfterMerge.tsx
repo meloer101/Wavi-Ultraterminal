@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Archive } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { archiveRemaining, remainingBranches } from './actions'

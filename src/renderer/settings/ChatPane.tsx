@@ -3,7 +3,7 @@ import { useMemo, useRef } from 'react'
 import { LIMITS, type AppearancePatch, type AppearanceSettings, type ChatAppearance, type ChatWeight } from '@shared/settings'
 import { defineMessages, withLang } from '@shared/i18n'
 import { Segmented } from '../ui/Segmented'
-import { useLang, useMessages } from '../i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import { Button, PreviewPage, Row, Section, Select, Slider } from './controls'
 import {
   CHAT_SIZE_OPTIONS,

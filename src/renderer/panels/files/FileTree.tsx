@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from 'lucide-reac
 import { useEffect, useId, useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type Ref } from 'react'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { PATHS_DRAG_TYPE } from '../../terminal/attachments'
 import { pointerAnchor } from '../../ui/menu'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'

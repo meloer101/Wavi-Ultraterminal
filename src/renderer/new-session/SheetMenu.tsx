@@ -6,7 +6,7 @@ import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './NewSessionSheet.module.css'
 
 export interface SheetMenuItem {

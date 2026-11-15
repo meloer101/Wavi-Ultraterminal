@@ -5,7 +5,7 @@ import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExtern
 import type { GraphRow } from '@shared/git-graph/lanes'
 import type { GitCommit } from '@shared/git-graph/log'
 import { defineMessages } from '@shared/i18n'
-import { useMessages } from '../../i18n'
+import { useMessages } from '../../ui/i18n'
 import { subscribeClock } from '../../sidebar/clock'
 import { useWorkspace } from '../../state/workspace'
 import { pointerAnchor, popupMenu } from '../../ui/menu'

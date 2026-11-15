@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Ellipsis, Plus } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionStatus } from '@shared/types'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ProjectHeader.module.css'

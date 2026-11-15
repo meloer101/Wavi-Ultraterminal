@@ -10,7 +10,7 @@ import { useMetaNow } from '../session-meta/MetaChips'
 import { Popover } from '../session-meta/Popover'
 import { useSessionMeta } from '../session-meta/store'
 import { UsageAgentRow, UsageContextRow, UsageWindowRow } from '../session-meta/UsageRows'
-import { useMessages } from '../i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

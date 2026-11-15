@@ -53,7 +53,7 @@ import {
   type ToolView,
   type WaviMessage
 } from './model'
-import { useLang, useMessages } from '../i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
 const M = defineMessages({

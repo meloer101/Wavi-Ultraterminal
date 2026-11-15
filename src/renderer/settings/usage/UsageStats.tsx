@@ -6,7 +6,7 @@ import { agentName, type CliAgent } from '@shared/agents'
 import { formatTokens, type Heatmap, type StatsAgent, type UsageView } from '@shared/usage-stats'
 import { defineMessages } from '@shared/i18n'
 import { AgentIcon } from '../../ui/AgentIcon'
-import { useLang, useMessages } from '../../i18n'
+import { useLang, useMessages } from '../../ui/i18n'
 import { axisLabel, barLabel, kpis, monthDayCn, niceMax, shareText, startLabel, tooltipTitle } from './labels'
 import styles from './UsageStats.module.css'
 
