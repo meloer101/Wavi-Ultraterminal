@@ -52,12 +52,12 @@
       "exited": "已退出"
     },
     "en": {
-      "running": "运行中",
-      "needs_you": "等你处理",
-      "done_unread": "已完成",
-      "idle": "空闲",
-      "error": "出错",
-      "exited": "已退出"
+      "running": "Running",
+      "needs_you": "Needs you",
+      "done_unread": "Done",
+      "idle": "Idle",
+      "error": "Error",
+      "exited": "Exited"
     }
   },
   "agents": [
@@ -217,7 +217,7 @@
       "id": "shell",
       "name": {
         "zh": "终端",
-        "en": "终端"
+        "en": "Terminal"
       },
       "mark": false
     }
