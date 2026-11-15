@@ -54,6 +54,7 @@ import {
   rememberedKey,
   rememberedKindOf,
   retry,
+  reviewAgain,
   setTexts,
   startState,
   stepWord,
@@ -61,6 +62,7 @@ import {
   syncOnto,
   toGlance,
   toRunning,
+  unreviewedNote,
   waitNote,
   withoutWriter,
   writeFailedToGlance,
@@ -82,8 +84,6 @@ interface Run {
   token: number
   /** 提交's commit went in (saved with the run). */
   committed: boolean
-  /** The squash commit 合并 made on the local base (saved with the run). */
-  merged?: string
   /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
   commit?: string
   /** Taken up after a reload while 提交's commit (or 合并's merge) was under way: main may have committed or merged
@@ -99,6 +99,12 @@ interface Run {
   prepared?: boolean
   range?: CommitRange | null
   commits?: number
+  /** The tip prepush answered (what the review read): main pushes exactly it, or answers stale. */
+  tip?: string
+  /** The remote has no base to compare the push with: the review step says nothing was read. */
+  remoteMissing?: boolean
+  /** Stale answers in a row: the base or branch kept moving while it was reviewed. */
+  staleRuns?: number
 }
 
 /** What a run of 同步 needs beyond its context. */
@@ -204,7 +210,7 @@ export function savedShipRuns(): SavedShipRun[] {
     const state = current(worktree)
     if (!state) continue
     const { settings: _settings, ...ctx } = run.ctx
-    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.merged ? { merged: run.merged } : {}), ...(run.commit ? { commit: run.commit } : {}), state })
+    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.commit ? { commit: run.commit } : {}), state })
   }
   return saved
 }
@@ -221,7 +227,6 @@ export function restoreShipRuns(saved: readonly SavedShipRun[], settings: ShipCo
   for (const item of saved) {
     if (runs.has(item.ctx.worktree)) continue
     const run: Run = { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, restored: true, resumed: interruptedAtCommit(item) }
-    if (item.merged) run.merged = item.merged
     if (item.commit) run.commit = item.commit
     runs.set(item.ctx.worktree, run)
     useShips.setState((s) => ({ byWorktree: { ...s.byWorktree, [item.ctx.worktree]: interruptedShip(item.state) } }))
@@ -377,7 +382,29 @@ async function drive(worktree: string, token: number): Promise<void> {
   if (prepushOf(run.kind) && !run.prepared && !(await pullFirst(worktree, token, run))) return
   const state = current(worktree)
   if (!state || !alive(worktree, token)) return
-  return state.stage === 'running' ? runPhase(worktree, token) : writePhase(worktree, token)
+  if (state.stage !== 'running') return writePhase(worktree, token)
+  // Main answered stale (reviewAgain): the new range is reviewed before the push, the text is not written again.
+  if (state.steps.some((s) => s.id === 'review' && (s.state === 'working' || s.state === 'pending'))) {
+    await reviewStep(worktree, token, run)
+    const reviewed = current(worktree)
+    if (!reviewed || reviewed.error || !alive(worktree, token)) return
+  }
+  return runPhase(worktree, token)
+}
+
+/** Stale answers in a row before the run stops on the last one instead of reviewing again. */
+const MAX_STALE_RUNS = 3
+
+/**
+ * Main refused the push as stale (the base or the branch moved while the review read it): pull first and review the
+ * new range, then push what that review read. Whether it went round again (false: the run stops on this answer).
+ */
+function againAfterStale(worktree: string, token: number, run: Run): boolean {
+  run.staleRuns = (run.staleRuns ?? 0) + 1
+  if (run.staleRuns >= MAX_STALE_RUNS) return false
+  run.prepared = false
+  if (patch(worktree, token, reviewAgain)) void drive(worktree, token)
+  return true
 }
 
 /**
@@ -399,6 +426,8 @@ async function pullFirst(worktree: string, token: number, run: Run): Promise<boo
     run.prepared = true
     run.range = result.range
     run.commits = result.commits
+    run.tip = result.tip
+    run.remoteMissing = result.remoteMissing === true
     patch(worktree, token, (s) => {
       const pulled = pulledFirst(s, result.pulled)
       return result.commits > 0 && pulled.steps.some((step) => step.id === 'review') ? withLabel(pulled, 'review', reviewLabel(result.commits)) : pulled
@@ -530,7 +559,7 @@ async function reviewStep(worktree: string, token: number, run: Run): Promise<vo
     return
   }
   if (!run.range) {
-    patch(worktree, token, (s) => complete(s, 'review', '没有要审阅的提交'))
+    patch(worktree, token, (s) => complete(s, 'review', run.remoteMissing ? unreviewedNote(ctx.base) : '没有要审阅的提交'))
     return
   }
   try {
@@ -922,17 +951,20 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     )
     return
   }
-  run.merged = result.commit
   patch(worktree, token, (s) => complete(s, 'merge', result.commit.slice(0, 7)))
   finish(worktree, token, `已合并到 ${ctx.base} · ${result.commit.slice(0, 7)}`)
 }
+
+/** The tip the push node's review read, which main pushes exactly (nothing when prepush answered none). */
+const expected = (run: Run): { expect?: string } => (run.tip ? { expect: run.tip } : {})
 
 /** 推送 of the base a local 合并 left ahead of its upstream: main pushes the base alone and watches its CI. */
 async function runPushBase(worktree: string, token: number, run: Run): Promise<void> {
   const { ctx } = run
   patch(worktree, token, (s) => begin(s, 'push'))
-  const result = await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree })
+  const result = await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...expected(run) })
   if (!alive(worktree, token)) return
+  if (!result.ok && result.stale && againAfterStale(worktree, token, run)) return
   if (!result.ok) {
     patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.message, result.failure, result.output ? { output: result.output } : {})))
     return
@@ -970,8 +1002,9 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
   const target: PrTarget = { root: ctx.root, worktree: ctx.worktree }
   if (kind === 'push-pr') {
     patch(worktree, token, (s) => begin(s, 'push'))
-    const pushed = await window.tr.pr.push(target)
+    const pushed = await window.tr.pr.push({ ...target, ...expected(run) })
     if (!alive(worktree, token)) return
+    if (!pushed.ok && pushed.stale && againAfterStale(worktree, token, run)) return
     if (!pushed.ok) {
       patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', pushed.message, pushed.failure)))
       return
@@ -988,9 +1021,11 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
     title: state.texts.title,
     body: state.texts.body,
     draft: state.texts.draft,
-    pushApproved: true
+    pushApproved: true,
+    ...expected(run)
   })
   if (!alive(worktree, token)) return
+  if (!created.ok && created.stale && againAfterStale(worktree, token, run)) return
   if (!created.ok) {
     if (created.reason === 'declined') {
       patch(worktree, token, backToGlance)

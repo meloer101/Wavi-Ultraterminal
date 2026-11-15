@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCommitRange, parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
+import { parseCommitRange, parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
 
 const target = { root: '/r', worktree: '/w' }
 
@@ -34,12 +34,15 @@ describe('parseDiffSinceRequest', () => {
   })
 })
 
-describe('parsePushBaseRequest', () => {
-  it('takes a target and, optionally, the merge commit to push', () => {
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w' })).toEqual({ root: '/r', worktree: '/w' })
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'abc1234' })).toEqual({ root: '/r', worktree: '/w', commit: 'abc1234' })
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'HEAD~1' })).toBeNull()
-    expect(parsePushBaseRequest({ root: 'r', worktree: '/w' })).toBeNull()
+describe('parsePushRequest', () => {
+  it('takes a target and, optionally, the full commit id the review read', () => {
+    const tip = 'a'.repeat(40)
+    expect(parsePushRequest({ root: '/r', worktree: '/w' })).toEqual({ root: '/r', worktree: '/w' })
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: tip })).toEqual({ root: '/r', worktree: '/w', expect: tip })
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: 'abc1234' })).toBeNull()
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: 'HEAD~1' })).toBeNull()
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: '--force' })).toBeNull()
+    expect(parsePushRequest({ root: 'r', worktree: '/w' })).toBeNull()
   })
 })
 

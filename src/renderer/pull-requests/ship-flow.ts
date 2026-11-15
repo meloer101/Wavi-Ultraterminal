@@ -434,6 +434,19 @@ export function pulledFirst(state: ShipState, pulled: { from: string } | null): 
   return { ...state, steps: has ? state.steps.map((s) => (s.id === 'sync' ? step : s)) : [step, ...state.steps] }
 }
 
+/** The review step's note when the remote has no `base` to compare the push with: nothing was read, the whole base goes. */
+export const unreviewedNote = (base: string): string => `未审阅：远程没有 ${base}`
+
+/**
+ * Main refused the push as stale: the base or the branch moved since the review read it. The review (when the run has
+ * one) and the push steps wait again, the run stays past its text, and the push node pulls and reviews the new range.
+ */
+export function reviewAgain(state: ShipState): ShipState {
+  const steps = state.steps.map((s): FlowStep => (s.id === 'review' || s.id === 'push' || s.id === 'create' ? { ...s, state: 'pending', note: undefined } : s))
+  const again: ShipState = { ...state, steps, stage: 'running', error: null, failedIn: null }
+  return steps.some((s) => s.id === 'review') ? begin(again, 'review', '有新提交，重新审阅') : again
+}
+
 /** Pulling first failed: the step shows, failed, before the others, which wait again. */
 export function pullFirstFailed(state: ShipState, from: string, error: Omit<ShipError, 'step'>): ShipState {
   const steps = state.steps.some((s) => s.id === 'sync') ? state.steps : [pullStep(from, 'pending'), ...state.steps]

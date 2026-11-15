@@ -13,7 +13,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { BrowserWindow, ipcMain } from 'electron'
 import { classifyGitFailure, type GitFailure, type GitFailureContext, type GitStep } from '@shared/git-failures'
 import { operationInProgress, trackedDirtyPaths, type GitOperation, type MergeBlocker, type MergeConflict, type MergePrecheck, type MergeResult } from '@shared/git-merge'
-import { hadOwnCommits, parseWorktreePorcelain } from '@shared/git-worktrees'
+import { hadOwnCommits, parseAheadBehind } from '@shared/git-worktrees'
 import {
   nextPollDelay,
   isRateLimited,
@@ -46,9 +46,10 @@ import {
 } from '@shared/ship'
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import { HANDOFF_FILES } from '@shared/ship-handoff'
-import { parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from '@shared/ship-requests'
+import { parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushRequest, parseShipMainRequest, parseShipOperationRequest } from '@shared/ship-requests'
 import { baseMergeCheck, mergePrecheck, mergeTreeConflicts, mergeWorktree, pushBase } from './git-merge'
 import { baseCompareRef } from './git-graph'
+import { checkoutOf, fastForwardBase, fetchBase, withBase } from './git/base'
 import { baseRemoteFor, remoteFor } from './git/remote'
 import { git, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pinned, pushEnv, refExists, searchPath, type Ran } from './git/run'
 import { branchInfo, catchUpBase, commitWorktree, detectGh, failedLogs, gh, ghPausedUntil, gitHubRepoFromUrl, openPrNumber, pauseGhForRateLimit, prRepoFor, uncommittedFiles } from './pull-requests'
@@ -312,9 +313,7 @@ async function isMainCheckout(cwd: string): Promise<boolean> {
 /** Local `ref` commits `upstream` lacks and the other way round, or null when they cannot be counted. */
 async function aheadBehind(cwd: string, upstream: string, ref: string): Promise<{ ahead: number; behind: number } | null> {
   const counts = await git(cwd, ['rev-list', '--left-right', '--count', `${upstream}...${ref}`, '--'])
-  if (counts.code !== 0) return null
-  const [behind = '0', own = '0'] = counts.stdout.trim().split(/\s+/)
-  return { ahead: Number(own) || 0, behind: Number(behind) || 0 }
+  return counts.code === 0 ? parseAheadBehind(counts.stdout) : null
 }
 
 /**
@@ -462,26 +461,15 @@ async function precheck(root: string, worktree: string): Promise<MergePrecheck |
 
 /**
  * Brings the local base up to its upstream before a merge (so the push is not rejected): fetches the base (a failed
- * fetch leaves what is known), then fast-forwards the checkout that has it out, or the branch ref when none has.
- * Returns whether the base moved, or why it could not.
+ * fetch leaves what is known), then fast-forwards it (fastForwardBase). Returns whether the base moved, or why it could
+ * not.
  */
 async function syncBase(root: string, check: MergePrecheck): Promise<{ moved: boolean } | { message: string }> {
   const up = await baseUpstream(root, check.base)
   if (!up) return { moved: false }
-  await git(root, pinned.fetch('--quiet', '--', up.remote, `${up.remoteRef}:${up.ref}`), { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(root) })
-  const behind = (await countCommits(root, `refs/heads/${check.base}..${up.ref}`)) ?? 0
-  if (behind === 0) return { moved: false }
-  const name = `${up.remote}/${up.remoteRef.slice('refs/heads/'.length)}`
-  const cannot = (why: string): { message: string } => ({ message: `${check.base} 落后 ${name} ${behind} 个提交，没法快进${why}` })
-  if (check.baseCheckout) {
-    const ran = await git(check.baseCheckout, pinned.merge('--ff-only', '--quiet', '--no-edit', up.ref), { timeout: CHECKOUT_TIMEOUT_MS })
-    return ran.code === 0 ? { moved: true } : cannot(`：${lastLines(ran.stderr || ran.stdout)}`)
-  }
-  if ((await git(root, ['merge-base', '--is-ancestor', `refs/heads/${check.base}`, up.ref])).code !== 0) {
-    return { message: `${check.base} 和 ${name} 各有对方没有的提交，没法快进` }
-  }
-  const ran = await git(root, ['update-ref', '-m', `wavi: fast-forward ${check.base}`, `refs/heads/${check.base}`, up.ref, check.baseHead])
-  return ran.code === 0 ? { moved: true } : cannot(`：${lastLines(ran.stderr || ran.stdout)}`)
+  await fetchBase(root, up.remote, up.remoteRef, up.ref)
+  const moved = await fastForwardBase(root, check.base, up.ref, remoteName(up))
+  return moved.ok ? { moved: moved.moved } : { message: moved.message }
 }
 
 const REBASE_GAVE_UP = '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」'
@@ -573,11 +561,18 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
     done.committed = true
   }
 
-  let check = await precheck(request.root, request.worktree)
+  const check = await precheck(request.root, request.worktree)
   if (typeof check === 'string') return stepFailure('merge', 'failed', `没能检查合并：${check}`)
   // The tip the caller checked (the merge sheet's precheck and test) is the one merged, or nothing is.
   if (request.head && check.head && check.head !== request.head) return stepFailure('merge', 'failed', '分支在检查之后又变了：重新检查', { stale: true })
   const root = await realOrSelf(request.root)
+  if (!check.base) return mergeSteps(request, check, root)
+  return withBase(root, check.base, (message) => stepFailure('merge', 'blocked', message), () => mergeSteps(request, check, root))
+}
+
+/** 合并's catch-up, merge and (自动修复) push, holding the base. */
+async function mergeSteps(request: ShipMainRequest, checked: MergePrecheck, root: string): Promise<ShipMainResult> {
+  let check = checked
   if (check.base && !check.blocker) {
     const caught = await syncBase(root, check)
     if ('message' in caught) return stepFailure('merge', 'blocked', caught.message)
@@ -617,12 +612,14 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
 /**
  * 推送 of the base (the push node): after a local 合并, from the main checkout on its base, or the retry of a push that
  * failed. Pull first — the upstream's commits the local base lacks come in (pullBaseFirst) — then only the base is
- * pushed (running 合并 again would find the branch merged and stop there), and, given `commit`, only while the base
- * still has that merge. A base the remote already has goes through as pushed (git has nothing to send) and its CI is
- * watched, keyed by the worktree that pushed.
+ * pushed (running 合并 again would find the branch merged and stop there). Given `expect` (the tip the review read),
+ * exactly that commit is pushed, and the push is refused as `stale` when the base is elsewhere before or after pulling
+ * first (a commit landed during the review, or the pull rebased the reviewed commits): the push node reviews again. A
+ * base the remote already has goes through as pushed (git has nothing to send) and its CI is watched, keyed by the
+ * worktree that pushed. Holds the base (withBase).
  */
 export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
-  const target = parsePushBaseRequest(raw)
+  const target = parsePushRequest(raw)
   if (!target || !isProjectRoot(target.root)) return stepFailure('push', 'failed', '请求无效')
   if (shipping.has(target.worktree)) return stepFailure('push', 'blocked', '正在合并这个分支')
   shipping.add(target.worktree)
@@ -633,30 +630,31 @@ export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
     const { base } = info
     if (!base) return stepFailure('push', 'failed', '不知道这个分支合并进哪个分支')
     const root = await realOrSelf(target.root)
-    const baseRef = `refs/heads/${base}`
-    const before = (await gitOut(root, ['rev-parse', '--verify', '--quiet', baseRef])).trim()
-    if (!before) return stepFailure('push', 'failed', `找不到基线分支 ${base}`)
-    const remote = await baseRemoteFor(root, info.branch, base)
-    if (!remote) return { ok: true, commit: before, pushed: false }
-    if (target.commit && (await git(root, ['merge-base', '--is-ancestor', target.commit, baseRef])).code !== 0) {
-      return stepFailure('push', 'failed', `${base} 上已经没有这次的合并（${target.commit.slice(0, 7)}）：没有推送`)
-    }
-    const pulled = await pullBaseFirst(root, base)
-    if (!pulled.ok) {
-      if (pulled.reason === 'failed') return stepFailure('push', 'failed', pulled.failure.message, { failure: pulled.failure })
-      return stepFailure('push', 'blocked', pulled.message, pulled.reason === 'conflicts' ? { conflicts: pulled.files } : {})
-    }
-    const head = (await gitOut(root, ['rev-parse', '--verify', '--quiet', baseRef])).trim() || before
-    // The merge kept is still the commit pushed unless pulling first rewrote it.
-    const commit = target.commit && !pulled.pulled ? target.commit : head
-    const remoteRef = `refs/remotes/${remote}/${base}`
-    const remoteTip = (await git(root, ['rev-parse', '--verify', '--quiet', remoteRef])).stdout.trim()
-    const push = await pushBase(root, base, remote)
-    if (push !== '') return pushFailure(commit, base, push, remote)
-    // What "was it already failing" compares with: the remote's base before this push, else the commit before it.
-    const previous = remoteTip && remoteTip !== head ? remoteTip : (await git(root, ['rev-parse', '--verify', '--quiet', `${head}^`])).stdout.trim()
-    await startBaseCi({ root: target.root, worktree: target.worktree, cwd: root, remote, base, sha: head, previous: previous || head })
-    return { ok: true, commit, pushed: true }
+    return await withBase(root, base, (message) => stepFailure('push', 'blocked', message), async () => {
+      const baseRef = `refs/heads/${base}`
+      const tipOf = async (): Promise<string> => (await gitOut(root, ['rev-parse', '--verify', '--quiet', baseRef])).trim()
+      const before = await tipOf()
+      if (!before) return stepFailure('push', 'failed', `找不到基线分支 ${base}`)
+      const remote = await baseRemoteFor(root, info.branch, base)
+      if (!remote) return { ok: true, commit: before, pushed: false }
+      const stale = (): ShipMainResult => stepFailure('push', 'failed', `${base} 在审阅之后又变了：没有推送`, { stale: true })
+      if (target.expect && before !== target.expect) return stale()
+      const pulled = await pullBaseFirst(root, base)
+      if (!pulled.ok) {
+        if (pulled.reason === 'failed') return stepFailure('push', 'failed', pulled.failure.message, { failure: pulled.failure })
+        return stepFailure('push', 'blocked', pulled.message, pulled.reason === 'conflicts' ? { conflicts: pulled.files } : {})
+      }
+      const head = (await tipOf()) || before
+      if (target.expect && head !== target.expect) return stale()
+      const remoteRef = `refs/remotes/${remote}/${base}`
+      const remoteTip = (await git(root, ['rev-parse', '--verify', '--quiet', remoteRef])).stdout.trim()
+      const push = await pushBase(root, base, remote, target.expect)
+      if (push !== '') return pushFailure(head, base, push, remote)
+      // What "was it already failing" compares with: the remote's base before this push, else the commit before it.
+      const previous = remoteTip && remoteTip !== head ? remoteTip : (await git(root, ['rev-parse', '--verify', '--quiet', `${head}^`])).stdout.trim()
+      await startBaseCi({ root: target.root, worktree: target.worktree, cwd: root, remote, base, sha: head, previous: previous || head })
+      return { ok: true, commit: head, pushed: true }
+    })
   } catch (error) {
     return stepFailure('push', 'failed', `推送没有成功：${errorText(error)}`)
   } finally {
@@ -842,16 +840,9 @@ export async function pullWorktree(raw: unknown): Promise<ShipPullResult> {
 /** What pulling first did; a failure as ShipPrepushResult says it. */
 type PullFirst = { ok: true; pulled: { from: string; commits: number } | null } | Extract<ShipPrepushResult, { ok: false }>
 
-/** The checkout (its real path) that has `branch` out, or null when none has. */
-async function checkoutOf(root: string, branch: string): Promise<string | null> {
-  const entries = parseWorktreePorcelain(await gitOut(root, ['worktree', 'list', '--porcelain']))
-  const entry = entries.find((e) => !e.bare && e.branch === branch)
-  return entry ? realOrSelf(entry.path) : null
-}
-
 /**
- * The base's pull first: fetch its upstream (only that ref; a failed fetch leaves what was known); when the upstream has commits the local base lacks, bring
- * them in. Nothing unpushed: a fast-forward (in the checkout that has the base out, else the ref). Unpushed commits: a
+ * The base's pull first: fetch its upstream (only that ref; a failed fetch leaves what was known); when the upstream has
+ * commits the local base lacks, bring them in. Nothing unpushed: a fast-forward (fastForwardBase). Unpushed commits: a
  * rebase of those onto the upstream, never a force-push, never a dropped commit — in the checkout that has the base out
  * (refused while tracked files there are uncommitted; on conflicts the rebase is left stopped there to resolve), else
  * away from every working tree the user sees (rebaseAway). A base without an upstream has nothing to pull.
@@ -862,22 +853,18 @@ async function pullBaseFirst(root: string, base: string): Promise<PullFirst> {
   const from = remoteName(up)
   const context = { base, remote: up.remote }
   // A failed fetch leaves what was last fetched (the push says it when the remote moved meanwhile), as 合并's catch-up.
-  await git(root, pinned.fetch('--quiet', '--', up.remote, `+${up.remoteRef}:${up.ref}`), { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(root) })
-  const baseRef = `refs/heads/${base}`
-  const counts = await aheadBehind(root, up.ref, baseRef)
+  await fetchBase(root, up.remote, up.remoteRef, up.ref)
+  const counts = await aheadBehind(root, up.ref, `refs/heads/${base}`)
   if (!counts || counts.behind === 0) return { ok: true, pulled: null }
   const pulled = { ok: true as const, pulled: { from, commits: counts.behind } }
+  if (counts.ahead === 0) {
+    const moved = await fastForwardBase(root, base, up.ref, from)
+    return moved.ok ? pulled : { ok: false, reason: 'blocked', message: moved.message, from }
+  }
   const checkout = await checkoutOf(root, base)
   if (checkout) {
     const busy = await operationOf(checkout)
     if (busy) return { ok: false, reason: 'blocked', message: `${base} 的工作区里有进行中的${operationNames[busy.kind]}：先完成或放弃它`, from }
-  }
-  if (counts.ahead === 0) {
-    const old = (await gitOut(root, ['rev-parse', '--verify', '--quiet', baseRef])).trim()
-    const ran = checkout
-      ? await git(checkout, pinned.merge('--ff-only', '--quiet', '--no-edit', up.ref), { timeout: CHECKOUT_TIMEOUT_MS, env: NO_EDITOR })
-      : await git(root, ['update-ref', '-m', `wavi: fast-forward ${base}`, baseRef, up.ref, old])
-    return ran.code === 0 ? pulled : { ok: false, reason: 'blocked', message: `${base} 落后 ${from} ${counts.behind} 个提交，没法快进：${lastLines(printed(ran))}`, from }
   }
   if (!checkout) return rebaseAway(root, base, up.ref, from, pulled)
   const status = await git(checkout, ['status', '--porcelain=v1', '-z', '--untracked-files=no', '--ignore-submodules=dirty'])
@@ -947,7 +934,9 @@ async function rangeOf(cwd: string, from: string, to: string): Promise<{ range: 
  * The push node's first step (ShipApi.prepush): pull first, then say what the push will send that the remote lacks —
  * the pre-push review's range. `base`: the local base against its upstream (pullBaseFirst); `branch`: the branch against
  * its remote branch, fast-forwarded first (a pushed branch is never rebased; diverged fails as such and the agent takes
- * it); `new-pr`: the branch as a PR proposes it, `<base>...<branch>`. Never pushes.
+ * it); `new-pr`: the branch as a PR proposes it, `<base>...<branch>`. `tip`: the ref once pulled, which the push sends
+ * exactly. A base whose remote has none to compare with says so (`remoteMissing`). Holds the base while pulling it
+ * (withBase). Never pushes.
  */
 export async function shipPrepush(raw: unknown): Promise<ShipPrepushResult> {
   const request = parsePrepushRequest(raw)
@@ -962,16 +951,21 @@ export async function shipPrepush(raw: unknown): Promise<ShipPrepushResult> {
     if (!base) return blockedResult('不知道这个分支合并进哪个分支')
     const root = await realOrSelf(request.root)
     const nothing = { range: null, commits: 0 }
+    const tipOf = async (cwd: string, ref: string): Promise<string> => (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])).trim()
     if (request.push === 'base') {
       if (!(await refExists(root, `refs/heads/${base}`))) return blockedResult(`找不到基线分支 ${base}`)
-      const pulled = await pullBaseFirst(root, base)
-      if (!pulled.ok) return pulled
-      // Against the upstream as just fetched, else the base on the remote it is pushed to.
-      const up = await baseUpstream(root, base)
-      const remote = up ? null : await baseRemoteFor(root, branch, base)
-      const against = up?.ref ?? (remote && (await refExists(root, `refs/remotes/${remote}/${base}`)) ? `refs/remotes/${remote}/${base}` : null)
-      const sent = against ? await rangeOf(root, against, `refs/heads/${base}`) : null
-      return { ok: true, pulled: pulled.pulled, ...(sent ?? nothing) }
+      return withBase<ShipPrepushResult>(root, base, blockedResult, async () => {
+        const pulled = await pullBaseFirst(root, base)
+        if (!pulled.ok) return pulled
+        // Against the upstream as just fetched, else the base on the remote it is pushed to.
+        const up = await baseUpstream(root, base)
+        const remote = up ? null : await baseRemoteFor(root, branch, base)
+        const against = up?.ref ?? (remote && (await refExists(root, `refs/remotes/${remote}/${base}`)) ? `refs/remotes/${remote}/${base}` : null)
+        const sent = against ? await rangeOf(root, against, `refs/heads/${base}`) : null
+        // A remote without the base: what the push sends cannot be told (the whole base goes), not "nothing new".
+        const missing = !against && remote !== null ? { remoteMissing: true as const } : {}
+        return { ok: true, pulled: pulled.pulled, ...(sent ?? nothing), tip: await tipOf(root, `refs/heads/${base}`), ...missing }
+      })
     }
     if (base === branch) return blockedResult('这是基线分支本身，没有可以推送的分支')
     const remote = await remoteFor(cwd, branch, base)
@@ -996,7 +990,7 @@ export async function shipPrepush(raw: unknown): Promise<ShipPrepushResult> {
       against = mergeBase || against
     }
     const sent = await rangeOf(cwd, against, `refs/heads/${branch}`)
-    return { ok: true, pulled, ...(sent ?? nothing) }
+    return { ok: true, pulled, ...(sent ?? nothing), tip: await tipOf(cwd, `refs/heads/${branch}`) }
   })
 }
 

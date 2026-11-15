@@ -114,7 +114,7 @@ export interface SavedShipRun {
   kind: ShipKind
   ctx: SavedShipContext
   committed: boolean
-  /** The squash commit 合并 made on the local base. */
+  /** The squash commit an older build's 合并 saved; kept as read, never written. */
   merged?: string
   /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry does not commit them again. */
   commit?: string

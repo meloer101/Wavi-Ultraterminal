@@ -150,8 +150,9 @@ export type ShipMainResult =
 
 /** 推送 of the base (ShipApi.pushBase): after a local 合并, or the retry of a failed push. */
 export interface PushBaseRequest extends PrTarget {
-  /** A merge commit the caller kept: the push is refused when the base no longer has it. */
-  commit?: string
+  /** The base's tip the push node's review read (prepush's `tip`), a full commit id: exactly that commit is pushed, and
+   *  the push is refused as `stale` when the base is elsewhere once pulled first. Absent (自动修复): whatever the base is at. */
+  expect?: string
 }
 
 /**
@@ -176,7 +177,17 @@ export interface CommitRange {
  * the remote lacks (null / 0: nothing). `from` names the remote ref, `<remote>/<branch>`.
  */
 export type ShipPrepushResult =
-  | { ok: true; pulled: { from: string; commits: number } | null; range: CommitRange | null; commits: number }
+  | {
+      ok: true
+      pulled: { from: string; commits: number } | null
+      range: CommitRange | null
+      commits: number
+      /** The local ref's tip once pulled (a full commit id): what the push sends, the request's `expect`. */
+      tip: string
+      /** A push of the base whose remote has no base to compare against (no upstream, no remote-tracking ref of the same
+       *  name): `range` is null because what it sends cannot be told, not because it sends nothing. */
+      remoteMissing?: true
+    }
   /** Nothing ran, or what ran was undone: why, in words (a rebase that conflicted away from any checkout is aborted). */
   | { ok: false; reason: 'blocked'; message: string; from?: string }
   | { ok: false; reason: 'failed'; failure: GitFailure; from?: string }
@@ -219,7 +230,8 @@ export interface ShipApi {
   /** The text the agent wrote, or null while the file is not there yet. */
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
-  /** 推送 of the base after a local 合并 (or after a push failed): pulls first, then pushes the base (nothing is merged). */
+  /** 推送 of the base after a local 合并 (or after a push failed): pulls first, then pushes the base (nothing is merged);
+   *  given `expect`, exactly that tip, or nothing (`stale`). */
   pushBase(request: PushBaseRequest): Promise<ShipMainResult>
   /** The push node's pull first, and what the push will send (the pre-push review's range). Never pushes. */
   prepush(request: ShipPrepushRequest): Promise<ShipPrepushResult>

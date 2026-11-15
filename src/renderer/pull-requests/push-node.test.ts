@@ -232,6 +232,74 @@ describe('a P0 / P1 stops the push', () => {
   })
 })
 
+describe('the push is bound to what the review read', () => {
+  const tip = 'b'.repeat(40)
+  const newer = { from: 'a'.repeat(40), to: 'd'.repeat(40) }
+
+  it('sends the tip prepush answered, and on a stale answer pulls and reviews the new range before pushing', async () => {
+    for (const kind of ['push-base', 'push-pr'] as const) {
+      const pushOf = kind === 'push-base' ? pushBase : push
+      prepush.mockReset()
+      startBackgroundReview.mockClear()
+      pushOf.mockReset()
+      prepush.mockResolvedValueOnce({ ok: true, pulled: null, range, commits: 3, tip })
+      prepush.mockResolvedValueOnce({ ok: true, pulled: null, range: newer, commits: 4, tip: newer.to })
+      pushOf.mockResolvedValueOnce(
+        kind === 'push-base'
+          ? { ok: false, step: 'push', reason: 'failed', message: 'main 在审阅之后又有了新提交', stale: true }
+          : { ok: false, reason: 'blocked', message: 'feat 在审阅之后又有了新提交', stale: true }
+      )
+      pushOf.mockResolvedValueOnce(kind === 'push-base' ? { ok: true, commit: newer.to, pushed: true } : { ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
+      startShip(ctx, kind, kind)
+      await settle()
+      expect(prepush).toHaveBeenCalledTimes(2)
+      expect(startBackgroundReview.mock.calls.map((call) => call[5])).toEqual([range, newer])
+      expect(pushOf.mock.calls.map((call) => (call[0] as { expect?: string }).expect)).toEqual([tip, newer.to])
+      expect(state()).toBeUndefined()
+    }
+  })
+
+  it('reviews the new range and stops on its P0 / P1 like the first review', async () => {
+    prepush.mockResolvedValueOnce({ ok: true, pulled: null, range, commits: 3, tip })
+    prepush.mockResolvedValueOnce({ ok: true, pulled: null, range: newer, commits: 4, tip: newer.to })
+    pushBase.mockResolvedValueOnce({ ok: false, step: 'push', reason: 'failed', message: 'main 在审阅之后又有了新提交', stale: true })
+    // The first review finds nothing; the second one a P1.
+    startBackgroundReview.mockImplementationOnce(async (root: string, agent: string) => {
+      landed[root] = []
+      reviews.byRoot[root] = { phase: 'done', agent, message: '看过了' }
+    })
+    nextFindings = [{ severity: 'P1', text: '越界' }]
+    startShip(ctx, 'push-base', '推送 main')
+    await settle()
+    expect(pushBase).toHaveBeenCalledTimes(1)
+    expect(startBackgroundReview).toHaveBeenCalledTimes(2)
+    expect(state()!.error).toMatchObject({ step: 'review', reviewStop: true })
+    pushPastReview(ctx.worktree)
+    await settle()
+    expect(pushBase).toHaveBeenLastCalledWith({ root: '/repo', worktree: '/repo-wt', expect: newer.to })
+  })
+
+  it('stops after the base moved three times in a row instead of reviewing forever', async () => {
+    prepush.mockResolvedValue({ ok: true, pulled: null, range, commits: 3, tip })
+    pushBase.mockResolvedValue({ ok: false, step: 'push', reason: 'failed', message: 'main 在审阅之后又有了新提交', stale: true })
+    startShip(ctx, 'push-base', '推送 main')
+    await settle()
+    expect(pushBase).toHaveBeenCalledTimes(3)
+    expect(state()!.error).toMatchObject({ step: 'push', message: 'main 在审阅之后又有了新提交' })
+  })
+
+  it('says the remote has no base to compare against instead of nothing to review, and pushes', async () => {
+    prepush.mockResolvedValueOnce({ ok: true, pulled: null, range: null, commits: 0, tip, remoteMissing: true })
+    nextFindings = [{ severity: 'P1', text: '越界' }]
+    pushBase.mockResolvedValueOnce({ ok: false, step: 'push', reason: 'failed', message: 'offline' })
+    startShip(ctx, 'push-base', '推送 main')
+    await settle()
+    expect(startBackgroundReview).not.toHaveBeenCalled()
+    expect(state()!.steps.find((s) => s.id === 'review')).toMatchObject({ state: 'done', note: '未审阅：远程没有 main' })
+    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', expect: tip })
+  })
+})
+
 describe('pull first fails', () => {
   it('hands a diverged branch to the agent (the 拉取 hand-off), nothing pushed', async () => {
     prepush.mockResolvedValueOnce({ ok: false, reason: 'failed', from: 'origin/feat', failure: { kind: 'diverged', message: '远程分支和本地分叉', next: 'handoff', tail: '' } })

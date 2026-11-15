@@ -182,8 +182,7 @@ const api: TrApi = {
     onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener),
     newSessionInfo: (root) => ipcRenderer.invoke(IPC.gitWorktreesNewSessionInfo, root),
     create: (request) => ipcRenderer.invoke(IPC.gitWorktreesCreate, request),
-    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree),
-    merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
+    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree)
   },
   browser: browserApi,
   simulator: {

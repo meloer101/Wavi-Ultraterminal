@@ -48,6 +48,7 @@ const readHandoff = vi.fn<(request: unknown) => Promise<string | null>>()
 const diffSince = vi.fn<(request: unknown) => Promise<string | null>>()
 const changes = vi.fn<(worktree: string) => Promise<unknown>>()
 const create = vi.fn<(request: unknown) => Promise<unknown>>()
+const prepush = vi.fn<(request: unknown) => Promise<unknown>>()
 /** diffSinceWithCut answers diffSince's text, cut at the cap when this is set. */
 let diffCut = false
 const diffSinceWithCut = async (request: unknown): Promise<{ text: string; cut: boolean } | null> => {
@@ -105,6 +106,9 @@ beforeEach(() => {
   // What is uncommitted now: nothing of the run's ticked files by default.
   changes.mockResolvedValue({ uncommitted: [], untrackedOmitted: 0 })
   create.mockReset()
+  prepush.mockReset()
+  // The push node's pull first: nothing came in, nothing to review.
+  prepush.mockResolvedValue({ ok: true, pulled: null, range: null, commits: 0 })
   readHandoff.mockResolvedValue('feat: from the agent\n')
   detectAgents.mockReset()
   detectAgents.mockResolvedValue({ claude: true, codex: true })
@@ -129,8 +133,7 @@ beforeEach(() => {
         diffSinceWithCut,
         handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }),
         readHandoff,
-        // The push node's pull first: nothing came in, nothing to review.
-        prepush: async () => ({ ok: true, pulled: null, range: null, commits: 0 })
+        prepush
       },
       agent: { onEvent: () => () => {} },
       app: { detectAgents },
@@ -487,6 +490,22 @@ describe('the exits commit nothing', () => {
     await settle()
     expect(commit).not.toHaveBeenCalled()
     expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('创建 PR whose branch moved since its pull first pulls again and creates at the new tip', async () => {
+    prepush.mockResolvedValueOnce({ ok: true, pulled: null, range: null, commits: 0, tip: 'a'.repeat(40) })
+    prepush.mockResolvedValueOnce({ ok: true, pulled: null, range: null, commits: 0, tip: 'b'.repeat(40) })
+    create.mockResolvedValueOnce({ ok: false, reason: 'blocked', message: 'feat 在审阅之后又有了新提交', stale: true, step: 'push' })
+    create.mockResolvedValueOnce({ ok: true, url: 'https://github.com/o/r/pull/9', number: 9 })
+    startShip(ctx, 'pr', '创建 PR')
+    await settle()
+    submitShip(ctx.worktree)
+    await settle()
+    expect(prepush).toHaveBeenCalledTimes(2)
+    expect(create.mock.calls.map((call) => (call[0] as { expect?: string }).expect)).toEqual(['a'.repeat(40), 'b'.repeat(40)])
+    // The title and body the user looked at are not written again.
+    expect(create.mock.calls[1]![0]).toMatchObject({ title: 'feat: new' })
+    expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
   })
 
   it('推送到 PR #N goes straight to the push', async () => {

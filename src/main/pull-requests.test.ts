@@ -427,6 +427,26 @@ describe('创建 PR', () => {
     expect(git(project, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
   })
 
+  it('pushes only the tip the review read: a commit made since is refused as stale, nothing pushed or created', async () => {
+    for (const pushed of [false, true]) {
+      const { root, wt, bare } = setup()
+      if (pushed) git(wt, 'push', '-q', '-u', 'origin', 'feat')
+      const reviewed = git(wt, 'rev-parse', 'HEAD').trim()
+      const remoteBefore = git(bare, 'for-each-ref', '--format=%(objectname)', 'refs/heads/feat').trim()
+      commit(wt, 'late.txt', 'l\n', 'Landed during the review')
+      expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true, expect: reviewed })).toMatchObject({ ok: false, reason: 'blocked', stale: true, step: 'push' })
+      expect(git(bare, 'for-each-ref', '--format=%(objectname)', 'refs/heads/feat').trim()).toBe(remoteBefore)
+      expect(ghCalls('pr create')).toHaveLength(0)
+      writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+      const tip = git(wt, 'rev-parse', 'HEAD').trim()
+      expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true, expect: tip })).toMatchObject({ ok: true, number: 7 })
+      expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(tip)
+      for (const name of readdirSync(ghDir)) rmSync(join(ghDir, name), { force: true })
+    }
+    const { root, wt } = setup()
+    expect(await createPullRequest({ root, worktree: wt, title: 't', expect: 'HEAD' })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
   it('refuses the base branch, a branch with nothing new, a missing gh and bad input', async () => {
     const { root, wt } = setup()
     expect(await createPullRequest({ root, worktree: root, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '这是基线分支本身，没有可以提 PR 的改动' })
@@ -768,7 +788,8 @@ describe('catching up the base after a merge (v1.65)', () => {
     expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
     expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: false })
 
-    commit(other, 'more.txt', 'x\n', 'Another merge')
+    // The fast-forward would change a.txt, which the checkout has edited.
+    commit(other, 'a.txt', 'merged edit\n', 'Another merge')
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'local edit\n')
     const before = git(root, 'rev-parse', 'main').trim()

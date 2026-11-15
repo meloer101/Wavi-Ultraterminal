@@ -1,14 +1,12 @@
 // Validation of what the renderer sends to the ship handlers (src/shared/ship.ts): main trusts none of it. Pure.
 import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, oneLine, type MergeMethod } from './git-merge'
-import { MAX_SHIP_FILES, parsePrTarget } from './pull-requests'
+import { isFullSha, MAX_SHIP_FILES, parsePrTarget, type PrPushRequest } from './pull-requests'
 import type { CommitRange, DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest, ShipOperationRequest, ShipPrepushRequest } from './ship'
 import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
 
 const MAX_PATH = 4096
 /** A full or abbreviated commit id; the diff and the reset resolve it and require it to be an ancestor of HEAD. */
 const SINCE = /^[0-9a-f]{7,40}$/i
-/** A full commit id (SHA-1 or SHA-256), as the precheck reads it. */
-const FULL_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/
 /** The squash commit's subject (the session's title), as the merge sheet's request caps it. */
 const MAX_TITLE = 200
 
@@ -34,16 +32,13 @@ export function parseDiffSinceRequest(raw: unknown): DiffSinceRequest | null {
   return { ...target, since: raw.since.toLowerCase() }
 }
 
-/**
- * 合并: the message is cleaned like a commit message (newlines kept) and capped; with paths it must not be empty (it is
- * the commit's message). An empty `paths` list means nothing to commit, as null does. `push` only when it is true; the
- * title one line, capped (an empty one is left out); `head` a full commit id.
- */
-export function parsePushBaseRequest(raw: unknown): PushBaseRequest | null {
+/** A push of the base (PushBaseRequest) or the branch (PrPushRequest): a worktree and, optionally, the tip the review
+ *  read (`expect`, a full commit id). */
+export function parsePushRequest(raw: unknown): (PushBaseRequest & PrPushRequest) | null {
   const target = parsePrTarget(raw)
   if (!target || !isRecord(raw)) return null
-  if (raw.commit === undefined) return target
-  return typeof raw.commit === 'string' && SINCE.test(raw.commit) ? { ...target, commit: raw.commit } : null
+  if (raw.expect === undefined) return target
+  return isFullSha(raw.expect) ? { ...target, expect: raw.expect } : null
 }
 
 const PREPUSH: ReadonlySet<unknown> = new Set(['base', 'branch', 'new-pr'])
@@ -59,7 +54,7 @@ export function parsePrepushRequest(raw: unknown): ShipPrepushRequest | null {
  *  as an option or a revision expression. */
 export function parseCommitRange(raw: unknown): CommitRange | null {
   if (!isRecord(raw) || typeof raw.from !== 'string' || typeof raw.to !== 'string') return null
-  if (!FULL_SHA.test(raw.from) || !FULL_SHA.test(raw.to)) return null
+  if (!isFullSha(raw.from) || !isFullSha(raw.to)) return null
   return { from: raw.from, to: raw.to }
 }
 
@@ -77,7 +72,7 @@ export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
   if (paths && !message) return null
   if (raw.push !== undefined && typeof raw.push !== 'boolean') return null
   if (raw.title !== undefined && typeof raw.title !== 'string') return null
-  if (raw.head !== undefined && (typeof raw.head !== 'string' || !FULL_SHA.test(raw.head))) return null
+  if (raw.head !== undefined && !isFullSha(raw.head)) return null
   const title = typeof raw.title === 'string' ? oneLine(raw.title).slice(0, MAX_TITLE) : ''
   return {
     ...target,
