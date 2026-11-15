@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { defineMessages, getLang, onLangChange, pick, resolveLang, setLang, withLang } from './i18n'
+import { defineMessages, getLang, localized, onLangChange, pick, resolveLang, setLang, withLang } from './i18n'
 
 afterEach(() => setLang('zh'))
 
@@ -48,5 +48,18 @@ describe('messages', () => {
     off()
     setLang('zh')
     expect(seen).toEqual(['en'])
+  })
+})
+
+describe('localized', () => {
+  const LABEL = localized(defineMessages({ zh: { running: '运行中', idle: '空闲' }, en: { running: 'Running', idle: 'Idle' } }))
+
+  it('reads the current language on every access, as a plain record would', () => {
+    expect(LABEL.running).toBe('运行中')
+    setLang('en')
+    expect(LABEL.idle).toBe('Idle')
+    expect(Object.entries(LABEL)).toEqual([['running', 'Running'], ['idle', 'Idle']])
+    expect({ ...LABEL }).toEqual({ running: 'Running', idle: 'Idle' })
+    expect('idle' in LABEL).toBe(true)
   })
 })

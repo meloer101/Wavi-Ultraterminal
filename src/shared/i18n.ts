@@ -90,3 +90,21 @@ export function defineMessages<T extends object>(messages: { zh: T; en: NoInfer<
 export function pick<T>(messages: Messages<T>): T {
   return messages[current]
 }
+
+/**
+ * A table that always reads the current language, for an exported constant other modules index into
+ * (`STATUS_LABEL[status]`, `Object.entries(…)`): its callers keep working unchanged. Read-only.
+ */
+export function localized<T extends object>(messages: Messages<T>): T {
+  return new Proxy(messages.zh, {
+    get: (_target, key) => (messages[current] as Record<PropertyKey, unknown>)[key],
+    has: (_target, key) => key in messages[current],
+    ownKeys: () => Reflect.ownKeys(messages[current]),
+    getOwnPropertyDescriptor: (_target, key) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(messages[current], key)
+      return descriptor && { ...descriptor, configurable: true }
+    },
+    set: () => false,
+    deleteProperty: () => false
+  })
+}
