@@ -36,6 +36,35 @@ describe('全屏背景 (PRD v1.97)', () => {
   })
 })
 
+describe('背景图片 (PRD v1.189)', () => {
+  const name = `${'0f'.repeat(32)}.jpg`
+
+  it('has no picture and no blur by default', () => {
+    expect(DEFAULT_SETTINGS.appearance.backgroundImage).toBe('')
+    expect(DEFAULT_SETTINGS.appearance.backgroundBlur).toBe(0)
+  })
+
+  it('keeps a stored picture’s name and drops anything else, so a path never reaches the protocol', () => {
+    expect(sanitizeSettings({ appearance: { backgroundImage: name } }).appearance.backgroundImage).toBe(name)
+    expect(sanitizeSettings({ appearance: { backgroundImage: '/Users/me/wall.jpg' } }).appearance.backgroundImage).toBe('')
+    expect(sanitizeSettings({ appearance: { backgroundImage: '../settings.json' } }).appearance.backgroundImage).toBe('')
+  })
+
+  it('clamps the blur to 0–100 % in whole percent', () => {
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 0.404 } }).appearance.backgroundBlur).toBe(0.4)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 2 } }).appearance.backgroundBlur).toBe(1)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: -1 } }).appearance.backgroundBlur).toBe(0)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 'x' } }).appearance.backgroundBlur).toBe(0)
+  })
+
+  it('移除 is a patch to the empty name', () => {
+    const withPicture = sanitizeSettings({ appearance: { backgroundImage: name, backgroundBlur: 0.4 } })
+    const removed = applySettingsPatch(withPicture, { appearance: { backgroundImage: '' } })
+    expect(removed.appearance.backgroundImage).toBe('')
+    expect(removed.appearance.backgroundBlur).toBe(0.4)
+  })
+})
+
 describe('applySettingsPatch', () => {
   it('merges appearance fields and keeps the rest', () => {
     const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { cjkFont: 'Noto Sans SC', fontSize: 14 } })

@@ -2,6 +2,7 @@
 // for the terminal layers and <html> data attributes. No DOM access, so it is unit tested.
 // The terminal color comes from the theme (--term-bg: white in light mode, near-black in dark) unless the user chose
 // or imported one (PRD F7 v1.71): then --term-bg is set on <html> to it and xterm gets the matching customTheme.
+import { backgroundBlurPx, backgroundImageUrl } from '@shared/background-image'
 import type { AppearanceSettings, ChatAppearance, ChatWidth } from '@shared/settings'
 import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
@@ -97,6 +98,8 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
   const material = shownMaterial(a, liquidGlass)
   const cli = terminalBackgroundAlpha(a)
   const gui = chatOpacity(a)
+  // 背景图片 (PRD v1.189, Figma 86): under the base layer on 玻璃; 实色 is opaque, so it is not drawn there.
+  const image = a.backgroundImage !== '' && material !== 'solid'
   return {
     vars: {
       // The base layer and the right panel follow the shown session's card (PRD v1.179; AppShell picks the cli or gui pair
@@ -121,10 +124,13 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
       '--tr-terminal-backdrop': backdropCss(a),
       // Layers that sit above the backdrop must not repaint it with an opaque fill.
       '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)',
-      '--tr-term-ring': ringCss(a)
+      '--tr-term-ring': ringCss(a),
+      '--tr-bg-image': image ? `url("${backgroundImageUrl(a.backgroundImage)}")` : null,
+      '--tr-bg-blur': image ? `${backgroundBlurPx(a.backgroundBlur)}px` : null
     },
     // The full-screen field (AppShell.module.css picks the palette, `auto` by theme).
     // data-material: 实色 swaps in the softer solid palette (tokens.css) and keeps full screen solid (AppShell.module.css).
-    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off', 'data-material': material }
+    // data-bg-image: the shell draws the user's picture under its base layer (AppShell.module.css).
+    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off', 'data-material': material, 'data-bg-image': image ? 'on' : 'off' }
   }
 }

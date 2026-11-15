@@ -526,6 +526,13 @@
   color: var(--text-primary);
 }
 
+/* The mark keeps its 16 : 28 share of the circle, as in an agent's turn (Chat.module.css); AgentIcon sizes itself
+   inline, hence !important. */
+.reportAvatar > :not(.dot) {
+  width: calc(var(--avatar) * 16 / 28) !important;
+  height: calc(var(--avatar) * 16 / 28) !important;
+}
+
 .dot {
   position: absolute;
   right: -1px;

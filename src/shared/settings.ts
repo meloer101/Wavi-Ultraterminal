@@ -2,6 +2,7 @@
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
 import { headlessAgent, type HeadlessAgent } from './agents'
+import { isBackgroundImageName } from './background-image'
 import { normalizeHex } from './color'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 import { DEFAULT_REMOTE_PORT } from './remote'
@@ -96,6 +97,14 @@ export interface AppearanceSettings {
    * opaque throughout.
    */
   windowMaterial: WindowMaterial
+  /**
+   * 背景图片 (PRD v1.189, Figma 86): the stored picture's name (`<sha256>.jpg`, shared/background-image.ts), or '' for none.
+   * It is drawn under the base layer of every window on 玻璃 (in place of the desktop, and of the full-screen field); not
+   * under 实色.
+   */
+  backgroundImage: string
+  /** 模糊 of that picture, 0–1. */
+  backgroundBlur: number
 }
 
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
@@ -243,7 +252,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalOpacity: 0.85,
     screenReader: false,
     chat: { width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 0.85, avatar: '' },
-    windowMaterial: 'glass'
+    windowMaterial: 'glass',
+    backgroundImage: '',
+    backgroundBlur: 0
   },
   ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
   review: {
@@ -284,6 +295,7 @@ export const LIMITS = {
   fontName: 120,
   chatFontSize: { min: 12, max: 18 },
   chatOpacity: { min: 0.2, max: 1 },
+  backgroundBlur: { min: 0, max: 1 },
   /** A 256² webp is ~10–40 KB; the cap keeps a stray big image out of settings.json. */
   avatar: 400_000
 } as const
@@ -359,7 +371,9 @@ function appearance(value: unknown): AppearanceSettings {
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader,
     chat: chat(v.chat),
-    windowMaterial: windowMaterial(v.windowMaterial)
+    windowMaterial: windowMaterial(v.windowMaterial),
+    backgroundImage: isBackgroundImageName(v.backgroundImage) ? v.backgroundImage : d.backgroundImage,
+    backgroundBlur: percent(num(v.backgroundBlur, d.backgroundBlur, LIMITS.backgroundBlur))
   }
 }
 

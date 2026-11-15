@@ -37,7 +37,7 @@
   }
 }
 
-.header > :is(button, label, [role='radiogroup']) {
+.header > :is(button, label, [role='radiogroup'], [role='tablist']) {
   -webkit-app-region: no-drag;
 }
 

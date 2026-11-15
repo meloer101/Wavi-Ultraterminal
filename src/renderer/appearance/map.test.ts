@@ -64,7 +64,7 @@ describe('toAppearanceDom', () => {
   })
 
   it('names the full-screen palette on <html> (auto picks by theme in CSS)', () => {
-    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off', 'data-material': 'frosted' })
+    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off', 'data-material': 'frosted', 'data-bg-image': 'off' })
     expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }, false).attrs['data-fs-backdrop']).toBe('dune')
   })
 })
@@ -138,6 +138,18 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(dom.vars['--chat-avatar']).toBe(`url("${avatar}")`)
     expect(dom.attrs['data-chat-avatar']).toBe('on')
     expect(toAppearanceDom(base, true).vars['--chat-avatar']).toBeNull()
+  })
+
+  it('draws the 背景图片 on 玻璃 only, blurred by 模糊 (PRD v1.189, Figma 86)', () => {
+    const name = `${'0f'.repeat(32)}.jpg`
+    const dom = toAppearanceDom({ ...base, backgroundImage: name, backgroundBlur: 0.4 }, true)
+    expect(dom.attrs['data-bg-image']).toBe('on')
+    expect(dom.vars['--tr-bg-image']).toBe(`url("wavi-bg://image/${name}")`)
+    expect(dom.vars['--tr-bg-blur']).toBe('16px')
+    const solid = toAppearanceDom({ ...base, backgroundImage: name, windowMaterial: 'solid' }, true)
+    expect(solid.attrs['data-bg-image']).toBe('off')
+    expect(solid.vars['--tr-bg-image']).toBeNull()
+    expect(toAppearanceDom(base, true).attrs['data-bg-image']).toBe('off')
   })
 
   it('quotes font names safely', () => {

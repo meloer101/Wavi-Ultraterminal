@@ -30,6 +30,23 @@
   background: var(--glass-shell-color);
 }
 
+/* 背景图片 (PRD v1.189, Figma 86): the user's picture under everything in the shell, the base layer included, so it shows
+   where the desktop (or the full-screen field) would. A layer of its own, behind the in-flow content of an isolated shell,
+   so 模糊 blurs the picture and nothing else; it overhangs the shell by twice the blur, which hides the blur's soft rim. */
+:global(:root[data-bg-image='on']) .shell {
+  isolation: isolate;
+}
+
+:global(:root[data-bg-image='on']) .shell::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(-2 * var(--tr-bg-blur, 0px));
+  pointer-events: none;
+  background: var(--tr-bg-image) center / cover no-repeat;
+  filter: blur(var(--tr-bg-blur, 0px));
+}
+
 /* 全屏背景 (PRD v1.97, Figma 38): full screen leaves no desktop behind the window for the glass to show, so the shell
    draws its own field (the palette <html data-fs-backdrop> names; auto follows the theme), film grain, a veil that keeps
    text readable and the light caught on the glass; cards get a lit top edge. */
@@ -46,8 +63,9 @@
 :global(:root[data-fs-backdrop='auto'][data-theme='dark']) { --fs-field: var(--fsb-ember); }
 :global(:root[data-fs-backdrop='plum']) { --fs-field: var(--fsb-plum); }
 
-/* 实色 (PRD v1.139) stays solid in full screen: no field, the shell's own colour. */
-:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] {
+/* 实色 (PRD v1.139) stays solid in full screen: no field, the shell's own colour. A 背景图片 (PRD v1.189) takes the field's
+   place, cards' lit edge included. */
+:global(:root:not([data-material='solid']):not([data-bg-image='on'])) .shell[data-fullscreen='true'] {
   --card-edge: var(--fs-card-edge);
   background: var(--fs-sheen), linear-gradient(var(--fs-veil), var(--fs-veil)), var(--fs-grain), var(--fs-field);
   background-blend-mode: normal, normal, overlay, normal;
@@ -55,8 +73,9 @@
 
 /* Text straight on the field — the sidebar (PRD v1.102, Figma 42C; the session headers are in the cards since Figma 55):
    the field's brightness changes from top to bottom and from palette to palette, so a grey level always meets a stretch
-   it matches. On the field everything is the primary colour and the quiet text is a size smaller. */
-:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] :global([data-region='sidebar']) {
+   it matches. On the field everything is the primary colour and the quiet text is a size smaller. With a 背景图片 full
+   screen looks like the window: the picture, the base layer, the usual text. */
+:global(:root:not([data-material='solid']):not([data-bg-image='on'])) .shell[data-fullscreen='true'] :global([data-region='sidebar']) {
   --text-secondary: var(--text-primary);
   --text-tertiary: var(--text-primary);
   --text-caption: var(--fs-text-caption);
@@ -65,7 +84,7 @@
 }
 
 /* Full screen keeps the sidebar untinted on the field (Figma 42C): no base layer. */
-:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] > :global([data-glass-base]) {
+:global(:root:not([data-material='solid']):not([data-bg-image='on'])) .shell[data-fullscreen='true'] > :global([data-glass-base]) {
   display: none;
 }
 
