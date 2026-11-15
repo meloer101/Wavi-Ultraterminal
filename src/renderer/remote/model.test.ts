@@ -32,17 +32,18 @@ describe('remoteSessions', () => {
 })
 
 describe('remoteShip', () => {
-  const input = { kind: 'main' as const, agent: 'Claude Code', base: 'main', branch: 'jacob/x', remote: 'origin', review: false }
+  // 合并 has no glance: 创建 PR is the exit with text to look at.
+  const input = { kind: 'pr' as const, agent: 'Claude Code', base: 'main', branch: 'jacob/x', remote: 'origin', review: false }
 
   it('shows a run on the session row with its glance worked out, and how the last one ended', () => {
-    const glance = toGlance(startState(input, '合并到 main 并推送'), { ...EMPTY_TEXTS, commit: 'feat: refresh\n\nBody' })
+    const glance = toGlance(startState(input, '创建 PR'), { ...EMPTY_TEXTS, title: 'feat: refresh', body: 'Body' })
     const list = remoteSessions(
       { projects: [project], worktrees: [tree], sessions: [session({ id: 's1' })] },
       { ships: { '/wt/refresh': glance }, endings: {} }
     )
-    expect(list.sessions[0]!.ship).toMatchObject({ kind: 'main', stage: 'glance', fields: ['commit'], submitLabel: '合并并推送', submitBlocker: null, texts: { commit: 'feat: refresh\n\nBody' } })
-    const ended = remoteSessions({ projects: [project], worktrees: [tree], sessions: [session({ id: 's1' })] }, { ships: {}, endings: { '/wt/refresh': '已合并到 main 并推送 · a41c9e2' } })
-    expect(ended.sessions[0]!.shipNotice).toBe('已合并到 main 并推送 · a41c9e2')
+    expect(list.sessions[0]!.ship).toMatchObject({ kind: 'pr', stage: 'glance', fields: ['title', 'body', 'draft'], submitLabel: '推送并创建 PR', submitBlocker: null, texts: { title: 'feat: refresh', body: 'Body' } })
+    const ended = remoteSessions({ projects: [project], worktrees: [tree], sessions: [session({ id: 's1' })] }, { ships: {}, endings: { '/wt/refresh': '已合并到 main · a41c9e2' } })
+    expect(ended.sessions[0]!.shipNotice).toBe('已合并到 main · a41c9e2')
   })
 
   it('carries each session\'s 会话设置 when it has any (Figma 64B)', () => {
@@ -52,17 +53,17 @@ describe('remoteShip', () => {
   })
 
   it('cuts long text to what main accepts and keeps local folders out of messages', () => {
-    const empty = toGlance(startState(input, '合并到 main 并推送'), EMPTY_TEXTS)
-    const failed = fail(empty, { step: 'merge', message: 'x'.repeat(3000), output: 'error in /wt/refresh/src/a.ts and /code/acme' })
+    const empty = toGlance(startState(input, '创建 PR'), EMPTY_TEXTS)
+    const failed = fail(empty, { step: 'push', message: 'x'.repeat(3000), output: 'error in /wt/refresh/src/a.ts and /code/acme' })
     const ship = remoteShip(failed, ['/wt/refresh', '/code/acme'])
     expect(ship.error!.message).toHaveLength(2000)
     expect(ship.error!.output).toBe('error in ./src/a.ts and acme')
   })
 
   it('says what blocks the glance and what a failed step offers', () => {
-    const empty = toGlance(startState(input, '合并到 main 并推送'), EMPTY_TEXTS)
-    expect(remoteShip(empty).submitBlocker).toBe('写一句提交说明')
-    const conflict = fail(empty, { step: 'merge', message: '合并有冲突', conflicts: ['a.ts'] })
+    const empty = toGlance(startState(input, '创建 PR'), EMPTY_TEXTS)
+    expect(remoteShip(empty).submitBlocker).toBe('写一个标题')
+    const conflict = fail(startState({ ...input, kind: 'main' }, '合并到 main'), { step: 'merge', message: '合并有冲突', conflicts: ['a.ts'] })
     expect(remoteShip(conflict).error).toEqual({ step: 'merge', message: '合并有冲突', conflicts: true, pushRefused: false })
   })
 })

@@ -1,6 +1,7 @@
 // Runs Git · 变更's two exits (PRD F16 v1.78, Figma 29C–29I) and the chain's other runs: the session's agent writes the
 // text (a handoff file, or a headless run when the session cannot take a message), the user looks at it, then Wavi runs
-// the mechanical steps. Only 提交 commits; the exits ship what is committed.
+// the mechanical steps. Only 提交 commits; the exits ship what is committed. 合并 has no text: it squashes into the
+// local base straight away and pushes nothing (推送 of the base is a run of its own).
 // The state lives here, per worktree, so the Ship block can close and open (图谱 ↔ 变更) without losing a run; the
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
@@ -37,7 +38,6 @@ import {
   formatCommit,
   interruptedShip,
   isExitRun,
-  mainFailureStep,
   markFailed,
   parseRemembered,
   POLL_MS,
@@ -72,12 +72,12 @@ interface Run {
   token: number
   /** 提交's commit went in (saved with the run). */
   committed: boolean
-  /** The merge commit a shipToMain kept although its push failed: the retry pushes it (if the base still has it). */
+  /** The squash commit 合并 made on the local base (saved with the run). */
   merged?: string
   /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
   commit?: string
-  /** Taken up after a reload while 提交's commit (or 合并到 main 并推送's merge) was under way: main may have committed
-   *  or merged meanwhile, so the first retry asks before it acts. */
+  /** Taken up after a reload while 提交's commit (or 合并's merge) was under way: main may have committed or merged
+   *  meanwhile, so the first retry asks before it acts. */
   resumed?: boolean
   /** Taken up after a reload at all: a commit main refuses because the ticked files have nothing left to commit went in
    *  while no window watched. */
@@ -94,7 +94,7 @@ export interface ShipStartOptions {
   /** The branch's tip the run starts from (the preflight the starting command just read); default: `ctx.head`, else
    *  unknown (the reload check then falls back to the older count). */
   head?: string
-  /** 合并到 <base> 并推送: where the base is pushed (the preflight's `baseRemote`), for the push step's label. */
+  /** 推送 of the base: where it is pushed (the preflight's `baseRemote`), for the push step's label. */
   baseRemote?: string | null
   /** 拉取: what it fetches (the preflight's `pullFrom`), for the step's label. */
   pullFrom?: string | null
@@ -156,11 +156,12 @@ function reviewAgentOf(ctx: ShipContext): ReviewAgent | null {
   return headlessAgent(sessionOf(ctx.sessionId)?.kind)
 }
 
+/** 推送前审阅 before a push of the branch (创建 PR, 推送到 PR #N); 合并 is local and reviews nothing. */
 function reviewWanted(ctx: ShipContext, kind: ShipKind): boolean {
   const { review } = ctx.settings
-  if (kind !== 'main' && kind !== 'pr' && kind !== 'push-pr') return false
+  if (kind !== 'pr' && kind !== 'push-pr') return false
   if (review.mode !== 'builtin' || !reviewAgentOf(ctx)) return false
-  return kind === 'main' ? review.beforeMerge || review.beforePush : review.beforePush
+  return review.beforePush
 }
 
 // --- the remembered exit ------------------------------------------------------------------------------------------
@@ -197,7 +198,7 @@ export function savedShipRuns(): SavedShipRun[] {
 }
 
 /** The step that was under way when the block was saved: where main may have gone on without a window. Only 提交's
- *  commit (or 合并到 main 并推送's merge) can have landed then; at the glance, the writing or a failed step nothing ran. */
+ *  commit (or 合并's merge) can have landed then; at the glance, the writing or a failed step nothing ran. */
 function interruptedAtCommit(item: SavedShipRun): boolean {
   const working = item.state.steps.find((s) => s.state === 'working')?.id
   return working === 'commit' || (item.kind === 'main' && working === 'merge')
@@ -259,7 +260,6 @@ export function startShip(ctx: ShipContext, kind: ShipKind, title: string, optio
       ...(options.baseRemote !== undefined ? { baseRemote: options.baseRemote } : {}),
       ...(options.pullFrom !== undefined ? { pullFrom: options.pullFrom } : {}),
       review: reviewWanted(ctx, kind),
-      ...(ctx.method ? { method: ctx.method } : {}),
       ...(options.syncMode ? { syncMode: options.syncMode } : {})
     },
     title
@@ -347,8 +347,8 @@ export async function handConflictsToAgent(worktree: string): Promise<void> {
   }
 }
 
-/** 改为创建 PR: the base's push was refused, so the branch goes up as a PR instead (offered only where 创建 PR can work,
- *  see prPossible). */
+/** 改为创建 PR: 推送 of the base was refused, so the branch goes up as a PR instead (offered only where 创建 PR can
+ *  work, see prPossible). */
 export function switchToPr(worktree: string): void {
   const run = runs.get(worktree)
   if (!run || !current(worktree)?.error?.pushRefused) return
@@ -372,7 +372,7 @@ async function writePhase(worktree: string, token: number): Promise<void> {
   const first = current(worktree)
   if (!first) return
   if (first.steps.some((s) => s.id === 'review' && (s.state === 'working' || s.state === 'pending'))) {
-    await reviewStep(worktree, token, ctx, kind)
+    await reviewStep(worktree, token, ctx)
     if (!alive(worktree, token)) return
   }
   const state = current(worktree)
@@ -408,14 +408,14 @@ async function headlessWriterInstalled(ctx: ShipContext): Promise<boolean> {
 
 type Written = { ok: true; texts: ShipTexts } | { ok: false; message: string }
 
-async function reviewStep(worktree: string, token: number, ctx: ShipContext, kind: ShipKind): Promise<void> {
+async function reviewStep(worktree: string, token: number, ctx: ShipContext): Promise<void> {
   const agent = reviewAgentOf(ctx)
   if (!agent) {
     patch(worktree, token, (s) => complete(s, 'review', '没有可用的审阅'))
     return
   }
   try {
-    await startBackgroundReview(ctx.worktree, agent, kind === 'main' ? 'merge' : 'push', ctx.base)
+    await startBackgroundReview(ctx.worktree, agent, 'push', ctx.base)
   } catch (error) {
     patch(worktree, token, (s) => markFailed(s, 'review', `没能开始：${errorText(error)}`))
     return
@@ -482,8 +482,8 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
   const agent = agentLabelFor(ctx)
   const target: PrTarget = { root: ctx.root, worktree: ctx.worktree }
   const wantsPr = kind === 'pr'
-  // 提交's message, or 合并到 main 并推送's squash message.
-  const wantsCommit = kind === 'main' || kind === 'commit'
+  // 提交's message.
+  const wantsCommit = kind === 'commit'
   try {
     const slots: Partial<Record<HandoffKind, string>> = {}
     for (const slot of [...(wantsPr ? (['pr'] as const) : []), ...(wantsCommit ? (['commit'] as const) : [])]) {
@@ -628,16 +628,12 @@ async function writeHeadless(worktree: string, token: number, ctx: ShipContext, 
       if (made.kind === 'commit') texts.commit = made.message
     }
     if (!alive(worktree, token)) return { ok: false, message: '已取消' }
-    // The exits ship what is committed: the squash merge takes the PR text's title and body as its message.
-    if (kind === 'pr' || kind === 'main') {
+    if (kind === 'pr') {
       const made = await window.tr.pr.write({ ...base, kind: 'pr' })
       if (!made.ok) return { ok: false, message: made.message }
       if (made.kind === 'pr') {
-        if (kind === 'main') texts.commit = formatCommit({ subject: made.title, body: made.body })
-        else {
-          texts.title = made.title
-          texts.body = withEvidence(made.body, evidenceBlock(evidenceParts(ctx)))
-        }
+        texts.title = made.title
+        texts.body = withEvidence(made.body, evidenceBlock(evidenceParts(ctx)))
       }
     }
     return { ok: true, texts }
@@ -654,6 +650,7 @@ async function runPhase(worktree: string, token: number): Promise<void> {
   if (!run || !state) return
   try {
     if (run.kind === 'main') await runMain(worktree, token, run, state)
+    else if (run.kind === 'push-base') await runPushBase(worktree, token, run)
     else if (run.kind === 'commit') await runCommit(worktree, token, run, state)
     else if (run.kind === 'sync') await runSync(worktree, token, run)
     else if (run.kind === 'pull') await runPull(worktree, token, run)
@@ -768,8 +765,8 @@ async function resumeCommit(worktree: string, token: number, run: Run, state: Sh
   return true
 }
 
-/** Exit A: squash what the branch committed into the base and push it — main does both in one call. Nothing is
- *  committed: files left uncommitted stay as they are. */
+/** 合并 (exit A): squash what the branch committed into the local base, titled after the session (the session's title
+ *  and the commit subjects) — no text to write, no review, no push. Nothing is committed: files left uncommitted stay. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
   // Taken up after a reload: main may have finished the merge the old window started (shipToMain goes on without it).
@@ -779,25 +776,17 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     if (!alive(worktree, token)) return
     if (now?.ok && now.merged) {
       patch(worktree, token, (s) => complete(s, 'merge'))
-      state = current(worktree) ?? state
+      return finish(worktree, token, `已合并到 ${ctx.base}`)
     }
   }
-  // After a failed push the merge stands on the local base: only the push is left.
-  const mergeDone = stepDone(state, 'merge')
-  const result = mergeDone
-    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) })
-    : await window.tr.ship.shipToMain({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, method: ctx.method ?? 'squash', paths: null })
+  const title = sessionOf(ctx.sessionId)?.title.trim()
+  const result = await window.tr.ship.shipToMain({ root: ctx.root, worktree: ctx.worktree, message: '', method: 'squash', paths: null, ...(title ? { title } : {}) })
   if (!alive(worktree, token)) return
   if (!result.ok) {
-    if (result.reason === 'declined') {
-      patch(worktree, token, backToGlance)
-      return
-    }
-    const step = mainFailureStep(result.step)
     patch(worktree, token, (s) =>
       fail(
         s,
-        stepError(s, run, step, result.message, result.failure, {
+        stepError(s, run, 'merge', result.message, result.failure, {
           ...(result.output ? { output: result.output } : {}),
           ...(result.conflicts && result.conflicts.length > 0
             ? { conflicts: result.conflicts, prompt: mergeConflictPrompt({ base: ctx.base, branch: ctx.branch, conflicts: result.conflicts }) }
@@ -807,21 +796,30 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     )
     return
   }
-  if (!mergeDone) patch(worktree, token, (s) => complete(s, 'merge'))
   run.merged = result.commit
+  patch(worktree, token, (s) => complete(s, 'merge', result.commit.slice(0, 7)))
+  finish(worktree, token, `已合并到 ${ctx.base} · ${result.commit.slice(0, 7)}`)
+}
+
+/** 推送 of the base a local 合并 left ahead of its upstream: main pushes the base alone and watches its CI. */
+async function runPushBase(worktree: string, token: number, run: Run): Promise<void> {
+  const { ctx } = run
+  const result = await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree })
+  if (!alive(worktree, token)) return
+  if (!result.ok) {
+    patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.message, result.failure, result.output ? { output: result.output } : {})))
+    return
+  }
   if (result.pushError) {
-    // 改为创建 PR only where a PR can be made; the merge Wavi kept on the local base is said with the class's words.
+    // 改为创建 PR only where a PR can be made.
     const refused = result.pushRefused === true && (await prPossible(ctx))
     if (!alive(worktree, token)) return
-    const kept = `（合并已留在本地 ${ctx.base} 上）`
-    const failure = result.failure
-      ? { ...result.failure, message: `${result.failure.message}${kept}`, next: !refused && result.failure.next === 'create-pr' ? null : result.failure.next }
-      : undefined
+    const failure = result.failure ? { ...result.failure, next: !refused && result.failure.next === 'create-pr' ? null : result.failure.next } : undefined
     patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.pushError!, failure, refused ? { pushRefused: true } : {})))
     return
   }
   patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
-  finish(worktree, token, `已合并到 ${ctx.base}${result.pushed ? ' 并推送' : ''} · ${result.commit.slice(0, 7)}`)
+  finish(worktree, token, result.pushed ? `已推送 ${ctx.base} · ${result.commit.slice(0, 7)}` : `${ctx.base} 没有远程，没有推送`)
 }
 
 /** 创建 PR can work for the run's branch: its remote is a GitHub repository and gh is installed and signed in (the

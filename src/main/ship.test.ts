@@ -196,6 +196,7 @@ describe('preflight', () => {
       merged: false,
       baseAheadOfUpstream: 0,
       baseBehindUpstream: 0,
+      baseUnpushed: 0,
       openPr: null,
       mergeMethods: null,
       head: sha(wt, 'HEAD'),
@@ -353,7 +354,7 @@ describe('shipToMain', () => {
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     writeFileSync(join(wt, 'other.txt'), 'o\n')
     const message = 'feat(nav): sticky header\n\nWhy: it jumped on scroll.'
-    const result = await shipToMain({ root, worktree: wt, message, method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message, method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     if (!result.ok) throw new Error('not shipped')
     expect(git(bare, 'log', '-1', '--format=%B', 'main').trim()).toBe(message)
@@ -372,7 +373,7 @@ describe('shipToMain', () => {
   it('merge: a merge commit with the message git would write, pushed; the agent message only commits the ticked files', async () => {
     const { root, wt, bare } = setup()
     writeFileSync(join(wt, 'new.txt'), 'n\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'merge', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'merge', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '-1', '--format=%s', 'main').trim()).toBe("Merge branch 'feat'")
     expect(git(bare, 'log', '-1', '--format=%P', 'main').trim().split(' ')).toHaveLength(2)
@@ -386,7 +387,7 @@ describe('shipToMain', () => {
     git(root, 'push', '-q', 'origin', 'main')
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     writeFileSync(join(wt, 'other.txt'), 'o\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'rebase', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'rebase', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: new file', 'Make nav sticky', 'main moved on', 'init'])
     expect(sha(root, 'feat')).toBe(sha(bare, 'main'))
@@ -401,7 +402,7 @@ describe('shipToMain', () => {
     commit(wt, 'a.txt', 'one\ntwo\nthree\n', 'feat puts a back')
     commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
     git(root, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null, push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', message: '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」' })
     if (!result.ok && result.failure) expect(result.failure.message).toBe('变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」')
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
@@ -417,7 +418,7 @@ describe('shipToMain', () => {
     const saved = { count: process.env.GIT_CONFIG_COUNT, value: process.env.GIT_CONFIG_VALUE_0 }
     Object.assign(process.env, { GIT_CONFIG_COUNT: '2', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: 'gpg.program', GIT_CONFIG_VALUE_1: gpg })
     try {
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null, push: true })
       expect(result).toMatchObject({ ok: false, step: 'merge', failure: { kind: 'signing', message: '提交签名需要口令', next: null } })
     } finally {
       Object.assign(process.env, { GIT_CONFIG_COUNT: saved.count, GIT_CONFIG_VALUE_0: saved.value })
@@ -429,7 +430,7 @@ describe('shipToMain', () => {
 
   it('without paths and without a message keeps the branch own commit message', async () => {
     const { root, wt, bare } = setup()
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '-1', '--format=%B', 'main').trim()).toBe('Make nav sticky')
   })
@@ -437,17 +438,17 @@ describe('shipToMain', () => {
   it('does not ship a squash-merged branch again: no empty commit on the base', async () => {
     const { root, wt, bare } = setup()
     const head = sha(root, 'feat')
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(first).toMatchObject({ ok: true, pushed: true })
     // The branch moved onto the squash commit: nothing ahead, and its own commit is in the base (merged).
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 0, merged: true })
     const pushed = sha(bare, 'main')
-    const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(again).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
     // A branch that could not be moved (an agent was editing) is told by content (v1.101).
     git(wt, 'reset', '-q', '--keep', head)
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 1, merged: true })
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })).toEqual(again)
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })).toEqual(again)
     expect(sha(root, 'main')).toBe(pushed)
     expect(sha(bare, 'main')).toBe(pushed)
     commit(wt, 'more.txt', 'm\n', 'More')
@@ -456,7 +457,7 @@ describe('shipToMain', () => {
 
   it('merges without pushing when there is no remote', async () => {
     const { root, wt } = setup({ remote: false })
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: false })
     expect(result).not.toHaveProperty('pushError')
     expect(git(root, 'log', '-1', '--format=%s', 'main').trim()).toBe('feat: b')
@@ -468,7 +469,7 @@ describe('shipToMain', () => {
     chmodSync(join(root, '.git', 'hooks', 'pre-commit'), 0o755)
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     const before = sha(root, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: false, step: 'commit', reason: 'failed' })
     expect(result.ok ? '' : result.output).toContain('lint: no semicolons')
     // git does not name the hook that failed, and this one does not either: its own words are the message.
@@ -478,15 +479,15 @@ describe('shipToMain', () => {
 
   it('refuses requests that are not valid', async () => {
     const { root, wt } = setup()
-    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: ['x.txt'] })).toMatchObject({ ok: false, reason: 'failed', message: '请求无效' })
-    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: null })).toMatchObject({ ok: false })
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: ['x.txt'], push: true })).toMatchObject({ ok: false, reason: 'failed', message: '请求无效' })
+    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: null, push: true })).toMatchObject({ ok: false })
     expect(await shipToMain(7)).toMatchObject({ ok: false })
   })
 
   it('blocks with a message when there is nothing to merge', async () => {
     const { root, wt } = setup({ github: false })
     git(wt, 'reset', '-q', '--hard', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     // Its reflog has a commit of its own, now all in main: the merge sheet says the same.
     expect(result).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
   })
@@ -497,7 +498,7 @@ describe('shipToMain', () => {
     commit(root, 'a.txt', 'one\ntwo from main\nthree\n', 'edit a on main')
     git(root, 'push', '-q', 'origin', 'main')
     const before = sha(root, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'conflicts', conflicts: ['a.txt'] })
     expect(sha(root, 'main')).toBe(before)
   })
@@ -507,7 +508,7 @@ describe('shipToMain', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: b', 'upstream work', 'init'])
     expect(existsSync(join(root, 'up.txt'))).toBe(true)
@@ -520,7 +521,7 @@ describe('shipToMain', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: b', 'upstream work', 'init'])
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
@@ -535,7 +536,7 @@ describe('shipToMain', () => {
       git(other, 'push', '-q', 'origin', 'main')
       git(root, 'update-ref', 'refs/heads/main', git(root, 'commit-tree', '-p', 'main', '-m', 'local only', 'main^{tree}').trim())
       const before = sha(root, 'main')
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
       expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'blocked' })
       expect(result.ok ? '' : result.message).toMatch(/^main (落后 origin\/main 1 个提交，没法快进|和 origin\/main 各有对方没有的提交，没法快进)/)
       expect(sha(root, 'main')).toBe(before)
@@ -548,7 +549,7 @@ describe('shipToMain', () => {
     writeFileSync(join(bare, 'hooks', 'pre-receive'), '#!/bin/sh\necho "no pushes today" >&2\nexit 1\n')
     chmodSync(join(bare, 'hooks', 'pre-receive'), 0o755)
     const before = sha(bare, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: false })
     if (!result.ok) throw new Error('not merged')
     expect(result.pushError).toContain('推送到 origin 失败')
@@ -567,7 +568,7 @@ describe('shipToMain', () => {
     const hook = join(bare, 'hooks', 'pre-receive')
     writeFileSync(hook, '#!/bin/sh\necho "no pushes today" >&2\nexit 1\n')
     chmodSync(hook, 0o755)
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!first.ok) throw new Error('not merged')
     expect(first.pushed).toBe(false)
     // Still refused: the merge stays, nothing new is merged.
@@ -589,7 +590,7 @@ describe('shipToMain', () => {
     writeFileSync(hook, '#!/bin/sh\nexit 1\n')
     chmodSync(hook, 0o755)
     const before = sha(root, 'main')
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!first.ok) throw new Error('not merged')
     rmSync(hook)
     git(root, 'reset', '-q', '--hard', before)
@@ -614,11 +615,11 @@ describe('shipToMain', () => {
     commit(root, 'a.txt', 'one\ntwo from main\nthree\n', 'edit a on main')
     git(root, 'push', '-q', 'origin', 'main')
     writeFileSync(join(wt, 'new.txt'), 'n\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new', method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new', method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'conflicts', committed: true })
     expect(git(wt, 'log', '-1', '--format=%s').trim()).toBe('feat: new')
     // Refused before anything ran: nothing was committed.
-    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: ['new.txt'] })).not.toHaveProperty('committed')
+    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: ['new.txt'], push: true })).not.toHaveProperty('committed')
   })
 
   it('reads the refusal of a protected base through the failure classes', () => {
@@ -637,10 +638,50 @@ describe('shipToMain', () => {
   })
 })
 
+// 合并 is local only: the base is squashed into and left ahead of its upstream; 推送 of the base is its own move.
+describe('合并 · the local merge', () => {
+  it('squashes into the local base with the title and the subjects, pushes nothing and watches no CI', async () => {
+    const { root, wt, bare } = setup()
+    const remoteBefore = sha(bare, 'main')
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, title: '导航吸顶' })
+    expect(result).toMatchObject({ ok: true, pushed: false })
+    expect(result).not.toHaveProperty('pushError')
+    if (!result.ok) throw new Error('not merged')
+    expect(sha(root, 'main')).toBe(result.commit)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- Make nav sticky')
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(baseCi({ root, worktree: wt })).toBeNull()
+    // The base is ahead of its upstream by the merge: the chain's 推送 of the base.
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: 1 })
+    // 推送 of the base sends it and starts watching its CI; then nothing is left unpushed.
+    expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: result.commit, pushed: true })
+    expect(sha(bare, 'main')).toBe(result.commit)
+    expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: result.commit })
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: 0 })
+  })
+
+  it('counts nothing unpushed for a base without an upstream', async () => {
+    const { root, wt } = setup({ remote: false })
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })).toMatchObject({ ok: true, pushed: false })
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: null })
+  })
+
+  it('refuses as stale when the branch moved past the tip the caller checked', async () => {
+    const { root, wt } = setup()
+    const checked = sha(root, 'feat')
+    commit(wt, 'c.txt', 'c\n', 'more after the check')
+    const before = sha(root, 'main')
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, head: checked })
+    expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'failed', stale: true })
+    expect(sha(root, 'main')).toBe(before)
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, head: sha(root, 'feat') })).toMatchObject({ ok: true, pushed: false })
+  })
+})
+
 describe('CI of the pushed base commit', () => {
   async function shipped() {
     const made = setup()
-    const result = await shipToMain({ root: made.root, worktree: made.wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root: made.root, worktree: made.wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!result.ok || !result.pushed) throw new Error('not pushed')
     return { ...made, commit: result.commit, target: { root: made.root, worktree: made.wt } }
   }
@@ -715,7 +756,7 @@ describe('CI of the pushed base commit', () => {
     await detectGh(true)
     expect(await baseFailing({ root: plain.root, worktree: plain.wt })).toBeNull()
     // And a push to a repository that is not on GitHub watches nothing.
-    const shippedPlain = await shipToMain({ root: plain.root, worktree: plain.wt, message: 'feat: b', method: 'squash', paths: null })
+    const shippedPlain = await shipToMain({ root: plain.root, worktree: plain.wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(shippedPlain).toMatchObject({ ok: true, pushed: true })
     expect(baseCi({ root: plain.root, worktree: plain.wt })).toBeNull()
   })
@@ -1412,7 +1453,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
       git(root, 'push', '-q', '-u', 'upstream', 'main')
       commit(root, 'm.txt', 'm\n', 'main moved on')
       git(root, 'push', '-q', 'upstream', 'main')
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method, paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method, paths: null, push: true })
       expect(result).toMatchObject({ ok: true, pushed: true })
       if (!result.ok) throw new Error('not shipped')
       expect(sha(bare, 'main')).toBe(result.commit)
@@ -1432,7 +1473,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(root, 'push', '-q', 'myfork', 'main')
     git(wt, 'push', '-q', '-u', 'myfork', 'feat')
     const forkMain = sha(fork, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(sha(bare, 'main')).toBe(sha(root, 'main'))
     expect(sha(fork, 'main')).toBe(forkMain)
@@ -1448,7 +1489,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(root, 'push', '-q', 'myfork', 'main')
     git(wt, 'push', '-q', '-u', 'myfork', 'feat')
     const forkMain = sha(fork, 'main')
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({ ok: true, pushed: true })
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })).toMatchObject({ ok: true, pushed: true })
     expect(sha(bare, 'main')).toBe(sha(root, 'main'))
     expect(sha(fork, 'main')).toBe(forkMain)
   })
@@ -1462,7 +1503,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(other, 'push', '-q', 'origin', 'main')
     execFileSync('git', ['-c', 'rebase.abbreviateCommands=false', 'rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick /edit /'" }, stdio: 'ignore' })
     const before = sha(root, 'refs/heads/main')
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })).toMatchObject({
       ok: false,
       step: 'merge',
       reason: 'blocked',
@@ -1481,7 +1522,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     const hook = join(bare, 'hooks', 'pre-receive')
     writeFileSync(hook, '#!/bin/sh\nexit 1\n')
     chmodSync(hook, 0o755)
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })
     expect(first).toMatchObject({ ok: true, pushed: false, pushError: expect.stringMatching(/^推送到 gh 失败/) })
     if (!first.ok) throw new Error('not merged')
     rmSync(hook)

@@ -48,6 +48,12 @@ describe('messages', () => {
     expect(squashMessage('b', [{ subject: 'one', body: 'one' }, { subject: 'two', body: 'two' }], '标题')).toBe('标题\n\n- one\n- two\n')
   })
 
+  // 合并: with the session's title the message is always the title and the subjects, one commit or several.
+  it('squash of a single commit is the title and its subject when there is a title', () => {
+    expect(squashMessage('b', [{ subject: 'fix', body: 'fix\n\ndetails\n' }], '修好登录')).toBe('修好登录\n\n- fix\n')
+    expect(squashMessage('b', [{ subject: 'fix', body: 'fix\n\ndetails\n' }], '  ')).toBe('fix\n\ndetails')
+  })
+
   it('oneLine strips control characters and newlines', () => {
     expect(oneLine(' a\n\tb\u001b[31m c ')).toBe('a b [31m c')
   })

@@ -1,5 +1,5 @@
-// The merge chain's mechanical side in main (PRD F16 v1.78, Figma 29): preflight, the agent handoff files, 合并到 main
-// 并推送, the diff a fix adds, risk markers, and CI on the base Wavi pushed. Channels in SHIP_IPC (src/shared/ship.ts).
+// The merge chain's mechanical side in main (PRD F16 v1.78, Figma 29): preflight, the agent handoff files, 合并 (local)
+// and 推送 of the base, the diff a fix adds, risk markers, and CI on the base Wavi pushed. Channels in SHIP_IPC (src/shared/ship.ts).
 //
 // The agent in the session writes every piece of text and fixes code; this file runs commit, merge, push and gh, and
 // the brakes. Everything the renderer sends is validated (src/shared/ship-requests.ts) and every worktree must be one
@@ -252,12 +252,15 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
   ])
   let baseAheadOfUpstream = 0
   let baseBehindUpstream = 0
+  /** null: no upstream to count against, or the count failed (the chain offers no 推送 of the base then). */
+  let baseUnpushed: number | null = null
   if (upstream) {
     const counts = await git(cwd, ['rev-list', '--left-right', '--count', `${upstream.ref}...refs/heads/${base}`, '--'])
     if (counts.code === 0) {
       const [behind = '0', own = '0'] = counts.stdout.trim().split(/\s+/)
       baseBehindUpstream = Number(behind) || 0
       baseAheadOfUpstream = Number(own) || 0
+      baseUnpushed = baseAheadOfUpstream
     }
   }
   const pushed = await pushedTo(cwd, info, remote)
@@ -288,6 +291,7 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
     merged: ahead > 0 ? check?.inBase === true : ownCommits,
     baseAheadOfUpstream,
     baseBehindUpstream,
+    baseUnpushed,
     openPr: openPrNumber(target.worktree),
     mergeMethods,
     head,
@@ -348,7 +352,7 @@ export async function readHandoffText(raw: unknown): Promise<string | null> {
   }
 }
 
-// ── 合并到 main 并推送 ──────────────────────────────────────────────────────────────────────────────────────────
+// ── 合并 (and the base's 推送) ────────────────────────────────────────────────────────────────────────────────────
 
 const operationNames: Record<GitOperation, string> = { merge: '合并', rebase: '变基', 'cherry-pick': 'cherry-pick', revert: '撤销' }
 
@@ -382,7 +386,7 @@ const stepFailure = (
   step: 'commit' | 'merge' | 'push',
   reason: 'blocked' | 'conflicts' | 'failed' | 'declined',
   message: string,
-  more: { conflicts?: string[]; output?: string; committed?: true; failure?: GitFailure } = {}
+  more: { conflicts?: string[]; output?: string; committed?: true; failure?: GitFailure; stale?: true } = {}
 ): ShipMainResult => ({
   ok: false,
   step,
@@ -440,7 +444,7 @@ function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergeP
     printed ? { failure: classifyGitFailure(step, printed, { base: check.base, remote }) } : {}
   switch (result.reason) {
     case 'stale':
-      return stepFailure('merge', 'failed', `分支或 ${check.base} 在检查之后又变了：再试一次`)
+      return stepFailure('merge', 'failed', `分支或 ${check.base} 在检查之后又变了：再试一次`, { stale: true })
     case 'conflict':
       if (result.conflicts && result.conflicts.length > 0) {
         return stepFailure('merge', 'conflicts', `${result.conflicts.length} 个文件和 ${check.base} 冲突`, { conflicts: result.conflicts.map((c) => c.path) })
@@ -479,9 +483,10 @@ export function pushFailure(commit: string, base: string, push: string, remote =
 }
 
 /**
- * Exit A: commit the ticked paths with the agent's message (hooks run), bring the base up to its upstream, merge the
- * branch into it and push it. A push that fails keeps the merge (`pushed: false`); a push that works starts watching
- * the pushed commit's CI.
+ * 合并 (exit A): commit the ticked paths with the message (hooks run), bring the base up to its upstream, merge the
+ * branch into it — and only when `push` asks (自动修复 of the base), push it. The merge stays local otherwise: 推送 of
+ * the base is the chain's next move (pushBaseAgain). A push that fails keeps the merge (`pushed: false`); a push that
+ * works starts watching the pushed commit's CI.
  */
 export async function shipToMain(raw: unknown): Promise<ShipMainResult> {
   const request = parseShipMainRequest(raw)
@@ -513,6 +518,8 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
 
   let check = await precheck(request.root, request.worktree)
   if (typeof check === 'string') return stepFailure('merge', 'failed', `没能检查合并：${check}`)
+  // The tip the caller checked (the merge sheet's precheck and test) is the one merged, or nothing is.
+  if (request.head && check.head && check.head !== request.head) return stepFailure('merge', 'failed', '分支在检查之后又变了：重新检查', { stale: true })
   const root = await realOrSelf(request.root)
   if (check.base && !check.blocker) {
     const caught = await syncBase(root, check)
@@ -537,9 +544,9 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
       method: request.method,
       head: check.head,
       baseHead: check.baseHead,
-      push: remote !== null,
-      // '' (only without paths) keeps the branch's own messages.
-      ...(request.message ? { message: request.message } : {})
+      push: request.push === true && remote !== null,
+      // '' (only without paths): the title and the branch's subjects (its own message without a title).
+      ...(request.message ? { message: request.message } : request.title ? { title: request.title } : {})
     },
     { remote }
   )
@@ -551,9 +558,10 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
 }
 
 /**
- * The retry of a push 合并到 main 并推送 could not make: the merge is on the local base already, so only the base is
- * pushed (running the exit again would find the branch merged and stop there), and only while the base still has
- * that merge. A base origin already has goes through as pushed (git has nothing to send) and its CI is watched.
+ * 推送 of the base after a local 合并 (or the retry of a push that failed): the merge is on the local base already, so
+ * only the base is pushed (running 合并 again would find the branch merged and stop there), and, given `commit`, only
+ * while the base still has that merge. A base the remote already has goes through as pushed (git has nothing to send)
+ * and its CI is watched.
  */
 export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
   const target = parsePushBaseRequest(raw)

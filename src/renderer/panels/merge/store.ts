@@ -36,7 +36,7 @@ export function closeMergeSheet(refocus: boolean): void {
 
 export const isMergeSheetOpen = (): boolean => useMergeSheet.getState().target !== null
 
-/** The exit Git · 变更 shows as primary for a worktree it is open on (合并到 main 并推送 / 创建 PR); ⇧⌘M runs it. */
+/** The exit Git · 变更 shows as primary for a worktree it is open on (合并 / 创建 PR); ⇧⌘M runs it. */
 const primaryExits = new Map<string, () => void>()
 
 /** Git · 变更 registers (and on unmount drops) what its primary exit button does; returns the unregister function. */

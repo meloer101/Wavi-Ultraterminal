@@ -1,10 +1,8 @@
 // The state machine of Git · 变更's Ship block (PRD F16 v1.78, Figma 29C / 29D / 29H; 合入链路 v2, Figma 73D–73F):
-// which steps each run has (the two exits, 推送 to a PR, 提交…, 同步 <base>, 拉取), how they advance, what a failure leaves
+// which steps each run has (the two exits, 推送 of the base, 推送 to a PR, 提交, 同步 <base>, 拉取), how they advance, what a failure leaves
 // and what gets the user on. Pure; ship-runner.ts does the work and ShipBlock.tsx draws it.
 import type { GitFailure, GitFailureKind, GitFailureNext } from '@shared/git-failures'
-import type { MergeMethod } from '@shared/git-merge'
-import type { RepoMergeMethods } from '@shared/pull-requests'
-import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
+import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import { AS_DATA, branchArg, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
@@ -17,14 +15,12 @@ export interface FlowInput {
   base: string
   branch: string
   remote: string | null
-  /** 合并到 <base> 并推送: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
+  /** 推送 of the base: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
   baseRemote?: string | null
   /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`); omitted: `<remote>/<branch>`. */
   pullFrom?: string | null
   /** The background review runs first (推送前 / 合并前审阅 is on and the diff has none). */
   review: boolean
-  /** 合并到 main 并推送's method (default squash). */
-  method?: MergeMethod
   /** 同步 <base>: a branch never pushed is rebased onto the base, a pushed one merges it (default rebase). */
   syncMode?: 'rebase' | 'merge'
   /** 提交… has someone to write the message (an agent session with hooks, or a headless Claude / Codex); false: the
@@ -61,18 +57,6 @@ export function waitNote(agent: string): string {
   return `等 ${agent} 空闲`
 }
 
-/** How the steps and the merge sheet name a merge method. */
-export const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
-
-/**
- * 合并到 main 并推送's method (合入链路 v2): the repository's default on GitHub when it allows it, else the first method
- * it allows; without GitHub's settings squash (the local merge sheet remembers no method).
- */
-export function exitMethod(methods: RepoMergeMethods | null | undefined): MergeMethod {
-  if (!methods || methods.methods.length === 0) return 'squash'
-  return methods.methods.includes(methods.defaultMethod) ? methods.defaultMethod : methods.methods[0]!
-}
-
 /** 提交…'s title (Figma 73F1): how many ticked files go into the commit. */
 export const commitTitle = (files: number): string => `提交 ${files} 个文件`
 
@@ -95,14 +79,16 @@ export function flowSteps(input: FlowInput): FlowStep[] {
     return steps
   }
   if (kind === 'pull') return [step('sync', `拉取 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`)]
+  // 合并 is local, a plain action: one squash into the base, titled after the session — no text to write, no review,
+  // no push (推送 of the base is the chain's next run).
+  if (kind === 'main') return [step('merge', `合并到 ${base}`)]
+  if (kind === 'push-base') {
+    const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
+    return [step('push', `推送 ${pushTo ?? 'origin'}/${base}`)]
+  }
   if (input.review) steps.push(step('review', '审阅'))
   // The exits ship only what is committed: 提交 is a run of its own, never a step of theirs.
-  if (kind === 'main') {
-    // The squash merge's message.
-    steps.push(write('写提交说明'))
-    const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
-    steps.push(step('merge', `合并到 ${base} · ${METHOD_LABEL[input.method ?? 'squash']}`), step('push', `推送 ${pushTo ?? 'origin'}/${base}`))
-  } else if (kind === 'pr') {
+  if (kind === 'pr') {
     steps.push(write('写标题和正文'), step('push', `推送 ${branch}`), step('create', '创建 PR'))
   } else {
     steps.push(step('push', `推送 ${branch}`))
@@ -233,9 +219,7 @@ export function setTexts(state: ShipState, patch: Partial<ShipTexts>): ShipState
 
 /** Why the glance cannot go ahead, or null. */
 export function submitBlocker(state: Pick<ShipState, 'kind' | 'texts' | 'steps'>): string | null {
-  // 提交's message, and 合并到 <base> 并推送's squash message.
-  const needsCommit = state.kind === 'main' || state.kind === 'commit'
-  if (needsCommit && !commitSubjectOf(state.texts.commit)) return '写一句提交说明'
+  if (state.kind === 'commit' && !commitSubjectOf(state.texts.commit)) return '写一句提交说明'
   if (state.kind === 'pr' && !state.texts.title.trim()) return '写一个标题'
   return null
 }
@@ -244,7 +228,9 @@ export function submitBlocker(state: Pick<ShipState, 'kind' | 'texts' | 'steps'>
 export function submitLabel(kind: ShipKind): string {
   switch (kind) {
     case 'main':
-      return '合并并推送'
+      return '合并'
+    case 'push-base':
+      return '推送'
     case 'pr':
       return '推送并创建 PR'
     case 'commit':
@@ -267,7 +253,7 @@ export function writeFailedToGlance(state: ShipState, message: string): ShipStat
 export type GlanceField = 'commit' | 'title' | 'body' | 'base' | 'draft'
 
 export function glanceFields(state: Pick<ShipState, 'kind' | 'steps'>): GlanceField[] {
-  if (state.kind === 'main' || state.kind === 'commit') return ['commit']
+  if (state.kind === 'commit') return ['commit']
   if (state.kind === 'pr') return ['title', 'body', 'base', 'draft']
   return []
 }
@@ -278,11 +264,6 @@ export const commitSubjectOf = (text: string): string => text.trim().split('\n')
 export function formatCommit(text: { subject: string; body: string }): string {
   const body = text.body.trim()
   return body ? `${text.subject.trim()}\n\n${body}` : text.subject.trim()
-}
-
-/** The step a failed shipToMain stopped at: the run sends no paths, so nothing is committed before the merge. */
-export function mainFailureStep(step: Extract<ShipMainResult, { ok: false }>['step']): StepId {
-  return step === 'push' ? 'push' : 'merge'
 }
 
 /** 提交… with nobody to write the message (no agent session with hooks, no headless Claude / Codex): the write step

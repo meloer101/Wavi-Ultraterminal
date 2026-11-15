@@ -15,7 +15,6 @@ import { conflictPrompt as mergeSheetPrompt } from '../panels/merge/model'
 import {
   commitTitle,
   divergedPrompt,
-  exitMethod,
   failureOutput,
   failurePrompt,
   failureWay,
@@ -41,7 +40,6 @@ import {
   formatCommit,
   glanceFields,
   interruptedShip,
-  mainFailureStep,
   markFailed,
   parseRemembered,
   retry,
@@ -57,7 +55,7 @@ import {
 } from './ship-flow'
 
 const input = (patch: Partial<FlowInput> = {}): FlowInput => ({
-  kind: 'main',
+  kind: 'pr',
   agent: 'Claude',
   base: 'main',
   branch: 'feat/x',
@@ -69,8 +67,16 @@ const input = (patch: Partial<FlowInput> = {}): FlowInput => ({
 const labels = (patch: Partial<FlowInput>): string[] => flowSteps(input(patch)).map((s) => s.label)
 
 describe('flowSteps', () => {
-  it('exit A: write the message, squash into the base, push it', () => {
-    expect(labels({})).toEqual(['Claude 写提交说明', '合并到 main · Squash', '推送 origin/main'])
+  // 合并 is local only: no text to write, no review, no push.
+  it('exit A: one squash into the local base, nothing written, reviewed or pushed', () => {
+    expect(labels({ kind: 'main' })).toEqual(['合并到 main'])
+    expect(flowSteps(input({ kind: 'main', review: true })).map((s) => s.id)).toEqual(['merge'])
+    expect(startState(input({ kind: 'main' }), '合并到 main')).toMatchObject({ stage: 'running', steps: [{ id: 'merge', state: 'working' }] })
+  })
+
+  it('推送 of the base: the push alone, straight away', () => {
+    expect(labels({ kind: 'push-base' })).toEqual(['推送 origin/main'])
+    expect(startState(input({ kind: 'push-base', review: true }), '推送 main')).toMatchObject({ stage: 'running', steps: [{ id: 'push', state: 'working' }] })
   })
 
   // 提交 is its own run: no exit has a 提交 step, whatever is left uncommitted.
@@ -88,18 +94,18 @@ describe('flowSteps', () => {
   })
 
   it('a review comes first when it is asked for', () => {
-    expect(labels({ review: true })[0]).toBe('审阅')
+    expect(labels({ kind: 'push-pr', review: true })[0]).toBe('审阅')
     expect(labels({ kind: 'pr', review: true }).slice(0, 2)).toEqual(['审阅', 'Claude 写标题和正文'])
   })
 
   it('names the remote the base goes to', () => {
-    expect(labels({ remote: 'upstream', base: 'develop' })[2]).toBe('推送 upstream/develop')
+    expect(labels({ kind: 'push-base', remote: 'upstream', base: 'develop' })).toEqual(['推送 upstream/develop'])
   })
 })
 
 describe('transitions', () => {
   it('starts on the first step in the writing stage', () => {
-    const state = startState(input({ review: true }), '合并到 main 并推送')
+    const state = startState(input({ review: true }), '创建 PR')
     expect(state.stage).toBe('writing')
     expect(state.steps.map((s) => s.state)).toEqual(['working', 'pending', 'pending', 'pending'])
   })
@@ -111,7 +117,7 @@ describe('transitions', () => {
   })
 
   it('writing ends at the glance with the write step done, then running starts the next step', () => {
-    let state = startState(input(), '合并到 main 并推送')
+    let state = startState(input(), '创建 PR')
     state = toGlance(state, {
       commit: 'feat: x',
       title: '',
@@ -135,9 +141,8 @@ describe('transitions', () => {
       })
     )
     state = fail(state, {
-      step: 'merge',
-      message: '有冲突',
-      conflicts: ['a.ts']
+      step: 'push',
+      message: '推送失败'
     })
     expect(state.steps.map((s) => s.state)).toEqual(['done', 'failed', 'pending'])
     expect(state.failedIn).toBe('running')
@@ -145,14 +150,14 @@ describe('transitions', () => {
     expect(state.error).toBeNull()
     expect(state.stage).toBe('running')
     expect(state.steps.map((s) => s.state)).toEqual(['done', 'working', 'pending'])
-    expect(firstUndone(state.steps)?.id).toBe('merge')
+    expect(firstUndone(state.steps)?.id).toBe('push')
   })
 
   it('a declined confirmation goes back to the glance with the unfinished steps pending', () => {
     let state = toRunning(
       toGlance(startState(input(), 't'), {
-        commit: 'feat: x',
-        title: '',
+        commit: '',
+        title: 'feat: x',
         body: '',
         draft: false
       })
@@ -160,7 +165,7 @@ describe('transitions', () => {
     state = backToGlance(state)
     expect(state.stage).toBe('glance')
     expect(state.steps.map((s) => s.state)).toEqual(['done', 'pending', 'pending'])
-    expect(state.texts.commit).toBe('feat: x')
+    expect(state.texts.title).toBe('feat: x')
   })
 
   it('a failed write retries in the writing stage', () => {
@@ -187,23 +192,26 @@ describe('transitions', () => {
 
 describe('glance', () => {
   it('shows what each exit has to say', () => {
-    const main = startState(input(), 't')
-    expect(glanceFields(main)).toEqual(['commit'])
+    expect(glanceFields(startState(input({ kind: 'commit' }), 't'))).toEqual(['commit'])
+    // 合并 has nothing to say: it runs straight away.
+    expect(glanceFields(startState(input({ kind: 'main' }), 't'))).toEqual([])
     expect(glanceFields(startState(input({ kind: 'pr' }), 't'))).toEqual(['title', 'body', 'base', 'draft'])
     expect(glanceFields(startState(input({ kind: 'push-pr' }), 't'))).toEqual([])
   })
 
   it('wants a subject, and for a PR a title', () => {
-    const main = startState(input(), 't')
-    expect(submitBlocker(main)).toBe('写一句提交说明')
-    expect(submitBlocker(setTexts(main, { commit: 'feat: x' }))).toBeNull()
+    const commit = startState(input({ kind: 'commit' }), 't')
+    expect(submitBlocker(commit)).toBe('写一句提交说明')
+    expect(submitBlocker(setTexts(commit, { commit: 'feat: x' }))).toBeNull()
+    expect(submitBlocker(startState(input({ kind: 'main' }), 't'))).toBeNull()
     const pr = startState(input({ kind: 'pr' }), 't')
     expect(submitBlocker(pr)).toBe('写一个标题')
     expect(submitBlocker(setTexts(pr, { title: 'T' }))).toBeNull()
   })
 
   it('labels the primary button after the exit', () => {
-    expect(submitLabel('main')).toBe('合并并推送')
+    expect(submitLabel('main')).toBe('合并')
+    expect(submitLabel('push-base')).toBe('推送')
     expect(submitLabel('pr')).toBe('推送并创建 PR')
     expect(submitLabel('push-pr')).toBe('推送')
   })
@@ -226,9 +234,6 @@ describe('helpers', () => {
   })
 
   it('maps a failed ship to the step that shows it', () => {
-    expect(mainFailureStep('commit')).toBe('merge')
-    expect(mainFailureStep('merge')).toBe('merge')
-    expect(mainFailureStep('push')).toBe('push')
     expect(createFailureStep('remote rejected')).toBe('push')
     expect(createFailureStep('GraphQL: not allowed')).toBe('create')
   })
@@ -242,10 +247,10 @@ describe('helpers', () => {
   })
 
   // R60 / R71: the push step names the remote the base goes to; 拉取 names what it fetches.
-  it('names where 合并到 main 并推送 pushes the base and what 拉取 fetches', () => {
+  it('names where 推送 of the base pushes it and what 拉取 fetches', () => {
     const base = { agent: 'Claude', base: 'main', branch: 'feat', remote: 'fork', review: false }
-    expect(flowSteps({ ...base, kind: 'main', baseRemote: 'upstream' }).at(-1)?.label).toBe('推送 upstream/main')
-    expect(flowSteps({ ...base, kind: 'main' }).at(-1)?.label).toBe('推送 fork/main')
+    expect(flowSteps({ ...base, kind: 'push-base', baseRemote: 'upstream' }).at(-1)?.label).toBe('推送 upstream/main')
+    expect(flowSteps({ ...base, kind: 'push-base' }).at(-1)?.label).toBe('推送 fork/main')
     expect(flowSteps({ ...base, kind: 'pull', pullFrom: 'origin/jacoy/feat' })[0]?.label).toBe('拉取 origin/jacoy/feat')
     expect(flowSteps({ ...base, kind: 'pull' })[0]?.label).toBe('拉取 fork/feat')
   })
@@ -274,7 +279,7 @@ describe('helpers', () => {
 
 describe('a Ship block taken up after a reload (architecture review, batch 6)', () => {
   const running: ShipState = {
-    ...startState({ kind: 'main', agent: 'Claude', base: 'main', branch: 'feat', remote: 'origin', review: false }, '合并到 main 并推送'),
+    ...startState({ kind: 'main', agent: 'Claude', base: 'main', branch: 'feat', remote: 'origin', review: false }, '合并到 main'),
     stage: 'running'
   }
 
@@ -331,16 +336,8 @@ describe('合入链路 v2 runs (Figma 73D–73F)', () => {
     expect(next.stage).toBe('glance')
   })
 
-  it('exit A names the method it merges with: the repository default among the allowed ones, else squash', () => {
-    expect(labels({ method: 'rebase' })[1]).toBe('合并到 main · Rebase')
-    expect(exitMethod(null)).toBe('squash')
-    expect(exitMethod({ methods: ['merge', 'squash'], defaultMethod: 'merge' })).toBe('merge')
-    expect(exitMethod({ methods: ['rebase'], defaultMethod: 'squash' })).toBe('rebase')
-    expect(exitMethod({ methods: [], defaultMethod: 'merge' })).toBe('squash')
-  })
-
   it('only the two exits are remembered as the repository’s choice', () => {
-    expect(['main', 'pr', 'push-pr', 'commit', 'sync', 'pull'].filter((k) => isExitRun(k as ShipState['kind']))).toEqual(['main', 'pr'])
+    expect(['main', 'push-base', 'pr', 'push-pr', 'commit', 'sync', 'pull'].filter((k) => isExitRun(k as ShipState['kind']))).toEqual(['main', 'pr'])
   })
 })
 

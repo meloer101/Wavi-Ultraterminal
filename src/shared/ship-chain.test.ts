@@ -89,18 +89,18 @@ describe('shipChain · actions', () => {
       shipChain(input({ preflight: ok({ ahead: 0 }), local: { ...dirty(0), ahead: 0 } }))
     ]
     for (const state of states) expect(state.actions.map((a) => a.id)).toEqual([...CHAIN_ACTION_IDS])
-    expect(CHAIN_ACTION_IDS).toEqual(['commit', 'sync', 'pull', 'push', 'pr', 'main', 'merge-pr', 'archive'])
+    expect(CHAIN_ACTION_IDS).toEqual(['commit', 'sync', 'pull', 'push', 'pr', 'main', 'push-base', 'merge-pr', 'archive'])
   })
 
   it('labels each action with the base and the PR', () => {
     const plain = shipChain(input({ preflight: ok({ base: 'develop' }) }))
-    expect(plain.actions.map((a) => a.label)).toEqual(['提交', '同步 develop', '拉取', '推送', '创建 PR', '合并到 develop 并推送', '合并 PR…', '归档…'])
+    expect(plain.actions.map((a) => a.label)).toEqual(['提交', '同步 develop', '拉取', '推送', '创建 PR', '合并', '推送', '合并 PR…', '归档…'])
     const withPr = shipChain(input({ pr: pr(), local: dirty(1) }))
     // 提交 is its own action: uncommitted work never renames the push.
     expect(action(withPr, 'pr').label).toBe('推送到 PR #5')
     expect(action(withPr, 'merge-pr').label).toBe('合并 PR #5…')
     expect(action(shipChain(input({ pr: pr({ unpushed: true }) })), 'pr').label).toBe('推送到 PR #5')
-    expect(action(shipChain(input({ preflight: ok({ remote: null }) })), 'main').label).toBe('合并到 main')
+    expect(action(shipChain(input({ preflight: ok({ remote: null }) })), 'main').label).toBe('合并')
     expect(CHAIN_LABEL.handoff('Codex')).toBe('交给 Codex')
   })
 
@@ -166,7 +166,7 @@ describe('shipChain · 提交 apart from the exits', () => {
     expect(state.next).toEqual({ id: 'commit', label: '提交', blocker: null })
     expect(state.headline).toBeNull()
     // The exits stay beside it: the branch has commits of its own.
-    expect(state.second).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+    expect(state.second).toEqual({ id: 'main', label: '合并', blocker: null })
     expect(CHAIN_LABEL.commit).toBe('提交')
   })
 
@@ -180,7 +180,7 @@ describe('shipChain · 提交 apart from the exits', () => {
 
   it('leaves unticked files out: with commits of its own, the exit is the primary move', () => {
     const state = shipChain(input({ local: dirty(2), ticked: 0 }))
-    expect(state.next).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+    expect(state.next).toEqual({ id: 'main', label: '合并', blocker: null })
     expect(state.second).toEqual({ id: 'pr', label: '创建 PR', blocker: null })
   })
 
@@ -306,7 +306,7 @@ describe('shipChain · while the preflight runs', () => {
     expect(state.stage).toBe('checking')
     expect(state.headline).toEqual({ tone: 'working', text: '正在检查…' })
     expect(state.next).toEqual({ id: 'pr', label: '创建 PR', blocker: '正在检查…' })
-    expect(state.second).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: '正在检查…' })
+    expect(state.second).toEqual({ id: 'main', label: '合并', blocker: '正在检查…' })
   })
 
   it('already knows a branch with nothing of its own, and a merged PR', () => {
@@ -427,6 +427,26 @@ describe('shipChain · d. merged', () => {
   it('is not merged while something is uncommitted', () => {
     expect(shipChain(input({ prMerged: true, local: dirty(1) })).stage).toBe('exits')
   })
+
+  // 合并 is local only: the base it left ahead of its upstream is pushed before anything is archived.
+  it('offers 推送 of the base, not 归档…, while the local base has commits its upstream lacks', () => {
+    const state = shipChain(input({ preflight: ok({ ahead: 0, merged: true, baseUnpushed: 1 }), local: { ...dirty(0), ahead: 0 } }))
+    expect(state).toMatchObject({ stage: 'unpushed', headline: { tone: 'info', text: 'main 有 1 个提交还没推送' }, next: { id: 'push-base', label: '推送', blocker: null }, second: null })
+    expect(action(state, 'push-base')).toEqual({ id: 'push-base', label: '推送', blocker: null })
+    expect(action(state, 'archive').blocker).toBe('先推送 main')
+    expect([state.next?.id, state.second?.id]).not.toContain('archive')
+  })
+
+  it('offers 归档… once nothing is left unpushed, and never 推送 of the base before the work is in it', () => {
+    const pushed = shipChain(input({ preflight: ok({ ahead: 0, merged: true, baseUnpushed: 0 }), local: { ...dirty(0), ahead: 0 } }))
+    expect(pushed).toMatchObject({ stage: 'merged', next: { id: 'archive', blocker: null } })
+    expect(action(pushed, 'push-base').blocker).toBe(CHAIN_TEXT.nothingToPush)
+    // No upstream to count against (or an older main): as before.
+    expect(shipChain(input({ preflight: ok({ ahead: 0, merged: true, baseUnpushed: null }), local: { ...dirty(0), ahead: 0 } })).stage).toBe('merged')
+    expect(shipChain(input({ preflight: ok({ ahead: 0, merged: true }), local: { ...dirty(0), ahead: 0 } })).stage).toBe('merged')
+    // Base commits of someone else's while the branch is not merged: the exits, 推送 of the base is not the way.
+    expect(shipChain(input({ preflight: ok({ baseUnpushed: 2 }) })).next?.id).toBe('main')
+  })
 })
 
 describe('shipChain · e. nothing of its own', () => {
@@ -468,22 +488,22 @@ describe('shipChain · g. the two exits', () => {
       stage: 'exits',
       headline: null,
       next: { id: 'pr', label: '创建 PR', blocker: null },
-      second: { id: 'main', label: '合并到 main 并推送', blocker: null }
+      second: { id: 'main', label: '合并', blocker: null }
     })
     expect(shipChain(input({ preflight: ok({ suggested: 'pr' }), remembered: 'main' })).next?.id).toBe('main')
   })
 
-  it('offers only 合并到 base without a remote', () => {
+  it('offers only 合并 without a remote', () => {
     const state = shipChain(input({ preflight: ok({ remote: null, suggested: 'pr' }), remembered: 'pr' }))
-    expect(state.next).toEqual({ id: 'main', label: '合并到 main', blocker: null })
+    expect(state.next).toEqual({ id: 'main', label: '合并', blocker: null })
     expect(state.second).toBeNull()
   })
 
-  it('offers only 合并到 base 并推送 when the remote is not on GitHub: no PR, no state line about it', () => {
+  it('offers only 合并 when the remote is not on GitHub: no PR, no state line about it', () => {
     for (const remembered of ['pr', 'main', null] as const) {
       const state = shipChain(input({ preflight: ok({ remoteOnGitHub: false, suggested: 'pr' }), remembered }))
       expect(state.stage).toBe('exits')
-      expect(state.next).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(state.next).toEqual({ id: 'main', label: '合并', blocker: null })
       expect(state.second).toBeNull()
       expect(state.headline).toBeNull()
       // The ⋯ menu still lists 创建 PR, disabled with the reason.
@@ -559,7 +579,6 @@ describe('chainInputFrom', () => {
     expect(state.stage).toBe('checking')
     expect(state.base).toBe('main')
     expect(state.actions.find((a) => a.id === 'sync')?.label).toBe('同步 main')
-    expect(state.actions.find((a) => a.id === 'main')?.label).toBe('合并到 main 并推送')
     // A remote called otherwise, a branch name with a slash.
     const release = { ...changes, base: 'upstream/release/1.0', baseRef: 'refs/remotes/upstream/release/1.0' }
     expect(shipChain(chainInputFrom({ preflight: null, remembered: null, prStatus: null, changes: release, isMain: false, projectRoot: '/r' })).base).toBe('release/1.0')

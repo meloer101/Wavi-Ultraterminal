@@ -109,6 +109,7 @@ const GIT_ICON: Partial<Record<ChainCommand, ActionIcon>> = {
   push: 'push',
   pr: 'pr',
   main: 'merge',
+  'push-base': 'push',
   'merge-pr': 'merge',
   archive: 'archive',
   review: 'review',

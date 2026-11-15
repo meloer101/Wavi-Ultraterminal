@@ -40,15 +40,11 @@ describe('sanitizeFixRuns', () => {
 
 const shipState: ShipState = {
   kind: 'main',
-  title: '合并到 main 并推送',
+  title: '合并到 main',
   agent: 'Claude',
-  steps: [
-    { id: 'write', label: 'Claude 写提交说明', state: 'done' },
-    { id: 'merge', label: '合并到 main · Squash', state: 'working' },
-    { id: 'push', label: '推送 origin/main', state: 'pending' }
-  ],
+  steps: [{ id: 'merge', label: '合并到 main', state: 'working' }],
   stage: 'running',
-  texts: { commit: 'feat: x', title: '', body: '', draft: false },
+  texts: { commit: '', title: '', body: '', draft: false },
   error: null,
   failedIn: null
 }
@@ -73,8 +69,26 @@ const shipRun: SavedShipRun = {
 describe('sanitizeShipRuns', () => {
   it('keeps a run of a worktree that exists, as it was', () => {
     expect(sanitizeShipRuns([shipRun, { ...shipRun, ctx: { ...shipRun.ctx, worktree: '/code/gone' } }], worktrees)).toEqual([shipRun])
-    const failed = { ...shipRun, merged: 'abc1234', state: { ...shipState, error: { step: 'push', message: 'offline', pushRefused: true }, failedIn: 'running' } }
+    const failed = { ...shipRun, merged: 'abc1234', state: { ...shipState, error: { step: 'merge', message: 'offline' }, failedIn: 'running' } }
     expect(sanitizeShipRuns([failed], worktrees)).toEqual([failed])
+  })
+
+  // 合并 is local only: a 合并 run saved with a push step was a merge and push of an older build — dropped;
+  // 推送 of the base comes back.
+  it('drops a 合并 run saved with a push step, and keeps 推送 of the base', () => {
+    const steps = [
+      { id: 'write', label: 'Claude 写提交说明', state: 'done' },
+      { id: 'merge', label: '合并到 main · Squash', state: 'done' },
+      { id: 'push', label: '推送 origin/main', state: 'failed' }
+    ]
+    const bundled = { ...shipRun, merged: 'abc1234', state: { ...shipState, title: '合并到 main 并推送', steps, error: { step: 'push', message: 'offline' }, failedIn: 'running' } }
+    expect(sanitizeShipRuns([bundled], worktrees)).toEqual([])
+    const pushBase = {
+      ...shipRun,
+      kind: 'push-base',
+      state: { ...shipState, kind: 'push-base', title: '推送 main', steps: [{ id: 'push', label: '推送 origin/main', state: 'failed' }], error: { step: 'push', message: 'main 受保护', pushRefused: true }, failedIn: 'running' }
+    }
+    expect(sanitizeShipRuns([pushBase], worktrees)).toEqual([pushBase])
   })
 
   it('keeps 合入链路 v2 runs (提交 / 同步 / 拉取), the merge method and a classified failure with its hand-off', () => {

@@ -4,7 +4,7 @@
 import type { ConfirmOptions } from '@shared/lifecycle'
 import { livePr, type GhState, type PrStatus } from '@shared/pull-requests'
 import type { ShipKind, ShipOperation, ShipOperationRequest, ShipOperationResult, ShipPreflight } from '@shared/ship'
-import { CHAIN_TEXT, oneLine, type ChainActionId, type ChainState, type ChainTone } from '@shared/ship-chain'
+import { CHAIN_LABEL, CHAIN_TEXT, oneLine, type ChainActionId, type ChainState, type ChainTone } from '@shared/ship-chain'
 import { PR_CONFLICT_FACT } from './auto-fix-model'
 
 /** Every way into the chain from the zone, the ⋯ menu and ⌘K (pull-requests/chain-actions.ts runs them): a chain move,
@@ -106,7 +106,7 @@ export const RESOLVED = '冲突都解决了'
 
 /**
  * The zone's state line: the chain's headline; else the reason the other exit is blocked (73C1: gh 还没有登录 while
- * 合并到 main 并推送 stays the primary), so no blocked button is left with only a tooltip.
+ * 合并 stays the primary), so no blocked button is left with only a tooltip.
  */
 export function zoneHeadline(chain: ChainState): ZoneHeadline | null {
   let line = chain.headline
@@ -144,9 +144,13 @@ export interface ZoneMenuItem {
 /** The part of a reason a menu's trailing slot has room for: the sentence up to its colon. */
 export const shortReason = (text: string): string => text.split('：')[0] ?? text
 
+/** An action as the ⋯ menu and ⌘K name it: 合并 and 推送 of the base with the base's name (the buttons need none). */
+const namedLabel = (a: ChainState['actions'][number], base: string): string =>
+  a.id === 'main' ? CHAIN_LABEL.mergeTo(base) : a.id === 'push-base' ? CHAIN_LABEL.pushBaseTo(base) : a.label
+
 /**
  * The ⋯ menu (73B): the chain's actions in their fixed order. 合并到 <base>… (the merge sheet) is hidden while a PR is
- * open, 合并 PR #N… shown only then; 创建 PR reads 推送到 PR #N with one open.
+ * open, 合并 PR #N… shown only then; 创建 PR reads 推送到 PR #N with one open; 推送 <base> pushes the local base.
  */
 export function zoneMenu(chain: ChainState): ZoneMenuItem[] {
   const open = chain.openPr !== null
@@ -155,7 +159,7 @@ export function zoneMenu(chain: ChainState): ZoneMenuItem[] {
     .map((a) => ({
       id: a.id,
       command: a.id === 'main' ? 'merge-sheet' : a.id,
-      label: a.id === 'main' ? `合并到 ${chain.base}…` : a.label,
+      label: a.id === 'main' ? `${CHAIN_LABEL.mergeTo(chain.base)}…` : namedLabel(a, chain.base),
       blocker: a.blocker === null ? null : shortReason(a.blocker)
     }))
 }
@@ -183,6 +187,8 @@ export interface PaletteGitFacts {
   exitRegistered: boolean
   /** What 拉取 fetches (the preflight's `pullFrom`); absent or null: `<remote>/<branch>`. */
   pullFrom?: string | null
+  /** Where 推送 of the base goes (the preflight's `baseRemote`); absent or null: the base alone. */
+  baseRemote?: string | null
 }
 
 /**
@@ -200,6 +206,8 @@ export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): Pa
         return facts.remote ? `${facts.branch} → ${facts.remote}` : facts.branch
       case 'pull':
         return facts.pullFrom ?? `${facts.remote ?? 'origin'}/${facts.branch}`
+      case 'push-base':
+        return facts.baseRemote ? `${chain.base} → ${facts.baseRemote}` : chain.base
       default:
         return ''
     }
@@ -209,7 +217,7 @@ export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): Pa
     .filter((a) => a.blocker === null && (a.id !== 'archive' || chain.stage === 'merged'))
     // ⇧⌘M runs an exit only while Git · 变更 registered it; 合并 PR #N… it runs through the chain from anywhere
     // (pull-requests/chain-actions.ts mergeShortcut).
-    .map((a) => ({ command: a.id, label: a.label, detail: detail(a.id), primary: chain.next?.id === a.id && (a.id === 'merge-pr' || facts.exitRegistered) }))
+    .map((a) => ({ command: a.id, label: namedLabel(a, chain.base), detail: detail(a.id), primary: chain.next?.id === a.id && (a.id === 'merge-pr' || facts.exitRegistered) }))
   if (facts.reviewFiles !== null && facts.reviewFiles > 0) out.push({ command: 'review', label: '审阅全部改动', detail: `${facts.reviewFiles} 个文件`, primary: false })
   if (facts.pr !== null) out.push({ command: 'open-pr', label: `打开 PR #${facts.pr}`, detail: '', primary: false })
   return out

@@ -36,7 +36,7 @@ function state(preflight: ShipPreflight | null, patch: Partial<ExitState> = {}):
 describe('shipExits', () => {
   it('shows both exits with a checking blocker while the preflight is pending', () => {
     const { primary, secondary } = shipExits(state(null))
-    expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: '正在检查…' })
+    expect(primary).toEqual({ kind: 'main', label: '合并', blocker: '正在检查…' })
     expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '正在检查…' })
   })
 
@@ -48,7 +48,7 @@ describe('shipExits', () => {
 
   it('puts the preflight failure on both exits, main first', () => {
     const { primary, secondary } = shipExits(state({ ok: false, message: '不是 git 仓库', operation: null }, { remembered: 'pr' }))
-    expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: '不是 git 仓库' })
+    expect(primary).toEqual({ kind: 'main', label: '合并', blocker: '不是 git 仓库' })
     expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '不是 git 仓库' })
   })
 
@@ -85,7 +85,7 @@ describe('shipExits', () => {
 
   it('offers only 合并到 base when the repository has no remote', () => {
     expect(shipExits(state(ok({ remote: null, base: 'develop', suggested: 'pr' }), { remembered: 'pr' }))).toEqual({
-      primary: { kind: 'main', label: '合并到 develop', blocker: null },
+      primary: { kind: 'main', label: '合并', blocker: null },
       secondary: null
     })
   })
@@ -94,7 +94,7 @@ describe('shipExits', () => {
     it('uses the suggestion when nothing is remembered', () => {
       const { primary, secondary } = shipExits(state(ok({ suggested: 'pr' })))
       expect(primary).toEqual({ kind: 'pr', label: '创建 PR', blocker: null })
-      expect(secondary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(secondary).toEqual({ kind: 'main', label: '合并', blocker: null })
     })
 
     it('prefers the remembered exit over the suggestion', () => {
@@ -102,9 +102,10 @@ describe('shipExits', () => {
       expect(shipExits(state(ok({ suggested: 'main' }), { remembered: 'pr' })).primary.kind).toBe('pr')
     })
 
-    it('names the base in the label', () => {
+    // 合并's button names no base (the ⋯ menu and ⌘K do).
+    it('labels 合并 without the base', () => {
       const { primary } = shipExits(state(ok({ base: 'develop' })))
-      expect(primary).toMatchObject({ kind: 'main', label: '合并到 develop 并推送' })
+      expect(primary).toMatchObject({ kind: 'main', label: '合并' })
     })
 
     it('blocks both exits with their own reasons when there is nothing to ship', () => {
@@ -146,7 +147,7 @@ describe('shipExits', () => {
 
     it('when the remote is not on GitHub: only 合并到 main is offered', () => {
       const { primary, secondary } = shipExits(state(ok({ remoteOnGitHub: false }), { remembered: 'pr' }))
-      expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(primary).toEqual({ kind: 'main', label: '合并', blocker: null })
       expect(secondary).toBeNull()
     })
   })
@@ -154,7 +155,7 @@ describe('shipExits', () => {
   it('blocks the single main exit when there is nothing to ship and no remote', () => {
     expect(shipExits(state(ok({ remote: null, ahead: 0 }))).primary).toEqual({
       kind: 'main',
-      label: '合并到 main',
+      label: '合并',
       blocker: '没有要合并的改动'
     })
   })
@@ -267,16 +268,17 @@ describe('shipContextFor', () => {
     expect(ctx).toMatchObject({ root: '/r', worktree: '/w', base: 'main', branch: 'feat/x', paths: null, openPr: null, sessionId: 's1' })
   })
 
-  it('takes 提交’s ticked paths (none: nothing to commit) and merges with the repository’s default method', () => {
+  // 合并 always squashes: the run carries no merge method.
+  it('takes 提交’s ticked paths (none: nothing to commit) and no merge method', () => {
     const preflight = ok({ mergeMethods: { methods: ['merge', 'rebase'], defaultMethod: 'rebase' } })
-    expect(shipContextFor({ ...base, preflight, paths: ['b.ts'] })).toMatchObject({ paths: ['b.ts'], method: 'rebase' })
+    expect(shipContextFor({ ...base, preflight, paths: ['b.ts'] })).toMatchObject({ paths: ['b.ts'] })
     expect(shipContextFor({ ...base, preflight, paths: [] }).paths).toBeNull()
-    expect(shipContextFor({ ...base, preflight: ok() }).method).toBe('squash')
+    expect(shipContextFor({ ...base, preflight })).not.toHaveProperty('method')
   })
 
   it('names the branch from the change list when the preflight refuses it (the main checkout on its base)', () => {
     const refused = { ok: false as const, message: '这是基线分支本身，没有可以合并的改动', operation: null }
     const ctx = shipContextFor({ ...base, preflight: refused, changes: { branch: 'main', base: null }, paths: ['a.ts'] })
-    expect(ctx).toMatchObject({ base: 'main', branch: 'main', remote: null, paths: ['a.ts'], method: 'squash' })
+    expect(ctx).toMatchObject({ base: 'main', branch: 'main', remote: null, paths: ['a.ts'] })
   })
 })

@@ -62,7 +62,8 @@ export function useGitGroup(): PaletteGit | null {
     reviewFiles: reviewable ? files : null,
     pr: prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr.number : null,
     exitRegistered: primaryExitOf(path) !== undefined,
-    ...(preflight.ok && preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {})
+    ...(preflight.ok && preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {}),
+    ...(preflight.ok && preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {})
   })
   if (actions.length === 0) return null
   return { name: preflight.ok ? preflight.branch : place.worktree.branch, worktreePath: path, sessionId, actions }

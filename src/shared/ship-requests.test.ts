@@ -56,6 +56,19 @@ describe('parseShipMainRequest', () => {
     expect(parseShipMainRequest({ ...valid, message: ' \n' })).toBeNull()
   })
 
+  it('asks for a push only when push is true, and keeps a one-line title and a full head', () => {
+    const plain = { ...target, message: '', method: 'squash', paths: null }
+    expect(parseShipMainRequest(plain)).not.toHaveProperty('push')
+    expect(parseShipMainRequest({ ...plain, push: false })).not.toHaveProperty('push')
+    expect(parseShipMainRequest({ ...plain, push: true })).toMatchObject({ push: true })
+    expect(parseShipMainRequest({ ...plain, push: 'yes' })).toBeNull()
+    expect(parseShipMainRequest({ ...plain, title: '修好\n登录' })).toMatchObject({ title: '修好 登录' })
+    expect(parseShipMainRequest({ ...plain, title: ' ' })).not.toHaveProperty('title')
+    expect(parseShipMainRequest({ ...plain, title: 3 })).toBeNull()
+    expect(parseShipMainRequest({ ...plain, head: 'a'.repeat(40) })).toMatchObject({ head: 'a'.repeat(40) })
+    expect(parseShipMainRequest({ ...plain, head: 'abc1234' })).toBeNull()
+  })
+
   it('reads an empty path list as nothing to commit and drops duplicates', () => {
     expect(parseShipMainRequest({ ...valid, paths: [] })?.paths).toBeNull()
     expect(parseShipMainRequest({ ...valid, paths: ['a', 'a'] })?.paths).toEqual(['a'])

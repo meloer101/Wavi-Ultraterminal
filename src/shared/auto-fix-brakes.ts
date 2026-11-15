@@ -123,7 +123,7 @@ export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, a
 
 // --- what a fix run is (the window's 自动修复, saved while unfinished) -------------------------------------------
 
-/** Where a failure lives: a PR's checks (and comments), or the base branch after 合并到 main 并推送. */
+/** Where a failure lives: a PR's checks (and comments), or the base branch after 推送 of the base. */
 export type FixScope = 'pr' | 'base'
 
 /** The decision that stops a fix: a brake (before the push) or the base already failing (before the fix). */

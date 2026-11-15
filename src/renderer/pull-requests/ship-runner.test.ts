@@ -1,4 +1,4 @@
-// 合并到 main 并推送 (exit A) driven against a fake window.tr: what a retry after a failed push asks main to do.
+// The Ship runs driven against a fake window.tr: 合并 (the local merge), 推送 of the base, 提交, 同步, 拉取, 创建 PR.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ShipMainResult } from '@shared/ship'
@@ -16,7 +16,7 @@ vi.mock('../session-io', () => ({
   insertIntoTerminal: async (id: string, text: string) => void inserted.push({ id, text }),
   submitPrompt: async (id: string, text: string) => void submitted.push({ id, text })
 }))
-type FakeSession = { id: string; kind: string; status: string; worktreeId: string }
+type FakeSession = { id: string; kind: string; status: string; worktreeId: string; title?: string }
 const workspace: { sessions: FakeSession[]; activeSessionId: string | null } = { sessions: [], activeSessionId: null }
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
@@ -74,12 +74,17 @@ const settle = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
-async function shipUntilPushFails(failed: ShipMainResult): Promise<void> {
+/** 合并 runs straight after the click (no text to write, nothing to look at first). */
+async function mergeUntilFails(failed: ShipMainResult): Promise<void> {
   shipToMain.mockResolvedValueOnce(failed)
-  startShip(ctx, 'main', 'feat: new')
+  startShip(ctx, 'main', '合并到 main')
   await settle()
-  expect(state().stage).toBe('glance')
-  submitShip(ctx.worktree)
+}
+
+/** 推送 of the base, as the chain starts it after a local 合并. */
+async function pushBaseUntilFails(failed: ShipMainResult): Promise<void> {
+  pushBase.mockResolvedValueOnce(failed)
+  startShip({ ...ctx, paths: null }, 'push-base', '推送 main', { baseRemote: 'origin' })
   await settle()
 }
 
@@ -122,48 +127,111 @@ beforeEach(() => {
   })
 })
 
-describe('合并到 main 并推送 after its push failed', () => {
-  it('retries the push alone: the merge it kept is not run again', async () => {
-    await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败（合并已留在本地 main 上）：offline' })
+// 合并 is local only: no text to write, no review, no push; 推送 of the base is the chain's next run.
+describe('合并 (the local merge)', () => {
+  it('runs straight after the click: one merge step, and asks main for a squash with no push, titled after the session', async () => {
+    workspace.sessions = [{ id: 's1', kind: 'claude', status: 'idle', worktreeId: 'w1', title: '导航吸顶' }]
+    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c1c1c1c1', pushed: false })
+    startShip({ ...ctx, sessionId: 's1', method: 'merge' }, 'main', '合并到 main')
+    expect(state().steps.map((s) => [s.id, s.label])).toEqual([['merge', '合并到 main']])
+    expect(state().stage).toBe('running')
+    await settle()
+    expect(shipToMain).toHaveBeenCalledTimes(1)
+    const request = shipToMain.mock.calls[0]![0] as Record<string, unknown>
+    expect(request).toMatchObject({ root: '/repo', worktree: '/repo-wt', message: '', method: 'squash', paths: null, title: '导航吸顶' })
+    expect(request.push).not.toBe(true)
+    expect(submitted).toEqual([])
+    expect(pushBase).not.toHaveBeenCalled()
+    expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main · c1c1c1c' })
+  })
+
+  // R37: exit A's conflicts go to the agent as one line, names quoted as data.
+  it('has the one-line merge hand-off ready when the merge conflicts', async () => {
+    await mergeUntilFails({ ok: false, step: 'merge', reason: 'conflicts', message: '3 个文件和 main 冲突', conflicts: ['a.ts', 'b.ts', 'c.ts'] })
+    const prompt = state().error!.prompt!
+    expect(prompt).not.toContain('\n')
+    expect(prompt).toContain('"a.ts"、"b.ts"、"c.ts"')
+    expect(prompt).toContain('GIT_EDITOR=true git merge refs/heads/main')
+    expect(handoffText(state().error, 'main', 'feat')).toBe(prompt)
+  })
+
+  it('retries the merge with nothing to commit either', async () => {
+    await mergeUntilFails({ ok: false, step: 'merge', reason: 'blocked', message: '正在合并这个分支' })
+    expect(state().error).toMatchObject({ step: 'merge', message: '正在合并这个分支' })
+    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c2', pushed: false })
+    retryShip(ctx.worktree)
+    await settle()
+    expect(shipToMain).toHaveBeenCalledTimes(2)
+    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
+    expect(pushBase).not.toHaveBeenCalled()
+  })
+})
+
+describe('推送 of the base after a local 合并', () => {
+  it('pushes the base alone, then the block goes', async () => {
+    pushBase.mockResolvedValueOnce({ ok: true, commit: 'c1c1c1c1', pushed: true })
+    startShip({ ...ctx, paths: null }, 'push-base', '推送 main', { baseRemote: 'upstream' })
+    expect(state().steps.map((s) => [s.id, s.label])).toEqual([['push', '推送 upstream/main']])
+    await settle()
+    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt' })
+    expect(shipToMain).not.toHaveBeenCalled()
+    expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已推送 main · c1c1c1c' })
+  })
+
+  it('retries the push after a network error', async () => {
+    await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败（合并已留在本地 main 上）：offline' })
     expect(state().error).toMatchObject({ step: 'push' })
     // A network error is not a protected branch: no 改为创建 PR.
     expect(state().error).not.toHaveProperty('pushRefused')
-
     pushBase.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: true })
     retryShip(ctx.worktree)
     await settle()
-    expect(shipToMain).toHaveBeenCalledTimes(1)
-    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', commit: 'c1' })
-    // Done: the block goes and the notice says what happened.
+    expect(pushBase).toHaveBeenCalledTimes(2)
     expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
-    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c1' })
-  })
-
-  it('merges with the method the run was started with', async () => {
-    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: true })
-    startShip({ ...ctx, method: 'merge' }, 'main', 'feat: new')
-    await settle()
-    expect(state().steps.find((s) => s.id === 'merge')?.label).toBe('合并到 main · Merge')
-    submitShip(ctx.worktree)
-    await settle()
-    expect(shipToMain).toHaveBeenCalledWith(expect.objectContaining({ method: 'merge' }))
   })
 
   it('a push of the base refused by a remote that moved shows git’s words in plain language and offers only 取消', async () => {
     // 同步 cannot repair a local base that diverged from its remote, and 重试 would be refused the same way.
     const failure = { kind: 'non-fast-forward' as const, message: '远程有本地没有的提交', next: null, tail: '! [rejected] main -> main (fetch first)' }
-    await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败', failure })
-    // R47: the class's words, and Wavi's own note that the merge stays on the local base.
-    expect(state().error).toMatchObject({ step: 'push', message: '远程有本地没有的提交（合并已留在本地 main 上）', failure: { ...failure, message: '远程有本地没有的提交（合并已留在本地 main 上）' } })
+    await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败', failure })
+    expect(state().error).toMatchObject({ step: 'push', message: '远程有本地没有的提交', failure })
     expect(failureWay(state().error!)).toBeNull()
-    expect(state().steps.map((s) => [s.id, s.state])).toEqual([
-      ['write', 'done'],
-      ['merge', 'done'],
-      ['push', 'failed']
-    ])
+    expect(state().steps.map((s) => [s.id, s.state])).toEqual([['push', 'failed']])
   })
 
-  // 提交 is its own run now: the hook that fails is its commit's, never the merge's.
+  it('offers 改为创建 PR when main says the base is protected', async () => {
+    preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', remoteOnGitHub: true, gh: 'ready' })
+    await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true })
+    expect(state().error).toMatchObject({ step: 'push', pushRefused: true })
+  })
+
+  // R46: a GitLab repository, or gh signed out: 创建 PR cannot work there, so it is not offered.
+  it('offers no 改为创建 PR where a PR cannot be made', async () => {
+    const failure = { kind: 'protected-branch' as const, message: 'main 受保护', next: 'create-pr' as const, tail: 'remote: GitLab: You are not allowed to push code to protected branches' }
+    for (const where of [{ remoteOnGitHub: false, gh: 'ready' }, { remoteOnGitHub: true, gh: 'signed-out' }]) {
+      cancelShip(ctx.worktree)
+      pushBase.mockReset()
+      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', ...where })
+      await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true, failure })
+      expect(state().error).not.toHaveProperty('pushRefused')
+      expect(failureWay(state().error!)).toBeNull()
+    }
+  })
+
+  it('stays on the push step when the retried push fails too', async () => {
+    await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败：offline' })
+    pushBase.mockResolvedValueOnce({ ok: false, step: 'push', reason: 'failed', message: 'main 上已经没有这次的合并（c1）：没有推送' })
+    retryShip(ctx.worktree)
+    await settle()
+    expect(state().error).toMatchObject({ step: 'push', message: 'main 上已经没有这次的合并（c1）：没有推送' })
+    expect(shipToMain).not.toHaveBeenCalled()
+  })
+})
+
+// 提交 is its own run now: the hook that fails is its commit's, never the merge's.
+describe('提交', () => {
   it('a commit hook that failed keeps its output and has the hand-off ready (Figma 73E3)', async () => {
     const failure = { kind: 'commit-hook' as const, message: 'pre-commit hook 没通过', next: 'handoff' as const, tail: 'eslint: 1 error' }
     commit.mockResolvedValueOnce({ ok: false, reason: 'failed', message: '提交失败', output: 'eslint: 1 error', failure })
@@ -174,53 +242,6 @@ describe('合并到 main 并推送 after its push failed', () => {
     expect(state().error).toMatchObject({ step: 'commit', message: 'pre-commit hook 没通过', output: 'eslint: 1 error' })
     expect(state().error!.prompt).toContain('Wavi 运行「提交」时失败了：pre-commit hook 没通过。')
     expect(state().error!.prompt).toContain('eslint: 1 error')
-  })
-
-  it('offers 改为创建 PR when main says the base is protected', async () => {
-    preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', remoteOnGitHub: true, gh: 'ready' })
-    await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true })
-    expect(state().error).toMatchObject({ step: 'push', pushRefused: true })
-  })
-
-  // R46: a GitLab repository, or gh signed out: 创建 PR cannot work there, so it is not offered.
-  it('offers no 改为创建 PR where a PR cannot be made', async () => {
-    const failure = { kind: 'protected-branch' as const, message: 'main 受保护', next: 'create-pr' as const, tail: 'remote: GitLab: You are not allowed to push code to protected branches' }
-    for (const where of [{ remoteOnGitHub: false, gh: 'ready' }, { remoteOnGitHub: true, gh: 'signed-out' }]) {
-      cancelShip(ctx.worktree)
-      shipToMain.mockReset()
-      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', ...where })
-      await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true, failure })
-      expect(state().error).not.toHaveProperty('pushRefused')
-      expect(failureWay(state().error!)).toBeNull()
-    }
-  })
-
-  // R37: exit A's conflicts go to the agent as one line, names quoted as data.
-  it('has the one-line merge hand-off ready when the merge conflicts', async () => {
-    await shipUntilPushFails({ ok: false, step: 'merge', reason: 'conflicts', message: '3 个文件和 main 冲突', conflicts: ['a.ts', 'b.ts', 'c.ts'] })
-    const prompt = state().error!.prompt!
-    expect(prompt).not.toContain('\n')
-    expect(prompt).toContain('"a.ts"、"b.ts"、"c.ts"')
-    expect(prompt).toContain('GIT_EDITOR=true git merge refs/heads/main')
-    expect(handoffText(state().error, 'main', 'feat')).toBe(prompt)
-  })
-
-  it('stays on the push step when the retried push fails too', async () => {
-    await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败：offline' })
-    pushBase.mockResolvedValueOnce({ ok: false, step: 'push', reason: 'failed', message: 'main 上已经没有这次的合并（c1）：没有推送' })
-    retryShip(ctx.worktree)
-    await settle()
-    expect(state().error).toMatchObject({ step: 'push', message: 'main 上已经没有这次的合并（c1）：没有推送' })
-    expect(shipToMain).toHaveBeenCalledTimes(1)
-  })
-
-  it('retries the merge with nothing to commit either', async () => {
-    await shipUntilPushFails({ ok: false, step: 'merge', reason: 'blocked', message: '正在合并这个分支' })
-    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c2', pushed: true })
-    retryShip(ctx.worktree)
-    await settle()
-    expect(shipToMain).toHaveBeenCalledTimes(2)
-    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
   })
 })
 
@@ -241,9 +262,7 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
 
   it('is saved without the settings, and comes back with the step under way failed, ready for 重试', async () => {
     shipToMain.mockReturnValueOnce(new Promise(() => {}))
-    startShip({ ...ctx, paths: null }, 'main', 'feat: new')
-    await settle()
-    submitShip(ctx.worktree)
+    startShip({ ...ctx, paths: null }, 'main', '合并到 main')
     await settle()
     const [saved] = savedShipRuns()
     expect(saved).toMatchObject({ kind: 'main', committed: false, ctx: { root: '/repo', worktree: '/repo-wt', paths: null } })
@@ -254,29 +273,26 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
     cancelShip(ctx.worktree)
     restoreShipRuns([saved!], ctx.settings)
     expect(state().error).toEqual({ step: 'merge', message: '窗口重新加载时这一步还没有结果，点重试' })
-    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: false })
     retryShip(ctx.worktree)
     await settle()
-    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null, message: 'feat: new' }))
-    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c3' })
+    expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null, message: '' }))
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main · c3' })
   })
 
-  it('asks main first: a merge it finished after the old window went is not run again, only the push', async () => {
+  it('asks main first: a merge it finished after the old window went is not run again, and nothing is pushed', async () => {
     shipToMain.mockReturnValueOnce(new Promise(() => {}))
-    startShip(ctx, 'main', 'feat: new')
-    await settle()
-    submitShip(ctx.worktree)
+    startShip(ctx, 'main', '合并到 main')
     await settle()
     const [saved] = savedShipRuns()
     cancelShip(ctx.worktree)
     restoreShipRuns([saved!], ctx.settings)
     preflight.mockResolvedValueOnce({ ok: true, merged: true, uncommitted: 0 })
-    pushBase.mockResolvedValueOnce({ ok: true, commit: 'c9', pushed: true })
     retryShip(ctx.worktree)
     await settle()
     expect(shipToMain).toHaveBeenCalledTimes(1)
-    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt' })
-    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c9' })
+    expect(pushBase).not.toHaveBeenCalled()
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main' })
   })
 
   // Review findings 15 / 35 / 16: whether the run's commit went in is decided from the commit, not from a file count.
@@ -424,27 +440,26 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
     })
   })
 
-  it('keeps the kept merge across it, so 重试 after a failed push still pushes the base alone', async () => {
-    await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败：offline' })
+  it('takes 推送 of the base up again: 重试 pushes the base alone', async () => {
+    await pushBaseUntilFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败：offline' })
     const [saved] = savedShipRuns()
-    expect(saved).toMatchObject({ merged: 'c1' })
+    expect(saved).toMatchObject({ kind: 'push-base' })
     cancelShip(ctx.worktree)
     restoreShipRuns([saved!], ctx.settings)
     pushBase.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: true })
     retryShip(ctx.worktree)
     await settle()
-    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', commit: 'c1' })
+    expect(pushBase).toHaveBeenLastCalledWith({ root: '/repo', worktree: '/repo-wt' })
+    expect(shipToMain).not.toHaveBeenCalled()
   })
 })
 
 // 提交 is never bundled: an exit ships only what is committed, whatever files are left uncommitted.
 describe('the exits commit nothing', () => {
-  it('合并到 main 并推送 has no 提交 step and never sends paths to main', async () => {
-    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: true })
-    startShip(ctx, 'main', '合并到 main 并推送')
-    await settle()
-    expect(state().steps.map((s) => s.id)).toEqual(['write', 'merge', 'push'])
-    submitShip(ctx.worktree)
+  it('合并 has no 提交 step and never sends paths to main', async () => {
+    shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c1', pushed: false })
+    startShip(ctx, 'main', '合并到 main')
+    expect(state().steps.map((s) => s.id)).toEqual(['merge'])
     await settle()
     expect(shipToMain).toHaveBeenCalledWith(expect.objectContaining({ paths: null }))
     expect(commit).not.toHaveBeenCalled()

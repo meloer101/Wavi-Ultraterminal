@@ -1,4 +1,4 @@
-// CI on the base after 合并到 main 并推送 pushed it (PRD F16 v1.78, Figma 29E / 29F): the latest BaseCi per worktree that
+// CI on the base after 推送 of the base pushed it (PRD F16 v1.78, Figma 29E / 29F): the latest BaseCi per worktree that
 // pushed one, and 自动修复's state for that base push (keyed by worktree path, PrAutomation with number 0). main pushes
 // every change (auto-fix.ts subscribes and asks once per worktree, for a CI that settled before the window loaded).
 import { create } from 'zustand'

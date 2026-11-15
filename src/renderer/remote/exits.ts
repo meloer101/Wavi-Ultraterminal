@@ -3,6 +3,7 @@
 // session list (model.ts `remoteShip`).
 import { remoteFail, type RemoteExit, type RemoteExits, type RemoteResult, type RemoteShipAction } from '@shared/remote'
 import type { ShipPreflight } from '@shared/ship'
+import { CHAIN_LABEL } from '@shared/ship-chain'
 import { checksText, turnCheckView } from '@shared/turn-checks'
 import type { Project, Session, Worktree } from '@shared/types'
 import { archiveTargetFor, archiveWorktree, blockerFor } from '../archive/actions'
@@ -136,7 +137,8 @@ async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<Rem
       settings: { review: settings.review, pr: settings.pr }
     }),
     exit.kind === 'open-pr' ? 'push-pr' : exit.kind,
-    exit.label,
+    // 合并 is local only (its button names no base; the block's title does). The phone has no 推送 of the base yet.
+    exit.kind === 'main' ? CHAIN_LABEL.mergeTo(preflight.base) : exit.label,
     // The tip the run starts from and where the base goes: the preflight just read, as the desktop's commands pass it.
     { head: preflight.head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) }
   )

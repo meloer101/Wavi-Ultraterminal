@@ -31,7 +31,7 @@ const optional = <K extends string, T>(key: K, value: T | undefined): Partial<Re
 export interface SavedFixRun {
   scope: FixScope
   worktree: string
-  /** The PR's number (0: the base after 合并到 main 并推送). */
+  /** The PR's number (0: the base after 推送 of the base). */
   number: number
   run: FixRun
 }
@@ -102,7 +102,7 @@ export interface SavedShipContext {
   openPr: { number: number; url: string } | null
   checksLine: string | null
   openIn: SessionId | null
-  /** 合并到 main 并推送's merge method (合入链路 v2: the repository's default, else squash); absent in older files. */
+  /** The merge method an older build's exit merged with; read from older files, never written (合并 always squashes). */
   method?: MergeMethod
   /** The branch's tip when the run started: after a reload, a commit of only `paths` on top of it is the run's own.
    *  Absent in older files (and when it was not known). */
@@ -114,14 +114,14 @@ export interface SavedShipRun {
   kind: ShipKind
   ctx: SavedShipContext
   committed: boolean
-  /** The merge commit 合并到 main 并推送 kept although its push failed. */
+  /** The squash commit 合并 made on the local base. */
   merged?: string
   /** The commit 提交 made of `ctx.paths` (its hash), once known: a retry does not commit them again. */
   commit?: string
   state: ShipState
 }
 
-const SHIP_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr', 'commit', 'sync', 'pull'])
+const SHIP_KINDS: ReadonlySet<unknown> = new Set(['main', 'push-base', 'pr', 'push-pr', 'commit', 'sync', 'pull'])
 /** Runs that ship only what is committed: one saved by an older build with a 提交 step of its own is not taken up. */
 const EXIT_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr'])
 const STEP_IDS: ReadonlySet<unknown> = new Set(['review', 'write', 'commit', 'merge', 'push', 'create', 'sync'])
@@ -214,6 +214,8 @@ export function sanitizeShipRuns(raw: unknown, worktrees: ReadonlySet<string>): 
     const state = sanitizeShipState(item.state)
     if (!ctx || !state || !worktrees.has(ctx.worktree) || seen.has(ctx.worktree)) continue
     if (EXIT_KINDS.has(item.kind) && state.steps.some((s) => s.id === 'commit')) continue
+    // 合并 is local only: a 合并 run with a push step is an older build's merge and push, not taken up.
+    if (item.kind === 'main' && state.steps.some((s) => s.id === 'push')) continue
     if (item.merged !== undefined && !(typeof item.merged === 'string' && SHA.test(item.merged))) continue
     if (item.commit !== undefined && !(typeof item.commit === 'string' && SHA.test(item.commit))) continue
     seen.add(ctx.worktree)

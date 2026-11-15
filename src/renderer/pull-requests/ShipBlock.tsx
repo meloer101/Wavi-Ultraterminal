@@ -43,6 +43,7 @@ const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
   main: GitMerge,
   pr: GitPullRequest,
   'push-pr': GitPullRequest,
+  'push-base': ArrowUp,
   push: ArrowUp,
   commit: GitCommitHorizontal,
   sync: RefreshCw,
@@ -63,7 +64,9 @@ function chainLabel(id: ChainActionId, base: string): string {
     case 'pr':
       return CHAIN_LABEL.createPr
     case 'main':
-      return CHAIN_LABEL.mergePush(base)
+      return CHAIN_LABEL.mergeTo(base)
+    case 'push-base':
+      return CHAIN_LABEL.pushBaseTo(base)
     case 'merge-pr':
       return CHAIN_LABEL.mergePr(null)
     case 'archive':

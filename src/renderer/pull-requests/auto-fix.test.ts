@@ -73,3 +73,28 @@ describe('which agent 自动修复 hands the fix to (every agent with hooks)', (
     }
   })
 })
+
+// 合并 is local only: a fix of the base's CI still lands on the base and is pushed (never reviewed).
+describe('自动修复 of the base', () => {
+  it('merges the fix into the base and pushes it', async () => {
+    const shipToMain = vi.fn(async (_request: unknown) => ({ ok: true, commit: 'f'.repeat(40), pushed: true }))
+    vi.stubGlobal('window', {
+      tr: {
+        ui: { confirm: async () => true, notify: () => {} },
+        ship: { shipToMain },
+        pr: { refresh: () => {} }
+      }
+    })
+    const { pushAnyway } = await import('./auto-fix')
+    const { setBaseAutomation, useBaseCi } = await import('./base-ci')
+    const run = { kind: 'stopped' as const, sessionId: 's1', since: 'abc1234', key: 'k', checks: ['test'], baseFailing: null, decision: { kind: 'stop' as const, reason: 'limit' as const } }
+    const { freshAutomation } = await import('./auto-fix-model')
+    setBaseAutomation('/repo-wt', { ...freshAutomation(0, true), attempts: 1, lastKey: 'k', lastHead: 'abc1234', baseChecked: true, run })
+    await pushAnyway('base', '/repo-wt')
+    expect(shipToMain).toHaveBeenCalledTimes(1)
+    expect(shipToMain.mock.calls[0]![0]).toEqual({ root: '/repo', worktree: '/repo-wt', message: '', paths: null, method: 'squash', push: true })
+    expect(useBaseCi.getState().automation['/repo-wt']).toMatchObject({ run: null, pushed: 1, pushedShas: ['f'.repeat(40)] })
+    setBaseAutomation('/repo-wt', null)
+    vi.unstubAllGlobals()
+  })
+})

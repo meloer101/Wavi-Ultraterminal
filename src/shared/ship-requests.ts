@@ -1,5 +1,5 @@
 // Validation of what the renderer sends to the ship handlers (src/shared/ship.ts): main trusts none of it. Pure.
-import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, type MergeMethod } from './git-merge'
+import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, oneLine, type MergeMethod } from './git-merge'
 import { MAX_SHIP_FILES, parsePrTarget } from './pull-requests'
 import type { DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest, ShipOperationRequest } from './ship'
 import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
@@ -7,6 +7,10 @@ import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
 const MAX_PATH = 4096
 /** A full or abbreviated commit id; the diff and the reset resolve it and require it to be an ancestor of HEAD. */
 const SINCE = /^[0-9a-f]{7,40}$/i
+/** A full commit id (SHA-1 or SHA-256), as the precheck reads it. */
+const FULL_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/
+/** The squash commit's subject (the session's title), as the merge sheet's request caps it. */
+const MAX_TITLE = 200
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -31,8 +35,9 @@ export function parseDiffSinceRequest(raw: unknown): DiffSinceRequest | null {
 }
 
 /**
- * 合并到 main 并推送: the message is cleaned like a commit message (newlines kept) and capped; with paths it must not be
- * empty (it is the commit's message). An empty `paths` list means nothing to commit, as null does.
+ * 合并: the message is cleaned like a commit message (newlines kept) and capped; with paths it must not be empty (it is
+ * the commit's message). An empty `paths` list means nothing to commit, as null does. `push` only when it is true; the
+ * title one line, capped (an empty one is left out); `head` a full commit id.
  */
 export function parsePushBaseRequest(raw: unknown): PushBaseRequest | null {
   const target = parsePrTarget(raw)
@@ -53,7 +58,19 @@ export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
   }
   const message = multiLine(raw.message)
   if (paths && !message) return null
-  return { ...target, message, method: raw.method as MergeMethod, paths }
+  if (raw.push !== undefined && typeof raw.push !== 'boolean') return null
+  if (raw.title !== undefined && typeof raw.title !== 'string') return null
+  if (raw.head !== undefined && (typeof raw.head !== 'string' || !FULL_SHA.test(raw.head))) return null
+  const title = typeof raw.title === 'string' ? oneLine(raw.title).slice(0, MAX_TITLE) : ''
+  return {
+    ...target,
+    message,
+    method: raw.method as MergeMethod,
+    paths,
+    ...(raw.push === true ? { push: true } : {}),
+    ...(title ? { title } : {}),
+    ...(typeof raw.head === 'string' ? { head: raw.head } : {})
+  }
 }
 
 /** 继续 / 中止: a worktree and one of the two actions. */

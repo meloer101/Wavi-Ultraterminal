@@ -1,11 +1,11 @@
 // 自动修复 and 通过后合并 (PRD F16 v1.63 · L3, v1.78), the bridge. Both are off until the user turns them on (per PR in
 // Git · 变更, or for new PRs in 设置 · 自动化 · PR): they spend the user's quota and act on GitHub as the user.
 //
-// 自动修复 watches two places: a PR's required checks and allowed review threads, and the base's CI after 合并到 main
-// 并推送 pushed it. It waits for the worktree's agent to be idle, hands it the failure through the ship handoff
+// 自动修复 watches two places: a PR's required checks and allowed review threads, and the base's CI after 推送 of the
+// base pushed it. It waits for the worktree's agent to be idle, hands it the failure through the ship handoff
 // (`window.tr.ship.handoff`, fix.md) and presses Enter. The agent fixes and COMMITS but never pushes: at its next Stop
 // Wavi looks at the fix's diff against the brakes (src/shared/auto-fix-brakes.ts) and pushes it — `pr.push` for a PR,
-// `ship.shipToMain` for the base — or stops with a row that asks the user (Figma 29G). auto-fix-model.ts decides when to
+// `ship.shipToMain` with `push` for the base — or stops with a row that asks the user (Figma 29G). auto-fix-model.ts decides when to
 // send and what the rows say. 通过后合并 is GitHub auto-merge; a new allowed thread or a P0 / P1
 // review turns it off again, since GitHub would merge past them.
 import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
@@ -55,7 +55,7 @@ const LOG_RETRY_MS = 15_000
 const initialized = new Map<string, number>()
 /** Worktree → the base commit whose CI the base automation last looked at. */
 const baseSeen = new Map<string, string>()
-/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 合并到 main 并推送. */
+/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 推送 of the base. */
 const restoredBase = new Set<string>()
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -370,7 +370,8 @@ async function pushFix(c: FixCtx, run: FixRun): Promise<void> {
       const result = await window.tr.pr.push(target)
       if (!result.ok) failed = result.message
     } else {
-      const result = await window.tr.ship.shipToMain({ ...target, message: '', paths: null, method: 'squash' })
+      // 合并 is local only; a fix of the base's CI is merged and pushed in one call (no review: the fix's brakes ran).
+      const result = await window.tr.ship.shipToMain({ ...target, message: '', paths: null, method: 'squash', push: true })
       if (!result.ok) failed = result.message
       else if (!result.pushed) failed = result.pushError ?? '没能推送'
       else sha = result.commit
@@ -493,7 +494,7 @@ function stepBase(worktreePath: string): void {
   const ci = useBaseCi.getState().byWorktree[worktreePath]
   if (!ci) return
   let state = useBaseCi.getState().automation[worktreePath]
-  // A commit Wavi did not push for a fix is a new 合并到 main 并推送: counting starts again.
+  // A commit Wavi did not push for a fix is a new 推送 of the base: counting starts again.
   if (baseSeen.get(worktreePath) !== ci.sha) {
     baseSeen.set(worktreePath, ci.sha)
     // A run taken up from the saved workspace keeps what it came back with.

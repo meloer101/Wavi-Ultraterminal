@@ -1,5 +1,5 @@
 // The merge chain (PRD F13 / F16 v1.78, Figma 29): three checkpoints (diff, optional review, CI) and two exits
-// (合并到 main 并推送 / 创建 PR). The agent in the session writes every piece of text and fixes code; Wavi runs the
+// (合并 / 创建 PR, then 推送 of the base). The agent in the session writes every piece of text and fixes code; Wavi runs the
 // mechanical steps (commit, merge, push, gh) and the brakes. These are the IPC payloads of window.tr.ship.
 import type { GitFailure } from './git-failures'
 import type { MergeConflict, MergeMethod } from './git-merge'
@@ -44,6 +44,10 @@ export type ShipPreflight =
       baseAheadOfUpstream: number
       /** Upstream base commits the local base lacks: 合并到 main pulls first. */
       baseBehindUpstream: number
+      /** Local base commits its upstream lacks, as last fetched (a local 合并 leaves the base ahead until 推送): the
+       *  chain's 推送 of the base. null when the base has no upstream with a remote-tracking ref, or it could not be
+       *  counted. Absent from an older main. */
+      baseUnpushed?: number | null
       /** The branch's open PR, if any (then 创建 PR becomes 推送到 PR #N). */
       openPr: number | null
       /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.105); null when there are no
@@ -71,7 +75,7 @@ export type ShipPreflight =
        *  (`ahead`, 推送) and the other way round (`behind`, 拉取); null when the branch was never pushed, or when git
        *  keeps no remote-tracking ref of it (a single-branch clone) so they cannot be known. */
       upstream: { ahead: number; behind: number } | null
-      /** Where 合并到 <base> 并推送 pushes the base (its own upstream remote first, see main's baseRemoteFor); null without
+      /** Where 推送 of the base pushes it (its own upstream remote first, see main's baseRemoteFor); null without
        *  a remote. Absent from an older main. */
       baseRemote?: string | null
       /** What 拉取 fetches: `<remote>/<the branch there>` of the branch's upstream (or same-named remote branch), which
@@ -95,13 +99,21 @@ export interface HandoffRequest extends PrTarget {
 /** handoff() clears any old file and answers where the agent should write the new one. */
 export type HandoffSlot = { ok: true; path: string } | { ok: false; message: string }
 
-/** 合并到 main 并推送 (exit A): commit `paths` (null: nothing to commit) with `message`, merge into the base, push it. */
+/** 合并 (exit A, local only): commit `paths` (null: nothing to commit) with `message`, fast-forward the base to its
+ *  upstream, merge the branch into it; push the base only when `push` asks (自动修复 of the base). */
 export interface ShipMainRequest extends PrTarget {
-  /** The agent-written commit message, subject first; also the squash commit's message. '' (only with paths null):
-   *  keep the branch's own commit messages (an auto-fix merging its committed fix into the base again). */
+  /** The commit message, subject first; also the squash commit's message. '': the squash message is `title` and the
+   *  branch's commit subjects (the branch's own message without a title). */
   message: string
   method: MergeMethod
   paths: string[] | null
+  /** Push the base after the merge (自动修复's fix of the base). Absent or false: the merge stays local (合并). */
+  push?: boolean
+  /** The session's title: the squash commit's subject when `message` is ''. */
+  title?: string
+  /** The branch tip the caller checked (the merge sheet's precheck and test): the merge refuses (`stale`) when the
+   *  branch moved since. Absent: whatever the branch is at. */
+  head?: string
 }
 
 export type ShipMainResult =
@@ -129,11 +141,13 @@ export type ShipMainResult =
       /** A step git ran and that failed: what it said, classified (src/shared/git-failures.ts). Absent when Wavi refused
        *  before running git (the message says why). */
       failure?: GitFailure
+      /** The branch or the base moved since the caller checked: check again before another try. */
+      stale?: true
     }
 
-/** The retry of a failed push (ShipApi.pushBase). */
+/** 推送 of the base (ShipApi.pushBase): after a local 合并, or the retry of a failed push. */
 export interface PushBaseRequest extends PrTarget {
-  /** The merge commit 合并到 main 并推送 kept: the push is refused when the base no longer has it. */
+  /** A merge commit the caller kept: the push is refused when the base no longer has it. */
   commit?: string
 }
 
@@ -173,7 +187,7 @@ export interface ShipApi {
   /** The text the agent wrote, or null while the file is not there yet. */
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
-  /** After 合并到 main 并推送 kept the merge but its push failed: pushes the base again (nothing is merged). */
+  /** 推送 of the base after a local 合并 (or after a push failed): pushes the base (nothing is merged). */
   pushBase(request: PushBaseRequest): Promise<ShipMainResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
   /** The same diff, saying whether it was cut at the cap (a file list read from a cut diff is not the whole list). */
@@ -294,11 +308,12 @@ export type ShipChainApi = Pick<ShipApi, 'sync' | 'pull' | 'operation'>
 // --- the Ship block's state (Git · 变更, Figma 29C / 29D / 29H), saved with the workspace while a run is open ---------
 
 /**
- * `main`: 合并到 base 并推送; `pr`: 创建 PR; `push-pr`: the branch's PR is open (or, with none, 推送 alone), commit what
- * is uncommitted and push. 合入链路 v2: `commit`: 提交… alone (write → glance → commit); `sync`: 同步 <base> (fetch, bring
- * the base into the branch); `pull`: 拉取 (fast-forward the branch to its upstream).
+ * `main`: 合并 (squash the branch into the local base, no push); `push-base`: 推送 of the base a local 合并 left ahead
+ * of its upstream; `pr`: 创建 PR; `push-pr`: the branch's PR is open (or, with none, 推送 alone), push what is committed.
+ * 合入链路 v2: `commit`: 提交 alone (write → glance → commit); `sync`: 同步 <base> (fetch, bring the base into the branch);
+ * `pull`: 拉取 (fast-forward the branch to its upstream).
  */
-export type ShipKind = 'main' | 'pr' | 'push-pr' | 'commit' | 'sync' | 'pull'
+export type ShipKind = 'main' | 'push-base' | 'pr' | 'push-pr' | 'commit' | 'sync' | 'pull'
 /** `sync`: the fetch of a `sync` run, and the one step of a `pull` run (the rebase / merge of a `sync` run is `merge`). */
 export type StepId = 'review' | 'write' | 'commit' | 'merge' | 'push' | 'create' | 'sync'
 export type StepState = 'pending' | 'working' | 'done' | 'failed'

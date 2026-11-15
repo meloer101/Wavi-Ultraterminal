@@ -6,7 +6,7 @@ import { headlessAgent } from '@shared/agents'
 import type { GitChanges } from '@shared/git-graph/log'
 import type { PrStatus } from '@shared/pull-requests'
 import type { ShipPreflight } from '@shared/ship'
-import { agentHandoffPrompt, CHAIN_TEXT, type ChainState } from '@shared/ship-chain'
+import { agentHandoffPrompt, CHAIN_LABEL, CHAIN_TEXT, type ChainState } from '@shared/ship-chain'
 import { checksText, turnCheckView } from '@shared/turn-checks'
 import type { Project, Session, Worktree } from '@shared/types'
 import { openArchiveSheet } from '../archive/store'
@@ -237,7 +237,14 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
       // The chain's open PR (the poll's, else the preflight's number while gh is not ready): a push to it, never 创建 PR.
       return startShip(ctx, prRunKind(chain), label, { head })
     case 'main':
-      return startShip(ctx, 'main', label, { head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) })
+      // 合并: the local squash, straight away; the block's title names the base.
+      return startShip({ ...ctx, paths: null }, 'main', CHAIN_LABEL.mergeTo(chain.base), { head })
+    case 'push-base':
+      // 推送 of the base a local 合并 left ahead (its own run).
+      return startShip({ ...ctx, paths: null, openPr: null }, 'push-base', CHAIN_LABEL.pushBaseTo(chain.base), {
+        head,
+        ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {})
+      })
   }
 }
 

@@ -122,8 +122,10 @@ describe('zoneMenu (73B)', () => {
   it('lists the fixed order, 合并到 <base>… opening the merge sheet, a blocked item with its short reason', () => {
     const chain = shipChain(input({ sessions: [{ status: 'running' }] }, preflight({ behindBase: 0 })))
     const menu = zoneMenu(chain)
-    expect(menu.map((m) => m.label)).toEqual(['提交', '同步 main', '拉取', '推送', '创建 PR', '合并到 main…', '归档…'])
+    expect(menu.map((m) => m.label)).toEqual(['提交', '同步 main', '拉取', '推送', '创建 PR', '合并到 main…', '推送 main', '归档…'])
     expect(menu.find((m) => m.id === 'main')).toMatchObject({ command: 'merge-sheet', blocker: null })
+    // 推送 of the base waits for a local 合并 to leave the base ahead.
+    expect(menu.find((m) => m.id === 'push-base')).toMatchObject({ command: 'push-base', blocker: CHAIN_TEXT.nothingToPush })
     expect(menu.find((m) => m.id === 'sync')!.blocker).toBe(CHAIN_TEXT.commitFirst)
     expect(menu.find((m) => m.id === 'pull')!.blocker).toBe(CHAIN_TEXT.neverPushed)
     expect(menu.find((m) => m.id === 'archive')!.blocker).not.toBeNull()
@@ -165,7 +167,7 @@ describe('paletteGitActions (73H)', () => {
       ['同步 main', '落后 4', false],
       ['推送', 'session-cookie → origin', false],
       ['创建 PR', '', false],
-      ['合并到 main 并推送', '', false],
+      ['合并到 main', '', false],
       ['审阅全部改动', '12 个文件', false]
     ])
     expect(paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: 7, exitRegistered: true }).at(-1)).toMatchObject({ command: 'open-pr', label: '打开 PR #7' })
@@ -190,6 +192,16 @@ describe('paletteGitActions (73H)', () => {
     const facts = { ticked: 0, behind: null, branch: 'feat', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: true }
     expect(paletteGitActions(chain, { ...facts, pullFrom: 'origin/jacoy/feat' }).find((r) => r.command === 'pull')?.detail).toBe('origin/jacoy/feat')
     expect(paletteGitActions(chain, facts).find((r) => r.command === 'pull')?.detail).toBe('origin/feat')
+  })
+
+  // 合并 is local only: after it, ⌘K offers 推送 of the base (where it goes), not 归档….
+  it('offers 推送 <base> after a local 合并, and 归档… only once nothing is left unpushed', () => {
+    const facts = { ticked: 0, behind: null, branch: 'b', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: true, baseRemote: 'upstream' }
+    const landed = shipChain(input({ local: { branch: 'b', base: 'main', ahead: 0, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ ahead: 0, merged: true, uncommitted: 0, baseUnpushed: 2 })))
+    const rows = paletteGitActions(landed, facts)
+    expect(rows.find((r) => r.command === 'push-base')).toMatchObject({ label: '推送 main', detail: 'main → upstream', primary: true })
+    expect(rows.map((r) => r.command)).not.toContain('archive')
+    expect(zoneMenu(landed).find((m) => m.id === 'archive')!.blocker).toBe('先推送 main')
   })
 
   it('offers 归档… only once the branch is merged', () => {

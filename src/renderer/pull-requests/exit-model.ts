@@ -1,4 +1,4 @@
-// Git · 变更's two exits (PRD F16 v1.78, Figma 29A): 合并到 main 并推送 and 创建 PR, which one is primary (the
+// Git · 变更's two exits (PRD F16 v1.78, Figma 29A): 合并 (into the local base) and 创建 PR, which one is primary (the
 // repository's remembered choice, else the preflight's suggestion), what each becomes once a PR is open, what blocks
 // them, and the run an exit starts. A thin adapter over the merge chain (src/shared/ship-chain.ts, 合入链路 v2): labels
 // and blockers come from the chain's actions. The exits ship only what is committed (提交 is a run of its own). Pure;
@@ -9,7 +9,6 @@ import type { AppSettings } from '@shared/settings'
 import type { ShipExitKind, ShipPreflight } from '@shared/ship'
 import { chainInputFrom, onOwnBase, shipChain, type ChainActionId, type ChainInput, type ChainState } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
-import { exitMethod } from './ship-flow'
 import type { ShipContext } from './ship-runner'
 
 export { livePr, unpushedOf }
@@ -102,7 +101,8 @@ export interface ExitPlan {
   pr: PullRequestInfo | null
   unpushed: boolean
   onBase: boolean
-  /** Nothing to propose or merge (merged already, or no work yet): no exits; the PR line says what happened. */
+  /** Nothing to propose or merge (merged already — pushed or not —, or no work yet): no exits; the PR line says what
+   *  happened. */
   nothingToShip: boolean
   /** A PR is open and there is nothing to push: open it, or merge it. */
   idlePr: PullRequestInfo | null
@@ -124,7 +124,8 @@ export function exitPlan(input: ExitInput): ExitPlan {
     pr,
     unpushed,
     onBase: onOwnBase(isMain, changes),
-    nothingToShip: chain.stage === 'merged' || chain.stage === 'empty',
+    // Merged into the local base and waiting for 推送 of the base: nothing to propose or merge either.
+    nothingToShip: chain.stage === 'merged' || chain.stage === 'unpushed' || chain.stage === 'empty',
     idlePr: pr && !unpushed && clean ? pr : null,
     // The chain's own blocker (an operation, the base, no project, checking, a failed preflight) holds every exit,
     // an open-PR exit the caller built too.
@@ -163,7 +164,6 @@ export function shipContextFor(input: {
     openPr: input.pr ? { number: input.pr.number, url: input.pr.url } : null,
     checksLine: input.checksLine,
     settings: input.settings,
-    openIn: input.openIn,
-    method: exitMethod(ok?.mergeMethods)
+    openIn: input.openIn
   }
 }
