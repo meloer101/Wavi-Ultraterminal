@@ -38,6 +38,36 @@ import { DeviceStore, type StoredDevice } from './devices'
 import { FeedHub, type FeedSource } from './feed'
 import { PhotoError, savePhotos } from './photos'
 import { RemoteServer, type RemoteConnection } from './server'
+import { defineMessages, pick as pickLang } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    noWindow: 'Mac 上没有窗口打开这个会话',
+    slow: 'Mac 上的 Wavi 没有及时响应',
+    noSession: '会话不存在',
+    photoNotSaved: '照片没能保存',
+    handled: '已经在终端里处理了',
+    answered: '已经在终端里回答了',
+    terminalOnly: '这个问题现在只能在终端里回答',
+    noProject: '项目不存在',
+    notRepo: '不是 git 仓库',
+    noBase: '没有可对比的基线分支',
+    badAnswer: 'Mac 上的 Wavi 给了看不懂的回答'
+  },
+  en: {
+    noWindow: 'No window on the Mac has this session open',
+    slow: "Wavi on the Mac didn't respond in time",
+    noSession: "The session doesn't exist",
+    photoNotSaved: "Couldn't save the photo",
+    handled: 'Already handled in the terminal',
+    answered: 'Already answered in the terminal',
+    terminalOnly: 'This question can only be answered in the terminal now',
+    noProject: "The project doesn't exist",
+    notRepo: 'Not a git repository',
+    noBase: 'No base branch to compare with',
+    badAnswer: 'Wavi on the Mac gave an answer it could not read'
+  }
+})
 
 let server: RemoteServer | null = null
 let running: { port: number } | null = null
@@ -178,12 +208,12 @@ const calls = new Map<string, { owner: WebContents; resolve: (result: RemoteResu
 const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { 'agent-models': 30_000, archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000, 'set-setting': 30_000 }
 
 function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Promise<RemoteResult> {
-  if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail('Mac 上没有窗口打开这个会话'))
+  if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail(pickLang(M).noWindow))
   const callId = randomBytes(12).toString('hex')
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       calls.delete(callId)
-      resolve(remoteFail('Mac 上的 Wavi 没有及时响应'))
+      resolve(remoteFail(pickLang(M).slow))
     }, SLOW_WINDOW_MS[command.type] ?? REMOTE_LIMITS.windowAnswerMs)
     calls.set(callId, {
       owner,
@@ -200,7 +230,7 @@ function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Pro
 // --- the phone's requests --------------------------------------------------------------------------------------------
 
 const knownSession = (id: string): boolean => windowSessions.sessions.some((s) => s.id === id)
-const notFound = remoteFail('会话不存在')
+const notFound = (): RemoteResult => remoteFail(pickLang(M).noSession)
 
 /** Claude's transcript before any hook named it: `<projects>/<cwd with every non-alphanumeric as ->/<id>.jsonl`. */
 function feedSource(sessionId: string): FeedSource | null {
@@ -234,7 +264,7 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
     case 'snapshot':
       return { ok: true, data: { ...phoneList(), prompts: await visiblePrompts() } }
     case 'watch': {
-      if (request.session && !knownSession(request.session)) return notFound
+      if (request.session && !knownSession(request.session)) return notFound()
       feed.watch(connection.id, request.session)
       if (!request.session) return { ok: true }
       // Not awaited: the conversation does not wait for the agent; its 会话设置 arrive with the session list.
@@ -246,61 +276,61 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       return { ok: true, data: page ?? { items: [], start: 0, total: 0 } }
     }
     case 'feed': {
-      if (!knownSession(request.session)) return notFound
+      if (!knownSession(request.session)) return notFound()
       const page = await feed.page(request.session, request.before)
       return { ok: true, data: page ?? { items: [], start: 0, total: 0 } }
     }
     case 'send': {
-      if (!knownSession(request.session)) return notFound
+      if (!knownSession(request.session)) return notFound()
       let paths: string[]
       try {
         paths = await savePhotos(join(app.getPath('temp'), 'wavi', 'attachments'), request.photos)
       } catch (error) {
-        return remoteFail(error instanceof PhotoError ? error.message : '照片没能保存')
+        return remoteFail(error instanceof PhotoError ? error.message : pickLang(M).photoNotSaved)
       }
       // A session restored after a restart has no PTY (so no owner) until it is first shown; the window that lists it starts it.
       return askWindow(ownerOf(request.session) ?? mainWindow(), { type: 'send', session: request.session, text: request.text, paths })
     }
     case 'interrupt':
-      return knownSession(request.session) ? askWindow(ownerOf(request.session), { type: 'interrupt', session: request.session }) : notFound
+      return knownSession(request.session) ? askWindow(ownerOf(request.session), { type: 'interrupt', session: request.session }) : notFound()
     case 'set-setting':
       return knownSession(request.session)
         ? askWindow(ownerOf(request.session), { type: 'set-setting', session: request.session, kind: request.kind, value: request.value })
-        : notFound
+        : notFound()
     case 'permission': {
       const prompt = prompts.get(request.prompt)
-      if (!prompt || prompt.kind !== 'permission') return remoteFail('已经在终端里处理了')
-      return (await respondFromRemote(request.prompt, request.decision)) ? { ok: true } : remoteFail('已经在终端里处理了')
+      if (!prompt || prompt.kind !== 'permission') return remoteFail(pickLang(M).handled)
+      return (await respondFromRemote(request.prompt, request.decision)) ? { ok: true } : remoteFail(pickLang(M).handled)
     }
     case 'answer': {
       const prompt = prompts.get(request.prompt)
-      if (!prompt || prompt.kind !== 'question') return remoteFail('已经在终端里回答了')
-      return (await answerFromRemote(request.prompt, request.answers)) ? { ok: true } : remoteFail('这个问题现在只能在终端里回答')
+      if (!prompt || prompt.kind !== 'question') return remoteFail(pickLang(M).answered)
+      return (await answerFromRemote(request.prompt, request.answers)) ? { ok: true } : remoteFail(pickLang(M).terminalOnly)
     }
     case 'new-session-info': {
       const root = windowSessions.roots[request.project]
-      if (!root) return remoteFail('项目不存在')
+      if (!root) return remoteFail(pickLang(M).noProject)
       const [info, installed] = await Promise.all([newSessionInfo(root), detectAgents()])
       return { ok: true, data: { info, agents: Object.entries(installed).filter(([id, on]) => on && isCliAgent(id)).map(([id]) => id) } }
     }
     case 'agent-models':
       return askWindow(mainWindow(), { type: 'agent-models', agent: request.agent })
     case 'new-session':
-      if (!windowSessions.roots[request.project]) return remoteFail('项目不存在')
+      if (!windowSessions.roots[request.project]) return remoteFail(pickLang(M).noProject)
       return askWindow(mainWindow(), { type: 'new-session', project: request.project, workdir: request.workdir, agent: request.agent, ...pick(request) })
     case 'changes': {
       const folder = windowSessions.folders[request.session]
-      if (!folder) return notFound
+      if (!folder) return notFound()
       const result = await changes(folder.cwd, folder.base)
-      return result ? { ok: true, data: result } : remoteFail('不是 git 仓库')
+      return result ? { ok: true, data: result } : remoteFail(pickLang(M).notRepo)
     }
     case 'diff': {
       const folder = windowSessions.folders[request.session]
-      if (!folder) return notFound
+      if (!folder) return notFound()
       let baseRef: string | undefined
       if (request.scope === 'committed') {
         baseRef = (await changes(folder.cwd, folder.base))?.baseRef ?? undefined
-        if (!baseRef) return remoteFail('没有可对比的基线分支')
+        if (!baseRef) return remoteFail(pickLang(M).noBase)
       }
       const text = await fileDiff({ root: folder.cwd, path: request.path, oldPath: request.oldPath, scope: request.scope, baseRef, untracked: request.untracked })
       return { ok: true, data: { text } }
@@ -308,11 +338,11 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
     // Exits and 归档 run in the main window, through Git · 变更's own code (PRD F16 / F15): it is the window whose session
     // list (with the runs' progress) the phone gets, and none of them needs the session's terminal to be open.
     case 'exits':
-      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'exits', session: request.session }) : notFound
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'exits', session: request.session }) : notFound()
     case 'ship':
-      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'ship', session: request.session, action: request.action }) : notFound
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'ship', session: request.session, action: request.action }) : notFound()
     case 'archive':
-      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'archive', session: request.session }) : notFound
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'archive', session: request.session }) : notFound()
   }
 }
 
@@ -449,7 +479,7 @@ export function registerRemoteHandlers(owner: (sessionId: string) => WebContents
     const call = calls.get(callId)
     if (!call || call.owner !== event.sender) return
     calls.delete(callId)
-    call.resolve(parseRemoteResult(result) ?? remoteFail('Mac 上的 Wavi 给了看不懂的回答'))
+    call.resolve(parseRemoteResult(result) ?? remoteFail(pickLang(M).badAnswer))
   })
   onSettingsChange(reapply)
   reapply()

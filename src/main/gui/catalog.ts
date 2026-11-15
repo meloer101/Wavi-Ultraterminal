@@ -16,6 +16,22 @@ import type { GuiCatalogResult, GuiModelCatalog } from '@shared/gui-chat'
 import { executableOnPath, userLoginPath } from '../agents-installed'
 import { claudeConfig } from './claude-stream'
 import { codexConfig } from './codex-app-server'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    exited: (code: string) => `退出了（退出码 ${code}）`,
+    noAnswer: '没有在 15 秒内回答',
+    notFound: (binary: string) => `没有找到 ${binary}`,
+    noModels: '没有列出模型'
+  },
+  en: {
+    exited: (code: string) => `Exited (exit code ${code})`,
+    noAnswer: "Didn't answer within 15 seconds",
+    notFound: (binary: string) => `Can't find ${binary}`,
+    noModels: 'No models listed'
+  }
+})
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -93,7 +109,7 @@ async function withProcess<T>(command: string, args: string[], env: NodeJS.Proce
     for (const w of waiting.splice(0)) w.resolve({ __failed: failed.message })
   }
   child.on('error', fail)
-  child.on('exit', (code) => fail(new Error(`退出了（退出码 ${code ?? '?'}）`)))
+  child.on('exit', (code) => fail(new Error(pick(M).exited(code === null ? '?' : String(code)))))
   createInterface({ input: child.stdout }).on('line', (line) => {
     let message: unknown
     try {
@@ -111,7 +127,7 @@ async function withProcess<T>(command: string, args: string[], env: NodeJS.Proce
       if (failed) return reject(failed)
       waiting.push({ match, resolve: (m) => (typeof m.__failed === 'string' ? reject(new Error(m.__failed)) : resolve(m)) })
     })
-  const timer = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('没有在 15 秒内回答')), PROBE_TIMEOUT_MS).unref())
+  const timer = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(pick(M).noAnswer)), PROBE_TIMEOUT_MS).unref())
   try {
     return await Promise.race([talk(send, next), timer])
   } finally {
@@ -126,7 +142,7 @@ function output(command: string, args: string[], env: NodeJS.ProcessEnv): Promis
     let out = ''
     const timer = setTimeout(() => {
       child.kill()
-      reject(new Error('没有在 15 秒内回答'))
+      reject(new Error(pick(M).noAnswer))
     }, PROBE_TIMEOUT_MS)
     child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString('utf8')))
     child.on('error', (error) => {
@@ -193,10 +209,10 @@ export function agentModels(agent: CliAgent): Promise<GuiCatalogResult> {
   const result = (async (): Promise<GuiCatalogResult> => {
     const path = (await userLoginPath()) ?? process.env.PATH ?? ''
     const binary = executableOnPath(path, AGENT_SPECS[agent].binary)
-    if (!binary) return { ok: false, reason: `没有找到 ${AGENT_SPECS[agent].binary}` }
+    if (!binary) return { ok: false, reason: pick(M).notFound(AGENT_SPECS[agent].binary) }
     try {
       const catalog = await ask(agent, binary, { ...process.env, PATH: path })
-      return catalog ? { ok: true, catalog } : { ok: false, reason: '没有列出模型' }
+      return catalog ? { ok: true, catalog } : { ok: false, reason: pick(M).noModels }
     } catch (error) {
       return { ok: false, reason: error instanceof Error ? error.message : String(error) }
     }

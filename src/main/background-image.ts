@@ -79,7 +79,7 @@ export function registerBackgroundImage(): void {
     try {
       await access(join(folder(), named))
     } catch {
-      console.warn('[background] the stored picture is missing; clearing 背景图片')
+      console.warn('[background] the stored picture is missing; clearing the background picture')
       await updateSettings({ appearance: { backgroundImage: '' } })
     }
   })

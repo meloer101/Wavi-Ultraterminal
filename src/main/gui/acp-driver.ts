@@ -10,6 +10,24 @@ import { parseAcpUsageUpdate } from '@shared/session-meta'
 import { acpAnswerResult, acpAutoAllow, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, type AcpPickerState } from './acp'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    initFailed: (agent: string, why: string) => `${agent} 没有完成初始化：${why}`,
+    signedOut: (agent: string) => `${agent} 还没有登录：先在终端里运行它登录一次`,
+    startFailed: (agent: string, why: string) => `${agent} 没能开始对话：${why}`,
+    noSessionId: '没有返回 sessionId',
+    refused: (agent: string) => `${agent} 拒绝了这个请求`
+  },
+  en: {
+    initFailed: (agent: string, why: string) => `${agent} didn't finish starting up: ${why}`,
+    signedOut: (agent: string) => `${agent} is not signed in: run it once in a terminal to sign in`,
+    startFailed: (agent: string, why: string) => `${agent} couldn't start a conversation: ${why}`,
+    noSessionId: 'no sessionId returned',
+    refused: (agent: string) => `${agent} refused this request`
+  }
+})
 
 const HANDSHAKE_TIMEOUT_MS = 60_000
 const UPDATES_THAT_RUN = new Set(['agent_message_chunk', 'agent_thought_chunk', 'tool_call', 'tool_call_update', 'plan'])
@@ -77,7 +95,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
       HANDSHAKE_TIMEOUT_MS
     )
     if (!init.ok) {
-      io.fail(`${options.label} 没有完成初始化：${init.message}`)
+      io.fail(pick(M).initFailed(options.label, init.message))
       return
     }
     if (isRec(init.result)) takeCapabilities(init.result)
@@ -95,7 +113,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     if (!result || !takeSession(result, str(result.sessionId))) {
       // -32000 "Authentication required" (ACP): the agent's own login is needed first.
       const login = !created.ok && /auth/i.test(created.message)
-      io.fail(login ? `${options.label} 还没有登录：先在终端里运行它登录一次` : `${options.label} 没能开始对话：${created.ok ? '没有返回 sessionId' : created.message}`)
+      io.fail(login ? pick(M).signedOut(options.label) : pick(M).startFailed(options.label, created.ok ? pick(M).noSessionId : created.message))
       return
     }
     await ready()
@@ -140,7 +158,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
   }
 
   function turnDone(stopReason: string | undefined, error?: string): void {
-    const failure = error ?? (stopReason === 'refusal' ? `${options.label} 拒绝了这个请求` : undefined)
+    const failure = error ?? (stopReason === 'refusal' ? pick(M).refused(options.label) : undefined)
     io.emit(normalizer.promptDone(stopReason, failure))
     io.turnEnd({ failed: failure !== undefined, ...(failure !== undefined ? { message: failure } : {}) })
   }

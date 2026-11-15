@@ -9,6 +9,20 @@ import { parseCodexThreadTokenUsage } from '@shared/session-meta'
 import { CODEX_APPROVAL, codexAnswerResult, codexConfig, codexTurnParams, createCodexNormalizer, isCodexLevel } from './codex-app-server'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { isImagePath, withPaths } from './launch'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    initFailed: (why: string) => `Codex 没有完成初始化：${why}`,
+    startFailed: (why: string) => `Codex 没能开始对话：${why}`,
+    noThread: '没有返回 thread'
+  },
+  en: {
+    initFailed: (why: string) => `Codex didn't finish starting up: ${why}`,
+    startFailed: (why: string) => `Codex couldn't start a conversation: ${why}`,
+    noThread: 'no thread returned'
+  }
+})
 
 const HANDSHAKE_TIMEOUT_MS = 60_000
 
@@ -58,7 +72,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
     const init = await rpc.request('initialize', { clientInfo: { name: 'wavi', title: 'Wavi', version: options.clientVersion }, capabilities: null }, HANDSHAKE_TIMEOUT_MS)
     // A reattached server that was initialized before says so; it still works.
     if (!init.ok && !/initiali[sz]ed/i.test(init.message)) {
-      io.fail(`Codex 没有完成初始化：${init.message}`)
+      io.fail(pick(M).initFailed(init.message))
       return
     }
     rpc.notify('initialized')
@@ -79,7 +93,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       HANDSHAKE_TIMEOUT_MS
     )
     if (!started.ok || !isRec(started.result) || !takeThread(started.result.thread)) {
-      io.fail(`Codex 没能开始对话：${started.ok ? '没有返回 thread' : started.message}`)
+      io.fail(pick(M).startFailed(started.ok ? pick(M).noThread : started.message))
       return
     }
     isReady = true

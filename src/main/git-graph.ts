@@ -32,6 +32,9 @@ import { parseCommitRange } from '@shared/ship-requests'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
 import { appPath, gitEnv, NO_OPTIONAL_LOCKS, pushEnv, runProcess } from './git/run'
 import { isInside, normalizeRelative, workspaceFolder } from './worktree-files'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({ zh: { notRepo: '不是 git 仓库' }, en: { notRepo: 'Not a git repository' } })
 
 const GIT_TIMEOUT_MS = 15_000
 const FETCH_TIMEOUT_MS = 60_000
@@ -208,7 +211,7 @@ async function signature(root: unknown): Promise<string> {
 
 async function fetchAll(root: unknown): Promise<string> {
   const cwd = await topLevel(root)
-  if (!cwd) return '不是 git 仓库'
+  if (!cwd) return pick(M).notRepo
   try {
     await git(cwd, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(cwd) })
     return ''

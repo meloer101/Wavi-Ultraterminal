@@ -11,6 +11,12 @@ import { parsePiContextUsage } from '@shared/session-meta'
 import { isRec, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
 import { callKey, createPiNormalizer, PI_FILE_CHANGE_TOOLS, PI_LEVELS, piAnswerResponse, piCommands, piConfig, piModelValue, waviConfirm, type PiPicks } from './pi-rpc'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { noAnswer: (why: string) => `Pi 没有回应：${why}`, noSessionId: 'Pi 没有返回会话 id', piError: 'Pi 出错了' },
+  en: { noAnswer: (why: string) => `Pi didn't respond: ${why}`, noSessionId: "Pi didn't return a session id", piError: 'Pi hit an error' }
+})
 
 const HANDSHAKE_TIMEOUT_MS = 60_000
 const ABORT_TIMEOUT_MS = 15_000
@@ -89,7 +95,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
       request('get_commands', {}, HANDSHAKE_TIMEOUT_MS)
     ])
     if (!state.ok) {
-      io.fail(`Pi 没有回应：${state.message}`)
+      io.fail(pick(M).noAnswer(state.message))
       return
     }
     takeState(state.data)
@@ -98,7 +104,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
     if (commands.ok) takeCommands(commands.data)
     emitConfig()
     if (!sessionId) {
-      io.fail('Pi 没有返回会话 id')
+      io.fail(pick(M).noSessionId)
       return
     }
     isReady = true
@@ -185,7 +191,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
         return
       }
       if (message.type === 'message_end' && isRec(message.message) && message.message.role === 'assistant') {
-        turnError = message.message.stopReason === 'error' ? (str(message.message.errorMessage) ?? 'Pi 出错了') : undefined
+        turnError = message.message.stopReason === 'error' ? (str(message.message.errorMessage) ?? pick(M).piError) : undefined
       }
       const events = normalizer.event(message)
       if (events.length > 0) io.emit(events)
