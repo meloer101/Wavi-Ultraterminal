@@ -9,6 +9,7 @@
 ## 当前位置
 
 - 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
+- 2026-11-15：设置 · 额度 统计去掉多余的线：四个数字之间不再有竖线，只靠留白分开；还没有记录的月份 / 日期不再画空框，只留下面的标签（热力图的空格子没动；Figma 69″ 未同步）。
 - 2026-11-15：侧栏「定时任务」挪到上方「看板」下面，「额度」挪回底部「设置」上方（PRD v1.194）。
 - 2026-11-15：英文版（PRD v1.193，Figma 89 / 89′）：设置 · 外观 · 语言（跟随系统 / 中文 / English），桌面全部界面文字、菜单、对话框、通知、发给 agent 和写进 PR 的文字都有英文；macOS 权限弹窗按系统语言；iPhone 跟随它给 Wavi 设的语言（String Catalog）。待作者定：Mac 生成后发给手机的文字（当前动作、出口步骤、错误）现在用 Mac 的语言。
 - 2026-11-15：PR 评论的回复和关闭 issue 交给 agent（PRD v1.192）：「让 <agent> 处理」请 agent 推送后在 thread 下回复、resolve；自动修复由 Wavi 推送后再请 agent 回复；GitHub 页签交 issue 时请 agent 写「Closes #N」，交 PR 时推送后回复 thread；本地 squash 说明保留关闭关键字行。`src/shared/pull-requests.ts`（`prThreadsPrompt`、`threadRepliesPrompt`、`threadReplyRules`）、`src/shared/github-board.ts`、`src/shared/git-merge.ts`、`src/renderer/pull-requests/auto-fix.ts`；单元测试。没在真实 GitHub 上跑过：`addPullRequestReviewThreadReply` / `resolveReviewThread` 的命令、各 agent 能否联网跑 gh（Claude Code、Codex 和其余 agent）都还没实测。

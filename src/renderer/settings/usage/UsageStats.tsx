@@ -1,6 +1,7 @@
 // 设置 · 额度's token statistics (PRD F11, Figma 69″ / 69′A): KPIs, the daily or monthly bars, the past-year heatmap and
 // the shares by agent, model, project and hour. Monochrome: agents are told apart by steps of text/primary, never hue.
-// Every agent counts from its own oldest log; bars and heat cells before any log are empty frames.
+// Every agent counts from its own oldest log; a bar before any log is left blank (its label stays),
+// a heat cell before any log is an empty frame.
 import { useState } from 'react'
 import { agentName, type CliAgent } from '@shared/agents'
 import { formatTokens, type Heatmap, type StatsAgent, type UsageView } from '@shared/usage-stats'
@@ -107,9 +108,7 @@ export function UsageChart({ view }: { view: UsageView }) {
           <div className={styles.bars} style={{ gridTemplateColumns: `repeat(${view.bars.length}, 1fr)` }}>
             {view.bars.map((b, i) => (
               <div key={b.start} className={styles.slot} onMouseEnter={() => setHover(i)} data-testid="usage-bar">
-                {b.noRecord ? (
-                  <span className={styles.noRecord} />
-                ) : (
+                {!b.noRecord && (
                   <span className={styles.stack} data-hover={hover === i} style={{ height: `${(b.tokens / max) * 100}%` }}>
                     {order
                       .filter((a) => (b.perAgent[a] ?? 0) > 0)
