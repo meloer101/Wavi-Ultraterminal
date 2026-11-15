@@ -6,13 +6,25 @@ import type { ChecksState } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 import type { PrAutomation } from './auto-fix-model'
 
+/** A 推送 of the base that went through in this window: the commit and when (epoch ms). */
+export interface BasePush {
+  sha: string
+  at: number
+}
+
 interface BaseCiStore {
   byWorktree: Record<string, BaseCi>
   /** 自动修复 for the worktree's base push; only worktrees that pushed one have an entry. */
   automation: Record<string, PrAutomation>
+  /** The last 推送 of the base each worktree made in this window (合并后自动归档 waits for its CI). */
+  pushes: Record<string, BasePush>
 }
 
-export const useBaseCi = create<BaseCiStore>()(() => ({ byWorktree: {}, automation: {} }))
+export const useBaseCi = create<BaseCiStore>()(() => ({ byWorktree: {}, automation: {}, pushes: {} }))
+
+export function noteBasePush(worktree: string, push: BasePush): void {
+  useBaseCi.setState((s) => ({ pushes: { ...s.pushes, [worktree]: push } }))
+}
 
 /** The newer of two answers for one worktree: a late reply about the same commit never overwrites a fresher one. */
 export function newerBaseCi(prev: BaseCi | undefined, next: BaseCi): BaseCi {

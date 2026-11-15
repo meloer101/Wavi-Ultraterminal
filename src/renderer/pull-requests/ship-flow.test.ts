@@ -22,6 +22,7 @@ import {
   heldBeforeStart,
   stepWord,
   isExitRun,
+  rememberedKindOf,
   titleIcon,
   syncConflictText,
   withoutWriter,
@@ -270,6 +271,16 @@ describe('helpers', () => {
     expect(parseRemembered('main')).toBe('main')
     expect(parseRemembered('x')).toBeNull()
     expect(parseRemembered(null)).toBeNull()
+  })
+
+  // `main` still means 合并 (now into the local base); the push moves are never remembered as an exit.
+  it('keeps a stored main as 合并, and never remembers or reads a push as the exit', () => {
+    expect(parseRemembered('main')).toBe('main')
+    for (const raw of ['push-pr', 'push-base', 'commit', 'merge']) expect(parseRemembered(raw)).toBeNull()
+    expect(isExitRun('push-base')).toBe(false)
+    expect(isExitRun('push-pr')).toBe(false)
+    expect(isExitRun('commit')).toBe(false)
+    expect(rememberedKindOf('main')).toBe('main')
   })
 
   it('asks the session only when it is an agent with hooks that is alive, and types only when it is free', () => {

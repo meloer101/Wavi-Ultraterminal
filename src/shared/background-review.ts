@@ -779,7 +779,7 @@ export async function driveReview(input: DriveReviewInput): Promise<ReviewDriveR
 }
 
 /** What started a review. Only `manual` runs regardless of 设置 · 自动化 · 代码审阅. */
-export type ReviewTrigger = 'manual' | 'merge' | 'push' | 'turn'
+export type ReviewTrigger = 'manual' | 'push' | 'turn'
 
 export interface ReviewRequest {
   /** The worktree to review (its top level). */
@@ -1002,7 +1002,7 @@ const MAX_ROOTS = 500
 
 const isRec = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
-const TRIGGER_SET: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
+const TRIGGER_SET: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'push', 'turn'])
 
 function sanitizeCounts(value: unknown): Partial<Record<ReviewSeverity, number>> {
   const counts: Partial<Record<ReviewSeverity, number>> = {}
@@ -1020,11 +1020,13 @@ function sanitizeRecord(value: unknown, root: string): ReviewRecord | null {
   if (typeof hash !== 'string' || !/^[0-9a-f]{8,64}$/.test(hash)) return null
   const agent = headlessAgent(value.agent)
   if (!agent) return null
-  if (!TRIGGER_SET.has(trigger) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
+  // 合并前审阅 is gone: a review it ran before is kept, as one asked for by hand.
+  const known = trigger === 'merge' ? 'manual' : trigger
+  if (!TRIGGER_SET.has(known) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
   return {
     hash,
     agent,
-    trigger: trigger as ReviewTrigger,
+    trigger: known as ReviewTrigger,
     message: typeof message === 'string' ? message.slice(0, 4000) : '',
     startedAt,
     endedAt,

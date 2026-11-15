@@ -1,15 +1,17 @@
 // Git · 变更's exits and 归档 for the phone (PRD F22, Figma 45I / 45J): the same plan, run and archive as the desktop's
-// buttons (pull-requests/exit-model.ts, ship-runner.ts, archive/actions.ts). The run's progress reaches the phone with the
-// session list (model.ts `remoteShip`).
-import { remoteFail, type RemoteExit, type RemoteExits, type RemoteResult, type RemoteShipAction } from '@shared/remote'
+// buttons (pull-requests/exit-model.ts, ship-runner.ts, archive/actions.ts). The phone runs 合并, 创建 PR / 推送到 PR #N
+// and 推送 of the base; a primary only the Mac runs (提交, 同步, 拉取, 交给 agent, 继续) is shown blocked with the chain's
+// state line and where it runs. The run's progress reaches the phone with the session list (model.ts `remoteShip`).
+import { remoteFail, type RemoteExit, type RemoteExits, type RemoteMacMove, type RemoteResult, type RemoteShipAction } from '@shared/remote'
 import type { ShipPreflight } from '@shared/ship'
-import { CHAIN_LABEL } from '@shared/ship-chain'
+import { CHAIN_LABEL, type ChainMove, type ChainState } from '@shared/ship-chain'
 import { checksText, turnCheckView } from '@shared/turn-checks'
 import type { Project, Session, Worktree } from '@shared/types'
 import { archiveTargetFor, archiveWorktree, blockerFor } from '../archive/actions'
 import { commentTarget } from '../panels/git/comments'
 import { tickedPaths } from '../panels/git/changes-model'
 import { gitOf } from '../panels/git/store'
+import { agentLabel } from '../panels/merge/model'
 import { exitPlan, shipContextFor, type ExitPlan, type ShipExit } from '../pull-requests/exit-model'
 import { cancelShip, editShip, handConflictsToAgent, readRemembered, retryShip, startShip, submitShip, switchToPr, useShips } from '../pull-requests/ship-runner'
 import { submitBlocker } from '../pull-requests/ship-flow'
@@ -60,6 +62,8 @@ async function planFor(place: Place) {
   const prStatus = pr.gh === 'ready' ? (pr.byWorktree[worktree.path] ?? null) : null
   // The Mac's checkboxes hold for the phone too: unticked files stay in the working tree (as chain-actions.ts reads them).
   const ticked = tickedPaths(changes.uncommitted, gitOf(worktree.path).unticked)
+  const ws = useWorkspace.getState()
+  const agent = commentTarget(worktree, ws.sessions, ws.worktrees, place.session.id)
   const plan = exitPlan({
     preflight,
     remembered: readRemembered(project.rootPath),
@@ -67,15 +71,28 @@ async function planFor(place: Place) {
     changes,
     isMain: worktree.isMain,
     projectRoot: project.rootPath,
+    gh: pr.gh,
+    agent: agent ? agentLabel(agent.kind) : null,
+    sessions: ws.sessions.filter((s) => s.worktreeId === worktree.id),
     ticked: ticked.length
   })
-  return { changes, preflight, plan, ticked }
+  return { changes, preflight, plan, ticked, prStatus }
 }
 
 function phoneExit(place: Place, exit: ShipExit, plan: ExitPlan, stopped: boolean): RemoteExit {
   const url = exit.kind === 'open-pr' ? plan.pr?.url : undefined
   const blocker = stopped ? STOPPED : (plan.blocker(exit) ?? (exit.kind === 'open-pr' && !url ? '正在读取 PR…' : null))
   return { kind: exit.kind, label: exit.label, blocker: blocker ? hidePaths(blocker, [place.worktree.path, place.project.rootPath]) : null, ...(url ? { url } : {}) }
+}
+
+const MAC_MOVES: ReadonlySet<string> = new Set<RemoteMacMove>(['commit', 'sync', 'pull', 'push', 'handoff', 'continue', 'abort'])
+const macMove = (move: ChainMove | null): move is ChainMove & { id: RemoteMacMove } => move !== null && MAC_MOVES.has(move.id)
+
+/** A primary only the Mac runs: shown blocked, with the chain's state line and where it runs. */
+function onMac(place: Place, chain: ChainState, move: ChainMove & { id: RemoteMacMove }): RemoteExit {
+  const where = `在 Mac 上${move.label}`
+  const line = move.blocker ?? chain.headline?.text ?? null
+  return { kind: move.id, label: move.label, blocker: hidePaths(line && line !== where ? `${line}；${where}` : where, [place.worktree.path, place.project.rootPath]) }
 }
 
 async function archiveBlocker(place: Place): Promise<string | null> {
@@ -94,14 +111,32 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
   const found = await planFor(place)
   if (!found) return remoteFail('不是 git 仓库')
   const { preflight, plan } = found
+  const { chain } = plan
   const { primary, secondary } = plan.exits
   const stopped = stoppedFix(place.worktree.path, plan.pr?.number ?? null)
   const open: ShipExit | null = plan.idlePr ? { kind: 'open-pr', number: plan.idlePr.number, label: `打开 PR #${plan.idlePr.number}`, blocker: null } : null
+  const next = chain.next
+  const hide = (text: string | null): string | null => (text ? hidePaths(text, [place.worktree.path, place.project.rootPath]) : null)
+  // The chain's primary decides: 推送 of the base the phone runs; a move only the Mac runs is shown blocked, the exit
+  // beside it (提交's) still runs; else the exits as the plan has them. 归档 is its own button.
+  const exitBeside = chain.second && (chain.second.id === 'main' || chain.second.id === 'pr') ? [primary, secondary].find((e) => e?.kind === chain.second!.id) : undefined
+  const [first, other]: [RemoteExit | null, RemoteExit | null] =
+    next?.id === 'push-base'
+      ? [{ kind: 'push-base', label: next.label, blocker: stopped ? STOPPED : hide(next.blocker) }, null]
+      : macMove(next)
+        ? [onMac(place, chain, next), exitBeside ? phoneExit(place, exitBeside, plan, stopped) : null]
+        : plan.nothingToShip
+          ? [null, null]
+          : [
+              // Opening the PR is never held up by a stopped fix.
+              open ? phoneExit(place, open, plan, false) : phoneExit(place, primary, plan, stopped),
+              plan.idlePr || !secondary ? null : phoneExit(place, secondary, plan, stopped)
+            ]
   const exits: RemoteExits = {
-    // Opening the PR is never held up by a stopped fix.
-    primary: plan.nothingToShip ? null : open ? phoneExit(place, open, plan, false) : phoneExit(place, primary, plan, stopped),
-    secondary: plan.nothingToShip || plan.idlePr || !secondary ? null : phoneExit(place, secondary, plan, stopped),
-    pr: plan.pr ? { number: plan.pr.number, state: plan.pr.state, url: plan.pr.url } : null,
+    primary: first,
+    secondary: other,
+    // The PR line names a merged or closed PR too (PR #5 · 已关闭), not only an open one.
+    pr: found.prStatus?.pr ? { number: found.prStatus.pr.number, state: found.prStatus.pr.state, url: found.prStatus.pr.url } : null,
     base: preflight.ok ? preflight.base : found.changes.base,
     baseProtected: preflight.ok ? preflight.baseProtected : null,
     archive: { blocker: await archiveBlocker(place) }
@@ -109,38 +144,47 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
   return { ok: true, data: exits }
 }
 
-async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<RemoteResult> {
+async function start(place: Place, kind: 'main' | 'pr' | 'push-pr' | 'push-base'): Promise<RemoteResult> {
   const found = await planFor(place)
   if (!found) return remoteFail('不是 git 仓库')
   const { changes, preflight, plan } = found
-  const exit = [plan.exits.primary, plan.exits.secondary].find((e) => e?.kind === kind)
-  if (!exit || plan.nothingToShip) return remoteFail('这个出口现在不能用')
+  // 推送 of the base is a chain action, not one of the two exits: its own blocker.
+  const pushBase = kind === 'push-base' ? plan.chain.actions.find((a) => a.id === 'push-base')! : null
+  const exit = pushBase ? null : [plan.exits.primary, plan.exits.secondary].find((e) => e?.kind === kind)
+  if (!pushBase && (!exit || plan.nothingToShip)) return remoteFail('这个出口现在不能用')
   if (useShips.getState().byWorktree[place.worktree.path]) return remoteFail('这个 worktree 已经有一个出口在进行')
   if (stoppedFix(place.worktree.path, plan.pr?.number ?? null)) return remoteFail(STOPPED)
-  const blocker = plan.blocker(exit)
+  const blocker = pushBase ? pushBase.blocker : exit ? plan.blocker(exit) : null
   if (blocker || !preflight.ok) return fail(place, blocker ?? '正在检查…')
   const { session, worktree, project } = place
   const state = useWorkspace.getState()
   const agent = commentTarget(worktree, state.sessions, state.worktrees, session.id)
   const checks = turnCheckView(agent ? useSessionMeta.getState().bySession[agent.id]?.checks : undefined)
   const settings = await window.tr.settings.get()
+  const ctx = shipContextFor({
+    projectRoot: project.rootPath,
+    worktreePath: worktree.path,
+    preflight,
+    changes,
+    pr: plan.pr,
+    agentSession: agent?.id ?? null,
+    openIn: session.id,
+    checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
+    settings: { review: settings.review, pr: settings.pr }
+  })
+  // The tip the run starts from and where the base goes: the preflight just read, as the desktop's commands pass it.
+  const options = { head: preflight.head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) }
+  if (!exit) {
+    // 推送 of the base, as Git · 变更 starts it (chain-actions.ts).
+    startShip({ ...ctx, paths: null, openPr: null }, 'push-base', CHAIN_LABEL.pushBaseTo(preflight.base), options)
+    return { ok: true }
+  }
   startShip(
-    shipContextFor({
-      projectRoot: project.rootPath,
-      worktreePath: worktree.path,
-      preflight,
-      changes,
-      pr: plan.pr,
-      agentSession: agent?.id ?? null,
-      openIn: session.id,
-      checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
-      settings: { review: settings.review, pr: settings.pr }
-    }),
+    ctx,
     exit.kind === 'open-pr' ? 'push-pr' : exit.kind,
-    // 合并 is local only (its button names no base; the block's title does). The phone has no 推送 of the base yet.
+    // 合并 is local only (its button names no base; the block's title does).
     exit.kind === 'main' ? CHAIN_LABEL.mergeTo(preflight.base) : exit.label,
-    // The tip the run starts from and where the base goes: the preflight just read, as the desktop's commands pass it.
-    { head: preflight.head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) }
+    options
   )
   return { ok: true }
 }

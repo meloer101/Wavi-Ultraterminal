@@ -11,7 +11,7 @@
 //      while it conflicts with the base, else 推送 to it, else 合并 PR #N… (once the PR's details are read)
 //   d. merged (PR merged, or the branch's work is in the base) and clean → 已经全部合并, 归档… (still checking while the
 //      preflight answers an older change list); the work in the local base that its upstream lacks (a local 合并) →
-//      推送 of the base first, 归档… only after it
+//      推送 of the base first, 归档… only after it; the branch's PR closed without a merge and clean → 归档… too
 //   e. nothing of its own and clean → nothing at all
 //   f. the pushed branch is behind its remote → 拉取 (or hand a diverged branch to the agent); then landing on the base
 //      would conflict → 同步 <base> (提交 first while files are ticked or tracked files are uncommitted)
@@ -106,6 +106,9 @@ export interface ChainInput {
   pr: ChainPr | null
   /** The branch's newest PR was merged on GitHub (and none is open). */
   prMerged: boolean
+  /** The number of the branch's newest PR when it was closed on GitHub without a merge (and none is open), while the
+   *  branch is still at its head; absent otherwise. */
+  prClosed?: number
   /** The worktree is the project's main checkout. */
   isMain: boolean
   projectRoot: string | null
@@ -179,6 +182,8 @@ export const CHAIN_TEXT = {
   /** The state line's remoteAhead when the count is known (Figma 73K6). */
   remoteAheadCount: (n: number) => `远程有本地没有的提交 · ${n} 个`,
   merged: (base: string) => `已经全部合并到 ${base}`,
+  /** The branch's PR was closed on GitHub without a merge. */
+  prClosed: (n: number) => `PR #${n} 已关闭`,
   /** The local base has commits its upstream lacks (a local 合并 left it ahead). */
   baseUnpushed: (base: string, n: number) => `${base} 有 ${n} 个提交还没推送`,
   /** 归档… waits while the merged work is only in the local base. */
@@ -238,6 +243,8 @@ export function chainInputFrom(sources: {
   const live = livePr(prStatus)
   const ok = preflight?.ok ? preflight : null
   const openPr = preflight?.ok ? preflight.openPr : null
+  const head = ok?.head ?? prStatus?.local?.head ?? null
+  const done = !live && prStatus?.pr && mergedPrIsThisBranch(prStatus.pr, head, ok?.merged === true) ? prStatus.pr : null
   const pr: ChainPr | null = live
     ? {
         number: live.number,
@@ -264,7 +271,8 @@ export function chainInputFrom(sources: {
       ...(changes.baseRef !== undefined ? { baseRef: changes.baseRef } : {})
     },
     pr,
-    prMerged: !live && prStatus?.pr?.state === 'merged' && mergedPrIsThisBranch(prStatus.pr, ok?.head ?? prStatus.local?.head ?? null, ok?.merged === true),
+    prMerged: done?.state === 'merged',
+    ...(done?.state === 'closed' ? { prClosed: done.number } : {}),
     isMain: sources.isMain,
     projectRoot: sources.projectRoot,
     gh: sources.gh ?? null,
@@ -276,8 +284,9 @@ export function chainInputFrom(sources: {
 }
 
 /**
- * A merged PR is this branch's work only while the branch is still at the PR's head, or while the preflight finds the
- * branch's work in the base: commits made after the merge (the branch reused for new work) are not merged.
+ * A merged (or closed) PR is this branch's work only while the branch is still at the PR's head, or while the preflight
+ * finds the branch's work in the base: commits made after it (the branch reused for new work) are not merged, nor are
+ * they what was closed.
  */
 function mergedPrIsThisBranch(pr: PullRequestInfo, head: string | null, workInBase: boolean): boolean {
   if (workInBase) return true
@@ -482,8 +491,12 @@ export function shipChain(input: ChainInput): ChainState {
   const clean = uncommitted === 0
   const mergedState = (): ChainState => {
     const archive = move('archive')
-    return state('merged', { tone: 'ok', text: CHAIN_TEXT.merged(base) }, archive.blocker ? null : archive)
+    // A PR closed without a merge says so; the work merged by other means (in the base) reads as merged.
+    const text = input.prClosed !== undefined && !merged ? CHAIN_TEXT.prClosed(input.prClosed) : CHAIN_TEXT.merged(base)
+    return state('merged', { tone: input.prClosed !== undefined && !merged ? 'info' : 'ok', text }, archive.blocker ? null : archive)
   }
+  /** The branch's PR is done on GitHub (merged, or closed without a merge): 归档… once the worktree is clean. */
+  const prDone = input.prMerged || input.prClosed !== undefined
   /** The change list and the preflight describe the same worktree state (a preflight asked before a commit does not):
    *  the same HEAD when the change list says which, else the same counts. */
   const agreed = !pf || (local.head ? pf.head === local.head : pf.ahead === local.ahead && pf.uncommitted === uncommitted)
@@ -495,7 +508,7 @@ export function shipChain(input: ChainInput): ChainState {
 
   // While the preflight runs, only what the change list and the PR poll know is decided.
   if (!pf) {
-    if (input.prMerged && clean) return mergedState()
+    if (prDone && clean) return mergedState()
     if (ahead === 0 && clean && !pr) return state('empty', null, null)
     if (ticked > 0) {
       const next = move('commit')
@@ -528,14 +541,14 @@ export function shipChain(input: ChainInput): ChainState {
     return state('pr', polled ? null : headlineOf(next), next)
   }
 
-  // d. Merged (only once the preflight answers the change list as it is now): the work only in the local base (a local
-  // 合并) is pushed first. e. Nothing of its own.
+  // d. Merged, or the PR closed (only once the preflight answers the change list as it is now): the work only in the
+  // local base (a local 合并) is pushed first. e. Nothing of its own.
   if (landedUnpushed && clean) {
     if (!agreed) return checking()
     const next = move('push-base')
     return state('unpushed', next.blocker ? headlineOf(next) : { tone: 'info', text: CHAIN_TEXT.baseUnpushed(base, baseUnpushed) }, next)
   }
-  if ((input.prMerged || merged) && clean) return agreed ? mergedState() : checking()
+  if ((prDone || merged) && clean) return agreed ? mergedState() : checking()
   if (ahead === 0 && clean) return state('empty', null, null)
 
   // The branch was pushed and its remote branch has commits it lacks: 拉取 first (创建 PR's push would be refused, and

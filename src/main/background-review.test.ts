@@ -74,6 +74,8 @@ describe('parseReviewRequest / triggerAllowed', () => {
     expect(() => parseReviewRequest({ root: 'w', agent: 'claude', trigger: 'manual' })).toThrow()
     expect(() => parseReviewRequest({ root: '/w', agent: 'bash', trigger: 'manual' })).toThrow()
     expect(() => parseReviewRequest({ root: '/w', agent: 'codex', trigger: 'cron' })).toThrow()
+    // 合并前审阅 is gone: nothing asks for a review before a merge.
+    expect(() => parseReviewRequest({ root: '/w', agent: 'claude', trigger: 'merge' })).toThrow('invalid trigger')
   })
 
   it('takes the asked prompts as an optional array of text, and rejects any other shape', () => {
@@ -95,12 +97,11 @@ describe('parseReviewRequest / triggerAllowed', () => {
   it('runs automatic triggers only when their switch is on and the built-in reviewer is chosen', () => {
     const off = DEFAULT_SETTINGS.review
     expect(triggerAllowed('manual', off)).toBe(true)
-    expect(triggerAllowed('merge', off)).toBe(false)
+    expect(triggerAllowed('push', off)).toBe(false)
     expect(triggerAllowed('turn', off)).toBe(false)
-    expect(triggerAllowed('merge', { ...off, beforeMerge: true })).toBe(true)
     expect(triggerAllowed('push', { ...off, beforePush: true })).toBe(true)
     expect(triggerAllowed('turn', { ...off, afterTurnWithCommits: true })).toBe(true)
-    expect(triggerAllowed('merge', { ...off, beforeMerge: true, mode: 'agent-command' })).toBe(false)
+    expect(triggerAllowed('push', { ...off, beforePush: true, mode: 'agent-command' })).toBe(false)
   })
 })
 
@@ -298,7 +299,7 @@ describe('startReview', { timeout: 15_000 }, () => {
   it('skips automatic triggers that are off, and nothing to review', async () => {
     const root = repo('auto')
     const o = owner()
-    expect((await startReview(o as never, { root, agent: 'claude', trigger: 'merge' })).message).toBe('自动审阅没有打开')
+    expect((await startReview(o as never, { root, agent: 'claude', trigger: 'push' })).message).toBe('自动审阅没有打开')
     expect((await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).message).toBe('没有要审阅的改动')
   })
 

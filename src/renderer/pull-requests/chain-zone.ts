@@ -4,7 +4,7 @@
 import type { ConfirmOptions } from '@shared/lifecycle'
 import { livePr, type GhState, type PrStatus } from '@shared/pull-requests'
 import type { ShipKind, ShipOperation, ShipOperationRequest, ShipOperationResult, ShipPreflight } from '@shared/ship'
-import { CHAIN_LABEL, CHAIN_TEXT, oneLine, type ChainActionId, type ChainState, type ChainTone } from '@shared/ship-chain'
+import { CHAIN_LABEL, CHAIN_TEXT, oneLine, type ChainActionId, type ChainMove, type ChainState, type ChainTone } from '@shared/ship-chain'
 import { PR_CONFLICT_FACT } from './auto-fix-model'
 
 /** Every way into the chain from the zone, the ⋯ menu and ⌘K (pull-requests/chain-actions.ts runs them): a chain move,
@@ -85,21 +85,21 @@ export async function runOperation(
 
 /**
  * What ⇧⌘M does while Git · 变更 is open on the worktree (`idle`: no run, no review, no stopped fix holds the zone): the
- * primary exit when it can run; 合并 PR #N… through the chain, which says why it cannot open yet (never the local merge
- * sheet past the PR); nothing for a blocked exit or the chain's other moves (clicked), or while the zone is busy. null:
- * nothing registered — the merge sheet (merged, stuck, no move).
+ * chain's primary — 提交, 合并, 创建 PR, 推送 (to the PR, of the base), 合并 PR #N…, 归档…, or a recovery move — when it
+ * can run; 合并 PR #N… through the chain also while it cannot open yet (its reason, never the local merge sheet past the
+ * PR); nothing for any other blocked primary, or while the zone is busy. null: nothing registered — no primary, or a
+ * stuck worktree (the merge sheet).
  */
 export function zoneShortcut(chain: ChainState | null, idle: boolean): ChainCommand | 'nothing' | null {
   if (!idle) return 'nothing'
   const next = chain?.next ?? null
-  if (next === null || chain?.stage === 'merged' || chain?.stage === 'stuck') return null
+  if (next === null || chain?.stage === 'stuck') return null
   if (next.id === 'merge-pr') return 'merge-pr'
-  return (next.id === 'main' || next.id === 'pr') && next.blocker === null ? next.id : 'nothing'
+  return next.blocker === null ? next.id : 'nothing'
 }
 
-/** Whether the primary button shows ⇧⌘M: an exit or 合并 PR #N… that can run now. */
-export const zoneShortcutShown = (chain: ChainState): boolean =>
-  chain.next !== null && (chain.next.id === 'main' || chain.next.id === 'pr' || chain.next.id === 'merge-pr') && chain.next.blocker === null
+/** Whether the primary button shows ⇧⌘M: the chain's primary, while it can run. */
+export const zoneShortcutShown = (chain: ChainState): boolean => chain.next !== null && chain.next.blocker === null && chain.stage !== 'stuck'
 
 /** 73D4: a stopped operation with every conflict resolved reads as such, on the ok tone. */
 export const RESOLVED = '冲突都解决了'
@@ -132,8 +132,11 @@ export function zoneFiles(chain: ChainState, preflight: ShipPreflight | null, ra
   return []
 }
 
+/** The moves a stopped operation offers (继续, 中止) besides the chain's actions. */
+type OperationMove = Extract<ChainMove['id'], 'continue' | 'abort'>
+
 export interface ZoneMenuItem {
-  id: ChainActionId
+  id: ChainActionId | OperationMove
   /** The ⋯ menu's 合并到 <base>… opens the merge sheet (merge-sheet); the rest run what their label says. */
   command: ChainCommand
   label: string
@@ -148,20 +151,33 @@ export const shortReason = (text: string): string => text.split('：')[0] ?? tex
 const namedLabel = (a: ChainState['actions'][number], base: string): string =>
   a.id === 'main' ? CHAIN_LABEL.mergeTo(base) : a.id === 'push-base' ? CHAIN_LABEL.pushBaseTo(base) : a.label
 
+/** The recovery moves only offered while they can run: 同步 and 拉取 among the actions. */
+const RECOVERY: ReadonlySet<ChainActionId> = new Set(['sync', 'pull'])
+
+/** 继续 / 中止 of a stopped operation, while the chain offers them (rule a). */
+function operationMoves(chain: ChainState): Array<{ id: OperationMove; label: string }> {
+  const out: Array<{ id: OperationMove; label: string }> = []
+  for (const m of [chain.next, chain.second]) if (m && m.blocker === null && (m.id === 'continue' || m.id === 'abort')) out.push({ id: m.id, label: m.label })
+  return out
+}
+
 /**
- * The ⋯ menu (73B): the chain's actions in their fixed order. 合并到 <base>… (the merge sheet) is hidden while a PR is
- * open, 合并 PR #N… shown only then; 创建 PR reads 推送到 PR #N with one open; 推送 <base> pushes the local base.
+ * The ⋯ menu (73B): 继续 / 中止 of a stopped operation first, then the chain's actions in their fixed order; the recovery
+ * moves (同步, 拉取) only while they can run. 合并到 <base>… (the merge sheet) is hidden while a PR is open, 合并 PR #N…
+ * shown only then; 创建 PR reads 推送到 PR #N with one open; 推送 <base> pushes the local base.
  */
 export function zoneMenu(chain: ChainState): ZoneMenuItem[] {
   const open = chain.openPr !== null
-  return chain.actions
-    .filter((a) => (open ? a.id !== 'main' : a.id !== 'merge-pr'))
+  const moves: ZoneMenuItem[] = operationMoves(chain).map((m) => ({ id: m.id, command: m.id, label: m.label, blocker: null }))
+  const actions: ZoneMenuItem[] = chain.actions
+    .filter((a) => (open ? a.id !== 'main' : a.id !== 'merge-pr') && (a.blocker === null || !RECOVERY.has(a.id)))
     .map((a) => ({
       id: a.id,
       command: a.id === 'main' ? 'merge-sheet' : a.id,
       label: a.id === 'main' ? `${CHAIN_LABEL.mergeTo(chain.base)}…` : namedLabel(a, chain.base),
       blocker: a.blocker === null ? null : shortReason(a.blocker)
     }))
+  return [...moves, ...actions]
 }
 
 export interface PaletteGitAction {
@@ -183,8 +199,6 @@ export interface PaletteGitFacts {
   reviewFiles: number | null
   /** The open PR to open; null when none. */
   pr: number | null
-  /** Git · 变更 is open on the worktree and registered what ⇧⌘M runs there (merge/store.ts registerPrimaryExit). */
-  exitRegistered: boolean
   /** What 拉取 fetches (the preflight's `pullFrom`); absent or null: `<remote>/<branch>`. */
   pullFrom?: string | null
   /** Where 推送 of the base goes (the preflight's `baseRemote`); absent or null: the base alone. */
@@ -192,8 +206,8 @@ export interface PaletteGitFacts {
 }
 
 /**
- * ⌘K's Git group for the active session's worktree (73H): only the chain actions that can run now (归档… only once the
- * branch is merged), then 审阅全部改动 and 打开 PR #N when they apply.
+ * ⌘K's Git group for the active session's worktree (73H): 继续 / 中止 of a stopped operation, then only the chain
+ * actions that can run now (归档… only once the branch is merged), then 审阅全部改动 and 打开 PR #N when they apply.
  */
 export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): PaletteGitAction[] {
   const detail = (id: ChainActionId): string => {
@@ -212,12 +226,13 @@ export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): Pa
         return ''
     }
   }
+  const moves: PaletteGitAction[] = operationMoves(chain).map((m) => ({ command: m.id, label: m.label, detail: '', primary: chain.next?.id === m.id }))
   const out: PaletteGitAction[] = chain.actions
     // 归档… is offered once the work is merged, not for every worktree whose sessions are idle.
     .filter((a) => a.blocker === null && (a.id !== 'archive' || chain.stage === 'merged'))
-    // ⇧⌘M runs an exit only while Git · 变更 registered it; 合并 PR #N… it runs through the chain from anywhere
-    // (pull-requests/chain-actions.ts mergeShortcut).
-    .map((a) => ({ command: a.id, label: namedLabel(a, chain.base), detail: detail(a.id), primary: chain.next?.id === a.id && (a.id === 'merge-pr' || facts.exitRegistered) }))
+    // ⇧⌘M runs the chain's primary from anywhere (pull-requests/chain-actions.ts mergeShortcut): that row shows it.
+    .map((a) => ({ command: a.id, label: namedLabel(a, chain.base), detail: detail(a.id), primary: chain.next?.id === a.id }))
+  out.unshift(...moves)
   if (facts.reviewFiles !== null && facts.reviewFiles > 0) out.push({ command: 'review', label: '审阅全部改动', detail: `${facts.reviewFiles} 个文件`, primary: false })
   if (facts.pr !== null) out.push({ command: 'open-pr', label: `打开 PR #${facts.pr}`, detail: '', primary: false })
   return out

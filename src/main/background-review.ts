@@ -60,7 +60,7 @@ const KILL_GRACE_MS = 1000
 const MAX_STDOUT = 16 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 const MAX_ROOT = 4096
-const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
+const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'push', 'turn'])
 
 interface Job {
   hash: string
@@ -161,7 +161,6 @@ function stopChild(child: ChildProcess | null): void {
 export function triggerAllowed(trigger: ReviewTrigger, settings: ReviewSettings): boolean {
   if (trigger === 'manual') return true
   if (settings.mode !== 'builtin') return false
-  if (trigger === 'merge') return settings.beforeMerge
   if (trigger === 'push') return settings.beforePush
   return settings.afterTurnWithCommits
 }

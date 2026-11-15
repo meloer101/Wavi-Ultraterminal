@@ -107,9 +107,8 @@ export interface PortSettings {
 
 /** 设置 · 自动化 · 代码审阅 (PRD F13). Every switch starts off: a review spends the user's own quota. */
 export interface ReviewSettings {
-  /** Open the merge sheet → start a review. The checklist gains a line; the merge is not blocked. */
-  beforeMerge: boolean
-  /** Before Wavi pushes the base to origin. The push is not blocked. */
+  /** The push node reviews what a push sends that the remote lacks (推送 of the base, to a PR, 创建 PR's); a P0 / P1
+   *  stops it before the push. */
   beforePush: boolean
   /** A Stop hook, and this worktree gained a commit during the turn. */
   afterTurnWithCommits: boolean
@@ -127,7 +126,8 @@ export interface ReviewSettings {
 
 /** 设置 · Worktree · 归档 (PRD F15). */
 export interface ArchiveSettings {
-  /** After a merge that kept the worktree, archive it. Off by default. */
+  /** Archive the worktree once its merge chain reaches 归档: its PR merged or closed on GitHub, or a local 合并 pushed
+   *  with the base and that push's CI settled (pull-requests/auto-archive.ts). Off by default. */
   afterMerge: boolean
 }
 
@@ -247,7 +247,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
   review: {
-    beforeMerge: false,
     beforePush: false,
     afterTurnWithCommits: false,
     mode: 'builtin',
@@ -384,8 +383,8 @@ function review(value: unknown): ReviewSettings {
     model = ''
   }
   return {
-    beforeMerge: typeof v.beforeMerge === 'boolean' ? v.beforeMerge : d.beforeMerge,
-    beforePush: typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush,
+    // 合并前审阅 is gone (合并 is local, the review lives in the push node): a stored one on turns 推送前审阅 on.
+    beforePush: v.beforeMerge === true || (typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush),
     afterTurnWithCommits: typeof v.afterTurnWithCommits === 'boolean' ? v.afterTurnWithCommits : d.afterTurnWithCommits,
     mode: v.mode === 'agent-command' ? 'agent-command' : d.mode,
     rules: v.rules === 'custom' ? 'custom' : d.rules,

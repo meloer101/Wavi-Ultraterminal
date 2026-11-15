@@ -21,6 +21,7 @@ import { SettingsDialog } from '../settings/SettingsDialog'
 import { SchedulesDialog } from '../schedules/SchedulesDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
+import { startAutoArchive } from '../pull-requests/auto-archive'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startShipRuns } from '../pull-requests/ship-runner'
 import { startDispatchBridge } from '../dispatch/bridge'
@@ -99,6 +100,7 @@ export function AppShell() {
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
+  useEffect(() => startAutoArchive(), [])
   useEffect(() => startShipRuns(), [])
   useEffect(() => startDispatchBridge(), [])
   useEffect(() => startRemoteBridge(), [])

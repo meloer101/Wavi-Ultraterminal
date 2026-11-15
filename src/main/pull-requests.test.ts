@@ -988,6 +988,17 @@ describe('status · a merged PR (合入链路 v2)', () => {
     expect(ghCalls('pr list')[0]).toContain('--json=number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,headRefOid,statusCheckRollup')
     unwatch(w)
   })
+
+  it('carries the local head for a PR closed without a merge too (归档 only while the branch is still at its head)', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ state: 'CLOSED', headRefOid: head }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'closed', headOid: head }, local: { head, remoteAhead: false } })
+    unwatch(w)
+  })
 })
 
 // Last: a rate limit pauses every gh call for a while.

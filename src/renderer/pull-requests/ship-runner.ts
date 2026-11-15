@@ -27,6 +27,7 @@ import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/per
 import { commentsOf, removeComments } from '../state/review-comments'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
+import { noteBasePush } from './base-ci'
 import {
   agentFree,
   backToGlance,
@@ -952,6 +953,7 @@ async function runPushBase(worktree: string, token: number, run: Run): Promise<v
     return
   }
   patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
+  if (result.pushed) noteBasePush(worktree, { sha: result.commit, at: Date.now() })
   finish(worktree, token, result.pushed ? `已推送 ${ctx.base} · ${result.commit.slice(0, 7)}` : `${ctx.base} 没有远程，没有推送`)
 }
 

@@ -430,9 +430,9 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     }
   }
   let local: PrStatus['local']
-  if (pr && (pr.details || pr.state === 'merged')) {
+  if (pr && (pr.details || pr.state === 'merged' || pr.state === 'closed')) {
     const head = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
-    // A merged PR: the local head, so the chain can tell the merged work from commits made after it.
+    // A merged or closed PR: the local head, so the chain can tell the PR's work from commits made after it.
     if (head && pr.details) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
     else if (head) local = { head, remoteAhead: false }
   }

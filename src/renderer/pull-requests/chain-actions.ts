@@ -14,7 +14,7 @@ import { useRadar, markFor } from '../conflict-radar/store'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { commentTarget } from '../panels/git/comments'
 import { tickedPaths } from '../panels/git/changes-model'
-import { gitOf, loadChanges } from '../panels/git/store'
+import { gitOf, loadChanges, setTab } from '../panels/git/store'
 import { openMergeSheet, primaryExitOf, targetFor } from '../panels/merge/store'
 import { agentLabel } from '../panels/merge/model'
 import { startBackgroundReview } from '../review/background'
@@ -22,7 +22,7 @@ import { useSessionMeta } from '../session-meta/store'
 import { insertIntoTerminal } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
-import { bumpChain, loadPreflight, useChainStore } from './chain-store'
+import { bumpChain, loadPreflight } from './chain-store'
 import { mergePrBlocker, prRunKind, runOperation, type ChainCommand } from './chain-zone'
 import { exitPlan, shipContextFor, type ExitPlan } from './exit-model'
 import { commitTitle, divergedPrompt } from './ship-flow'
@@ -249,9 +249,11 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
 }
 
 /**
- * ⇧⌘M (menu command merge-worktree) for the active session's worktree: the primary Git · 变更 registered while it is open
- * there; else, with an open PR (the poll's, or the preflight's number), 合并 PR #N… through the chain (its reason when
- * the PR's details are not read, never the local merge sheet past the PR); else the merge sheet.
+ * ⇧⌘M (menu command merge-worktree) for the active session's worktree: the chain's primary, whatever it is. Git · 变更
+ * registers what it runs while it is open there (chain-zone.ts zoneShortcut). Else the chain is read fresh: 合并 (and a
+ * worktree with no primary, or a stuck one) opens the local merge sheet, as from the Worktree view; the sheets (合并
+ * PR #N…, 归档…) open as they are; any other move opens Git · 变更 on the worktree and runs there, as ⌘K's Git group
+ * does (a blocked one says why there).
  */
 export function mergeShortcut(): void {
   const state = useWorkspace.getState()
@@ -261,9 +263,19 @@ export function mergeShortcut(): void {
   if (!worktree || !project) return
   const exit = primaryExitOf(worktree.path)
   if (exit) return exit()
-  const known = useChainStore.getState().preflights[worktree.path]
-  const pr = usePullRequests.getState().byWorktree[worktree.path]
-  const open = (pr?.pr && (pr.pr.state === 'open' || pr.pr.state === 'draft')) || (known?.ok && known.openPr !== null)
-  if (open) return void runChainCommand(worktree.path, 'merge-pr', session?.id ?? null)
-  openMergeSheet(targetFor(project.rootPath, worktree))
+  void shortcutFromAnywhere(worktree, project, session?.id ?? null)
+}
+
+async function shortcutFromAnywhere(worktree: Worktree, project: Project, sessionId: string | null): Promise<void> {
+  const place = chainPlace(worktree.path)
+  if (!place || useShips.getState().byWorktree[worktree.path]) return
+  const sources = await freshSources(place)
+  const chain = sources ? chainPlanOf(place, sources).chain : null
+  const next = chain?.next ?? null
+  if (!chain || !next || next.id === 'main' || chain.stage === 'stuck') return openMergeSheet(targetFor(project.rootPath, worktree))
+  if (next.id !== 'merge-pr' && next.id !== 'archive') {
+    useWorkspace.getState().setRightPanel('git')
+    setTab(worktree.path, 'changes')
+  }
+  await runChainCommand(worktree.path, next.id, sessionId)
 }

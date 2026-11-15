@@ -480,6 +480,17 @@ describe('shipChain · d. merged', () => {
     expect(shipChain(input({ prMerged: true, local: dirty(1) })).stage).toBe('exits')
   })
 
+  // Path ③: the PR is done on GitHub however it ended; 归档… is the primary for a closed one too.
+  it('offers 归档… for a PR closed without a merge, and says it was closed', () => {
+    const state = shipChain(input({ prClosed: 7 }))
+    expect(state).toMatchObject({ stage: 'merged', headline: { tone: 'info', text: 'PR #7 已关闭' }, next: { id: 'archive', blocker: null }, second: null })
+    expect(shipChain(input({ prClosed: 7, preflight: null })).next?.id).toBe('archive')
+    // Closed, but its work reached the base some other way: merged.
+    expect(shipChain(input({ prClosed: 7, preflight: ok({ merged: true }) })).headline?.text).toBe('已经全部合并到 main')
+    expect(shipChain(input({ prClosed: 7, sessions: [{ status: 'needs_you' }] })).next).toBeNull()
+    expect(shipChain(input({ prClosed: 7, local: dirty(1) })).stage).toBe('exits')
+  })
+
   // 合并 is local only: the base it left ahead of its upstream is pushed before anything is archived.
   it('offers 推送 of the base, not 归档…, while the local base has commits its upstream lacks', () => {
     const state = shipChain(input({ preflight: ok({ ahead: 0, merged: true, baseUnpushed: 1 }), local: { ...dirty(0), ahead: 0 } }))
@@ -663,10 +674,23 @@ describe('chainInputFrom', () => {
     expect(from().ticked).toBeUndefined()
   })
 
-  it('sees a merged PR, and no PR in a closed one', () => {
+  it('sees a merged PR, and a closed one as closed (no open PR, not merged)', () => {
     const merged: PullRequestInfo = { ...live, state: 'merged', headOid: 'c0ffee' }
     expect(from({ prStatus: status({ pr: merged }) })).toMatchObject({ pr: null, prMerged: true })
-    expect(from({ prStatus: status({ pr: { ...live, state: 'closed', headOid: 'c0ffee' } }) })).toMatchObject({ pr: null, prMerged: false })
+    expect(from({ prStatus: status({ pr: merged }) }).prClosed).toBeUndefined()
+    expect(from({ preflight: ok({ head: 'c0ffee' }), prStatus: status({ pr: { ...live, state: 'closed', headOid: 'c0ffee' } }) })).toMatchObject({ pr: null, prMerged: false, prClosed: 7 })
+  })
+
+  it('counts a closed PR only while the branch is still at its head (a reused branch is new work)', () => {
+    const closed: PullRequestInfo = { ...live, state: 'closed', headOid: 'aaa111' }
+    expect(from({ preflight: ok({ head: 'aaa111' }), prStatus: status({ pr: closed }) }).prClosed).toBe(7)
+    expect(from({ preflight: ok({ head: 'bbb222' }), prStatus: status({ pr: closed }) }).prClosed).toBeUndefined()
+    expect(from({ preflight: null, prStatus: status({ pr: closed, local: { head: 'aaa111', remoteAhead: false } }) }).prClosed).toBe(7)
+    expect(from({ preflight: null, prStatus: status({ pr: closed, local: { head: 'bbb222', remoteAhead: false } }) }).prClosed).toBeUndefined()
+    // gh did not say the head: not this branch's.
+    expect(from({ preflight: ok({ head: 'aaa111' }), prStatus: status({ pr: { ...live, state: 'closed' } }) }).prClosed).toBeUndefined()
+    const reused = from({ preflight: ok({ head: 'bbb222' }), prStatus: status({ pr: closed }), changes: { ...changes, uncommitted: [], untrackedOmitted: 0 } })
+    expect(shipChain(reused).next?.id).not.toBe('archive')
   })
 
   it('counts a merged PR as merged only while the branch is at its head or its work is in the base', () => {

@@ -65,7 +65,7 @@ const ctx = {
   paths: ['new.txt'],
   openPr: null,
   checksLine: null,
-  settings: { review: { ...DEFAULT_SETTINGS.review, beforeMerge: false, beforePush: false }, pr: DEFAULT_SETTINGS.pr },
+  settings: { review: { ...DEFAULT_SETTINGS.review, beforePush: false }, pr: DEFAULT_SETTINGS.pr },
   openIn: null
 }
 
