@@ -3,6 +3,8 @@
 import { ArrowLeft, BookOpen, Code, Ellipsis, FileCode } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import type { FilePreview as Preview, GitLetter, LineMark, LineMarkRange } from '@shared/worktree-files'
 import { IconButton } from '../../ui/IconButton'
 import { formatAccelerator } from '../../ui/menu-model'
@@ -16,6 +18,37 @@ import { reveal, showPreview, useFiles } from './store'
 import { parentOf } from './tree-model'
 import { previewLines, MAX_PREVIEW_LINES } from './preview-model'
 import styles from './FilesView.module.css'
+
+const M = defineMessages({
+  zh: {
+    cannotRead: '无法读取这个文件',
+    binary: '二进制文件，无法预览',
+    tooLarge: (shortcut: string) => `文件超过 1 MB，用默认编辑器打开（${shortcut}）`,
+    deleted: '文件已删除',
+    backToTree: '返回目录树',
+    showRendered: '显示渲染结果',
+    showSource: '显示源码',
+    openInEditor: '用默认编辑器打开',
+    more: '更多',
+    preview: (path: string) => `${path} 预览`,
+    truncated: (lines: number, shortcut: string) => `只显示前 ${lines} 行，用默认编辑器打开查看全部（${shortcut}）`,
+    mark: { add: '新增的行', mod: '改动的行' } as Record<LineMark, string>
+  },
+  en: {
+    cannotRead: "Can't read this file",
+    binary: "Binary file, can't preview",
+    tooLarge: (shortcut: string) => `File is over 1 MB. Open it in the default editor (${shortcut})`,
+    deleted: 'File deleted',
+    backToTree: 'Back to file tree',
+    showRendered: 'Show rendered',
+    showSource: 'Show source',
+    openInEditor: 'Open in default editor',
+    more: 'More',
+    preview: (path: string) => `${path} preview`,
+    truncated: (lines: number, shortcut: string) => `Showing the first ${lines} lines. Open in the default editor to see all (${shortcut})`,
+    mark: { add: 'Added line', mod: 'Changed line' }
+  }
+})
 
 interface Loaded {
   /** The file this was read from; another one's content is never shown under this path. */
@@ -34,6 +67,7 @@ interface Props {
 }
 
 export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
+  const m = useMessages(M)
   const revision = useFiles((s) => s.roots[root]?.previewRevision ?? 0)
   const targetLine = useFiles((s) => s.roots[root]?.previewLine ?? null)
   const request = useFiles((s) => s.roots[root]?.previewRequest ?? 0)
@@ -105,19 +139,19 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
   const dir = parentOf(path)
   const name = path.slice(dir ? dir.length + 1 : 0)
   const message = error
-    ? '无法读取这个文件'
+    ? m.cannotRead
     : loaded?.preview.kind === 'binary'
-      ? '二进制文件，无法预览'
+      ? m.binary
       : loaded?.preview.kind === 'too-large'
-        ? `文件超过 1 MB，用默认编辑器打开（${formatAccelerator(FILE_SHORTCUTS.open)}）`
+        ? m.tooLarge(formatAccelerator(FILE_SHORTCUTS.open))
         : loaded?.preview.kind === 'missing'
-          ? '文件已删除'
+          ? m.deleted
           : null
 
   return (
     <>
       <div className={styles.previewHeader}>
-        <IconButton label="返回目录树" title="返回目录树 · Esc" onClick={back}>
+        <IconButton label={m.backToTree} title={`${m.backToTree} · Esc`} onClick={back}>
           <ArrowLeft size={16} strokeWidth={1.75} />
         </IconButton>
         <span className={styles.path} title={path}>
@@ -136,7 +170,7 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
         <span className={styles.previewTools}>
           {markdown && (
             <IconButton
-              label={source ? '显示渲染结果' : '显示源码'}
+              label={source ? m.showRendered : m.showSource}
               aria-pressed={source}
               active={source}
               onClick={() => setView({ key: viewKey, source: !source })}
@@ -144,17 +178,17 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
               {source ? <BookOpen size={16} strokeWidth={1.75} /> : <FileCode size={16} strokeWidth={1.75} />}
             </IconButton>
           )}
-          <IconButton label="用默认编辑器打开" title={`用默认编辑器打开 · ${formatAccelerator(FILE_SHORTCUTS.open)}`} onClick={() => runFileAction('open', target)}>
+          <IconButton label={m.openInEditor} title={`${m.openInEditor} · ${formatAccelerator(FILE_SHORTCUTS.open)}`} onClick={() => runFileAction('open', target)}>
             <Code size={16} strokeWidth={1.75} />
           </IconButton>
-          <IconButton label="更多" aria-haspopup="menu" onClick={(e) => void openFileMenu(target, e.currentTarget, { withPreview: false })}>
+          <IconButton label={m.more} aria-haspopup="menu" onClick={(e) => void openFileMenu(target, e.currentTarget, { withPreview: false })}>
             <Ellipsis size={16} strokeWidth={1.75} />
           </IconButton>
           <ClosePanelButton />
         </span>
       </div>
       <FilesNotice root={root} />
-      <div ref={body} className={styles.code} tabIndex={0} role="document" aria-label={`${path} 预览`} data-testid="file-preview" onKeyDown={onKeyDown}>
+      <div ref={body} className={styles.code} tabIndex={0} role="document" aria-label={m.preview(path)} data-testid="file-preview" onKeyDown={onKeyDown}>
         {message ? (
           <p className={styles.empty}>{message}</p>
         ) : rendered !== null ? (
@@ -170,14 +204,14 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
                   data-mark={line.mark ?? undefined}
                   data-target={line.number === targetLine || undefined}
                 >
-                  <span className={styles.changeMark} aria-label={line.mark ? MARK_LABEL[line.mark] : undefined} />
+                  <span className={styles.changeMark} aria-label={line.mark ? m.mark[line.mark] : undefined} />
                   <span className={styles.lineNo}>{line.number}</span>
                   <span className={styles.lineText}>{line.text}</span>
                 </div>
               ))}
               {lines.truncated && (
                 <p className={styles.truncated}>
-                  只显示前 {MAX_PREVIEW_LINES} 行，用默认编辑器打开查看全部（{formatAccelerator(FILE_SHORTCUTS.open)}）
+                  {m.truncated(MAX_PREVIEW_LINES, formatAccelerator(FILE_SHORTCUTS.open))}
                 </p>
               )}
             </div>
@@ -187,5 +221,3 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
     </>
   )
 }
-
-const MARK_LABEL: Record<LineMark, string> = { add: '新增的行', mod: '改动的行' }

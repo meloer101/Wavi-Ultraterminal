@@ -1,12 +1,28 @@
 // `:5173` tags for a session (PRD F14), on the sidebar row and the overview.
 // Click opens the built-in browser, ⌥-click the system browser, right-click asks main to end the process.
 import { portUrl } from '@shared/browser'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { openLink } from '../../state/link-actions'
 import { useBrowser } from './store'
 import styles from './PortTags.module.css'
 
+const M = defineMessages({
+  zh: {
+    waiting: '新端口，切到这个会话时自动打开 · ',
+    title: (url: string) => `在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`,
+    open: (url: string) => `打开 ${url}`
+  },
+  en: {
+    waiting: 'New port, opens when you switch to this session · ',
+    title: (url: string) => `Open ${url} in the built-in browser · ⌥-click to open in the system browser · Right-click to end the process`,
+    open: (url: string) => `Open ${url}`
+  }
+})
+
 /** Renders nothing when this session is not listening. */
 export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: number }) {
+  const m = useMessages(M)
   const ports = useBrowser((s) => s.ports[sessionId])
   // 自动打开 waits for the user to go to this worktree (auto-open.ts).
   const pending = useBrowser((s) => s.pendingPorts[sessionId])
@@ -28,8 +44,8 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
             type="button"
             className={styles.port}
             data-pending={waiting || undefined}
-            title={`${waiting ? '新端口，切到这个会话时自动打开 · ' : ''}${p.label ? `${p.label} · ` : ''}在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`}
-            aria-label={`打开 ${url}`}
+            title={`${waiting ? m.waiting : ''}${p.label ? `${p.label} · ` : ''}${m.title(url)}`}
+            aria-label={m.open(url)}
             onClick={(e) => {
               e.stopPropagation()
               // ctrl-click is the context-menu gesture on macOS; that path ends the process.

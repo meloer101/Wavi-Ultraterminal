@@ -11,6 +11,29 @@ import { useWorkspace } from '../state/workspace'
 import { promptsOf } from '../attempts/sources'
 import { guiStateOf } from '../gui/store'
 import { guiUserTexts, withAsked } from './asked'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    alreadyReviewed: '这份改动已经审过',
+    reviewing: '正在审阅…',
+    hidden: (count: number) => ` · 另有 ${count} 条你之前忽略过`,
+    note: (note: string) => `${note}：`,
+    found: (reviewer: string, found: number, counts: string) => `${reviewer ? `${reviewer} ` : ''}审阅找到 ${found} 条${counts ? `（${counts}）` : ''}`,
+    clean: (reviewer: string) => `${reviewer ? `${reviewer} ` : ''}审阅完成，没有发现问题`,
+    failed: (message: string) => `审阅失败：${message}`
+  },
+  en: {
+    alreadyReviewed: 'These changes were already reviewed',
+    reviewing: 'Reviewing…',
+    hidden: (count: number) => ` · ${count} more you ignored before`,
+    note: (note: string) => `${note}: `,
+    found: (reviewer: string, found: number, counts: string) =>
+      `${reviewer ? `${reviewer} review` : 'Review'} found ${found} ${found === 1 ? 'issue' : 'issues'}${counts ? ` (${counts})` : ''}`,
+    clean: (reviewer: string) => `${reviewer ? `${reviewer} review` : 'Review'} done: no issues`,
+    failed: (message: string) => `Review failed: ${message}`
+  }
+})
 
 /** A worktree's latest review as the window keeps it: the comments themselves live in the comment store. */
 export type ReviewState = Omit<ReviewStatus, 'comments'> & {
@@ -28,7 +51,7 @@ export function nextReviewState(prev: ReviewState | undefined, next: ReviewStatu
   if (prev && prev.startedAt === next.startedAt && prev.hash === next.hash && prev.phase !== 'running' && next.phase === 'running') return null
   if (next.phase === 'skipped' && prev && prev.hash === next.hash && prev.phase === 'done') return { ...prev, note: next.message }
   const { comments, cached, ...rest } = next
-  if (cached) return { ...rest, note: '这份改动已经审过' }
+  if (cached) return { ...rest, note: pick(M).alreadyReviewed }
   return comments ? { ...rest, found: comments.length } : rest
 }
 
@@ -128,22 +151,22 @@ export function reviewLine(status: ReviewState, counts: string, sessionAgent?: R
   const meta = formatReviewStats(status.durationMs, status.costUsd)
   // Named only when 另一家来审 picked a different CLI than the session's.
   const reviewerName = sessionAgent && sessionAgent !== status.agent ? (status.agent === 'claude' ? 'Claude' : 'Codex') : ''
+  const m = pick(M)
   switch (status.phase) {
     case 'running':
-      return { tone: 'working', text: status.message || '正在审阅…', meta: '' }
+      return { tone: 'working', text: status.message || m.reviewing, meta: '' }
     case 'done': {
       const found = status.found ?? 0
-      const who = reviewerName ? `${reviewerName} ` : ''
-      const hidden = status.hidden ? ` · 另有 ${status.hidden} 条你之前忽略过` : ''
+      const hidden = status.hidden ? m.hidden(status.hidden) : ''
       return {
         tone: found > 0 ? 'warn' : 'ok',
-        text: `${status.note ? `${status.note}：` : ''}${found > 0 ? `${who}审阅找到 ${found} 条${counts ? `（${counts}）` : ''}` : `${who}审阅完成，没有发现问题`}${hidden}`,
+        text: `${status.note ? m.note(status.note) : ''}${found > 0 ? m.found(reviewerName, found, counts) : m.clean(reviewerName)}${hidden}`,
         meta,
         ...(status.message ? { detail: status.message } : {})
       }
     }
     case 'failed':
-      return { tone: 'error', text: `审阅失败：${status.message}`, meta }
+      return { tone: 'error', text: m.failed(status.message), meta }
     case 'cancelled':
       return { tone: 'muted', text: status.message, meta: '' }
     case 'skipped':

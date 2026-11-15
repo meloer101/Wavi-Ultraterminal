@@ -3,6 +3,8 @@
 // brake, or the base failing already — the decision surface: the question or the brake's reason with its answers in
 // place of the exits (29G / 29J; shared with the base rows in BaseCiRow.tsx).
 import type { PrStatus } from '@shared/pull-requests'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import {
   agentIdle,
   agentName,
@@ -23,6 +25,42 @@ import { usePullRequests } from '../../pull-requests/store'
 import { useWorkspace } from '../../state/workspace'
 import { Toggle } from '../../ui/Toggle'
 import ci from './CiRows.module.css'
+
+const M = defineMessages({
+  zh: {
+    decline: '不修',
+    fixHere: '在这里修',
+    pushAnywayTitle: '不管刹车，把这次修复推上去（先确认）',
+    pushAnyway: '仍然推送',
+    discardTitle: '把分支退回修复开始前的提交',
+    discard: '丢弃',
+    retry: (agent: string) => `让 ${agent} 重修`,
+    stop: '停下',
+    autoFix: '自动修复',
+    autoFixTitle: 'CI 失败或有新评论时，等 agent 空闲后让它修并提交，Wavi 检查后推送（用你的额度，每个 PR 有次数上限）',
+    noAgent: '这个 worktree 没有 agent 会话',
+    mergeWhenGreen: '通过后合并',
+    draft: '草稿 PR 不能合并',
+    mergeWhenGreenTitle: '检查通过后由 GitHub 合并（仓库要开着 auto-merge）'
+  },
+  en: {
+    decline: "Don't fix",
+    fixHere: 'Fix here',
+    pushAnywayTitle: 'Push this fix despite the brake (asks first)',
+    pushAnyway: 'Push anyway',
+    discardTitle: 'Reset the branch to the commit before the fix began',
+    discard: 'Discard',
+    retry: (agent: string) => `Let ${agent} fix again`,
+    stop: 'Stop',
+    autoFix: 'Auto-fix',
+    autoFixTitle:
+      'When CI fails or new comments arrive, the agent fixes them and commits once it is idle; Wavi checks and pushes (uses your usage, with a limit on attempts per PR)',
+    noAgent: 'This worktree has no agent session',
+    mergeWhenGreen: 'Merge when green',
+    draft: "A draft PR can't be merged",
+    mergeWhenGreenTitle: 'GitHub merges once the checks pass (the repository needs auto-merge turned on)'
+  }
+})
 
 type StoppedRun = Extract<FixRun, { kind: 'stopped' }>
 
@@ -49,6 +87,7 @@ export function useStoppedFix(
  * so its words stay on the text column.
  */
 export function FixStopFooter({ scope, worktreePath, run, agent, note, attempts }: { scope: FixScope; worktreePath: string; run: StoppedRun; agent: string; note: string | null; attempts?: number }) {
+  const m = useMessages(M)
   const actions = stopActions(run)
   const { question } = stopParts(run.decision, attempts)
   return (
@@ -60,26 +99,26 @@ export function FixStopFooter({ scope, worktreePath, run, agent, note, attempts 
       {actions.kind === 'ask' ? (
         <>
           <button type="button" className={ci.action} onClick={() => declineFix(scope, worktreePath)}>
-            不修
+            {m.decline}
           </button>
           <button type="button" className={ci.action} data-primary onClick={() => proceedAnyway(scope, worktreePath)}>
-            在这里修
+            {m.fixHere}
           </button>
         </>
       ) : (
         <>
           {actions.push && (
-            <button type="button" className={ci.action} title="不管刹车，把这次修复推上去（先确认）" onClick={() => void pushAnyway(scope, worktreePath)}>
-              仍然推送
+            <button type="button" className={ci.action} title={m.pushAnywayTitle} onClick={() => void pushAnyway(scope, worktreePath)}>
+              {m.pushAnyway}
             </button>
           )}
           {actions.discard && (
-            <button type="button" className={ci.action} title="把分支退回修复开始前的提交" onClick={() => void discardFix(scope, worktreePath)}>
-              丢弃
+            <button type="button" className={ci.action} title={m.discardTitle} onClick={() => void discardFix(scope, worktreePath)}>
+              {m.discard}
             </button>
           )}
           <button type="button" className={ci.action} data-primary onClick={() => void retryFix(scope, worktreePath)}>
-            {`让 ${agent} 重修`}
+            {m.retry(agent)}
           </button>
         </>
       )}
@@ -89,10 +128,11 @@ export function FixStopFooter({ scope, worktreePath, run, agent, note, attempts 
 
 /** 停下 while the agent works on a fix. */
 export function FixStopButton({ scope, worktreePath, run }: { scope: FixScope; worktreePath: string; run: FixRun | null | undefined }) {
+  const m = useMessages(M)
   if (run?.kind !== 'fixing') return null
   return (
     <button type="button" className={ci.action} onClick={() => stopFix(scope, worktreePath)}>
-      停下
+      {m.stop}
     </button>
   )
 }
@@ -112,6 +152,7 @@ export function usePrAutomationWords(worktreePath: string, status: PrStatus | nu
 
 /** 自动修复 · 通过后合并 (PRD F16 · L3, Figma 29R): the label, then its switch; 停下 at the end while a fix runs. Open PRs only. */
 export function PrAutomationRow({ worktreePath, status }: { worktreePath: string; status: PrStatus }) {
+  const m = useMessages(M)
   const stored = usePullRequests((s) => s.automation[worktreePath])
   const session = useAgentOf(worktreePath)
   const pr = status.pr
@@ -119,21 +160,21 @@ export function PrAutomationRow({ worktreePath, status }: { worktreePath: string
   const state = stored?.number === pr.number ? stored : undefined
   return (
     <div className={ci.switches} data-testid="pr-automation">
-      <span className={ci.label}>自动修复</span>
+      <span className={ci.label}>{m.autoFix}</span>
       <Toggle
-        label="自动修复"
+        label={m.autoFix}
         checked={state?.autoFix === true}
         disabled={!session}
-        title={session ? 'CI 失败或有新评论时，等 agent 空闲后让它修并提交，Wavi 检查后推送（用你的额度，每个 PR 有次数上限）' : '这个 worktree 没有 agent 会话'}
+        title={session ? m.autoFixTitle : m.noAgent}
         onChange={(on) => setAutoFix(worktreePath, on)}
       />
       <span className={ci.gap} />
-      <span className={ci.label}>通过后合并</span>
+      <span className={ci.label}>{m.mergeWhenGreen}</span>
       <Toggle
-        label="通过后合并"
+        label={m.mergeWhenGreen}
         checked={mergeWhenGreenOn(status)}
         disabled={!pr.details || pr.state === 'draft'}
-        title={pr.state === 'draft' ? '草稿 PR 不能合并' : '检查通过后由 GitHub 合并（仓库要开着 auto-merge）'}
+        title={pr.state === 'draft' ? m.draft : m.mergeWhenGreenTitle}
         onChange={(on) => void setMergeWhenGreen(worktreePath, on)}
       />
       <span className={ci.spacer} />

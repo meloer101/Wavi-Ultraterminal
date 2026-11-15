@@ -6,6 +6,8 @@ import { Check, CircleDashed, CircleHelp, GitPullRequest, X } from 'lucide-react
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import type { Session, SessionId, Worktree } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
 import { baseBrokenChecks, prHeadline } from '../../pull-requests/auto-fix-model'
@@ -17,7 +19,32 @@ import { agentLabel } from '../merge/model'
 import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
 
-const GH_HINT = { missing: CHAIN_TEXT.ghMissing, 'signed-out': CHAIN_TEXT.ghSignedOut } as const
+/** Read at use, so the hint follows the interface language. */
+const ghHintText = (gh: 'missing' | 'signed-out'): string => (gh === 'missing' ? CHAIN_TEXT.ghMissing : CHAIN_TEXT.ghSignedOut)
+
+const M = defineMessages({
+  zh: {
+    commentsTitle: (count: number, agent: string) => `把这 ${count} 条评论放进 ${agent} 的输入行，看过后按回车发送`,
+    handle: (agent: string) => `让 ${agent} 处理`,
+    fixTitle: (agent: string) => `把失败的检查和日志末尾放进 ${agent} 的输入行，看过后按回车发送`,
+    readingLogs: '正在读取日志…',
+    fix: (agent: string) => `让 ${agent} 修复`,
+    openPr: (number: number) => `打开 PR #${number}`,
+    openIn: (url: string) => `在内置浏览器打开 ${url}`,
+    handOffFailed: (agent: string, error: string) => `没能交给 ${agent}：${error}`
+  },
+  en: {
+    commentsTitle: (count: number, agent: string) =>
+      `Put ${count === 1 ? 'this comment' : `these ${count} comments`} into ${agent}'s input line; press Return to send once you've checked it`,
+    handle: (agent: string) => `Let ${agent} handle`,
+    fixTitle: (agent: string) => `Put the failing checks and the end of their logs into ${agent}'s input line; press Return to send once you've checked it`,
+    readingLogs: 'Reading logs…',
+    fix: (agent: string) => `Let ${agent} fix`,
+    openPr: (number: number) => `Open PR #${number}`,
+    openIn: (url: string) => `Open ${url} in the built-in browser`,
+    handOffFailed: (agent: string, error: string) => `Couldn't hand off to ${agent}: ${error}`
+  }
+})
 
 /** The PR's headline and facts (Figma 29R), shared by the headline row and the zone's facts line. */
 export function usePrLines(worktree: Worktree) {
@@ -54,6 +81,7 @@ export function PrStatusLine({
   /** Say how to get gh while there is no PR (false: the chain's state line already says it). */
   ghHint?: boolean
 }) {
+  const m = useMessages(M)
   const gh = usePullRequests((s) => s.gh)
   const busy = usePullRequests((s) => s.busy[worktree.path])
   const notice = usePullRequests((s) => s.notice[worktree.path])
@@ -86,8 +114,8 @@ export function PrStatusLine({
     if (onBase || !ghHint || (gh !== 'missing' && gh !== 'signed-out')) return null
     return (
       <p className={styles.reviewStatus} data-tone="muted" role="status" data-testid="pr-status">
-        <span className={styles.reviewStatusText} title={GH_HINT[gh]}>
-          {GH_HINT[gh]}
+        <span className={styles.reviewStatusText} title={ghHintText(gh)}>
+          {ghHintText(gh)}
         </span>
       </p>
     )
@@ -109,10 +137,10 @@ export function PrStatusLine({
         <button
           type="button"
           className={ci.action}
-          title={`把这 ${threads.length} 条评论放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`}
+          title={m.commentsTitle(threads.length, agentLabel(target.kind))}
           onClick={() => void handleComments(worktree.path, target, pr.number, threads)}
         >
-          {`让 ${agentLabel(target.kind)} 处理`}
+          {m.handle(agentLabel(target.kind))}
         </button>
       )}
       {/* While 自动修复 waits on the decision surface, 在这里修 there is this action. */}
@@ -121,13 +149,13 @@ export function PrStatusLine({
           type="button"
           className={ci.action}
           disabled={busy === 'fixing'}
-          title={`把失败的检查和日志末尾放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`}
+          title={m.fixTitle(agentLabel(target.kind))}
           onClick={() => void fixWithAgent(worktree.path, target)}
         >
-          {busy === 'fixing' ? '正在读取日志…' : `让 ${agentLabel(target.kind)} 修复`}
+          {busy === 'fixing' ? m.readingLogs : m.fix(agentLabel(target.kind))}
         </button>
       )}
-      <button type="button" className={ci.link} aria-label={`打开 PR #${pr.number}`} title={`在内置浏览器打开 ${pr.url}`} onClick={() => openPullRequest(openIn, pr.url)}>
+      <button type="button" className={ci.link} aria-label={m.openPr(pr.number)} title={m.openIn(pr.url)} onClick={() => openPullRequest(openIn, pr.url)}>
         PR #{pr.number}
       </button>
     </p>
@@ -145,6 +173,6 @@ async function handleComments(worktreePath: string, target: Session, number: num
     await insertIntoTerminal(target.id, prThreadsPrompt(number, threads))
     useWorkspace.getState().requestTerminalFocus()
   } catch (error) {
-    setPrNotice(worktreePath, { tone: 'error', text: `没能交给 ${agentLabel(target.kind)}：${error instanceof Error ? error.message : String(error)}` })
+    setPrNotice(worktreePath, { tone: 'error', text: pick(M).handOffFailed(agentLabel(target.kind), error instanceof Error ? error.message : String(error)) })
   }
 }

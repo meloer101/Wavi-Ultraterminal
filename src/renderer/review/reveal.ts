@@ -3,7 +3,7 @@
 // then bring the tag itself into view. Best effort; a finding whose line is not in the diff lands on its file's row.
 import { create } from 'zustand'
 import type { ReviewComment } from '@shared/review-comments'
-import { changeItems, changeKey, itemHeight } from '../panels/git/changes-model'
+import { changedFilesLabel, changeItems, changeKey, itemHeight } from '../panels/git/changes-model'
 import { gitOf, toggleFile, useGit } from '../panels/git/store'
 import { offsetsOf } from '../panels/git/virtual'
 import { useReviewComments } from '../state/review-comments'
@@ -70,7 +70,7 @@ export async function revealInDiff(root: string, comment: ReviewComment): Promis
   if (!gitOf(root).expanded.has(key)) toggleFile(root, key)
   await diffReady(root, key)
   const git = gitOf(root)
-  const scroller = document.querySelector<HTMLElement>('[role="list"][aria-label="改动的文件"]')
+  const scroller = document.querySelector<HTMLElement>(`[role="list"][aria-label="${changedFilesLabel()}"]`)
   if (git.changes && scroller) {
     const layout = scroller.dataset.layout === 'split' ? 'split' : 'unified'
     const own = (useReviewComments.getState().byRoot[root] ?? []).filter((c) => c.origin !== 'review')

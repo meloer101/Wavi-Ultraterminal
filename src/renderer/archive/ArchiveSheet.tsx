@@ -4,12 +4,39 @@
 // script shows its output and offers 仍然归档.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { Check, X } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { useRepoScripts } from '../scripts/run-script'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { archiveWorktree, blockerFor, type ArchiveStep, type ArchiveTarget } from './actions'
 import { closeArchiveSheet, useArchiveSheet } from './store'
 import styles from './ArchiveSheet.module.css'
+
+const M = defineMessages({
+  zh: {
+    archive: '归档',
+    stopSessions: '停止这里的会话',
+    runArchive: (script: string) => `运行 archive：${script}`,
+    snapshot: '工作区（含未提交的改动）记在本地，侧栏里先收起来',
+    restoreLater: '之后可以在跳转（⌘K）的历史里恢复',
+    notArchived: (message: string) => `${message}，还没归档`,
+    cancel: '取消',
+    archiving: '正在归档…',
+    archiveAnyway: '仍然归档'
+  },
+  en: {
+    archive: 'Archive',
+    stopSessions: 'Stop the sessions here',
+    runArchive: (script: string) => `Run archive: ${script}`,
+    snapshot: 'Keep the worktree (uncommitted changes included) locally and fold it out of the sidebar',
+    restoreLater: 'Restore it later from the history in Jump to (⌘K)',
+    notArchived: (message: string) => `${message}. Not archived yet`,
+    cancel: 'Cancel',
+    archiving: 'Archiving…',
+    archiveAnyway: 'Archive anyway'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -28,6 +55,7 @@ type Phase =
 const STEP_ORDER: ArchiveStep[] = ['stopping', 'script', 'snapshot']
 
 function Sheet({ target }: { target: ArchiveTarget }) {
+  const m = useMessages(M)
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' })
   const sheetRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -93,7 +121,7 @@ function Sheet({ target }: { target: ArchiveTarget }) {
       >
         <header className={styles.context}>
           <h2 id={titleId} className={styles.title}>
-            归档
+            {m.archive}
           </h2>
           <p className={styles.branch}>{target.branch}</p>
         </header>
@@ -103,13 +131,13 @@ function Sheet({ target }: { target: ArchiveTarget }) {
             <Line tone="error" text={blocker} />
           ) : (
             <>
-              <Line state={stepState('stopping')} text="停止这里的会话" />
-              {script !== undefined && <Line state={stepState('script')} text={`运行 archive：${script.replace(/\s+/g, ' ').trim()}`} />}
-              <Line state={stepState('snapshot')} text="工作区（含未提交的改动）记在本地，侧栏里先收起来" />
-              <Line text="之后可以在跳转（⌘K）的历史里恢复" />
+              <Line state={stepState('stopping')} text={m.stopSessions} />
+              {script !== undefined && <Line state={stepState('script')} text={m.runArchive(script.replace(/\s+/g, ' ').trim())} />}
+              <Line state={stepState('snapshot')} text={m.snapshot} />
+              <Line text={m.restoreLater} />
               {phase.kind === 'script-failed' && (
                 <>
-                  <Line tone="error" text={`${phase.message}，还没归档`} />
+                  <Line tone="error" text={m.notArchived(phase.message)} />
                   {phase.output && <pre className={styles.output}>{phase.output}</pre>}
                 </>
               )}
@@ -121,10 +149,10 @@ function Sheet({ target }: { target: ArchiveTarget }) {
         <footer className={styles.footer}>
           <span className={styles.spacer} />
           <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeArchiveSheet(true)}>
-            取消
+            {m.cancel}
           </button>
           <button type="button" className={styles.primary} disabled={busy || blocker !== null} onClick={primary}>
-            {busy ? '正在归档…' : phase.kind === 'script-failed' ? '仍然归档' : '归档'}
+            {busy ? m.archiving : phase.kind === 'script-failed' ? m.archiveAnyway : m.archive}
             <span className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>

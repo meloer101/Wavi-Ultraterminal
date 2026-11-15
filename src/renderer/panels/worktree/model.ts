@@ -4,6 +4,54 @@ import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import { isActiveStatus } from '@shared/lifecycle'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    noCommit: '无提交',
+    merged: '已合并',
+    main: '主目录',
+    rebasing: '变基中',
+    detachedUnreachable: (count: number) => `分离的 HEAD · ${count} 个提交不在分支上`,
+    detached: '分离的 HEAD',
+    locked: '已锁定',
+    folderGone: '文件夹已不在',
+    mainBlocked: '主目录不能删除',
+    activeSession: '有会话正在运行或等你处理，先结束它',
+    notDetailed: '还没读完它的状态，稍后再试',
+    lockedBlocked: '已被 git worktree lock 锁定',
+    rebasingBlocked: '正在变基，先完成或中止',
+    dirtyUnknown: '无法确认有没有未提交的改动',
+    dirty: (count: number) => `有 ${count} 个未提交的改动，先提交或丢弃`,
+    unreachableUnknown: '无法确认它的提交是否都在分支上',
+    unreachable: (count: number) => `有 ${count} 个提交不在任何分支上，先给它建一个分支`,
+    hasSession: '有会话',
+    branchKept: (branch: string) => `分支 ${branch} 保留`,
+    commitsElsewhere: '它的提交都已在其他分支上'
+  },
+  en: {
+    noCommit: 'no commits',
+    merged: 'Merged',
+    main: 'main folder',
+    rebasing: 'rebasing',
+    detachedUnreachable: (count: number) => `detached HEAD · ${count} ${count === 1 ? 'commit' : 'commits'} not on a branch`,
+    detached: 'detached HEAD',
+    locked: 'locked',
+    folderGone: 'folder is gone',
+    mainBlocked: "The main folder can't be deleted",
+    activeSession: 'A session is running or needs you. End it first',
+    notDetailed: "Its state hasn't been read yet. Try again in a moment",
+    lockedBlocked: 'Locked with git worktree lock',
+    rebasingBlocked: 'Rebasing. Finish or abort it first',
+    dirtyUnknown: "Can't tell whether there are uncommitted changes",
+    dirty: (count: number) => `${count} uncommitted ${count === 1 ? 'change' : 'changes'}. Commit or discard first`,
+    unreachableUnknown: "Can't tell whether all its commits are on a branch",
+    unreachable: (count: number) => `${count} ${count === 1 ? 'commit is' : 'commits are'} not on any branch. Create a branch for ${count === 1 ? 'it' : 'them'} first`,
+    hasSession: 'Has a session',
+    branchKept: (branch: string) => `Branch ${branch} is kept`,
+    commitsElsewhere: 'Its commits are all on other branches'
+  }
+})
 
 export interface WorktreeRow {
   /** Resolved path: stable identity across refreshes. */
@@ -41,7 +89,7 @@ export interface WorktreeGroups {
 }
 
 export function shortSha(sha: string | null): string {
-  return sha ? sha.slice(0, 7) : '无提交'
+  return sha ? sha.slice(0, 7) : pick(M).noCommit
 }
 
 /** `/Users/me/x` → `~/x`. */
@@ -59,18 +107,19 @@ export function formatDiff(info: Pick<GitWorktreeInfo, 'added' | 'removed' | 'di
 
 /** Commits of its own: `↑N`; 已合并 once they are all in the base; nothing at 0 or without a base. Behind is left out. */
 export function formatAhead(info: Pick<GitWorktreeInfo, 'ahead' | 'merged' | 'base'>): string {
-  if (info.merged && info.base) return '已合并'
+  if (info.merged && info.base) return pick(M).merged
   return info.ahead ? `↑${info.ahead}` : ''
 }
 
 /** What is odd about the checkout, said after its branch: main, a rebase, a detached HEAD, a lock, a missing folder. */
 function checkoutNotes(info: GitWorktreeInfo): string[] {
+  const m = pick(M)
   const notes: string[] = []
-  if (info.isMain) notes.push('主目录')
-  if (info.rebasing) notes.push('变基中')
-  else if (info.branch === null) notes.push(info.unreachableCommits ? `分离的 HEAD · ${info.unreachableCommits} 个提交不在分支上` : '分离的 HEAD')
-  if (info.locked) notes.push('已锁定')
-  if (info.prunable !== null) notes.push('文件夹已不在')
+  if (info.isMain) notes.push(m.main)
+  if (info.rebasing) notes.push(m.rebasing)
+  else if (info.branch === null) notes.push(info.unreachableCommits ? m.detachedUnreachable(info.unreachableCommits) : m.detached)
+  if (info.locked) notes.push(m.locked)
+  if (info.prunable !== null) notes.push(m.folderGone)
   return notes
 }
 
@@ -157,16 +206,17 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
  */
 export function deleteBlocker(row: Pick<WorktreeRow, 'info' | 'sessions'>): string | null {
   const { info } = row
-  if (info.isMain) return '主目录不能删除'
-  if (row.sessions.some((s) => isActiveStatus(s.status))) return '有会话正在运行或等你处理，先结束它'
-  if (!info.detailed) return '还没读完它的状态，稍后再试'
-  if (info.locked) return '已被 git worktree lock 锁定'
-  if (info.rebasing) return '正在变基，先完成或中止'
-  if (info.dirtyCount === null) return '无法确认有没有未提交的改动'
-  if (info.dirtyCount > 0) return `有 ${info.dirtyCount} 个未提交的改动，先提交或丢弃`
+  const m = pick(M)
+  if (info.isMain) return m.mainBlocked
+  if (row.sessions.some((s) => isActiveStatus(s.status))) return m.activeSession
+  if (!info.detailed) return m.notDetailed
+  if (info.locked) return m.lockedBlocked
+  if (info.rebasing) return m.rebasingBlocked
+  if (info.dirtyCount === null) return m.dirtyUnknown
+  if (info.dirtyCount > 0) return m.dirty(info.dirtyCount)
   if (info.branch === null && info.head) {
-    if (info.unreachableCommits === null) return '无法确认它的提交是否都在分支上'
-    if (info.unreachableCommits > 0) return `有 ${info.unreachableCommits} 个提交不在任何分支上，先给它建一个分支`
+    if (info.unreachableCommits === null) return m.unreachableUnknown
+    if (info.unreachableCommits > 0) return m.unreachable(info.unreachableCommits)
   }
   return null
 }
@@ -180,7 +230,7 @@ export interface CleanupPlan {
 export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
   const plan: CleanupPlan = { remove: [], skip: [] }
   for (const row of rows) {
-    const reason = row.sessions.length > 0 ? '有会话' : deleteBlocker(row)
+    const reason = row.sessions.length > 0 ? pick(M).hasSession : deleteBlocker(row)
     if (reason) plan.skip.push({ row, reason })
     else plan.remove.push(row)
   }
@@ -189,7 +239,7 @@ export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
 
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
-  return info.branch ? `分支 ${info.branch} 保留` : '它的提交都已在其他分支上'
+  return info.branch ? pick(M).branchKept(info.branch) : pick(M).commitsElsewhere
 }
 
 /** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */

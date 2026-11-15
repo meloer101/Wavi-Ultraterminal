@@ -3,11 +3,29 @@
 // then fold it out of every list. Restore: main brings the folder back only if it is gone; the records come back and
 // the agents resume their conversations on first view.
 import { archiveBlocker, newArchiveId, sessionIdsToStop, shouldRunArchiveScript } from '@shared/archive'
+import { defineMessages, pick } from '@shared/i18n'
 import type { ProjectId, WorktreeId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 import { disposeTerminal } from '../terminal/registry'
 import { forgetLiveSessions } from '../terminal/live-sessions'
 import { closeWorktreeTabs } from '../panels/terminal/actions'
+
+const M = defineMessages({
+  zh: {
+    needsApproval: '这个仓库的 archive 脚本要先在 Mac 上批准一次',
+    scriptDidNotRun: 'archive 脚本没能运行',
+    scriptFailed: (code: number) => `archive 脚本没通过（退出码 ${code}）`,
+    snapshotFailed: (message: string) => `没能记下工作区：${message}`,
+    archiveGone: '这个归档已经不在了'
+  },
+  en: {
+    needsApproval: "This repository's archive script must be approved once on the Mac first",
+    scriptDidNotRun: 'The archive script could not run',
+    scriptFailed: (code: number) => `The archive script failed (exit code ${code})`,
+    snapshotFailed: (message: string) => `Couldn't save the worktree: ${message}`,
+    archiveGone: 'This archive no longer exists'
+  }
+})
 
 export interface ArchiveTarget {
   projectId: ProjectId
@@ -56,7 +74,7 @@ export async function archiveWorktree(
   // before anything is stopped.
   if (options.unattended) {
     const scripts = await window.tr.repoScripts.get(target.worktreePath).catch(() => null)
-    if (scripts?.scripts.archive !== undefined && !scripts.approved) return { ok: false, stage: 'blocked', message: '这个仓库的 archive 脚本要先在 Mac 上批准一次' }
+    if (scripts?.scripts.archive !== undefined && !scripts.approved) return { ok: false, stage: 'blocked', message: pick(M).needsApproval }
   }
 
   options.onStep?.('stopping')
@@ -80,7 +98,7 @@ export async function archiveWorktree(
         return {
           ok: false,
           stage: 'script',
-          message: result.code === null ? 'archive 脚本没能运行' : `archive 脚本没通过（退出码 ${result.code}）`,
+          message: result.code === null ? pick(M).scriptDidNotRun : pick(M).scriptFailed(result.code),
           output: result.output.trim()
         }
       }
@@ -90,7 +108,7 @@ export async function archiveWorktree(
   options.onStep?.('snapshot')
   const id = newArchiveId(Date.now(), Math.random())
   const saved = await window.tr.archive.capture(target.root, target.worktreePath, id)
-  if (!saved.ok) return { ok: false, stage: 'snapshot', message: `没能记下工作区：${saved.message}` }
+  if (!saved.ok) return { ok: false, stage: 'snapshot', message: pick(M).snapshotFailed(saved.message) }
   useWorkspace.getState().archiveWorktrees(target.worktreeIds, { id, at: Date.now(), commit: saved.commit, dirty: saved.dirty })
   return { ok: true, dirty: saved.dirty }
 }
@@ -100,7 +118,7 @@ export async function restoreArchivedWorktree(worktreeId: WorktreeId): Promise<v
   const state = useWorkspace.getState()
   const worktree = state.worktrees.find((w) => w.id === worktreeId)
   const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
-  if (!worktree?.archived || !project) throw new Error('这个归档已经不在了')
+  if (!worktree?.archived || !project) throw new Error(pick(M).archiveGone)
   const result = await window.tr.archive.restore({ root: project.rootPath, worktree: worktree.path, branch: worktree.branch, id: worktree.archived.id })
   if (!result.ok) throw new Error(result.message)
   const ids = useWorkspace

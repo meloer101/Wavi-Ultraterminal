@@ -8,6 +8,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import { severityCounts } from '@shared/background-review'
 import type { MergeMethod, PrStatus } from '@shared/pull-requests'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { loadSavedReview, reviewLine, useBackgroundReview } from '../../review/background'
 import { useReviewComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
@@ -19,11 +21,45 @@ import { METHOD_LABEL, prMergeView } from './pr-model'
 import { closeMergeSheet, type MergeTarget } from './store'
 import styles from './MergeSheet.module.css'
 
+const M = defineMessages({
+  zh: {
+    githubMerges: '检查通过后由 GitHub 合并',
+    mergeAs: (viewer: string | null) => `以 @${viewer || '你的账号'} 合并 · 分支保护照样由 GitHub 执行`,
+    mergeTo: '合并到',
+    method: '合并方式',
+    onlyMethods: (count: number) => `仓库只允许${count === 1 ? '这一种' : `这 ${count} 种`}`,
+    deleteRemote: '合并后删除远程分支（本地分支保留）',
+    repoDeletes: '仓库设置了合并后自动删除',
+    repoDecides: '检查通过后合并时由仓库设置决定',
+    cancel: '取消',
+    done: '完成',
+    merging: '正在合并…',
+    mergeWhenGreen: '检查通过后合并',
+    mergePr: (number: number) => `合并 PR #${number}`
+  },
+  en: {
+    githubMerges: 'GitHub merges once the checks pass',
+    mergeAs: (viewer: string | null) => `Merging as @${viewer || 'your account'} · GitHub still enforces branch protection`,
+    mergeTo: 'Merge into',
+    method: 'Merge method',
+    onlyMethods: (count: number) => (count === 1 ? 'The repository allows only this one' : `The repository allows only these ${count}`),
+    deleteRemote: 'Delete the remote branch after merging (the local branch stays)',
+    repoDeletes: 'The repository deletes it after merging',
+    repoDecides: "When merging after the checks pass, the repository's setting decides",
+    cancel: 'Cancel',
+    done: 'Done',
+    merging: 'Merging…',
+    mergeWhenGreen: 'Merge when green',
+    mergePr: (number: number) => `Merge PR #${number}`
+  }
+})
+
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 type Phase = { kind: 'ready' } | { kind: 'merging' } | { kind: 'done'; lines: CheckLine[] }
 
 export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTarget; status: PrStatus; targetSwitch: ReactNode }) {
+  const t = useMessages(M)
   const titleId = useId()
   const sheetRef = useRef<HTMLDivElement>(null)
   const ids = target.worktreeIds
@@ -91,9 +127,7 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
     if (event.target === event.currentTarget && !busy) closeMergeSheet(true)
   }
 
-  const who = view.waitForChecks
-    ? '检查通过后由 GitHub 合并'
-    : `以 @${details.viewer || '你的账号'} 合并 · 分支保护照样由 GitHub 执行`
+  const who = view.waitForChecks ? t.githubMerges : t.mergeAs(details.viewer)
 
   return (
     <div className={styles.scrim} onMouseDown={onScrim} data-region="merge">
@@ -112,7 +146,7 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
         <header className={styles.context}>
           <div className={styles.titleRow}>
             <h2 id={titleId} className={styles.title}>
-              合并到
+              {t.mergeTo}
             </h2>
             {targetSwitch}
           </div>
@@ -136,11 +170,11 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
 
         {phase.kind !== 'done' && !blocked && (
           <div className={styles.options}>
-            <div className={styles.field} role="group" aria-label="合并方式">
-              <span className={styles.label}>合并方式</span>
+            <div className={styles.field} role="group" aria-label={t.method}>
+              <span className={styles.label}>{t.method}</span>
               <div className={styles.control}>
-                <Segmented label="合并方式" value={methods.includes(method) ? method : methods[0]!} options={methods.map((m) => ({ value: m, label: METHOD_LABEL[m] }))} onChange={setMethod} />
-                {methods.length < 3 && <p className={styles.note}>仓库只允许{methods.length === 1 ? '这一种' : `这 ${methods.length} 种`}</p>}
+                <Segmented label={t.method} value={methods.includes(method) ? method : methods[0]!} options={methods.map((m) => ({ value: m, label: METHOD_LABEL[m] }))} onChange={setMethod} />
+                {methods.length < 3 && <p className={styles.note}>{t.onlyMethods(methods.length)}</p>}
               </div>
             </div>
             <div className={styles.field}>
@@ -150,8 +184,8 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
                   checked={details.repo.deleteBranchOnMerge || (deleteRemote && !view.waitForChecks)}
                   disabled={details.repo.deleteBranchOnMerge || view.waitForChecks || busy}
                   onChange={setDeleteRemote}
-                  label="合并后删除远程分支（本地分支保留）"
-                  note={details.repo.deleteBranchOnMerge ? '仓库设置了合并后自动删除' : view.waitForChecks ? '检查通过后合并时由仓库设置决定' : null}
+                  label={t.deleteRemote}
+                  note={details.repo.deleteBranchOnMerge ? t.repoDeletes : view.waitForChecks ? t.repoDecides : null}
                 />
               </div>
             </div>
@@ -170,17 +204,17 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
           <span className={styles.spacer} />
           {phase.kind !== 'done' && (
             <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeMergeSheet(true)}>
-              取消
+              {t.cancel}
             </button>
           )}
           {phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
-              完成
+              {t.done}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           ) : (
             <button type="button" className={styles.primary} disabled={blocked || busy} onClick={() => void merge()}>
-              {busy ? '正在合并…' : view.waitForChecks ? '检查通过后合并' : `合并 PR #${pr.number}`}
+              {busy ? t.merging : view.waitForChecks ? t.mergeWhenGreen : t.mergePr(pr.number)}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           )}

@@ -4,9 +4,34 @@
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Smartphone } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { parseAddress, splitUrl, type BrowserPageState } from '@shared/browser'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { IconButton } from '../../ui/IconButton'
 import { ClosePanelButton } from '../PaneHeader'
 import styles from './BrowserView.module.css'
+
+const M = defineMessages({
+  zh: {
+    back: '后退',
+    forward: '前进',
+    reload: '刷新',
+    address: '地址',
+    addressPlaceholder: '输入地址或端口号，如 5173',
+    exitMobile: '退出手机视口',
+    mobile: '手机视口 375',
+    openExternal: '用系统浏览器打开'
+  },
+  en: {
+    back: 'Back',
+    forward: 'Forward',
+    reload: 'Reload',
+    address: 'Address',
+    addressPlaceholder: 'Enter an address or a port, e.g. 5173',
+    exitMobile: 'Exit phone viewport',
+    mobile: 'Phone viewport 375',
+    openExternal: 'Open in system browser'
+  }
+})
 
 export function BrowserBar({
   worktree,
@@ -18,6 +43,7 @@ export function BrowserBar({
   /** An address that cannot be opened: the reason, or null to clear it. */
   onError: (message: string | null) => void
 }) {
+  const m = useMessages(M)
   const url = page?.url ?? ''
   const mobile = page?.mobile ?? false
   const [draft, setDraft] = useState<string | null>(null)
@@ -58,13 +84,13 @@ export function BrowserBar({
   return (
     <div className={styles.header}>
       <div className={styles.bar}>
-        <IconButton label="后退" disabled={!page?.canGoBack} onClick={() => browser.back(worktree)}>
+        <IconButton label={m.back} disabled={!page?.canGoBack} onClick={() => browser.back(worktree)}>
           <ArrowLeft size={16} strokeWidth={1.75} />
         </IconButton>
-        <IconButton label="前进" disabled={!page?.canGoForward} onClick={() => browser.forward(worktree)}>
+        <IconButton label={m.forward} disabled={!page?.canGoForward} onClick={() => browser.forward(worktree)}>
           <ArrowRight size={16} strokeWidth={1.75} />
         </IconButton>
-        <IconButton label="刷新" disabled={!url} onClick={() => browser.reload(worktree)}>
+        <IconButton label={m.reload} disabled={!url} onClick={() => browser.reload(worktree)}>
           <RotateCw size={16} strokeWidth={1.75} />
         </IconButton>
         <label className={styles.address} data-editing={editing}>
@@ -72,8 +98,8 @@ export function BrowserBar({
           <input
             ref={input}
             className={styles.addressInput}
-            aria-label="地址"
-            placeholder="输入地址或端口号，如 5173"
+            aria-label={m.address}
+            placeholder={m.addressPlaceholder}
             spellCheck={false}
             autoComplete="off"
             value={draft ?? url}
@@ -97,7 +123,7 @@ export function BrowserBar({
         </label>
         <span className={styles.gap} />
         <IconButton
-          label={mobile ? '退出手机视口' : '手机视口 375'}
+          label={mobile ? m.exitMobile : m.mobile}
           active={mobile}
           aria-pressed={mobile}
           disabled={!url}
@@ -105,7 +131,7 @@ export function BrowserBar({
         >
           <Smartphone size={16} strokeWidth={1.75} />
         </IconButton>
-        <IconButton label="用系统浏览器打开" disabled={!url} onClick={() => browser.openExternal(worktree)}>
+        <IconButton label={m.openExternal} disabled={!url} onClick={() => browser.openExternal(worktree)}>
           <ExternalLink size={16} strokeWidth={1.75} />
         </IconButton>
       </div>
