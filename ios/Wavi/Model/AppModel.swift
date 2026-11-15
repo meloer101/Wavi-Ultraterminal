@@ -185,7 +185,7 @@ final class AppModel {
   }
 
   func call(_ command: PhoneCommand) async -> RemoteResult {
-    await client?.request(command) ?? .failed("没有连上 Mac")
+    await client?.request(command) ?? .failed(String(localized: "没有连上 Mac"))
   }
 
   /// The link is open, or opened within `seconds` (the app was just woken in the background).
@@ -219,7 +219,7 @@ final class AppModel {
   /// socket from before the app was suspended may be dead without knowing it) and the list fetched, then the answer
   /// sent; the prompt goes at once (Wavi's list follows), or the card says why it did not.
   func answerFromActivity(prompt: String, command: PhoneCommand) async {
-    var result = RemoteResult.failed("没有连上 Mac")
+    var result = RemoteResult.failed(String(localized: "没有连上 Mac"))
     var target: RemotePrompt?
     if await whenOpen() {
       if !(await refresh(timeout: 4)) {

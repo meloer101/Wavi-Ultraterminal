@@ -1,0 +1,3 @@
+/* What iOS asks before the app may use the camera or the local network (the same as project.yml). */
+"NSCameraUsageDescription" = "扫描 Mac 上的配对二维码，拍照发给智能体。";
+"NSLocalNetworkUsageDescription" = "连接同一个 Wi-Fi 里的 Mac 上的 Wavi。";

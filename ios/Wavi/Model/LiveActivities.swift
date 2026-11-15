@@ -63,7 +63,7 @@ final class LiveActivities {
     let content = ActivityContent(state: state, staleDate: stale)
     if let activity, Self.live(activity) {
       let config = alert && state.prompt != nil && UIApplication.shared.applicationState != .active
-        ? AlertConfiguration(title: "\(state.kind == .permission ? "等你确认" : "等你回答")", body: "\(state.title)", sound: .default) : nil
+        ? AlertConfiguration(title: state.kind == .permission ? "等你确认" : "等你回答", body: "\(state.title)", sound: .default) : nil
       return Task { await activity.update(content, alertConfiguration: config) }
     }
     // 空闲 only lets a card end quietly; it never opens one.
