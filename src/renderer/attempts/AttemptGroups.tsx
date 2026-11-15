@@ -18,6 +18,8 @@ import {
   type DiffSummary
 } from '@shared/attempt-groups'
 import type { Session, SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { glyphStatus } from '../lifecycle/present'
 import { GROUP_LABEL } from '../overview/model'
 import { showCompare } from '../overview/store'
@@ -31,6 +33,59 @@ import styles from './AttemptGroups.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const DIFF_POLL_MS = 4000
+
+const M = defineMessages({
+  zh: {
+    title: '同任务多解',
+    notArchived: (failures: string[]) => `没有归档：${failures.join('；')}`,
+    reportTo: (title: string) => `汇报给 ${title}`,
+    basedOn: (base: string) => `基于 ${base}`,
+    mergedBranch: (branch: string) => `已合并 ${branch}`,
+    listSep: '、',
+    archiveTitle: (branches: string) => `先确认，再归档 ${branches}；可以在跳转（⌘K）的历史里恢复`,
+    archiving: '正在归档…',
+    archiveRest: (n: number) => `归档其余 ${n} 份`,
+    compareTitle: '在浮层里并排看这几份的终端、改动和检查',
+    compare: '比较',
+    creating: '正在创建 worktree…',
+    starting: '等 agent 启动后发送…',
+    sending: '正在发送…',
+    diffError: '读不出改动',
+    notSent: (message: string) => `没发出去：${message}`,
+    resendTitle: '把任务再发给这一份一次（用你自己的额度）',
+    resend: '再发一次',
+    diffTitle: '进入这个会话，打开 Git · 变更',
+    diff: '看 diff',
+    merged: '已合并',
+    mergeTitle: (branch: string, base: string) => `把 ${branch} 合并到 ${base}（先预检）`,
+    merge: '合并这个'
+  },
+  en: {
+    title: 'Same task, several tries',
+    notArchived: (failures: string[]) => `Not archived: ${failures.join('; ')}`,
+    reportTo: (title: string) => `Reports to ${title}`,
+    basedOn: (base: string) => `Based on ${base}`,
+    mergedBranch: (branch: string) => `Merged ${branch}`,
+    listSep: ', ',
+    archiveTitle: (branches: string) => `Asks first, then archives ${branches}; restore them from History in Jump to (⌘K)`,
+    archiving: 'Archiving…',
+    archiveRest: (n: number) => (n === 1 ? 'Archive the other 1' : `Archive the other ${n}`),
+    compareTitle: "See these tries' terminals, changes and checks side by side in an overlay",
+    compare: 'Compare',
+    creating: 'Creating worktree…',
+    starting: 'Sends once the agent is up…',
+    sending: 'Sending…',
+    diffError: "Couldn't read the changes",
+    notSent: (message: string) => `Not sent: ${message}`,
+    resendTitle: 'Send the task to this try again (uses your own usage)',
+    resend: 'Send again',
+    diffTitle: 'Open this session with Git · Changes',
+    diff: 'View diff',
+    merged: 'Merged',
+    mergeTitle: (branch: string, base: string) => `Merge ${branch} into ${base} (checks first)`,
+    merge: 'Merge this'
+  }
+})
 
 interface MemberView {
   session: Session
@@ -64,12 +119,13 @@ export function AttemptGroups() {
     const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
     return new Set(sessions.filter((x) => !archived.has(x.worktreeId)).map((x) => x.id))
   }, [sessions, worktrees])
+  const m = useMessages(M)
   const shown = groups.filter((g) => groupShown(g, (id) => listed.has(id)))
   if (shown.length === 0) return null
   return (
-    <section className={styles.section} aria-label="同任务多解" data-testid="attempt-groups">
+    <section className={styles.section} aria-label={m.title} data-testid="attempt-groups">
       <div className={styles.header}>
-        <h2>同任务多解</h2>
+        <h2>{m.title}</h2>
         <span className={styles.count}>{shown.length}</span>
       </div>
       {shown.map((g) => (
@@ -80,6 +136,7 @@ export function AttemptGroups() {
 }
 
 function GroupRow({ group }: { group: AttemptGroup }) {
+  const m = useMessages(M)
   const members = useMembers(group)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -92,7 +149,7 @@ function GroupRow({ group }: { group: AttemptGroup }) {
     setNotice(null)
     const result = await archiveRemaining(group)
     setBusy(false)
-    if (result.failures.length > 0) setNotice(`没有归档：${result.failures.join('；')}`)
+    if (result.failures.length > 0) setNotice(m.notArchived(result.failures))
   }
 
   return (
@@ -103,15 +160,15 @@ function GroupRow({ group }: { group: AttemptGroup }) {
       <span className={styles.task} title={group.prompt}>
         {promptPreview(group.prompt)}
       </span>
-      <span className={styles.base}>{parentTitle !== null ? `汇报给 ${parentTitle}` : `基于 ${group.base}`}</span>
+      <span className={styles.base}>{parentTitle !== null ? m.reportTo(parentTitle) : m.basedOn(group.base)}</span>
       <span className={styles.members}>
-        {members.map((m) => {
-          const status = glyphStatus(m.session)
-          const text = `${m.label} · ${GROUP_LABEL[status]} · ${m.branch}`
+        {members.map((member) => {
+          const status = glyphStatus(member.session)
+          const text = `${member.label} · ${GROUP_LABEL[status]} · ${member.branch}`
           return (
-            <span key={m.session.id} className={styles.member} title={text} aria-label={text} data-member-id={m.session.id}>
+            <span key={member.session.id} className={styles.member} title={text} aria-label={text} data-member-id={member.session.id}>
               <StatusGlyph status={status} />
-              <span>{m.label}</span>
+              <span>{member.label}</span>
             </span>
           )
         })}
@@ -119,7 +176,7 @@ function GroupRow({ group }: { group: AttemptGroup }) {
       {group.merged && (
         <span className={styles.merged}>
           <GitMerge size={12} strokeWidth={2} aria-hidden />
-          已合并 {group.merged.branch}
+          {m.mergedBranch(group.merged.branch)}
         </span>
       )}
       {notice && (
@@ -133,20 +190,20 @@ function GroupRow({ group }: { group: AttemptGroup }) {
           type="button"
           className={enterStyles.enter}
           disabled={busy}
-          title={`先确认，再归档 ${remainingBranches(group).map((b) => b.branch).join('、')}；可以在跳转（⌘K）的历史里恢复`}
+          title={m.archiveTitle(remainingBranches(group).map((b) => b.branch).join(m.listSep))}
           onClick={() => void archive()}
         >
-          {busy ? '正在归档…' : `归档其余 ${left.length} 份`}
+          {busy ? m.archiving : m.archiveRest(left.length)}
         </button>
       )}
       {comparable.length > 0 && (
         <button
           type="button"
           className={enterStyles.enter}
-          title="在浮层里并排看这几份的终端、改动和检查"
-          onClick={() => showCompare(group.id, comparable.map((m) => m.session.id))}
+          title={m.compareTitle}
+          onClick={() => showCompare(group.id, comparable.map((c) => c.session.id))}
         >
-          比较
+          {m.compare}
         </button>
       )}
     </div>
@@ -175,15 +232,12 @@ function useDiffSummary(path: string | undefined, base: string): DiffSummary | '
   return summary
 }
 
-const LAUNCH_TEXT: Record<Exclude<MemberLaunch['phase'], 'failed'>, string | null> = {
-  creating: '正在创建 worktree…',
-  starting: '等 agent 启动后发送…',
-  sending: '正在发送…',
-  sent: null
-}
+const launchText = (m: (typeof M)['zh'], phase: Exclude<MemberLaunch['phase'], 'failed'>): string | null =>
+  ({ creating: m.creating, starting: m.starting, sending: m.sending, sent: null })[phase]
 
 /** The bar under a member's title bar in the compare overlay. */
 export const CompareBar = memo(function CompareBar({ groupId, sessionId }: { groupId: string; sessionId: SessionId }) {
+  const m = useMessages(M)
   const group = useAttemptGroups((s) => s.groups.find((g) => g.id === groupId))
   const launch = useAttemptGroups((s) => s.launches[sessionId])
   const members = useMembers(group)
@@ -191,38 +245,38 @@ export const CompareBar = memo(function CompareBar({ groupId, sessionId }: { gro
   const diff = useDiffSummary(member?.path, group?.base ?? '')
   if (!group || !member) return null
   const merged = group.merged?.sessionId === sessionId
-  const launchText = launch && launch.phase !== 'failed' ? LAUNCH_TEXT[launch.phase] : null
+  const launchLine = launch && launch.phase !== 'failed' ? launchText(m, launch.phase) : null
   return (
     <div className={styles.compare} data-testid="attempt-compare" data-member-id={sessionId}>
       <span className={styles.compareLabel}>{member.label}</span>
       <span className={styles.diff} data-testid="attempt-diff">
-        {diff === null ? '…' : diff === 'error' ? '读不出改动' : diffSummaryText(diff)}
+        {diff === null ? '…' : diff === 'error' ? m.diffError : diffSummaryText(diff)}
       </span>
       <TurnChecksTag sessionId={sessionId} />
-      {launchText && <span className={styles.launch}>{launchText}</span>}
+      {launchLine && <span className={styles.launch}>{launchLine}</span>}
       {launch?.phase === 'failed' && (
         <span className={styles.failed} role="status" title={launch.message}>
           <AlertCircle size={12} strokeWidth={2} aria-hidden />
-          没发出去：{launch.message}
+          {m.notSent(launch.message)}
         </span>
       )}
       <span className={styles.spacer} />
       {launch?.phase === 'failed' && (
-        <button type="button" className={enterStyles.enter} title="把任务再发给这一份一次（用你自己的额度）" onClick={() => resend(sessionId)}>
-          再发一次
+        <button type="button" className={enterStyles.enter} title={m.resendTitle} onClick={() => resend(sessionId)}>
+          {m.resend}
         </button>
       )}
-      <button type="button" className={enterStyles.enter} title="进入这个会话，打开 Git · 变更" onClick={() => openMemberDiff(sessionId)}>
-        看 diff
+      <button type="button" className={enterStyles.enter} title={m.diffTitle} onClick={() => openMemberDiff(sessionId)}>
+        {m.diff}
       </button>
       {merged ? (
         <span className={styles.mergedTag}>
           <GitMerge size={12} strokeWidth={2} aria-hidden />
-          已合并
+          {m.merged}
         </span>
       ) : (
-        <button type="button" className={enterStyles.enter} title={`把 ${member.branch} 合并到 ${group.base}（先预检）`} onClick={() => mergeMember(sessionId)}>
-          合并这个
+        <button type="button" className={enterStyles.enter} title={m.mergeTitle(member.branch, group.base)} onClick={() => mergeMember(sessionId)}>
+          {m.merge}
         </button>
       )}
     </div>

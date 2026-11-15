@@ -10,6 +10,8 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { dropRect, evenSplit, measureSplit, PICKER_PANE, resizeSplit, type PaneBox, type Rect, type Size, type SplitHandle, type SplitNode } from '@shared/split-layout'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { MAIN_WINDOW, viewRoot } from '@shared/window-layout'
 import { glyphStatus } from '../lifecycle/present'
 import { SessionHeader } from '../session-header/SessionHeader'
@@ -24,6 +26,37 @@ import './font-zoom'
 import { dropLabel, pickerRows, stackHandles } from './model'
 import { setSplitGeometry, useSessionDrag, type SessionDrag } from './store'
 import styles from './SplitArea.module.css'
+
+const M = defineMessages({
+  zh: {
+    resizeWidth: '调整宽度',
+    resizeHeight: '调整高度',
+    hairlineTitle: '拖动调整大小，双击两边等分',
+    pickerTitle: '选择这一格显示的会话',
+    keys: '↵ 显示 · Esc 取消',
+    cancelPane: '取消这一格',
+    searchPlaceholder: '搜索会话、项目或分支',
+    search: '搜索会话',
+    noMatch: '没有匹配的会话',
+    noOthers: '没有其他会话了。⌘N 新建一个',
+    sessions: '会话',
+    newWindow: '松开在新窗口中打开'
+  },
+  en: {
+    resizeWidth: 'Resize width',
+    resizeHeight: 'Resize height',
+    hairlineTitle: 'Drag to resize, double-click to split evenly',
+    pickerTitle: 'Choose the session for this pane',
+    keys: '↵ Show · Esc Cancel',
+    cancelPane: 'Cancel this pane',
+    searchPlaceholder: 'Search sessions, projects or branches',
+    search: 'Search sessions',
+    noMatch: 'No matching sessions',
+    noOthers: 'No other sessions. ⌘N to start one',
+    sessions: 'Sessions',
+    newWindow: 'Release to open in a new window'
+  }
+})
 
 /** The drop target sits this far inside the part of the pane it will take (Figma 21D). */
 const DROP_INSET = 8
@@ -121,6 +154,7 @@ function PaneHeader({ rect, focused, many }: { rect: PaneBox; focused: boolean; 
 
 /** The glass between two panes: an 8 px strip that drags to resize, with a short grip always shown in its middle. */
 function Hairline({ handle }: { handle: SplitHandle }) {
+  const m = useMessages(M)
   const across = handle.dir === 'row'
   const [dragging, setDragging] = useState(false)
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -157,8 +191,8 @@ function Hairline({ handle }: { handle: SplitHandle }) {
       data-dragging={dragging}
       role="separator"
       aria-orientation={across ? 'vertical' : 'horizontal'}
-      aria-label={across ? '调整宽度' : '调整高度'}
-      title="拖动调整大小，双击两边等分"
+      aria-label={across ? m.resizeWidth : m.resizeHeight}
+      title={m.hairlineTitle}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
     />
@@ -194,6 +228,7 @@ const useClockNow = (): number => useSyncExternalStore(subscribeClock, () => Mat
 
 /** ⌘D / ⇧⌘D's new pane (Figma 21G): the sessions not shown yet, filtered as you type; ↵ shows one, Esc cancels. */
 function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: boolean }) {
+  const m = useMessages(M)
   const [filter, setFilter] = useState('')
   const [at, setAt] = useState(0)
   const now = useClockNow()
@@ -232,7 +267,7 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
       style={box(rect)}
       data-glass-card=""
       data-pane-id={PICKER_PANE}
-      aria-label="选择这一格显示的会话"
+      aria-label={m.pickerTitle}
       onKeyDown={onKeyDown}
       onFocus={() => usePickerFocus.setState({ focused: true })}
       onBlur={(e) => {
@@ -240,10 +275,10 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
       }}
     >
       <header className={styles.pickerBar} data-drag-region={top} data-sidebar-collapsed={lead && sidebarCollapsed}>
-        <h2 className={styles.pickerTitle}>选择这一格显示的会话</h2>
+        <h2 className={styles.pickerTitle}>{m.pickerTitle}</h2>
         <span className={styles.spacer} />
-        <span className={styles.keys}>↵ 显示 · Esc 取消</span>
-        <IconButton label="取消这一格" onClick={cancel}>
+        <span className={styles.keys}>{m.keys}</span>
+        <IconButton label={m.cancelPane} onClick={cancel}>
           <X size={16} strokeWidth={1.75} />
         </IconButton>
       </header>
@@ -251,8 +286,8 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
         <input
           className={styles.filter}
           type="text"
-          placeholder="搜索会话、项目或分支"
-          aria-label="搜索会话"
+          placeholder={m.searchPlaceholder}
+          aria-label={m.search}
           spellCheck={false}
           autoFocus
           value={filter}
@@ -262,9 +297,9 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
           }}
         />
         {rows.length === 0 ? (
-          <p className={styles.empty}>{filter ? '没有匹配的会话' : '没有其他会话了。⌘N 新建一个'}</p>
+          <p className={styles.empty}>{filter ? m.noMatch : m.noOthers}</p>
         ) : (
-          <div className={styles.list} role="listbox" aria-label="会话">
+          <div className={styles.list} role="listbox" aria-label={m.sessions}>
             {rows.map((row, i) => (
               <button
                 key={row.session.id}
@@ -294,6 +329,7 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
 
 /** Follows the pointer while a session is dragged (Figma 21D DragGhost); mounted once per window. */
 export function SessionDragGhost() {
+  const m = useMessages(M)
   const { key: windowKey, win } = useWindowScope()
   const drag = useSessionDrag((s) => (s.drag?.window === windowKey ? s.drag : null))
   const session = useWorkspace((s) => (drag ? s.sessions.find((x) => x.id === drag.id) : undefined))
@@ -307,7 +343,7 @@ export function SessionDragGhost() {
         style={{ left: clamp(drag.x + 14, 8, win.innerWidth - 220), top: clamp(drag.y + 18, 8, win.innerHeight - 40) }}
         aria-hidden
       >
-        松开在新窗口中打开
+        {m.newWindow}
       </span>
     )
   }

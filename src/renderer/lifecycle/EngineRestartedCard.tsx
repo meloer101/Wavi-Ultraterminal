@@ -1,9 +1,20 @@
 import { useState } from 'react'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
+import { useMessages } from '../i18n'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { lostSessionIds, recoverLostSessions, useHostRestart } from './host-restart'
 import styles from './EngineRestartedCard.module.css'
+
+const M = defineMessages({
+  zh: { title: '终端进程意外退出，已自动重启', lost: (n: number) => `${n} 个会话需要恢复`, recover: '全部恢复' },
+  en: {
+    title: 'The terminal process quit unexpectedly and was restarted',
+    lost: (n: number) => (n === 1 ? '1 session needs recovering' : `${n} sessions need recovering`),
+    recover: 'Recover all'
+  }
+})
 
 /**
  * Figma Screen 10 "Engine restarted" (64:2344): shown in each session the pty-host crash took down.
@@ -11,6 +22,7 @@ import styles from './EngineRestartedCard.module.css'
  */
 export function EngineRestartedCard({ sessionId }: { sessionId: SessionId }) {
   const [busy, setBusy] = useState(false)
+  const m = useMessages(M)
   const sessions = useWorkspace((s) => s.sessions)
   const lost = useHostRestart((s) => s.lost)
   const lostIds = lostSessionIds(lost, sessions)
@@ -27,11 +39,11 @@ export function EngineRestartedCard({ sessionId }: { sessionId: SessionId }) {
         <StatusGlyph status="error" />
       </span>
       <div className={styles.text}>
-        <p className={styles.title}>终端进程意外退出，已自动重启</p>
-        <p className={styles.detail}>{lostIds.length} 个会话需要恢复</p>
+        <p className={styles.title}>{m.title}</p>
+        <p className={styles.detail}>{m.lost(lostIds.length)}</p>
       </div>
       <button type="button" className={styles.primary} disabled={busy} onClick={recover}>
-        全部恢复
+        {m.recover}
       </button>
     </div>
   )

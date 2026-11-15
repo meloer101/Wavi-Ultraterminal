@@ -3,10 +3,30 @@ import type { SubagentInfo } from '@shared/agent-events'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
 import type { SidebarGroupBy } from '@shared/workspace-file'
+import { defineMessages, pick } from '@shared/i18n'
 import type { PendingStart } from '@shared/dispatch'
 import { memberLine, TEAM_GLYPH, type TeamState } from '@shared/agent-team'
 import { phaseLine } from '../lifecycle/present'
 import { currentPhase, isLiveRun, phaseViews, runOutcome, type WorkflowPhaseView, type WorkflowRun } from '@shared/workflow-run'
+
+const M = defineMessages({
+  zh: {
+    doneReply: (reply: string) => `已完成 · ${reply}`,
+    doneUnread: '已完成 · 未读',
+    snapshot: '快照',
+    scheduled: (branch: string) => `定时 · ${branch}`,
+    team: (n: number) => `队伍 · ${n} 人`,
+    pending: '待开始'
+  },
+  en: {
+    doneReply: (reply: string) => `Done · ${reply}`,
+    doneUnread: 'Done · unread',
+    snapshot: 'Snapshot',
+    scheduled: (branch: string) => `Scheduled · ${branch}`,
+    team: (n: number) => (n === 1 ? 'Team · 1 member' : `Team · ${n} members`),
+    pending: 'Waiting to start'
+  }
+})
 
 /**
  * A line hung under a session: a subagent (Figma 44B), a Claude workflow run and its phases (Figma 74D, PRD F25), or a
@@ -114,7 +134,7 @@ export interface SidebarInput {
 
 /** What a finished turn left: "已完成 · <reply>" while unread, the reply once seen. */
 function afterTurn(session: Session): string | undefined {
-  if (session.status === 'done_unread') return session.lastReply ? `已完成 · ${session.lastReply}` : '已完成 · 未读'
+  if (session.status === 'done_unread') return session.lastReply ? pick(M).doneReply(session.lastReply) : pick(M).doneUnread
   if (session.status === 'idle') return session.lastReply
   return undefined
 }
@@ -133,7 +153,7 @@ function toRow(session: Session, worktree: Worktree | undefined, { depth, parent
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
     // A snapshot has no branch (detached): its line says so instead.
-    branch: session.dispatchBase === 'snapshot' ? '快照' : session.scheduledBy ? `定时 · ${worktree?.branch ?? ''}` : (worktree?.branch ?? ''),
+    branch: session.dispatchBase === 'snapshot' ? pick(M).snapshot : session.scheduledBy ? pick(M).scheduled(worktree?.branch ?? '') : (worktree?.branch ?? ''),
     depth,
     model: session.dispatchModel ?? '',
     tree,
@@ -251,7 +271,7 @@ export function teamItems(team: TeamState | undefined): SideItem[] {
   const mates = team?.members.filter((m) => m.agentId) ?? []
   if (mates.length === 0) return []
   return [
-    { id: 'team', title: `队伍 · ${mates.length} 人`, kind: 'team' },
+    { id: 'team', title: pick(M).team(mates.length), kind: 'team' },
     ...mates.map((m): SideItem => ({
       id: `teammate:${m.agentId}`,
       title: m.name,
@@ -270,7 +290,7 @@ export function teamItems(team: TeamState | undefined): SideItem[] {
  */
 export function pendingItems(confirms: ReadonlyArray<Pick<PendingStart, 'childId' | 'parentId' | 'plan'>>): Record<SessionId, SideItem[]> {
   const out: Record<SessionId, SideItem[]> = {}
-  for (const c of confirms) (out[c.parentId] ??= []).push({ id: `pending:${c.childId}`, title: c.plan.item.title, kind: 'pending', right: '待开始' })
+  for (const c of confirms) (out[c.parentId] ??= []).push({ id: `pending:${c.childId}`, title: c.plan.item.title, kind: 'pending', right: pick(M).pending })
   return out
 }
 

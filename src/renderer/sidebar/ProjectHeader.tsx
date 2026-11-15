@@ -1,8 +1,29 @@
 import { ChevronDown, ChevronRight, Ellipsis, Plus } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
 import type { SessionStatus } from '@shared/types'
+import { useMessages } from '../i18n'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ProjectHeader.module.css'
+
+const M = defineMessages({
+  zh: {
+    expand: '展开',
+    collapse: '折叠',
+    newSessionIn: (name: string) => `在 ${name} 新建会话`,
+    newSession: '新建会话 · ⌘N',
+    projectMenuOf: (name: string) => `${name} 项目菜单`,
+    projectMenu: '项目菜单'
+  },
+  en: {
+    expand: 'Expand',
+    collapse: 'Collapse',
+    newSessionIn: (name: string) => `New session in ${name}`,
+    newSession: 'New session · ⌘N',
+    projectMenuOf: (name: string) => `${name} project menu`,
+    projectMenu: 'Project menu'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -28,6 +49,7 @@ interface Props {
  * draws the same header without ＋ and …, so its count stays.
  */
 export function ProjectHeader({ name, count, collapsed, attention, onToggle, onNewSession, onMenu }: Props) {
+  const m = useMessages(M)
   return (
     <div
       className={styles.header}
@@ -42,7 +64,7 @@ export function ProjectHeader({ name, count, collapsed, attention, onToggle, onN
         type="button"
         className={styles.toggle}
         aria-expanded={!collapsed}
-        title={collapsed ? '展开' : '折叠'}
+        title={collapsed ? m.expand : m.collapse}
         onClick={onToggle}
       >
         <span className={styles.chevron}>{collapsed ? <ChevronRight {...ICON} /> : <ChevronDown {...ICON} />}</span>
@@ -56,10 +78,10 @@ export function ProjectHeader({ name, count, collapsed, attention, onToggle, onN
       {collapsed && count > 0 && <span className={styles.count}>{count}</span>}
       {onNewSession && onMenu && (
         <span className={styles.actions}>
-          <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话 · ⌘N" aria-haspopup="dialog" onClick={() => onNewSession()}>
+          <button type="button" className={styles.action} aria-label={m.newSessionIn(name)} title={m.newSession} aria-haspopup="dialog" onClick={() => onNewSession()}>
             <Plus {...ICON} />
           </button>
-          <button type="button" className={styles.action} aria-label={`${name} 项目菜单`} title="项目菜单" aria-haspopup="menu" onClick={(e) => onMenu(e.currentTarget)}>
+          <button type="button" className={styles.action} aria-label={m.projectMenuOf(name)} title={m.projectMenu} aria-haspopup="menu" onClick={(e) => onMenu(e.currentTarget)}>
             <Ellipsis {...ICON} />
           </button>
         </span>

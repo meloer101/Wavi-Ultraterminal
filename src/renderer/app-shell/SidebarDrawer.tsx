@@ -6,6 +6,9 @@ import { Sidebar } from '../sidebar/Sidebar'
 import { startColumnResize } from '../ui/column-resize'
 import { drawerIsWide, useDrawer } from './drawer-motion'
 import styles from './AppShell.module.css'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({ zh: { resize: '调整侧栏宽度' }, en: { resize: 'Resize sidebar' } })
 
 /**
  * The sidebar as a drawer: its width springs between 0 and the user's while its content (always full width) slides
@@ -42,7 +45,7 @@ function SidebarResizeHandle({ width }: { width: number }) {
       className={styles.sidebarResize}
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整侧栏宽度"
+      aria-label={pick(M).resize}
       onPointerDown={onPointerDown}
       onDoubleClick={() => setWidth(SIDEBAR_WIDTH_DEFAULT)}
     />

@@ -18,6 +18,7 @@ import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-moti
 import { HEADER_HEIGHT } from '../app-shell/layout'
 import { PaneStrips } from '../lifecycle/PaneStrips'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
+import { useLang } from '../i18n'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal, setTerminalShown } from './registry'
@@ -159,6 +160,8 @@ export function useTerminalHost(
 
 const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  // Memo'd: the strips and search bar inside follow the interface language.
+  useLang()
   // The overview may show this terminal in its own host for a while (borrow.ts).
   const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
   const placed = rect !== undefined
