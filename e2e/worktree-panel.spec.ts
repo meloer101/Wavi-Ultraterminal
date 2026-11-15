@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { launchApp, setWindowSize } from './launch'
 
 const SHOTS = join(process.cwd(), 'test-results', 'right-panel')
+const WITHIN = { timeout: 15_000 }
 
 interface DialogHook {
   requests: { message: string; detail?: string }[]
@@ -167,13 +168,16 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(feature.getByRole('button', { name: /合并到 main/ })).toBeEnabled()
     await shoot('13c-worktree')
 
-    // The local merge is always a squash (PRD v1.185): the sheet has no 合并方式 row, only the two options.
+    // The local merge is always a squash (PRD v1.185) and only local (v1.186): no 合并方式 row, no switch to push or
+    // to remove the worktree, no review.
     await feature.getByRole('button', { name: /合并到 main/ }).click()
     const sheet = page.getByTestId('merge-sheet')
     await expect(sheet.getByRole('button', { name: /^合并 / })).toBeVisible({ timeout: 15_000 })
     await expect(sheet.getByRole('group', { name: '合并方式' })).toHaveCount(0)
     await expect(sheet).not.toContainText('Rebase')
-    await expect(sheet).toContainText('合并后删除 worktree（保留分支）')
+    await expect(sheet.getByRole('switch')).toHaveCount(0)
+    await expect(sheet.getByRole('checkbox')).toHaveCount(0)
+    for (const text of ['删除 worktree', '推送', '审阅']) await expect(sheet).not.toContainText(text)
     await shoot('05-merge-squash-only')
     await page.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
@@ -184,7 +188,7 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(page.locator('header h1')).toHaveText('Cookie 会话迁移')
   })
 
-  test('a merged worktree offers no 合并到 main…, and ⇧⌘M only says it is merged (Figma 30B / 30D)', async () => {
+  test('a merged worktree offers no 合并到 main…; ⇧⌘M runs its next Git step, 归档…, which only opens the sheet (Figma 30D, 87⁗)', async () => {
     await item(repo.busy).locator('button[aria-expanded]').click()
     const busy = item(repo.busy)
     await expect(page.locator('header h1')).toHaveText('还在看的')
@@ -199,15 +203,17 @@ test.describe('F17 right panel · Worktree', () => {
     expect(Math.abs(openX - labelX)).toBeLessThan(0.5)
     await shoot('30d-worktree-merged')
 
+    // ⇧⌘M (Git 下一步) runs the chain's primary from anywhere: merged, clean and idle, that is 归档…, which opens its
+    // sheet and archives nothing by itself; the local merge sheet does not open.
     await page.keyboard.press('Meta+Shift+KeyM')
-    const sheet = page.getByTestId('merge-sheet')
-    await expect(sheet).toBeVisible()
-    await expect(sheet).toContainText('jacob/busy 已经全部合并到 main')
-    await expect(sheet.getByRole('button', { name: /关闭/ })).toBeVisible()
-    for (const name of ['合并', '先审阅', '取消']) await expect(sheet.getByRole('button', { name, exact: true })).toHaveCount(0)
-    await shoot('30b-merge-nothing')
+    const sheet = page.getByTestId('archive-sheet')
+    await expect(sheet).toBeVisible(WITHIN)
+    await expect(sheet).toContainText('jacob/busy')
+    await expect(page.getByTestId('merge-sheet')).toHaveCount(0)
+    await shoot('30b-shortcut-archive')
     await page.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
+    expect(existsSync(repo.busy)).toBe(true)
   })
 
   test('deleting a worktree with uncommitted changes is refused before any confirmation', async () => {

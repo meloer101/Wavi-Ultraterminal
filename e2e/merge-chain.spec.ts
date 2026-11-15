@@ -3,8 +3,9 @@
 // commits and a package.json change; merges cleanly) and jacob/conflict (edits the README that main also edited).
 // Checks the review block (header, counts, summary, one row per finding, the P1 tag on the diff line, 发给 putting the
 // ticked findings into the input line without Enter), the facts row for a risk marker, the agent-command review mode,
-// a squash merge landing on main from the agent-written message, and a branch that would conflict with main: 同步 main
-// starts nothing and puts the rebase into the agent's input line (sent only when the user presses Enter), main untouched.
+// 合并 squashing the branch into the local main titled after the session (nothing written, nothing pushed) with 归档…
+// next, and a branch that would conflict with main: ⇧⌘M runs the primary 同步 main, which starts nothing and puts the
+// rebase into the agent's input line (sent only when the user presses Enter), main untouched.
 // Screenshots in both themes go to test-results/merge-chain/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -13,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fakeHookClaude } from './fake-hook-claude'
 import { launchApp, setWindowSize } from './launch'
-import { agentWrites, promptedPath, typedBy } from './ship'
+import { typedBy } from './ship'
 
 const SHOTS = join(process.cwd(), 'test-results', 'merge-chain')
 const WITHIN = { timeout: 30_000 }
@@ -209,38 +210,38 @@ test.describe('F13 review block · F16 exit A', () => {
     await updateSettings({ review: { mode: 'builtin' } })
   })
 
-  test('exit A without a remote: 合并到 main is the only exit; the agent writes commit.md, ⌘↵ squashes the branch into main', async () => {
+  test('合并 without a remote: the only exit and the primary; one click squashes the branch into main, titled after the session, nothing written or pushed; then 归档… is next', async () => {
     await expect(panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
-    const exit = panel().getByRole('button', { name: /^合并到 main( |$)/ })
+    const exit = panel().getByRole('button', { name: /^合并( |$)/ })
     await expect(exit).toBeEnabled(WITHIN)
+    // The primary carries ⇧⌘M.
+    await expect(exit).toContainText(/[⌘⇧]/)
+    await shoot('merge-primary')
+    const before = repo.git(repo.project, 'rev-parse', 'main').trim()
+    const typed = cleanTyped()
     await exit.click()
-    await expect(ship()).toHaveAttribute('data-stage', 'writing')
-    await expect(ship()).toContainText('Claude Code 写提交说明')
-    const file = await promptedPath(repo.agents.clean, 'wt-clean', 'commit')
-    agentWrites(repo.agents.clean, file, '导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试\n')
 
-    await expect(ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
-    await expect(ship().getByRole('textbox', { name: '提交说明' })).toHaveValue('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
-    await shoot('ship-glance')
-    // A reload (a crash, a rebuild) keeps the open block: the same stage and the text the agent wrote.
-    await page.reload()
-    await panel().getByRole('tab', { name: /^变更/ }).click()
-    await expect(ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
-    await expect(ship().getByRole('textbox', { name: '提交说明' })).toHaveValue('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
-    await page.keyboard.press('Meta+Enter')
-
+    // A plain local action: no text for the agent to write, no glance, no review.
     await expect(ship()).toHaveCount(0, WITHIN)
-    await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/)
-    expect(repo.git(repo.project, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
+    await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/, WITHIN)
+    expect(cleanTyped()).toBe(typed)
+    // One squash commit: the session's title and the branch's subjects, oldest first.
+    expect(repo.git(repo.project, 'rev-list', '--count', `${before}..main`).trim()).toBe('1')
+    expect(repo.git(repo.project, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- Make nav sticky\n- Test nav\n- Add a dependency')
     expect(existsSync(join(repo.project, 'nav.ts'))).toBe(true)
-    // Squash-merged: the branch is still ahead by its commits, but nothing is left to ship again (B25).
-    await expect(panel().getByRole('button', { name: /^合并到 main( |$)/ })).toHaveCount(0, WITHIN)
+    // Squash-merged: the branch is still ahead by its commits, but nothing is left to ship again (B25). main has no
+    // upstream, so nothing waits to be pushed: 归档… is the primary, and it only opens its sheet.
+    await expect(panel().getByRole('button', { name: /^合并( |$)/ })).toHaveCount(0, WITHIN)
+    await expect(panel().getByTestId('chain-headline')).toContainText('已经全部合并到 main', WITHIN)
+    const archive = panel().getByRole('button', { name: /^归档…/ })
+    await expect(archive).toContainText(/[⌘⇧]/)
+    await shoot('archive-primary')
     // The branch and its worktree stay: archiving them is the user's call.
     expect(existsSync(repo.clean)).toBe(true)
     expect(repo.git(repo.project, 'branch', '--list', 'jacob/clean').trim()).toContain('jacob/clean')
   })
 
-  test('a branch that would conflict with main: 合并到 main is held, 同步 main starts nothing and puts the rebase into the input line, not sent; main does not move', async () => {
+  test('a branch that would conflict with main: 合并 is held, ⇧⌘M runs the primary 同步 main, which starts nothing and puts the rebase into the input line, not sent; main does not move', async () => {
     await page.locator(`[data-region="sidebar"] [data-session-id="s-conflict"]`).click()
     await expect(page.locator('header h1')).toHaveText('改 README')
     await expect.poll(() => repo.agents.conflict.pid(), WITHIN).not.toBeNull()
@@ -249,7 +250,9 @@ test.describe('F13 review block · F16 exit A', () => {
     await panel().getByRole('tab', { name: /^变更/ }).click()
     // 合入链路 v2 (Figma 73C3): the chain says so before anything runs, and 同步 main is the way on.
     await expect(panel().getByTestId('chain-headline')).toContainText('和 main 会冲突 · 1 个文件', WITHIN)
-    await panel().getByRole('button', { name: /^同步 main/ }).click()
+    // ⇧⌘M (Git 下一步) runs whatever the primary is: here 同步 main.
+    await expect(panel().getByRole('button', { name: /^同步 main/ })).toContainText(/[⌘⇧]/)
+    await page.keyboard.press('Meta+Shift+KeyM')
 
     const alert = ship().getByRole('alert')
     await expect(alert).toContainText('rebase 会冲突 · README.md', WITHIN)

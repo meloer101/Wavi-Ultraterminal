@@ -248,9 +248,11 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
               ) : chain?.second?.id === 'abort' ? (
                 <ChainAbort chain={chain} worktreePath={worktree.path} idle={idle} />
               ) : (
-                // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action.
+                // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action. Once the
+                // branch's work is in the base (merged, or only waiting for 推送 of the base) it has nothing of its own to read.
                 reviewer &&
                 chain?.stage !== 'merged' &&
+                chain?.stage !== 'unpushed' &&
                 (!reviewShown || settings.review.mode === 'agent-command') && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
               )}
               <span className={styles.spacer} />

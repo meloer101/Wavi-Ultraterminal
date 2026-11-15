@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-14：出口区改成三个节点（PRD v1.186，Figma 87⁗）：提交 → 合并（本地 squash，说明 = 会话标题 + 各提交标题，不推送、不审阅）/ 创建 PR → 推送（先拉取，推送前审阅只看远程没有的提交，P0 / P1 停下给「让 <agent> 修 / 照样推送」）→ 归档，一次只亮一个主按钮；项目主目录检出基线（路径 ①）能提交和推送基线；归档在基线推送后或 PR 合并 / 关闭后，「合并后自动归档」是一个订阅者；「合并前审阅」去掉；⇧⌘M 执行主按钮，菜单项改名「Git 下一步」；合并面板去掉推送、删除 worktree 两个开关和审阅。e2e：`ship-chain`、`pull-requests`、`merge-chain`、`remote-exits`、`worktree-panel`、`git-panel`、`settings`、`menu-keys` 按新流程改写并通过（含审阅停下、推送前拉取 origin/main、路径 ①），两种主题截图。没做：手机上的「提交」（iOS 端）、iOS 读 `reviewStop` 显示审阅停下、⌘K 里「继续 / 中止」的图标、Worktree 视图的「合并到 <base>…」按钮仍总写 ⇧⌘M（⇧⌘M 已改为执行主按钮）；手机的归档在本地合并后、基线推送前不挡（Mac 上挡「先推送 <base>」）。
 - 2026-11-14：本地合并面板去掉「合并方式」一行，一律 squash（PRD v1.185）。依据是竞品里能本地合并的 Paseo、Vibe Kanban 都只用一种方式。PR 合并面板和出口 A 不变。
 - 2026-11-14：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.184，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。
 - 2026-11-14：一层底（PRD v1.183，Figma 84A）：侧栏那层色调铺满整个窗口（侧栏、卡片之间的缝、四周留边），在每张卡片处挖空，卡片按自己的不透明度浮在上面；设置 · 外观的小窗口预览同样画法。e2e 核对了底层的不透明度和挖洞的位置；玻璃上的实际效果还没在作者的 Mac 上看过。

@@ -221,7 +221,7 @@ export function installAppMenu(): void {
         { type: 'separator' },
         { label: '重命名会话', ...command('rename-session') },
         { label: '同任务多解…', accelerator: SHORTCUTS['same-task'], ...command('same-task') },
-        { label: '合并到基线…', accelerator: SHORTCUTS['merge-worktree'], ...command('merge-worktree') }
+        { label: 'Git 下一步', accelerator: SHORTCUTS['merge-worktree'], ...command('merge-worktree') }
       ]
     },
     {
