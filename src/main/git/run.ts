@@ -6,6 +6,18 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { delimiter } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { userLoginPath } from '../agents-installed'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    timedOut: (seconds: number) => `超过 ${seconds} 秒没有结束，已停止`,
+    tooMuchOutput: (mib: number) => `输出超过 ${mib} MiB，已停止`
+  },
+  en: {
+    timedOut: (seconds: number) => `Still running after ${seconds} s; stopped`,
+    tooMuchOutput: (mib: number) => `Output over ${mib} MiB; stopped`
+  }
+})
 
 /** A read-only command's time (status, rev-parse, log): longer ones (commit hooks, push, fetch) pass their own. */
 export const GIT_TIMEOUT_MS = 15_000
@@ -50,7 +62,7 @@ export function runProcess(bin: string, args: readonly string[], options: RunOpt
       child.stdin?.end(options.input)
     }
     const timer = setTimeout(() => {
-      stderr += `\n超过 ${Math.round(options.timeout / 1000)} 秒没有结束，已停止`
+      stderr += `\n${pick(M).timedOut(Math.round(options.timeout / 1000))}`
       child.kill('SIGTERM')
     }, options.timeout)
     const finish = (code: number): void => {
@@ -66,7 +78,7 @@ export function runProcess(bin: string, args: readonly string[], options: RunOpt
         if (stdout.length > options.tail * 2) stdout = stdout.slice(-options.tail)
       } else if (stdout.length > maxStdout && !overflow) {
         overflow = true
-        stderr += `\n输出超过 ${Math.round(maxStdout / 1024 / 1024)} MiB，已停止`
+        stderr += `\n${pick(M).tooMuchOutput(Math.round(maxStdout / 1024 / 1024))}`
         child.kill('SIGTERM')
       }
     })

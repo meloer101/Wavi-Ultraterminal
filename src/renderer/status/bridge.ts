@@ -4,6 +4,7 @@ import { hasOwnAdapter } from '@shared/agents'
 import { confirmLabels } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
@@ -17,6 +18,11 @@ import { dropConfirmsOf } from '../dispatch/handler'
 import { finishGoesToDispatcher } from '../dispatch/reports'
 import { useDispatch } from '../dispatch/store'
 import { scheduleRequestCounts, useScheduleRequests } from '../schedules/agent-requests'
+
+const M = defineMessages({
+  zh: { schedules: (n: number) => `想建 ${n} 个定时任务` },
+  en: { schedules: (n: number) => (n === 1 ? 'Wants to create 1 scheduled task' : `Wants to create ${n} scheduled tasks`) }
+})
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
@@ -230,7 +236,7 @@ export function startStatusBridge(): () => void {
   let asking = new Set<string>()
   const applyConfirms = (): void => {
     const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
-    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
+    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, pick(M).schedules(n))
     for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
     asking = new Set(labels.keys())
   }

@@ -4,6 +4,7 @@
 // Pure: parsing, validation, what an approval covers, the app-owned store of approvals and port blocks. Unknown
 // keys are ignored so the file can grow.
 import { parse, TomlError } from 'smol-toml'
+import { defineMessages, pick } from './i18n'
 
 /** Relative to the worktree's top level. */
 export const REPO_SETTINGS_FILE = '.tr/settings.toml'
@@ -22,6 +23,32 @@ export type RunnableScript = 'setup' | 'run'
 /** A script main runs itself and keeps the output of, instead of handing it to a terminal (`archive`: PRD F15). */
 export type CapturedScript = 'test' | 'archive'
 
+const M = defineMessages({
+  zh: {
+    notString: (name: string) => `scripts.${name} 应该是字符串或字符串数组`,
+    badChars: (name: string) => `scripts.${name} 含有不能用的字符`,
+    tooLong: (name: string, max: number) => `scripts.${name} 太长（最多 ${max} 个字符）`,
+    badLine: (file: string, line: number, reason: string) => `${file} 第 ${line} 行格式不对${reason ? `（${reason}）` : ''}`,
+    notToml: (file: string) => `${file} 不是有效的 TOML`,
+    notTable: 'scripts 应该是一个表（[scripts]）',
+    when: { archive: '（归档时）', test: '（合并前）' } as Partial<Record<ScriptName, string>>,
+    scriptBlock: (name: string, when: string, shown: string) => `${name}${when}：\n${shown}`,
+    footer: (file: string) => `这些命令来自仓库里的 ${file}，会在 worktree 里运行。内容改变后会再问一次。`
+  },
+  en: {
+    notString: (name: string) => `scripts.${name} should be a string or an array of strings`,
+    badChars: (name: string) => `scripts.${name} contains characters that can't be used`,
+    tooLong: (name: string, max: number) => `scripts.${name} is too long (at most ${max} characters)`,
+    badLine: (file: string, line: number, reason: string) => `${file} line ${line} is malformed${reason ? ` (${reason})` : ''}`,
+    notToml: (file: string) => `${file} is not valid TOML`,
+    notTable: 'scripts should be a table ([scripts])',
+    when: { archive: ' (on archive)', test: ' (before merge)' },
+    scriptBlock: (name: string, when: string, shown: string) => `${name}${when}:\n${shown}`,
+    footer: (file: string) =>
+      `These commands come from ${file} in the repository and run in the worktree. You'll be asked again when they change.`
+  }
+})
+
 /** Each present script is non-empty shell text (an array in the file is joined with newlines). */
 export type RepoScripts = Partial<Record<ScriptName, string>>
 
@@ -36,15 +63,15 @@ function scriptValue(name: ScriptName, value: unknown, problems: string[]): stri
   if (typeof value === 'string') text = value
   else if (Array.isArray(value) && value.length <= MAX_SCRIPT_LINES && value.every((line) => typeof line === 'string')) text = value.join('\n')
   else {
-    problems.push(`scripts.${name} 应该是字符串或字符串数组`)
+    problems.push(pick(M).notString(name))
     return undefined
   }
   if (text.includes('\0')) {
-    problems.push(`scripts.${name} 含有不能用的字符`)
+    problems.push(pick(M).badChars(name))
     return undefined
   }
   if (text.length > MAX_SCRIPT_CHARS) {
-    problems.push(`scripts.${name} 太长（最多 ${MAX_SCRIPT_CHARS} 个字符）`)
+    problems.push(pick(M).tooLong(name, MAX_SCRIPT_CHARS))
     return undefined
   }
   return text.trim() === '' ? undefined : text.trim()
@@ -62,15 +89,15 @@ export function parseRepoSettings(text: string): RepoSettings {
   } catch (error) {
     if (error instanceof TomlError) {
       const reason = error.message.split('\n')[0]?.replace(/^Invalid TOML document:\s*/, '') ?? ''
-      return { scripts: {}, problems: [`${REPO_SETTINGS_FILE} 第 ${error.line} 行格式不对${reason ? `（${reason}）` : ''}`] }
+      return { scripts: {}, problems: [pick(M).badLine(REPO_SETTINGS_FILE, error.line, reason)] }
     }
-    return { scripts: {}, problems: [`${REPO_SETTINGS_FILE} 不是有效的 TOML`] }
+    return { scripts: {}, problems: [pick(M).notToml(REPO_SETTINGS_FILE)] }
   }
   const problems: string[] = []
   const table = (root as Record<string, unknown>).scripts
   if (table === undefined) return { scripts: {}, problems }
   if (typeof table !== 'object' || table === null || Array.isArray(table) || table instanceof Date) {
-    return { scripts: {}, problems: ['scripts 应该是一个表（[scripts]）'] }
+    return { scripts: {}, problems: [pick(M).notTable] }
   }
   const scripts: RepoScripts = {}
   for (const name of READ_SCRIPTS) {
@@ -102,15 +129,14 @@ export function approvalInput(scripts: RepoScripts): string {
 const DETAIL_SCRIPT_CHARS = 600
 
 /** The confirmation sheet's text: every command the approval lets run, each shortened if very long. */
-const SCRIPT_WHEN: Partial<Record<ScriptName, string>> = { archive: '（归档时）', test: '（合并前）' }
-
 export function approvalDetail(scripts: RepoScripts): string {
+  const m = pick(M)
   const blocks = READ_SCRIPTS.filter((name) => scripts[name] !== undefined).map((name) => {
     const text = scripts[name]!
     const shown = text.length > DETAIL_SCRIPT_CHARS ? `${text.slice(0, DETAIL_SCRIPT_CHARS)}…` : text
-    return `${name}${SCRIPT_WHEN[name] ?? ''}：\n${shown}`
+    return m.scriptBlock(name, m.when[name] ?? '', shown)
   })
-  return `${blocks.join('\n\n')}\n\n这些命令来自仓库里的 ${REPO_SETTINGS_FILE}，会在 worktree 里运行。内容改变后会再问一次。`
+  return `${blocks.join('\n\n')}\n\n${m.footer(REPO_SETTINGS_FILE)}`
 }
 
 // --- the store main keeps in <userData>/repo-scripts.json --------------------------------------------------------

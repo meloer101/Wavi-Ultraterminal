@@ -98,7 +98,7 @@ struct ToolView: View {
         .toolbar {
           ToolbarItem(placement: .principal) {
             let (name, dir) = splitPath(diff.path)
-            NavTitle(title: name, subtitle: [dir, tool.name ?? "", "\(diff.hunks.count) 处"].filter { !$0.isEmpty }.joined(separator: " · "))
+            NavTitle(title: name, subtitle: [dir, tool.name ?? "", String(localized: "\(diff.hunks.count) 处")].filter { !$0.isEmpty }.joined(separator: " · "))
           }
           ToolbarItem(placement: .topBarTrailing) { Counts(added: diff.added, removed: diff.removed) }
         }
@@ -117,10 +117,10 @@ struct ToolView: View {
           .padding(Metric.margin)
         }
         .toolbar {
-          ToolbarItem(placement: .principal) { NavTitle(title: tool.name ?? "工具", subtitle: tool.state == "running" ? "运行中" : tool.state == "error" ? "出错" : "完成") }
+          ToolbarItem(placement: .principal) { NavTitle(title: tool.name ?? String(localized: "工具"), subtitle: tool.state == "running" ? String(localized: "运行中") : tool.state == "error" ? String(localized: "出错") : String(localized: "完成")) }
         }
       } else {
-        EmptyState(title: "这次工具调用不在当前的对话里")
+        EmptyState(title: String(localized: "这次工具调用不在当前的对话里"))
       }
     }
     .background(Color.bgApp)
@@ -146,7 +146,7 @@ struct TurnView: View {
       .sorted { $0.0.at < $1.0.at }
     Group {
       if items.isEmpty {
-        EmptyState(title: "这一轮的改动不在当前的对话里")
+        EmptyState(title: String(localized: "这一轮的改动不在当前的对话里"))
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
@@ -177,7 +177,7 @@ struct TurnView: View {
     .background(Color.bgApp)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .principal) { NavTitle(title: "这一轮的改动", subtitle: "\(items.count) 个文件") }
+      ToolbarItem(placement: .principal) { NavTitle(title: String(localized: "这一轮的改动"), subtitle: String(localized: "\(items.count) 个文件")) }
     }
   }
 }
@@ -199,7 +199,7 @@ struct FileDiffView: View {
     let (name, dir) = splitPath(path)
     Group {
       if let rows {
-        if rows.isEmpty { EmptyState(title: "没有可显示的文本改动") } else { DiffView(rows: rows) }
+        if rows.isEmpty { EmptyState(title: String(localized: "没有可显示的文本改动")) } else { DiffView(rows: rows) }
       } else if let error {
         EmptyState(title: error)
       } else {
@@ -209,11 +209,11 @@ struct FileDiffView: View {
     .background(Color.bgApp)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .principal) { NavTitle(title: name, subtitle: [dir, scope == "committed" ? "已提交" : "未提交"].filter { !$0.isEmpty }.joined(separator: " · ")) }
+      ToolbarItem(placement: .principal) { NavTitle(title: name, subtitle: [dir, scope == "committed" ? String(localized: "已提交") : String(localized: "未提交")].filter { !$0.isEmpty }.joined(separator: " · ")) }
     }
     .task {
       let result = await model.call(.diff(session: session, path: path, scope: scope, oldPath: oldPath, untracked: untracked))
-      if let data = result.decode(Text_.self) { rows = unifiedRows(data.text ?? "") } else { error = result.error ?? "没有读到改动" }
+      if let data = result.decode(Text_.self) { rows = unifiedRows(data.text ?? "") } else { error = result.error ?? String(localized: "没有读到改动") }
     }
   }
 }

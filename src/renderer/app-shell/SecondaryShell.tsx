@@ -16,8 +16,25 @@ import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
+
+const M = defineMessages({
+  zh: {
+    noneForProject: (project: string) => `${project} 没有在这里显示的会话`,
+    none: '这个窗口没有在显示的会话',
+    hint: '从侧栏选一个会话，或按 ⌘N 新建。关掉这个窗口，会话照常运行。'
+  },
+  en: {
+    noneForProject: (project: string) => `No ${project} session shown here`,
+    none: 'No session shown in this window',
+    hint: 'Pick a session in the sidebar, or press ⌘N for a new one. Closing this window leaves the sessions running.'
+  }
+})
 
 export function SecondaryShell() {
+  // A language change re-renders the whole window from here (memo'd components subscribe themselves).
+  const m = useMessages(M)
   const { win } = useWindowScope()
   const record = useSecondaryWindow()
   const collapsed = useSidebarCollapsed()
@@ -45,8 +62,8 @@ export function SecondaryShell() {
             <SplitArea />
             {!hasSession && (
               <div className={empty.empty} data-glass-card="">
-                <p className={empty.title}>{project ? `${project.name} 没有在这里显示的会话` : '这个窗口没有在显示的会话'}</p>
-                <p className={empty.hint}>从侧栏选一个会话，或按 ⌘N 新建。关掉这个窗口，会话照常运行。</p>
+                <p className={empty.title}>{project ? m.noneForProject(project.name) : m.none}</p>
+                <p className={empty.hint}>{m.hint}</p>
               </div>
             )}
           </section>

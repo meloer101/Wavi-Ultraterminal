@@ -23,6 +23,34 @@ import { ghResolvedRemote, isRateLimited, isSignedOut, repoArg, type GitHubRepo 
 import { git, gitOut, lastLines, pushEnv, refExists } from './git/run'
 import { detectGh, gh, ghPausedUntil, gitHubRepoFromUrl, pauseGhForRateLimit } from './pull-requests'
 import { isProjectRoot } from './workspace-store'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    rateLimited: '到了 GitHub 的请求上限，稍后再试',
+    signedOut: 'gh 还没有登录：在终端运行 gh auth login',
+    ghExit: (code: number) => `gh 退出码 ${code}`,
+    noJson: 'gh 没有输出 JSON',
+    invalid: '请求无效',
+    notGitHub: '这个项目不在 GitHub 上',
+    unreadable: 'gh 的输出读不懂',
+    headUnreadable: 'PR 的分支名读不懂',
+    fetchFailed: (why: string) => `没能拉取 PR 的分支：${why}`,
+    gitExit: (code: number) => `git 退出码 ${code}`
+  },
+  en: {
+    rateLimited: 'Hit the GitHub rate limit; try again later',
+    signedOut: 'gh is not signed in: run gh auth login in a terminal',
+    ghExit: (code: number) => `gh exit code ${code}`,
+    noJson: "gh didn't print JSON",
+    invalid: 'Invalid request',
+    notGitHub: "This project isn't on GitHub",
+    unreadable: "Can't read gh's output",
+    headUnreadable: "Can't read the PR's branch name",
+    fetchFailed: (why: string) => `Couldn't fetch the PR's branch: ${why}`,
+    gitExit: (code: number) => `git exit code ${code}`
+  }
+})
 
 /** A list answer is reused this long unless 刷新 asks again. */
 const LIST_TTL_MS = 60_000
@@ -59,13 +87,13 @@ function failure(stderr: string, stdout: string, code: number): string {
   const output = stderr.trim() || stdout.trim()
   if (isRateLimited(output)) {
     pauseGhForRateLimit()
-    return '到了 GitHub 的请求上限，稍后再试'
+    return pick(M).rateLimited
   }
-  if (isSignedOut(output)) return 'gh 还没有登录：在终端运行 gh auth login'
-  return lastLines(output, 2, 200) || `gh 退出码 ${code}`
+  if (isSignedOut(output)) return pick(M).signedOut
+  return lastLines(output, 2, 200) || pick(M).ghExit(code)
 }
 
-const paused = (): string | null => (ghPausedUntil() > Date.now() ? '到了 GitHub 的请求上限，稍后再试' : null)
+const paused = (): string | null => (ghPausedUntil() > Date.now() ? pick(M).rateLimited : null)
 
 async function ghJson(args: string[]): Promise<{ json: unknown } | { error: string }> {
   const ran = await gh(args)
@@ -73,13 +101,13 @@ async function ghJson(args: string[]): Promise<{ json: unknown } | { error: stri
   try {
     return { json: JSON.parse(ran.stdout) as unknown }
   } catch {
-    return { error: 'gh 没有输出 JSON' }
+    return { error: pick(M).noJson }
   }
 }
 
 export async function listBoard(raw: unknown): Promise<BoardList> {
   const request = parseListRequest(raw)
-  if (!request || !isProjectRoot(request.root)) return { gh: 'ready', project: { state: 'error', message: '请求无效' } }
+  if (!request || !isProjectRoot(request.root)) return { gh: 'ready', project: { state: 'error', message: pick(M).invalid } }
   const state = await detectGh()
   if (state !== 'ready') return { gh: state }
   const key = `${request.root}\n${request.scope}`
@@ -108,10 +136,10 @@ export async function listBoard(raw: unknown): Promise<BoardList> {
 
 export async function boardDetail(raw: unknown): Promise<BoardDetailResult> {
   const request = parseItemRequest(raw)
-  if (!request || !isProjectRoot(request.root)) return { ok: false, message: '请求无效' }
-  if ((await detectGh()) !== 'ready') return { ok: false, message: 'gh 还没有登录：在终端运行 gh auth login' }
+  if (!request || !isProjectRoot(request.root)) return { ok: false, message: pick(M).invalid }
+  if ((await detectGh()) !== 'ready') return { ok: false, message: pick(M).signedOut }
   const where = await projectRepo(request.root)
-  if (!where) return { ok: false, message: '这个项目不在 GitHub 上' }
+  if (!where) return { ok: false, message: pick(M).notGitHub }
   const wait = paused()
   if (wait) return { ok: false, message: wait }
   const result = await ghJson(viewArgs(request.kind, request.number, where.repo))
@@ -120,7 +148,7 @@ export async function boardDetail(raw: unknown): Promise<BoardDetailResult> {
     return { ok: false, message: result.error }
   }
   const detail = parseDetail(request.kind, result.json, where.repo)
-  return detail ? { ok: true, detail } : { ok: false, message: 'gh 的输出读不懂' }
+  return detail ? { ok: true, detail } : { ok: false, message: pick(M).unreadable }
 }
 
 /**
@@ -130,16 +158,16 @@ export async function boardDetail(raw: unknown): Promise<BoardDetailResult> {
  */
 export async function prStart(raw: unknown): Promise<BoardPrStart> {
   const request = parseItemRequest(raw)
-  if (!request || request.kind !== 'pr' || !isProjectRoot(request.root)) return { ok: false, message: '请求无效' }
-  if ((await detectGh()) !== 'ready') return { ok: false, message: 'gh 还没有登录：在终端运行 gh auth login' }
+  if (!request || request.kind !== 'pr' || !isProjectRoot(request.root)) return { ok: false, message: pick(M).invalid }
+  if ((await detectGh()) !== 'ready') return { ok: false, message: pick(M).signedOut }
   const where = await projectRepo(request.root)
-  if (!where) return { ok: false, message: '这个项目不在 GitHub 上' }
+  if (!where) return { ok: false, message: pick(M).notGitHub }
   const wait = paused()
   if (wait) return { ok: false, message: wait }
   const viewed = await ghJson(['pr', 'view', String(request.number), `--repo=${repoArg(where.repo)}`, '--json=headRefName,baseRefName,isCrossRepository'])
   if ('error' in viewed) return { ok: false, message: viewed.error }
   const head = parsePrHead(viewed.json)
-  if (!head) return { ok: false, message: 'PR 的分支名读不懂' }
+  if (!head) return { ok: false, message: pick(M).headUnreadable }
   const env = await pushEnv(request.root)
   const target = head.crossRepo ? `refs/wavi/pull/${request.number}` : `refs/remotes/${where.remote}/${head.headRef}`
   const source = head.crossRepo ? `refs/pull/${request.number}/head` : `refs/heads/${head.headRef}`
@@ -147,7 +175,7 @@ export async function prStart(raw: unknown): Promise<BoardPrStart> {
   if (fetched.code !== 0 || !(await refExists(request.root, target))) {
     const message = lastLines(fetched.stderr || fetched.stdout, 2, 200)
     console.error(`[github-board] fetching PR #${request.number} of ${repoArg(where.repo)} failed:`, message)
-    return { ok: false, message: `没能拉取 PR 的分支：${message || `git 退出码 ${fetched.code}`}` }
+    return { ok: false, message: pick(M).fetchFailed(message || pick(M).gitExit(fetched.code)) }
   }
   return { ok: true, startAt: target, baseRef: head.baseRef, headRef: head.crossRepo ? null : head.headRef }
 }

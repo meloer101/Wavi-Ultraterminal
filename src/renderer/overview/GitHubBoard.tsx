@@ -8,6 +8,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { BOARD_SCOPES, type BoardItem, type BoardPr, type BoardProject } from '@shared/github-board'
 import { STATUS_LABEL } from '@shared/session-status'
 import type { Project, Session } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { subscribeClock } from '../sidebar/clock'
 import { formatElapsed } from '../sidebar/format-elapsed'
 import { useWorkspace } from '../state/workspace'
@@ -20,6 +22,39 @@ import { enterSession } from './store'
 import styles from './GitHubBoard.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
+
+const M = defineMessages({
+  zh: {
+    ghMissing: '看 GitHub 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login',
+    ghSignedOut: 'gh 还没有登录：在终端运行 gh auth login',
+    recheck: '重新检查',
+    noProjects: '还没有项目。',
+    scope: '范围',
+    offGitHub: '不在 GitHub 上',
+    loading: '加载中…',
+    failed: (message: string) => `查询失败：${message}`,
+    retry: '重试',
+    noReviews: '没有请你审阅的 PR',
+    nothingOpen: '没有打开的 issue 和 PR',
+    comments: (n: number) => `${n} 条评论`,
+    enter: '进入会话'
+  },
+  en: {
+    ghMissing: 'GitHub needs the GitHub CLI: install gh, then run gh auth login in a terminal',
+    ghSignedOut: 'gh is not signed in: run gh auth login in a terminal',
+    recheck: 'Check again',
+    noProjects: 'No projects yet.',
+    scope: 'Scope',
+    offGitHub: 'Not on GitHub',
+    loading: 'Loading…',
+    failed: (message: string) => `Query failed: ${message}`,
+    retry: 'Retry',
+    noReviews: 'No PRs waiting for your review',
+    nothingOpen: 'No open issues or PRs',
+    comments: (n: number) => (n === 1 ? '1 comment' : `${n} comments`),
+    enter: 'Enter session'
+  }
+})
 const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 /** "Now" to the minute on the shared clock: `3h` changes without re-rendering every row each frame. */
@@ -29,6 +64,7 @@ const minuteNow = (): number => Math.floor(Date.now() / 60_000) * 60_000
 const Linked = createContext<ReadonlyMap<string, Session>>(new Map())
 
 export function GitHubBoard({ filter }: { filter: string }) {
+  const m = useMessages(M)
   const projects = useWorkspace((s) => s.projects)
   const { sessions, worktrees } = useWorkspace(useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees })))
   const linked = useMemo(() => linkedSessions(sessions, worktrees), [sessions, worktrees])
@@ -42,19 +78,19 @@ export function GitHubBoard({ filter }: { filter: string }) {
   if (problem) {
     return (
       <div className={styles.problem} data-testid="github-gh-problem">
-        <p>{problem === 'missing' ? '看 GitHub 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login' : 'gh 还没有登录：在终端运行 gh auth login'}</p>
+        <p>{problem === 'missing' ? m.ghMissing : m.ghSignedOut}</p>
         <button type="button" className={styles.secondary} onClick={() => refreshGitHub(true)}>
-          重新检查
+          {m.recheck}
         </button>
       </div>
     )
   }
-  if (projects.length === 0) return <p className={styles.empty}>还没有项目。</p>
+  if (projects.length === 0) return <p className={styles.empty}>{m.noProjects}</p>
 
   return (
     <Linked.Provider value={linked}>
     <div className={styles.board} data-testid="github-board">
-      <div className={styles.scope} role="radiogroup" aria-label="范围">
+      <div className={styles.scope} role="radiogroup" aria-label={m.scope}>
         {BOARD_SCOPES.map((option) => (
           <button key={option.value} type="button" role="radio" aria-checked={option.value === scope} className={styles.scopeTab} onClick={() => setScope(option.value)}>
             {option.label}
@@ -71,6 +107,7 @@ export function GitHubBoard({ filter }: { filter: string }) {
 }
 
 function ProjectSection({ project, offGitHub, filter }: { project: Project; offGitHub: boolean; filter: string }) {
+  const m = useMessages(M)
   const load = useGitHubBoard((g) => g.byRoot[project.rootPath])
   const scope = useGitHubBoard((g) => g.scope)
   const [folded, setFolded] = useState<boolean | null>(null)
@@ -83,7 +120,7 @@ function ProjectSection({ project, offGitHub, filter }: { project: Project; offG
         <span className={styles.chevron}>{isFolded ? <ChevronRight {...ICON} /> : <ChevronDown {...ICON} />}</span>
         <h2>{project.name}</h2>
         {result?.state === 'ok' && <span className={styles.repo}>{`${result.repo.owner}/${result.repo.name}`}</span>}
-        {offGitHub && <span className={styles.repo}>不在 GitHub 上</span>}
+        {offGitHub && <span className={styles.repo}>{m.offGitHub}</span>}
       </button>
       {!isFolded && !offGitHub && <ProjectBody project={project} result={result} loading={!result && (load?.loading ?? true)} filter={filter} prsOnly={scope === 'review'} />}
     </section>
@@ -91,19 +128,20 @@ function ProjectSection({ project, offGitHub, filter }: { project: Project; offG
 }
 
 function ProjectBody({ project, result, loading, filter, prsOnly }: { project: Project; result: BoardProject | null; loading: boolean; filter: string; prsOnly: boolean }) {
-  if (loading || !result) return <p className={styles.state}>加载中…</p>
+  const m = useMessages(M)
+  if (loading || !result) return <p className={styles.state}>{m.loading}</p>
   if (result.state === 'error') {
     return (
       <p className={styles.state} data-tone="error">
-        <span>查询失败：{result.message}</span>
+        <span>{m.failed(result.message)}</span>
         <button type="button" className={styles.ghost} onClick={() => refreshGitHub(true)}>
-          重试
+          {m.retry}
         </button>
       </p>
     )
   }
   if (result.state !== 'ok') return null
-  if (result.issues.length === 0 && result.prs.length === 0) return <p className={styles.state}>{prsOnly ? '没有请你审阅的 PR' : '没有打开的 issue 和 PR'}</p>
+  if (result.issues.length === 0 && result.prs.length === 0) return <p className={styles.state}>{prsOnly ? m.noReviews : m.nothingOpen}</p>
   const issues = result.issues.filter((i) => matchesFilter(i, filter))
   const prs = result.prs.filter((p) => matchesFilter(p, filter))
   const columns: ReactNode[] = []
@@ -127,6 +165,7 @@ function Column({ label, count, items, project, result }: { label: string; count
 }
 
 function ItemRow({ item, project, result }: { item: BoardItem; project: Project; result: Extract<BoardProject, { state: 'ok' }> }) {
+  const m = useMessages(M)
   const linked = useContext(Linked).get(linkKey(linkOf(result.repo, item))) ?? null
   const selected = useGitHubBoard((g) => g.open?.root === project.rootPath && g.open.kind === item.kind && g.open.number === item.number)
   const pr = item.kind === 'pr' ? (item as BoardPr) : null
@@ -157,7 +196,7 @@ function ItemRow({ item, project, result }: { item: BoardItem; project: Project;
           </span>
         )}
         {!linked && (
-          <span className={styles.comments} aria-label={item.comments > 0 ? `${item.comments} 条评论` : undefined}>
+          <span className={styles.comments} aria-label={item.comments > 0 ? m.comments(item.comments) : undefined}>
             {item.comments > 0 && (
               <>
                 <MessageSquare {...SMALL} />
@@ -175,9 +214,10 @@ function ItemRow({ item, project, result }: { item: BoardItem; project: Project;
 
 /** The session started on this item: its status (glyph and word) and title; a click enters it. */
 function LinkedSession({ session }: { session: Session }) {
+  const m = useMessages(M)
   const status = glyphStatus(session)
   return (
-    <button type="button" className={styles.linked} onClick={() => enterSession(session.id)} title="进入会话" data-testid="github-linked">
+    <button type="button" className={styles.linked} onClick={() => enterSession(session.id)} title={m.enter} data-testid="github-linked">
       <StatusGlyph status={status} />
       <span>{`${STATUS_LABEL[status]} · ${session.title}`}</span>
     </button>

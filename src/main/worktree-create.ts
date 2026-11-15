@@ -24,6 +24,12 @@ import { gitText, NO_OPTIONAL_LOCKS, pushEnv } from './git/run'
 import { readRepoSettings } from './repo-scripts'
 import { isProjectRoot } from './workspace-store'
 import { isInside, normalizeRelative } from './worktree-files'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { baseNotSaved: (base: string, why: string) => `没能记下基线分支 ${base}：${why}`, configFailed: 'git config 失败' },
+  en: { baseNotSaved: (base: string, why: string) => `Couldn't record the base branch ${base}: ${why}`, configFailed: 'git config failed' }
+})
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 15_000
@@ -304,7 +310,7 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
   // The Worktree view and the merge compare against this (PRD F17 / F4); without it they fall back on the main branch.
   const baseNotSaved = await git(top, ['config', `branch.${request.branch}.base`, request.base]).then(
     () => null,
-    (error: unknown) => `没能记下基线分支 ${request.base}：${errorText(error) || 'git config 失败'}`
+    (error: unknown) => pick(M).baseNotSaved(request.base, errorText(error) || pick(M).configFailed)
   )
   if (baseNotSaved) console.error(`[worktree-create] branch.${request.branch}.base not written:`, baseNotSaved)
   const copyFailures = request.prepare ? await copyIncluded(top, path) : 0

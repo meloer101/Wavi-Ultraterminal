@@ -8,6 +8,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import type { MergePrecheck } from '@shared/git-merge'
 import type { ShipMainResult } from '@shared/ship'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { useRepoScripts } from '../../scripts/run-script'
 import { insertIntoTerminal } from '../../session-io'
@@ -36,6 +38,49 @@ import {
 import { closeMergeSheet, useMergeSheet, type MergeTarget } from './store'
 import styles from './MergeSheet.module.css'
 
+const M = defineMessages({
+  zh: {
+    mergeTo: '合并到',
+    mergeInto: (base: string) => `合并到 ${base}`,
+    local: '本地',
+    moved: '分支或基线在检查之后又变了，已重新检查',
+    handOffFailed: (agent: string, error: string) => `没有交给 ${agent}：${error}`,
+    checking: '正在检查…',
+    checkFailed: (message: string) => `没能检查：${message}`,
+    conflictedFiles: '冲突的文件',
+    moreFiles: (count: number) => `还有 ${count} 个文件`,
+    handOffNote: (agent: string) => `说明会放进 ${agent} 的输入行，看过后按回车发送`,
+    resolveInTerminal: '在终端里解决冲突后重新打开',
+    cancel: '取消',
+    close: '关闭',
+    done: '完成',
+    handingOff: (agent: string) => `正在交给 ${agent}…`,
+    handOff: (agent: string) => `交给 ${agent} 解决`,
+    merging: '正在合并…',
+    merge: '合并'
+  },
+  en: {
+    mergeTo: 'Merge into',
+    mergeInto: (base: string) => `Merge into ${base}`,
+    local: 'Local',
+    moved: 'The branch or the base changed after the check; checked again',
+    handOffFailed: (agent: string, error: string) => `Not handed to ${agent}: ${error}`,
+    checking: 'Checking…',
+    checkFailed: (message: string) => `Couldn't check: ${message}`,
+    conflictedFiles: 'Conflicted files',
+    moreFiles: (count: number) => `${count} more ${count === 1 ? 'file' : 'files'}`,
+    handOffNote: (agent: string) => `The instructions go into ${agent}'s input line; press Return to send once you've checked them`,
+    resolveInTerminal: 'Resolve the conflicts in the terminal, then reopen',
+    cancel: 'Cancel',
+    close: 'Close',
+    done: 'Done',
+    handingOff: (agent: string) => `Handing to ${agent}…`,
+    handOff: (agent: string) => `Hand to ${agent}`,
+    merging: 'Merging…',
+    merge: 'Merge'
+  }
+})
+
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** Conflicted files listed in the sheet; the rest are counted. */
 const MAX_LISTED_CONFLICTS = 8
@@ -51,17 +96,18 @@ export function MergeSheet() {
  * Without a PR (or without gh) the sheet is the local one, with no switch.
  */
 function Target({ target }: { target: MergeTarget }) {
+  const m = useMessages(M)
   const status = usePrStatus(target.worktreePath)
   const pr = status?.pr
   const live = pr && (pr.state === 'open' || pr.state === 'draft') && pr.details ? pr : null
   const [to, setTo] = useState<'pr' | 'local'>(live ? 'pr' : 'local')
   const choice = live ? (
     <Segmented
-      label="合并到"
+      label={m.mergeTo}
       value={to}
       options={[
         { value: 'pr', label: `GitHub PR #${live.number}` },
-        { value: 'local', label: '本地' }
+        { value: 'local', label: m.local }
       ]}
       onChange={setTo}
     />
@@ -77,6 +123,7 @@ type Phase =
   | { kind: 'done'; check: MergePrecheck; lines: CheckLine[] }
 
 function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: ReactNode }) {
+  const m = useMessages(M)
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -203,7 +250,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
     if (!result.ok) {
       // Moved since the check (or the base it caught up with now conflicts): the checklist is read again.
       if (result.stale || result.reason === 'conflicts') {
-        setNote('分支或基线在检查之后又变了，已重新检查')
+        setNote(m.moved)
         recheck()
         return
       }
@@ -229,7 +276,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       await insertIntoTerminal(agent.id, prompt)
     } catch (error) {
       if (mounted.current) {
-        setFailure(`没有交给 ${agentLabel(agent.kind)}：${error instanceof Error ? error.message : String(error)}`)
+        setFailure(m.handOffFailed(agentLabel(agent.kind), error instanceof Error ? error.message : String(error)))
         setHanding(false)
       }
       return
@@ -281,13 +328,13 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
           {targetSwitch ? (
             <div className={styles.titleRow}>
               <h2 id={titleId} className={styles.title}>
-                合并到
+                {m.mergeTo}
               </h2>
               {targetSwitch}
             </div>
           ) : (
             <h2 id={titleId} className={styles.title}>
-              合并到 {shown?.base || '…'}
+              {m.mergeInto(shown?.base || '…')}
             </h2>
           )}
           {shown?.branch && (
@@ -301,8 +348,8 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
         </header>
 
         <div className={styles.checks} aria-live="polite">
-          {phase.kind === 'checking' && <p className={styles.muted}>正在检查…</p>}
-          {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: `没能检查：${phase.message}` }} />}
+          {phase.kind === 'checking' && <p className={styles.muted}>{m.checking}</p>}
+          {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: m.checkFailed(phase.message) }} />}
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
           {phase.kind === 'done' && attemptGroup && <AfterMerge groupId={attemptGroup.groupId} />}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
@@ -311,7 +358,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
             <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
           )}
           {conflicts.length > 0 && (
-            <ul className={styles.conflicts} aria-label="冲突的文件">
+            <ul className={styles.conflicts} aria-label={m.conflictedFiles}>
               {conflicts.slice(0, MAX_LISTED_CONFLICTS).map((c) => (
                 <li key={c.path} className={styles.conflict}>
                   <span className={styles.conflictPath}>{c.path}</span>
@@ -319,7 +366,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
                 </li>
               ))}
               {conflicts.length > MAX_LISTED_CONFLICTS && (
-                <li className={styles.conflictMore}>还有 {conflicts.length - MAX_LISTED_CONFLICTS} 个文件</li>
+                <li className={styles.conflictMore}>{m.moreFiles(conflicts.length - MAX_LISTED_CONFLICTS)}</li>
               )}
             </ul>
           )}
@@ -336,35 +383,35 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
         <footer className={styles.footer}>
           {conflicts.length > 0 && !shown?.blocker && (
             <span className={styles.footerNote}>
-              {agent ? `说明会放进 ${agentLabel(agent.kind)} 的输入行，看过后按回车发送` : '在终端里解决冲突后重新打开'}
+              {agent ? m.handOffNote(agentLabel(agent.kind)) : m.resolveInTerminal}
             </span>
           )}
           <span className={styles.spacer} />
           {phase.kind !== 'done' && !settled && (
             <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeMergeSheet(true)}>
-              取消
+              {m.cancel}
             </button>
           )}
           {settled ? (
             <button type="button" className={styles.close} onClick={() => closeMergeSheet(true)}>
-              关闭
+              {m.close}
               <span className={styles.shortcut}>esc</span>
             </button>
           ) : phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
-              完成
+              {m.done}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           ) : conflicts.length > 0 && !shown?.blocker ? (
             agent && (
               <button type="button" className={styles.primary} disabled={handing} onClick={() => void handToAgent()}>
-                {handing ? `正在交给 ${agentLabel(agent.kind)}…` : `交给 ${agentLabel(agent.kind)} 解决`}
+                {handing ? m.handingOff(agentLabel(agent.kind)) : m.handOff(agentLabel(agent.kind))}
                 <span className={styles.shortcut}>⌘↵</span>
               </button>
             )
           ) : (
             <button type="button" className={styles.primary} disabled={!mergeable || busy} onClick={() => void merge()}>
-              {busy ? '正在合并…' : '合并'}
+              {busy ? m.merging : m.merge}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           )}

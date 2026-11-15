@@ -7,6 +7,7 @@ export function ChatPreview() {
   return (
     <div className={styles.chatPreview} data-testid="chat-preview">
       <div className={styles.chatUser}>
+        {/* eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the chat's Chinese font in both languages */}
         <span className={styles.chatBubble}>把登录态迁移到 httpOnly cookie</span>
         <span className={styles.chatUserAvatar} aria-hidden />
       </div>
@@ -14,6 +15,7 @@ export function ChatPreview() {
         <span className={styles.chatAgentAvatar} aria-hidden>
           <AgentIcon kind="claude" size={16} />
         </span>
+        {/* eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the chat's Chinese font in both languages */}
         <span>好。先看一下 session.ts 里 token 是怎么存的，再改登录接口。中英混排 abc 123 对齐检查。</span>
       </div>
     </div>

@@ -1,6 +1,7 @@
 // PR / CI status in the window (PRD F16): which worktrees main should watch, the statuses it sends back and whether
 // gh is usable. gh runs in main; this only mirrors it. Nothing shows while gh is missing or signed out.
 import { create } from 'zustand'
+import { defineMessages, pick } from '@shared/i18n'
 import type { GhState, PrStatus, PrTarget, PullRequestInfo } from '@shared/pull-requests'
 import type { PrAutomation } from './auto-fix-model'
 import type { Project, Session, Worktree } from '@shared/types'
@@ -80,8 +81,15 @@ export function useSessionPrStatus(sessionId: string): PrStatus | null {
   return usePrStatus(useWorkspace((s) => worktreePathOf(s, sessionId)))
 }
 
+const M = defineMessages({
+  zh: { queryFailed: '查询失败' },
+  en: { queryFailed: 'Query failed' }
+})
+
 /** 查询失败 (Figma 73I): what a PR tag and the PR line say while the PR poll fails. */
-export const PR_QUERY_FAILED = '查询失败'
+export function prQueryFailed(): string {
+  return pick(M).queryFailed
+}
 
 export function setPrBusy(worktree: string, busy: PrBusy | null): void {
   usePullRequests.setState((s) => {

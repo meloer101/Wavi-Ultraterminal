@@ -10,6 +10,22 @@ import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import { compareSemver, parseSemver } from '../update-check'
 import type { ImageBlock } from './driver'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    notFound: (binary: string) => `找不到 ${binary}`,
+    killed: (binary: string) => `${binary} 被结束了`,
+    exited: (binary: string, code: number) => `${binary} 退出了（退出码 ${code}）`,
+    withTail: (how: string, tail: string) => `${how}：${tail}`
+  },
+  en: {
+    notFound: (binary: string) => `Can't find ${binary}`,
+    killed: (binary: string) => `${binary} was killed`,
+    exited: (binary: string, code: number) => `${binary} exited (exit code ${code})`,
+    withTail: (how: string, tail: string) => `${how}: ${tail}`
+  }
+})
 
 /** The flags a long-lived headless Claude needs for a GUI (PRD F23 驱动). */
 export const CLAUDE_STREAM_ARGS = [
@@ -164,7 +180,7 @@ export interface PipeExitInfo {
 
 /** Why the agent process ended, for the line above the composer. */
 export function exitReason(exit: PipeExitInfo, binary: string): string {
-  if (exit.exitCode === 127) return `找不到 ${binary}`
+  if (exit.exitCode === 127) return pick(M).notFound(binary)
   const tail = exit.stderr
     .split('\n')
     .map((l) => l.trim())
@@ -172,6 +188,6 @@ export function exitReason(exit: PipeExitInfo, binary: string): string {
     .slice(-2)
     .join(' ')
   const clipped = tail.length > 300 ? `…${tail.slice(-300)}` : tail
-  const how = exit.signal ? `${binary} 被结束了` : `${binary} 退出了（退出码 ${exit.exitCode}）`
-  return clipped ? `${how}：${clipped}` : how
+  const how = exit.signal ? pick(M).killed(binary) : pick(M).exited(binary, exit.exitCode)
+  return clipped ? pick(M).withTail(how, clipped) : how
 }

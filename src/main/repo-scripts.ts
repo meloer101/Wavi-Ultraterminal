@@ -27,6 +27,24 @@ import { confirm } from './confirm'
 import { getSettings } from './settings'
 import { resolveRoot, workspaceFolder } from './worktree-files'
 import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    notAFile: (file: string) => `${file} 不是文件`,
+    tooLarge: (file: string) => `${file} 太大（最多 64 KB）`,
+    runRepo: (repo: string) => `运行仓库 ${repo} 的脚本？`,
+    run: '运行',
+    dontRun: '不运行'
+  },
+  en: {
+    notAFile: (file: string) => `${file} is not a file`,
+    tooLarge: (file: string) => `${file} is too large (64 KB at most)`,
+    runRepo: (repo: string) => `Run the scripts of the ${repo} repository?`,
+    run: 'Run',
+    dontRun: "Don't run"
+  }
+})
 
 const GIT_TIMEOUT_MS = 5_000
 
@@ -59,8 +77,8 @@ export async function readRepoSettings(top: string): Promise<{ scripts: RepoScri
   const path = join(top, REPO_SETTINGS_FILE)
   const info = await stat(path).catch(() => null)
   if (!info) return { scripts: {}, problems: [] }
-  if (!info.isFile()) return { scripts: {}, problems: [`${REPO_SETTINGS_FILE} 不是文件`] }
-  if (info.size > MAX_SETTINGS_BYTES) return { scripts: {}, problems: [`${REPO_SETTINGS_FILE} 太大（最多 64 KB）`] }
+  if (!info.isFile()) return { scripts: {}, problems: [pick(M).notAFile(REPO_SETTINGS_FILE)] }
+  if (info.size > MAX_SETTINGS_BYTES) return { scripts: {}, problems: [pick(M).tooLarge(REPO_SETTINGS_FILE)] }
   return parseRepoSettings(await readFile(path, 'utf8'))
 }
 
@@ -186,10 +204,10 @@ async function approve(owner: WebContents, dirRaw: unknown, nameRaw: unknown): P
     const repoName = key.endsWith('/.git') ? key.slice(0, -5).split('/').pop() : top.split('/').pop()
     pending = confirm(
       {
-        message: `运行仓库 ${repoName ?? ''} 的脚本？`,
+        message: pick(M).runRepo(repoName ?? ''),
         detail: approvalDetail(scripts),
-        confirmLabel: '运行',
-        cancelLabel: '不运行'
+        confirmLabel: pick(M).run,
+        cancelLabel: pick(M).dontRun
       },
       BrowserWindow.fromWebContents(owner)
     ).finally(() => asking.delete(id))

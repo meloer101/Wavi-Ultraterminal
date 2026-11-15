@@ -60,25 +60,28 @@ func toolSummary(_ items: [ChatItem]) -> String {
   func count(_ names: Set<String>) -> Int { items.filter { names.contains($0.name ?? "") }.count }
   let known = editTools.union(readTools).union(searchTools).union(commandTools)
   let parts: [(Int, (Int) -> String)] = [
-    (distinct(readTools), { "读了 \($0) 个文件" }),
-    (count(searchTools), { "搜索了 \($0) 次" }),
-    (distinct(editTools), { "改了 \($0) 个文件" }),
-    (count(commandTools), { "跑了 \($0) 条命令" }),
-    (items.filter { !known.contains($0.name ?? "") }.count, { "调用了 \($0) 次其他工具" })
+    (distinct(readTools), { String(localized: "读了 \($0) 个文件") }),
+    (count(searchTools), { String(localized: "搜索了 \($0) 次") }),
+    (distinct(editTools), { String(localized: "改了 \($0) 个文件") }),
+    (count(commandTools), { String(localized: "跑了 \($0) 条命令") }),
+    (items.filter { !known.contains($0.name ?? "") }.count, { String(localized: "调用了 \($0) 次其他工具") })
   ]
-  return parts.filter { $0.0 > 0 }.map { $0.1($0.0) }.joined(separator: "，")
+  return parts.filter { $0.0 > 0 }.map { $0.1($0.0) }.joined(separator: String(localized: "，", comment: "Between the items of a list"))
 }
 
 /// The line left after an answer (Figma 59 Mobile/Receipt).
 func receiptText(_ prompt: RemotePrompt, decision: String?, onPhone: Bool) -> String {
   let subject = prompt.kind == "permission" ? (prompt.summary ?? "") : (prompt.questions?.first?.question ?? "")
-  let verb: String
-  if prompt.kind == "permission" {
-    verb = onPhone ? (decision == "deny" ? "拒绝" : decision == "allow-always" ? "总是允许" : "允许") : "处理"
-  } else {
-    verb = "回答"
+  // Whole phrases: the word order differs between languages.
+  if prompt.kind != "permission" {
+    return onPhone ? String(localized: "在这台手机上回答 · \(subject)") : String(localized: "在 Mac 上回答 · \(subject)")
   }
-  return "\(onPhone ? "在这台手机上" : "在 Mac 上")\(verb) · \(subject)"
+  if !onPhone { return String(localized: "在 Mac 上处理 · \(subject)") }
+  switch decision {
+  case "deny": return String(localized: "在这台手机上拒绝 · \(subject)")
+  case "allow-always": return String(localized: "在这台手机上总是允许 · \(subject)")
+  default: return String(localized: "在这台手机上允许 · \(subject)")
+  }
 }
 
 /// `turnOpen`: the agent is still at the last turn (no totals for it yet).

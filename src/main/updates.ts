@@ -7,6 +7,12 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { IPC, type UpdateInfo } from '@shared/ipc'
 import { isDeveloperBuild } from './source-checkout'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { released: (name: string, version: string) => `${name} ${version} 已发布`, body: '点击查看更新内容并下载。' },
+  en: { released: (name: string, version: string) => `${name} ${version} is out`, body: "Click to see what's new and download it." }
+})
 import { checkLatestRelease, parseRepository, type FetchLike, type Repo } from './update-check'
 
 const FIRST_CHECK_DELAY_MS = 10_000
@@ -58,8 +64,8 @@ function notify(update: UpdateInfo): void {
   notified = update.version
   void rememberNotified(update.version)
   const notification = new Notification({
-    title: `${app.name} ${update.version} 已发布`,
-    body: '点击查看更新内容并下载。',
+    title: pick(M).released(app.name, update.version),
+    body: pick(M).body,
     silent: true
   })
   live.add(notification)

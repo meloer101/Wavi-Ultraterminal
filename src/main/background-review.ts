@@ -53,6 +53,44 @@ import { getSettings } from './settings'
 import { isWorkspaceDir } from './workspace-store'
 import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 import { killGroup, searchPath } from './git/run'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    timedOut: (minutes: number) => `超过 ${minutes} 分钟没有结束，已停止`,
+    segment: (index: number, count: number) => `正在审阅第 ${index}/${count} 段…`,
+    cancelled: '已取消审阅',
+    autoOff: '自动审阅没有打开',
+    readFailed: (why: string) => `没能读取改动：${why}`,
+    notRepo: '不是 git 仓库',
+    nothing: '没有要审阅的改动',
+    alreadyReviewed: '这份改动已经审过',
+    noCommand: (agent: string) => `找不到 ${agent} 命令，没有审阅`,
+    changed: '改动变了，已取消上一次审阅',
+    fellBack: (missing: string, used: string) => `没找到 ${missing} 命令，改用 ${used} 审阅…`,
+    reviewingWith: (agent: string) => `正在用 ${agent} 审阅…`,
+    reviewing: '正在审阅…',
+    windowClosed: '窗口已关闭',
+    quit: '已退出'
+  },
+  en: {
+    timedOut: (minutes: number) => `Still running after ${minutes} min; stopped`,
+    segment: (index: number, count: number) => `Reviewing part ${index}/${count}…`,
+    cancelled: 'Review cancelled',
+    autoOff: 'Automatic review is off',
+    readFailed: (why: string) => `Couldn't read the changes: ${why}`,
+    notRepo: 'Not a git repository',
+    nothing: 'No changes to review',
+    alreadyReviewed: 'These changes were already reviewed',
+    noCommand: (agent: string) => `Can't find the ${agent} command; not reviewed`,
+    changed: 'The changes changed; cancelled the previous review',
+    fellBack: (missing: string, used: string) => `No ${missing} command; reviewing with ${used}…`,
+    reviewingWith: (agent: string) => `Reviewing with ${agent}…`,
+    reviewing: 'Reviewing…',
+    windowClosed: 'The window was closed',
+    quit: 'Exited'
+  }
+})
 
 /** One segment may take this long before it is stopped and the review fails. */
 const SEGMENT_TIMEOUT_MS = 15 * 60_000
@@ -202,7 +240,7 @@ function runCli(job: Job, binary: string, args: string[], prompt: string, cwd: s
     let stderr = ''
     let settled = false
     const timer = setTimeout(() => {
-      stderr += `\n超过 ${SEGMENT_TIMEOUT_MS / 60_000} 分钟没有结束，已停止`
+      stderr += `\n${pick(M).timedOut(SEGMENT_TIMEOUT_MS / 60_000)}`
       stopChild(child)
     }, SEGMENT_TIMEOUT_MS)
     const finish = (code: number | null): void => {
@@ -294,7 +332,7 @@ async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSe
       isCancelled: () => job.cancelled,
       onSegment: (index, count) => {
         if (count < 2) return
-        job.status = { ...job.status, segment: { index, count }, message: `正在审阅第 ${index + 1}/${count} 段…` }
+        job.status = { ...job.status, segment: { index, count }, message: pick(M).segment(index + 1, count) }
         send(job.owner, job.status)
       },
       run: async ({ argv, prompt, schemaJson, outputPath }) => {
@@ -308,7 +346,7 @@ async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSe
       }
     })
     if (result.phase === 'cancelled' || job.cancelled) {
-      finishJob(state, job, { phase: 'cancelled', message: '已取消审阅' }, 'cancelled')
+      finishJob(state, job, { phase: 'cancelled', message: pick(M).cancelled }, 'cancelled')
       return
     }
     const durationMs = Date.now() - started
@@ -332,7 +370,8 @@ async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSe
       'done'
     )
   } catch (error) {
-    finishJob(state, job, { phase: 'failed', message: `审阅失败：${error instanceof Error ? error.message : String(error)}` }, 'failed')
+    // The renderer puts 审阅失败 in front, in its own language (review-block-model.ts).
+    finishJob(state, job, { phase: 'failed', message: error instanceof Error ? error.message : String(error) }, 'failed')
   } finally {
     if (dir) void rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -395,15 +434,15 @@ async function diffSincePrevious(cwd: string, previous: ReviewRecord | null, hea
 export async function startReview(owner: WebContents, raw: unknown): Promise<ReviewStatus> {
   const request = parseReviewRequest(raw)
   const settings = getSettings().review
-  if (!triggerAllowed(request.trigger, settings)) return quick(request, 'skipped', '自动审阅没有打开')
+  if (!triggerAllowed(request.trigger, settings)) return quick(request, 'skipped', pick(M).autoOff)
   let diff
   try {
     diff = await reviewDiff(request.root, request.base, request.range)
   } catch (error) {
-    return quick(request, 'failed', `没能读取改动：${error instanceof Error ? error.message : String(error)}`)
+    return quick(request, 'failed', pick(M).readFailed(error instanceof Error ? error.message : String(error)))
   }
-  if (!diff) return quick(request, 'failed', '不是 git 仓库')
-  if (diff.text === '') return quick(request, 'skipped', '没有要审阅的改动')
+  if (!diff) return quick(request, 'failed', pick(M).notRepo)
+  if (diff.text === '') return quick(request, 'skipped', pick(M).nothing)
   const hash = diffHash(diff.text)
   const state = stateOf(request.root)
   // 重审 of a diff that was reviewed: forget that, and read all of it again.
@@ -413,11 +452,11 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   if (decision.kind === 'skip') {
     if (decision.reason === 'in-flight' && state.job) return state.job.status
     const record = recordFor(resultsFile().get(), request.root, hash)
-    return record ? recordStatus(request.root, record, true) : quick(request, 'skipped', '这份改动已经审过', hash)
+    return record ? recordStatus(request.root, record, true) : quick(request, 'skipped', pick(M).alreadyReviewed, hash)
   }
   const path = await searchPath()
   const reviewer = pickReviewer(request.agent, settings.reviewer, (agent) => executableOnPath(path, agent))
-  if (!reviewer) return quick(request, 'failed', `找不到 ${request.agent} 命令，没有审阅`, hash)
+  if (!reviewer) return quick(request, 'failed', pick(M).noCommand(request.agent), hash)
   const head = await headCommit(diff.cwd)
   const store = resultsFile().get()
   // A range (the push node's commits) is always read in full: what an earlier review of the whole change kept is not
@@ -432,13 +471,13 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   })
   // The awaits above let another start() through: it owns the run now.
   if (state.memory.inFlightHash === hash && state.job) return state.job.status
-  if (state.job) cancelJob(state, state.job, '改动变了，已取消上一次审阅')
+  if (state.job) cancelJob(state, state.job, pick(M).changed)
   state.memory = beginReview(state.memory, hash)
   const message = reviewer.fellBack
-    ? `没找到 ${otherAgent(request.agent)} 命令，改用 ${AGENT_NAME[reviewer.agent]} 审阅…`
+    ? pick(M).fellBack(otherAgent(request.agent), AGENT_NAME[reviewer.agent])
     : reviewer.agent !== request.agent
-      ? `正在用 ${AGENT_NAME[reviewer.agent]} 审阅…`
-      : '正在审阅…'
+      ? pick(M).reviewingWith(AGENT_NAME[reviewer.agent])
+      : pick(M).reviewing
   const job: Job = {
     hash,
     head,
@@ -487,7 +526,7 @@ function cancelJob(state: RootState, job: Job, message: string): void {
 
 export function cancelReview(root: string): void {
   const state = roots.get(root)
-  if (state?.job) cancelJob(state, state.job, '已取消审阅')
+  if (state?.job) cancelJob(state, state.job, pick(M).cancelled)
 }
 
 const hooked = new WeakSet<WebContents>()
@@ -497,7 +536,7 @@ function hookOwner(owner: WebContents): void {
   if (hooked.has(owner)) return
   hooked.add(owner)
   owner.once('destroyed', () => {
-    for (const state of roots.values()) if (state.job?.owner === owner) cancelJob(state, state.job, '窗口已关闭')
+    for (const state of roots.values()) if (state.job?.owner === owner) cancelJob(state, state.job, pick(M).windowClosed)
   })
 }
 
@@ -543,6 +582,6 @@ export function registerBackgroundReviewHandlers(): void {
     if (valid.length > 0) dismissFindings(root, valid, undo === true)
   })
   app.on('before-quit', () => {
-    for (const state of roots.values()) if (state.job) cancelJob(state, state.job, '已退出')
+    for (const state of roots.values()) if (state.job) cancelJob(state, state.job, pick(M).quit)
   })
 }

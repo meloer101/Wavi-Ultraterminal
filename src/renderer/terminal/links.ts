@@ -3,6 +3,12 @@
 // browser or the default editor; a right-click on a link opens the link menu.
 import { isAllowedUrl } from '@shared/browser'
 import { pathLabel } from './file-links'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { url: '单击在内置浏览器打开 · ⌘ 单击用系统浏览器打开', file: '单击预览 · ⌘ 单击用默认编辑器打开' },
+  en: { url: 'Click to open in the built-in browser · ⌘-click for the system browser', file: 'Click to preview · ⌘-click to open in the default editor' }
+})
 
 /** What a link points at: a URL, or a file as a POSIX path relative to the session's worktree. */
 export type LinkRef = { kind: 'url'; url: string } | { kind: 'file'; path: string; line: number | null; column: number | null }
@@ -62,6 +68,6 @@ export function linkTarget(link: Pick<TerminalLink, 'metaKey'>): LinkTarget {
 /** Hover hint: the real address (an OSC 8 link's text can differ from it) or the path, and what a click does. */
 export function linkHint(ref: LinkRef): string {
   return ref.kind === 'url'
-    ? `${ref.url}\n单击在内置浏览器打开 · ⌘ 单击用系统浏览器打开`
-    : `${pathLabel(ref.path, ref.line, ref.column)}\n单击预览 · ⌘ 单击用默认编辑器打开`
+    ? `${ref.url}\n${pick(M).url}`
+    : `${pathLabel(ref.path, ref.line, ref.column)}\n${pick(M).file}`
 }

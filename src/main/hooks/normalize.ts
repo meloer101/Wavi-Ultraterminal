@@ -11,6 +11,52 @@ import { trimHookPayload } from '@shared/hook-payload'
 import { isTodoTool } from '@shared/todo-progress'
 import { normalizeAdapter, normalizeGemini, normalizeQwen } from './cli-normalize'
 import { classifyNotification } from './notification'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    running: (command: string) => `运行 ${command}`,
+    runCommand: '运行命令',
+    editing: (file: string) => `编辑 ${file}`,
+    editFile: '编辑文件',
+    editNotebook: '编辑 notebook',
+    writing: (file: string) => `写入 ${file}`,
+    writeFile: '写入文件',
+    reading: (file: string) => `读取 ${file}`,
+    readFile: '读取文件',
+    fetching: (url: string) => `抓取 ${url}`,
+    fetchPage: '抓取网页',
+    searching: (query: string) => `搜索 ${query}`,
+    webSearch: '联网搜索',
+    searchFiles: '搜索文件',
+    subtask: (description: string) => `子任务 ${description}`,
+    startSubtask: '启动子任务',
+    confirmPlan: '确认计划',
+    calling: (server: string, tool: string) => `调用 ${server} · ${tool}`,
+    using: (tool: string) => `使用 ${tool}`
+  },
+  en: {
+    running: (command: string) => `Running ${command}`,
+    runCommand: 'Running a command',
+    editing: (file: string) => `Editing ${file}`,
+    editFile: 'Editing a file',
+    editNotebook: 'Editing a notebook',
+    writing: (file: string) => `Writing ${file}`,
+    writeFile: 'Writing a file',
+    reading: (file: string) => `Reading ${file}`,
+    readFile: 'Reading a file',
+    fetching: (url: string) => `Fetching ${url}`,
+    fetchPage: 'Fetching a web page',
+    searching: (query: string) => `Searching ${query}`,
+    webSearch: 'Searching the web',
+    searchFiles: 'Searching files',
+    subtask: (description: string) => `Subtask ${description}`,
+    startSubtask: 'Starting a subtask',
+    confirmPlan: 'Confirm the plan',
+    calling: (server: string, tool: string) => `Calling ${server} · ${tool}`,
+    using: (tool: string) => `Using ${tool}`
+  }
+})
 
 export interface PermissionDraft {
   tool: string
@@ -68,44 +114,45 @@ function shortPath(path: string): string {
 
 /** One-line Chinese description of a tool call for the permission prompt, e.g. "运行 pnpm test". */
 export function summarizeToolUse(tool: string, input: Rec): string {
+  const m = pick(M)
   const file = str(input.file_path) ?? str(input.notebook_path) ?? str(input.path)
   switch (tool) {
     case 'Bash': {
       const command = str(input.command)
-      return command ? `运行 ${truncate(command.split('\n')[0] ?? command)}` : '运行命令'
+      return command ? m.running(truncate(command.split('\n')[0] ?? command)) : m.runCommand
     }
     case 'Edit':
     case 'MultiEdit':
-      return file ? `编辑 ${shortPath(file)}` : '编辑文件'
+      return file ? m.editing(shortPath(file)) : m.editFile
     case 'NotebookEdit':
-      return file ? `编辑 ${shortPath(file)}` : '编辑 notebook'
+      return file ? m.editing(shortPath(file)) : m.editNotebook
     case 'Write':
-      return file ? `写入 ${shortPath(file)}` : '写入文件'
+      return file ? m.writing(shortPath(file)) : m.writeFile
     case 'Read':
-      return file ? `读取 ${shortPath(file)}` : '读取文件'
+      return file ? m.reading(shortPath(file)) : m.readFile
     case 'WebFetch': {
       const url = str(input.url)
-      return url ? `抓取 ${truncate(url)}` : '抓取网页'
+      return url ? m.fetching(truncate(url)) : m.fetchPage
     }
     case 'WebSearch': {
       const query = str(input.query)
-      return query ? `搜索 ${truncate(query)}` : '联网搜索'
+      return query ? m.searching(truncate(query)) : m.webSearch
     }
     case 'Grep':
     case 'Glob': {
       const pattern = str(input.pattern)
-      return pattern ? `搜索 ${truncate(pattern)}` : '搜索文件'
+      return pattern ? m.searching(truncate(pattern)) : m.searchFiles
     }
     case 'Task':
     case 'Agent': {
       const description = str(input.description)
-      return description ? `子任务 ${truncate(description)}` : '启动子任务'
+      return description ? m.subtask(truncate(description)) : m.startSubtask
     }
     case 'ExitPlanMode':
-      return '确认计划'
+      return m.confirmPlan
     default: {
       const mcp = /^mcp__(.+?)__(.+)$/.exec(tool)
-      return mcp ? `调用 ${mcp[1]} · ${mcp[2]}` : `使用 ${tool}`
+      return mcp ? m.calling(mcp[1]!, mcp[2]!) : m.using(tool)
     }
   }
 }

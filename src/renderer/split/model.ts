@@ -2,8 +2,28 @@
 // and the words on a drop target. Pure.
 import { hasPane, type SplitDrop, type SplitHandle, type SplitNode } from '@shared/split-layout'
 import type { Project, Session, SessionId, Worktree } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { buildOverview, type OverviewRow } from '../overview/model'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
+
+const M = defineMessages({
+  zh: {
+    max: '最多 4 格 · 放到格子中间来替换',
+    noRoom: '这里放不下新的一格 · 放到格子中间来替换',
+    swap: '松开交换这两格',
+    replace: '松开换掉这一格',
+    move: '松开把这一格挪到这里',
+    show: '松开在这里显示这个会话'
+  },
+  en: {
+    max: 'At most 4 panes · drop in the middle of one to replace it',
+    noRoom: 'No room for another pane here · drop in the middle of one to replace it',
+    swap: 'Release to swap these panes',
+    replace: 'Release to replace this pane',
+    move: 'Release to move this pane here',
+    show: 'Release to show this session here'
+  }
+})
 
 export interface PickerInput {
   projects: Project[]
@@ -28,10 +48,11 @@ export function pickerRows({ projects, worktrees, sessions, shown: shownIds, now
 
 /** The caption on a drop target (Figma 21D / 21E). */
 export function dropLabel(drop: SplitDrop, dragged: SessionId, root: SplitNode | null): string {
-  if ('refused' in drop) return drop.refused === 'max' ? '最多 4 格 · 放到格子中间来替换' : '这里放不下新的一格 · 放到格子中间来替换'
+  const m = pick(M)
+  if ('refused' in drop) return drop.refused === 'max' ? m.max : m.noRoom
   const moving = hasPane(root, dragged)
-  if (drop.zone === 'center') return moving ? '松开交换这两格' : '松开换掉这一格'
-  return moving ? '松开把这一格挪到这里' : '松开在这里显示这个会话'
+  if (drop.zone === 'center') return moving ? m.swap : m.replace
+  return moving ? m.move : m.show
 }
 
 /**

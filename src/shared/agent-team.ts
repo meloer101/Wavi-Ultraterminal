@@ -4,7 +4,21 @@
 // shared so the renderer and the tests read the same state. Measured on 2.1.325 (PRD §6.20 agent teams): a teammate
 // sends SubagentStart for each message it takes up and SubagentStop + TeammateIdle when that turn ends, so a stop is
 // "idle", never "gone"; only a new or ended conversation dissolves the team.
+import { defineMessages, pick } from './i18n'
 import type { SessionStatus } from './types'
+
+const M = defineMessages({
+  zh: {
+    confirm: (action: string | undefined) => `等你确认${action ? `：${action}` : ''}`,
+    working: '在干活',
+    idle: '空闲'
+  },
+  en: {
+    confirm: (action: string | undefined) => (action ? `Confirm: ${action}` : 'Needs confirmation'),
+    working: 'Working',
+    idle: 'Idle'
+  }
+})
 
 /** The lead's own lane: the session's main thread. */
 export const TEAM_LEAD = 'lead'
@@ -160,9 +174,10 @@ export const TEAM_GLYPH: Readonly<Record<TeamMemberState, SessionStatus>> = { wo
 
 /** A member's second line (Figma 83″B / 82′F): what it waits on you for, what it is doing, or 空闲. */
 export function memberLine(member: TeamMember): string {
-  if (member.state === 'asking') return `等你确认${member.action ? `：${member.action}` : ''}`
-  if (member.state === 'working') return member.action ?? '在干活'
-  return '空闲'
+  const m = pick(M)
+  if (member.state === 'asking') return m.confirm(member.action)
+  if (member.state === 'working') return member.action ?? m.working
+  return m.idle
 }
 
 /** Per state, how many teammates are in it (the strip's header, Figma 83′C); the lead is not counted. */

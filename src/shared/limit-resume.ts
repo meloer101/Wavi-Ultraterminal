@@ -2,11 +2,40 @@
 // once the limit resets. Pure: which sessions the limit stopped, when the send is due, whether the usage and the screen
 // allow it, and the copy. The renderer's limit-resume bridge owns the timer and the send. Measurements: PRD §6.6 / §6.7.
 import { usageVendor } from './agents'
+import { defineMessages, onLangChange, pick } from './i18n'
 import { formatClock, VENDOR_LABEL, type UsageVendor, type UsageWindow, type VendorUsage } from './session-meta'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
-/** What Wavi types (then Enter), the same word as the error bar's 重试这一轮. */
-export const RESUME_PROMPT = '继续'
+const M = defineMessages({
+  zh: {
+    prompt: '继续',
+    button: (prompt: string) => `恢复后发送“${prompt}”`,
+    armed: (at: string, prompt: string) => `${at} 发送“${prompt}”`,
+    stopNote: (vendor: string, at: string) => `${vendor} 额度用完 · ${at} 恢复`,
+    hint: (resets: string, due: string, prompt: string) =>
+      `额度 ${resets} 恢复；约 ${due} 在终端里输入“${prompt}”并回车。你在终端里打字、会话自己继续了，或再点一次，就取消`,
+    agentContinues: (vendor: string, prompt: string) => `额度已恢复，${vendor} 会自己继续，Wavi 没有发送“${prompt}”`,
+    stillLimited: (prompt: string) => `额度还没有恢复，没有发送“${prompt}”`,
+    dialog: (prompt: string) => `额度已恢复，但终端里有选择框，没有发送“${prompt}”，请在终端里处理`
+  },
+  en: {
+    prompt: 'continue',
+    button: (prompt: string) => `Send “${prompt}” once usage resets`,
+    armed: (at: string, prompt: string) => `Sends “${prompt}” at ${at}`,
+    stopNote: (vendor: string, at: string) => `${vendor} out of usage · resets ${at}`,
+    hint: (resets: string, due: string, prompt: string) =>
+      `Usage resets at ${resets}; around ${due} Wavi types “${prompt}” in the terminal and presses Return. Typing in the terminal, the session carrying on by itself, or another click cancels it`,
+    agentContinues: (vendor: string, prompt: string) => `Usage has reset and ${vendor} carries on by itself, so Wavi did not send “${prompt}”`,
+    stillLimited: (prompt: string) => `Usage has not reset yet; “${prompt}” was not sent`,
+    dialog: (prompt: string) => `Usage has reset, but the terminal shows a choice, so “${prompt}” was not sent; please handle it in the terminal`
+  }
+})
+
+/**
+ * What Wavi types (then Enter), the same word as the error bar's 重试这一轮: `继续` / `continue`, following the interface
+ * language. A live binding, updated when the language changes, so importers read the current word.
+ */
+export let RESUME_PROMPT = pick(M).prompt
 
 export interface ResumeTiming {
   /** The send is due this long after the reset: the vendor's clock against ours, and the agent's own continue goes first. */
@@ -215,27 +244,35 @@ export function isTypedInput(data: string): boolean {
 // Copy
 // ---------------------------------------------------------------------------------------------
 
-/** The button before the click. */
-export const RESUME_BUTTON = `恢复后发送“${RESUME_PROMPT}”`
+/** The button before the click (a live binding, like RESUME_PROMPT). */
+export let RESUME_BUTTON = pick(M).button(RESUME_PROMPT)
+
+onLangChange(() => {
+  RESUME_PROMPT = pick(M).prompt
+  RESUME_BUTTON = pick(M).button(RESUME_PROMPT)
+})
 
 /** The armed button: when it will type 继续. */
 export function armedLabel(plan: Pick<ResumePlan, 'resetsAt'>, now: number, timing: ResumeTiming = RESUME_TIMING): string {
-  return `${formatClock(resumeDueAt(plan, timing), now)} 发送“${RESUME_PROMPT}”`
+  const m = pick(M)
+  return m.armed(formatClock(resumeDueAt(plan, timing), now), m.prompt)
 }
 
 /** One line for the overview row and the error bar: `Claude 额度用完 · 17:22 恢复`. */
 export function stopNote(stop: Pick<LimitStop, 'vendor' | 'resetsAt'>, now: number): string {
-  return `${VENDOR_LABEL[stop.vendor]} 额度用完 · ${formatClock(stop.resetsAt, now)} 恢复`
+  return pick(M).stopNote(VENDOR_LABEL[stop.vendor], formatClock(stop.resetsAt, now))
 }
 
 /** The button's tooltip: exactly what it will do, and what calls it off. */
 export function resumeHint(stop: Pick<LimitStop, 'resetsAt'>, now: number, timing: ResumeTiming = RESUME_TIMING): string {
-  return `额度 ${formatClock(stop.resetsAt, now)} 恢复；约 ${formatClock(resumeDueAt(stop, timing), now)} 在终端里输入“${RESUME_PROMPT}”并回车。你在终端里打字、会话自己继续了，或再点一次，就取消`
+  const m = pick(M)
+  return m.hint(formatClock(stop.resetsAt, now), formatClock(resumeDueAt(stop, timing), now), m.prompt)
 }
 
 /** Notification body when the due send was not made. */
 export function holdText(reason: HoldReason, vendor: UsageVendor): string {
-  if (reason === 'agent-continues') return `额度已恢复，${VENDOR_LABEL[vendor]} 会自己继续，Wavi 没有发送“${RESUME_PROMPT}”`
-  if (reason === 'still-limited') return `额度还没有恢复，没有发送“${RESUME_PROMPT}”`
-  return `额度已恢复，但终端里有选择框，没有发送“${RESUME_PROMPT}”，请在终端里处理`
+  const m = pick(M)
+  if (reason === 'agent-continues') return m.agentContinues(VENDOR_LABEL[vendor], m.prompt)
+  if (reason === 'still-limited') return m.stillLimited(m.prompt)
+  return m.dialog(m.prompt)
 }

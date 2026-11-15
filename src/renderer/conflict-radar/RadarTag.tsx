@@ -5,23 +5,31 @@
 import { memo } from 'react'
 import { ArrowDown, OctagonAlert } from 'lucide-react'
 import type { RadarMark } from '@shared/conflict-radar'
+import { defineMessages } from '@shared/i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import { useSessionRadarMark } from './store'
 import styles from './RadarTag.module.css'
 
 const MARK_ICON = { size: 12, strokeWidth: 2, 'aria-hidden': true } as const
 
-const SHORT_LABEL: Record<RadarMark['tone'], string> = { conflict: '冲突', behind: '落后' }
+const M = defineMessages<{ short: Record<RadarMark['tone'], string> }>({
+  zh: { short: { conflict: '冲突', behind: '落后' } },
+  en: { short: { conflict: 'Conflict', behind: 'Behind' } }
+})
 
 export function RadarTag({ mark, short = false }: { mark: RadarMark; short?: boolean }) {
+  const m = useMessages(M)
   return (
     <span className={styles.tag} data-tone={mark.tone} data-testid="radar-tag" title={mark.detail} aria-label={mark.detail}>
       <span className={styles.icon}>{mark.tone === 'conflict' ? <OctagonAlert {...MARK_ICON} /> : <ArrowDown {...MARK_ICON} />}</span>
-      <span className={styles.label}>{short ? SHORT_LABEL[mark.tone] : mark.label}</span>
+      <span className={styles.label}>{short ? m.short[mark.tone] : mark.label}</span>
     </span>
   )
 }
 
 export const SessionRadarTag = memo(function SessionRadarTag({ sessionId }: { sessionId: string }) {
+  // Memo'd: the mark's label is built outside React, so this re-renders on a language switch itself.
+  useLang()
   const mark = useSessionRadarMark(sessionId)
   return mark ? <RadarTag mark={mark} /> : null
 })

@@ -12,6 +12,7 @@ import { GUI_IPC, type GuiEvent } from '@shared/gui-chat'
 import { SIM_PORT_MESSAGE, SIMULATOR_IPC } from '@shared/simulator'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
+import { isLang, type Lang } from '@shared/i18n'
 import { isMenuCommand } from '@shared/shortcuts'
 import { isSecondaryKey } from '@shared/window-layout'
 import type { SessionId } from '@shared/types'
@@ -49,6 +50,12 @@ ipcRenderer.on(IPC.ptyData, (_event, message: { sessionId: SessionId; data: stri
 ipcRenderer.on(IPC.ptyExit, (_event, message: { sessionId: SessionId; exit: PtyExit }) => {
   exitListeners.emit(message.sessionId, message.exit)
 })
+
+/** The language main resolved for this window, read once before the page renders. */
+function initialLanguage(): Lang {
+  const lang: unknown = ipcRenderer.sendSync(IPC.appLanguage)
+  return isLang(lang) ? lang : 'zh'
+}
 
 function listen<T>(channel: string, listener: (payload: T) => void): () => void {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => listener(payload)
@@ -138,6 +145,8 @@ const api: TrApi = {
   },
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
+    language: initialLanguage(),
+    onLanguage: (listener) => listen(IPC.appLanguageChanged, (lang: unknown) => { if (isLang(lang)) listener(lang) }),
     checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
     reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
     keepTimers: (on) => ipcRenderer.send(IPC.appKeepTimers, on),

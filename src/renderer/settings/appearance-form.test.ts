@@ -38,10 +38,10 @@ describe('MATERIAL_OPTIONS (PRD v1.174, Figma 66′)', () => {
 })
 
 describe('恢复默认 per page (Figma 66)', () => {
-  it('every appearance setting belongs to exactly one page, except the theme, 全屏背景 and the 背景图片 (PRD v1.189)', () => {
+  it('every appearance setting belongs to exactly one page, except the language, the theme, 全屏背景 and the 背景图片 (PRD v1.189, Figma 89)', () => {
     const owned = Object.values(RESET_KEYS).flat()
     expect(new Set(owned).size).toBe(owned.length)
-    expect([...owned, 'theme', 'fullscreenBackdrop', 'backgroundImage'].sort()).toEqual(Object.keys(DEFAULT_SETTINGS.appearance).sort())
+    expect([...owned, 'language', 'theme', 'fullscreenBackdrop', 'backgroundImage'].sort()).toEqual(Object.keys(DEFAULT_SETTINGS.appearance).sort())
   })
 
   it('resets only its own page', () => {

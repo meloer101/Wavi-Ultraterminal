@@ -33,6 +33,9 @@ export function launchApp(
     TR_USAGE_STATS_HOME: join(userData, 'usage-home'),
     // Nor the real gh for PRs (PRD F16); e2e/pull-requests.spec.ts puts a fake one on the PATH instead.
     TR_GH: 'off',
+    // The interface language stands in for the system's (main/language.ts): the specs read the Chinese UI unless one
+    // asks for English.
+    WAVI_LANG: 'zh-Hans',
     ...envOverrides
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]

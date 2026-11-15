@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { ProjectId, Session, WorktreeId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useLang, useMessages } from '../../ui/i18n'
 import { newSessionInProject } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
@@ -27,6 +29,43 @@ import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
 import { buildRows, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
 import { patchRoot, refreshWorktrees, useWorktrees, watchRepo, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
+
+const M = defineMessages({
+  zh: {
+    reading: '正在读取 worktree…',
+    readFailed: '无法读取 worktree',
+    notRepo: '不是 git 仓库',
+    newSession: '新建会话',
+    cleanable: '可清理',
+    cleanAll: '全部清理',
+    noSession: '没有会话',
+    uncommitted: (diff: string) => `未提交 ${diff}`,
+    behind: (base: string, behind: number) => `落后 ${base} ${behind} 个提交`,
+    mergeInto: (base: string) => `合并到 ${base}…`,
+    openFolder: '打开文件夹',
+    rebaseTitle: (agent: string) => `把 rebase 说明放进 ${agent} 的输入行，看过后按回车发送`,
+    handOffFailed: (agent: string, error: string) => `没能交给 ${agent}：${error}`,
+    rebase: '让 agent rebase',
+    more: '更多'
+  },
+  en: {
+    reading: 'Reading worktrees…',
+    readFailed: "Can't read worktrees",
+    notRepo: 'Not a git repository',
+    newSession: 'New session',
+    cleanable: 'Can clean up',
+    cleanAll: 'Clean up all',
+    noSession: 'No session',
+    uncommitted: (diff: string) => `Uncommitted ${diff}`,
+    behind: (base: string, behind: number) => `${behind} ${behind === 1 ? 'commit' : 'commits'} behind ${base}`,
+    mergeInto: (base: string) => `Merge into ${base}…`,
+    openFolder: 'Open folder',
+    rebaseTitle: (agent: string) => `Put the rebase instructions into ${agent}'s input line; press Return to send once you've checked them`,
+    handOffFailed: (agent: string, error: string) => `Couldn't hand off to ${agent}: ${error}`,
+    rebase: 'Let agent rebase',
+    more: 'More'
+  }
+})
 
 /** Session changes (new, closed, status) come in bursts; list once they settle. */
 const SESSION_REFRESH_DELAY_MS = 400
@@ -49,6 +88,9 @@ function sessionKeys(sessions: readonly Session[]): Map<WorktreeId, string> {
 }
 
 export function WorktreeView({ projectId, root, projectName, activeWorktreeId }: Props) {
+  const m = useMessages(M)
+  // The rows' words are picked when they are built: build them again in the other language.
+  const lang = useLang()
   const state = useWorktrees((s) => s.roots[root]) ?? worktreesOf(root)
   const worktrees = useWorkspace(useShallow((s) => s.worktrees.filter((w) => w.projectId === projectId)))
   const sessions = useWorkspace(
@@ -61,7 +103,7 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
   const refresh = useCallback((only?: string[]) => refreshWorktrees(root, knownPaths, only), [root, knownPaths])
   const refreshAll = useCallback(() => refresh(), [refresh])
 
-  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions])
+  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions, lang]) // eslint-disable-line react-hooks/exhaustive-deps
   // The session-change timer below maps worktree ids to rows when it fires, not when it was set.
   const groupsRef = useRef<WorktreeGroups | null>(groups)
   useEffect(() => {
@@ -113,14 +155,14 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
   const rowProps = { projectId, root, refresh: refreshAll }
 
   const empty =
-    state.listing === undefined ? '正在读取 worktree…' : state.listing === null ? (state.failed ? '无法读取 worktree' : '不是 git 仓库') : null
+    state.listing === undefined ? m.reading : state.listing === null ? (state.failed ? m.readFailed : m.notRepo) : null
 
   return (
     <>
       <PaneHeader title="Worktree" context={projectName}>
         <IconButton
-          label="新建会话"
-          title="新建会话 · ⌘N"
+          label={m.newSession}
+          title={`${m.newSession} · ⌘N`}
           aria-haspopup="dialog"
           onClick={() => newSessionInProject(projectId)}
         >
@@ -142,9 +184,9 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
             ))}
           </ul>
           {groups.cleanable.length > 0 && (
-            <section aria-label="可清理">
+            <section aria-label={m.cleanable}>
               <div className={styles.groupHeader}>
-                <h3 className={styles.groupTitle}>可清理</h3>
+                <h3 className={styles.groupTitle}>{m.cleanable}</h3>
                 <span className={styles.groupCount}>{groups.cleanable.length}</span>
                 <button
                   type="button"
@@ -152,10 +194,10 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
                   disabled={state.busy}
                   onClick={() => void cleanUpInteractive(root, groups.cleanable, refreshAll)}
                 >
-                  全部清理
+                  {m.cleanAll}
                 </button>
               </div>
-              <ul className={styles.list} aria-label="可清理">
+              <ul className={styles.list} aria-label={m.cleanable}>
                 {groups.cleanable.map((row) => (
                   <Row key={row.key} row={row} selected={row === selected} cleanable {...rowProps} />
                 ))}
@@ -163,12 +205,12 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
             </section>
           )}
           {groups.idle.length > 0 && (
-            <section aria-label="没有会话">
+            <section aria-label={m.noSession}>
               <div className={styles.groupHeader}>
-                <h3 className={styles.groupTitle}>没有会话</h3>
+                <h3 className={styles.groupTitle}>{m.noSession}</h3>
                 <span className={styles.groupCount}>{groups.idle.length}</span>
               </div>
-              <ul className={styles.list} aria-label="没有会话">
+              <ul className={styles.list} aria-label={m.noSession}>
                 {groups.idle.map((row) => (
                   <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
                 ))}
@@ -193,6 +235,7 @@ interface RowProps {
 
 /** One worktree (Figma 85B″): a single line; the selected one expands into its conflicts and the actions. */
 function Row({ row, selected, cleanable = false, projectId, root, refresh }: RowProps) {
+  const m = useMessages(M)
   const { info } = row
   const radar = useWorktreeRadarMark(root, row.worktreeIds)
   const activeSessionId = useWorkspace((s) => s.activeSessionId)
@@ -221,10 +264,10 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
           {row.agent && <AgentIcon kind={row.agent} size={12} />}
           {row.where && <span className={styles.whereText}>{row.where}</span>}
         </span>
-        <span className={styles.diff} title={row.diff ? `未提交 ${row.diff}` : undefined}>
+        <span className={styles.diff} title={row.diff ? m.uncommitted(row.diff) : undefined}>
           {row.diff}
         </span>
-        <span className={styles.ahead} title={info.base && info.behind ? `落后 ${info.base} ${info.behind} 个提交` : undefined}>
+        <span className={styles.ahead} title={info.base && info.behind ? m.behind(info.base, info.behind) : undefined}>
           {row.ahead}
         </span>
         <span className={styles.radar}>{radar && <RadarTag mark={radar} short />}</span>
@@ -248,7 +291,7 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
                   openMergeSheet({ projectId, root, worktreePath: info.path, worktreeIds: row.worktreeIds, isMain: info.isMain })
                 }
               >
-                合并到 {info.base}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+                {m.mergeInto(info.base)}<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
               </button>
             )}
             <button
@@ -257,25 +300,25 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
               disabled={info.prunable !== null}
               onClick={() => window.tr.worktree.reveal(row.openPath, '')}
             >
-              打开文件夹
+              {m.openFolder}
             </button>
             {radar && rebaseTarget && (
               <button
                 type="button"
                 className={styles.action}
-                title={`把 rebase 说明放进 ${agentLabel(rebaseTarget.kind)} 的输入行，看过后按回车发送`}
+                title={m.rebaseTitle(agentLabel(rebaseTarget.kind))}
                 onClick={() =>
                   void rebaseWithAgent(radar.self, rebaseTarget).then((error) => {
-                    if (error) patchRoot(root, { notice: `没能交给 ${agentLabel(rebaseTarget.kind)}：${error}` })
+                    if (error) patchRoot(root, { notice: m.handOffFailed(agentLabel(rebaseTarget.kind), error) })
                   })
                 }
               >
-                让 agent rebase
+                {m.rebase}
               </button>
             )}
             <span className={styles.spacer} />
             <IconButton
-              label="更多"
+              label={m.more}
               aria-haspopup="menu"
               onClick={(e) => void openRowMenu(projectId, root, row, e.currentTarget, refresh)}
             >

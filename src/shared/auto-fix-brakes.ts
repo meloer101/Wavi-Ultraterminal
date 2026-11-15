@@ -1,7 +1,35 @@
 // The auto-fix brakes (PRD F16 v1.78, Figma 29G). The agent fixes and commits; before Wavi pushes the fix it checks
 // the fix's diff and the failure history here. Pure, so the renderer loop and its tests share one decision.
+import { defineMessages, pick } from './i18n'
 import { cleanFailedLog } from './pull-requests'
 import { riskMarkers, riskPhrase, type RiskKind, type RiskMarker } from './risk-markers'
+
+const M = defineMessages({
+  zh: {
+    baseFailing: (checks: string[]) => `基线上本来就失败：${checks.join('、')}`,
+    head: '自动修复已停：',
+    weakenedBy: (phrase: string) => `这次修复${phrase}`,
+    weakened: '这次修复放宽了检查',
+    repeated: '同一个失败又出现了',
+    limitN: (n: number) => `已经修了 ${n} 次`,
+    limit: '已经修了很多次',
+    noProgress: '这一轮没有新的提交',
+    interrupted: '窗口重新加载时这次修复还没走完',
+    noTurnEnd: '30 分钟没有收到这一轮结束的信号'
+  },
+  en: {
+    baseFailing: (checks: string[]) => `Already failing on the base: ${checks.join(', ')}`,
+    head: 'Auto-fix stopped: ',
+    weakenedBy: (phrase: string) => `this fix ${phrase}`,
+    weakened: 'this fix loosened the checks',
+    repeated: 'the same failure came back',
+    limitN: (n: number) => `already fixed ${n} ${n === 1 ? 'time' : 'times'}`,
+    limit: 'already fixed many times',
+    noProgress: 'no new commit this turn',
+    interrupted: 'the window reloaded before this fix finished',
+    noTurnEnd: 'no end-of-turn signal for 30 minutes'
+  }
+})
 
 export interface BrakeInput {
   /** `git diff <last pushed>..HEAD` of the worktree: the fix about to be pushed. */
@@ -99,25 +127,26 @@ export function failureKey(checks: string[], log: string): string {
 
 /** One stop reason as the PR / base row reads, e.g. "自动修复已停：这次修复删了 1 个测试". */
 export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, attempts?: number): string {
-  if (decision.kind === 'ask') return `基线上本来就失败：${decision.checks.join('、')}`
-  const head = '自动修复已停：'
+  const m = pick(M)
+  if (decision.kind === 'ask') return m.baseFailing(decision.checks)
+  const head = m.head
   switch (decision.reason) {
     case 'weakened': {
       const first = decision.markers?.[0]
-      return `${head}${first ? `这次修复${riskPhrase(first)}` : '这次修复放宽了检查'}`
+      return `${head}${first ? m.weakenedBy(riskPhrase(first)) : m.weakened}`
     }
     case 'repeated':
-      return `${head}同一个失败又出现了`
+      return `${head}${m.repeated}`
     case 'limit': {
       const n = attempts ?? decision.attempts
-      return `${head}${n !== undefined ? `已经修了 ${n} 次` : '已经修了很多次'}`
+      return `${head}${n !== undefined ? m.limitN(n) : m.limit}`
     }
     case 'no-progress':
-      return `${head}这一轮没有新的提交`
+      return `${head}${m.noProgress}`
     case 'interrupted':
-      return `${head}窗口重新加载时这次修复还没走完`
+      return `${head}${m.interrupted}`
     case 'no-turn-end':
-      return `${head}30 分钟没有收到这一轮结束的信号`
+      return `${head}${m.noTurnEnd}`
   }
 }
 

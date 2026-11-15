@@ -58,7 +58,7 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - Figma hand-off: screenshot and look at every changed screen before reporting, not a sample; a component edit counts as changing every screen that uses it. Render with `get_screenshot` in a separate call (CJK in text set during the same `use_figma` call can render blank).
 - Icons: `lucide-react`, `size={16} strokeWidth={1.75}`.
 - CJK: always keep a CJK family in font stacks; CJK occupies 2 terminal cells.
-- UI copy in Chinese; code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).
+- UI copy in Chinese and English side by side: `defineMessages({ zh, en })` from `src/shared/i18n.ts` (lint allows Chinese only there; the phone's is `ios/Wavi/Resources/Localizable.xcstrings`). Code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).
 - Security: `contextIsolation` + `sandbox` stay on; renderer reaches the system only through `window.tr`. Validate every IPC payload in main. Folder roots from the renderer must be workspace folders (`isWorkspaceDir` / `isProjectRoot`); the renderer declares those folders, so this keeps a wrong path out and is no boundary against a renderer that is not ours. Every agent runs as the same user, so the hook socket token only keeps other users out, not one session's agent from another's.
 - Never write to the user's global agent config (`~/.claude/settings.json`, `~/.codex/*`). Hooks are injected per launch (PRD §6.2).
 - Adapted third-party code: MIT / Apache-2.0 / BSD / ISC only, attribute in file header and `THIRD_PARTY_NOTICES.md`.

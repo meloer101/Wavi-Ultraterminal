@@ -25,6 +25,8 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { useWorkspace } from '../state/workspace'
 import { formatAccelerator } from '../ui/menu-model'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -60,7 +62,24 @@ const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
   link: ExternalLink
 }
 
-const SECTION_TITLE: Record<PaletteSection, string> = { git: 'Git', sessions: '会话', actions: '操作', history: '历史' }
+const M = defineMessages({
+  zh: {
+    sections: { git: 'Git', sessions: '会话', actions: '操作', history: '历史' } as Record<PaletteSection, string>,
+    palette: '命令面板',
+    placeholder: '跳转到会话或运行操作…',
+    search: '搜索会话和操作',
+    results: '结果',
+    empty: '没有匹配项'
+  },
+  en: {
+    sections: { git: 'Git', sessions: 'Sessions', actions: 'Actions', history: 'History' },
+    palette: 'Command palette',
+    placeholder: 'Jump to a session or run an action…',
+    search: 'Search sessions and actions',
+    results: 'Results',
+    empty: 'No matches'
+  }
+})
 
 function Highlight({ text, ranges }: { text: string; ranges?: Range[] }): ReactNode {
   if (!ranges || ranges.length === 0) return text
@@ -102,6 +121,7 @@ export function CommandPalette() {
 }
 
 function Sheet() {
+  const m = useMessages(M)
   const input = useWorkspace(
     useShallow((s) => ({
       projects: s.projects,
@@ -170,7 +190,7 @@ function Sheet() {
         if (e.target === e.currentTarget) closeCommandPalette()
       }}
     >
-      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label="命令面板" data-testid="command-palette" onKeyDown={onKeyDown}>
+      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={m.palette} data-testid="command-palette" onKeyDown={onKeyDown}>
         <div className={styles.inputRow}>
           <span className={styles.icon} aria-hidden="true">
             <Search {...ICON} />
@@ -179,14 +199,14 @@ function Sheet() {
             ref={inputRef}
             className={styles.input}
             value={query}
-            placeholder="跳转到会话或运行操作…"
+            placeholder={m.placeholder}
             spellCheck={false}
             autoComplete="off"
             role="combobox"
             aria-expanded="true"
             aria-controls={listId}
             aria-activedescendant={results.length > 0 ? optionId(index) : undefined}
-            aria-label="搜索会话和操作"
+            aria-label={m.search}
             onChange={(e) => {
               setQuery(e.target.value)
               setSelected(0)
@@ -201,10 +221,10 @@ function Sheet() {
           id={listId}
           className={styles.list}
           role="listbox"
-          aria-label="结果"
+          aria-label={m.results}
           onMouseDown={(e) => e.preventDefault()}
         >
-          {results.length === 0 && <div className={styles.empty}>没有匹配项</div>}
+          {results.length === 0 && <div className={styles.empty}>{m.empty}</div>}
           {results.map((item, i) => {
             const { entry } = item
             const header = i === 0 || results[i - 1]!.entry.section !== entry.section
@@ -213,7 +233,7 @@ function Sheet() {
               <div key={entry.id} role="presentation">
                 {header && (
                   <div className={styles.section} aria-hidden="true">
-                    {entry.sectionTitle ?? SECTION_TITLE[entry.section]}
+                    {entry.sectionTitle ?? m.sections[entry.section]}
                   </div>
                 )}
                 <div

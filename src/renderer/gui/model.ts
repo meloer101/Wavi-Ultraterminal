@@ -5,12 +5,153 @@ import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { isWaviRun, looksLikeReport, parseNoticeText, parseReportText, waviRunIds, type ParsedReport } from '@shared/dispatch'
 import { AGENT_GUI, guiAvailability } from '@shared/gui-agents'
 import type { GuiCommand, GuiConfigOption, GuiPermission, GuiPermissionOption, GuiPrompt, GuiQuestion, GuiState } from '@shared/gui-chat'
+import { defineMessages, pick } from '@shared/i18n'
 import { composerPickers, isGuiPermission } from '@shared/gui-chat'
 import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
 import type { SessionId, SessionStatus } from '@shared/types'
 import type { AgentAvailability } from '@shared/ipc'
 import { binaryInstalled, listedAgents } from '../new-session/model'
 import { CUT_ESCAPE, ESCAPES } from './ansi'
+
+type GroupKind = 'run' | 'read' | 'edit' | 'search' | 'fetch' | 'todo' | 'output' | 'stop' | 'write' | 'delete' | 'move' | 'web-search' | 'skill' | 'think' | 'mode' | 'tool'
+type GroupSay = (n: number, args: readonly string[]) => string
+
+const times = (n: number): string => (n === 1 ? 'once' : `${n} times`)
+const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+const M = defineMessages({
+  zh: {
+    thought: '思考了',
+    thoughtFor: (time: string) => `思考了 ${time}`,
+    /** Figma 59J: a tool row's verb, by the tool's name. */
+    verbs: {
+      Read: '读取',
+      Edit: '编辑',
+      MultiEdit: '编辑',
+      Write: '写入',
+      NotebookEdit: '编辑',
+      Bash: '运行',
+      BashOutput: '读取输出',
+      KillShell: '停止',
+      Grep: '搜索',
+      Glob: '查找文件',
+      WebFetch: '读取',
+      WebSearch: '搜索网页',
+      Agent: '子 agent',
+      Task: '子 agent',
+      Subagent: '子 agent',
+      TodoWrite: '任务',
+      Plan: '任务',
+      Skill: 'Skill',
+      ExitPlanMode: '计划',
+      Delete: '删除',
+      Move: '移动',
+      Search: '搜索',
+      Think: '思考',
+      Fetch: '读取',
+      Mode: '切换模式',
+      Tool: '工具'
+    },
+    group: {
+      run: (n: number) => `运行了 ${n} 条命令`,
+      read: (n: number) => `读取了 ${n} 个文件`,
+      edit: (n: number) => `编辑了 ${n} 个文件`,
+      search: (n: number) => `搜索了 ${n} 次`,
+      fetch: (n: number) => `读取了 ${n} 个网页`,
+      todo: () => '更新了任务',
+      output: (n: number) => `读取了 ${n} 次输出`,
+      stop: (n: number) => `停止了 ${n} 条命令`,
+      write: (n: number) => `写入了 ${n} 个文件`,
+      delete: (n: number) => `删除了 ${n} 个文件`,
+      move: (n: number) => `移动了 ${n} 个文件`,
+      'web-search': (n: number) => `搜索了 ${n} 次网页`,
+      skill: (n: number, args: readonly string[]) => (n === 1 && args[0] ? `用了 Skill ${args[0]}` : `用了 ${n} 个 Skill`),
+      think: (n: number) => `思考了 ${n} 次`,
+      mode: () => '切换了模式',
+      tool: (n: number) => `用了 ${n} 次工具`
+    } satisfies Record<GroupKind, GroupSay>,
+    otherTool: (name: string, n: number) => `用了 ${name} ${n} 次`,
+    groupSeparator: '，',
+    wantsRun: (agent: string) => `${agent} 要运行一条命令`,
+    wantsEdit: (agent: string) => `${agent} 要修改文件`,
+    wantsRead: (agent: string) => `${agent} 要读取文件`,
+    wantsNetwork: (agent: string) => `${agent} 要访问网络`,
+    wantsTool: (agent: string, tool: string) => `${agent} 要使用 ${tool}`,
+    wantsConfirm: (agent: string) => `${agent} 要你确认`,
+    plan: '计划',
+    planNamed: (name: string) => `计划：${name}`,
+    commands: '命令',
+    model: '模型',
+    effort: '推理强度',
+    permissions: '权限',
+    mode: '模式'
+  },
+  en: {
+    thought: 'Thought',
+    thoughtFor: (time: string) => `Thought for ${time}`,
+    verbs: {
+      Read: 'Read',
+      Edit: 'Edit',
+      MultiEdit: 'Edit',
+      Write: 'Write',
+      NotebookEdit: 'Edit',
+      Bash: 'Run',
+      BashOutput: 'Read output',
+      KillShell: 'Stop',
+      Grep: 'Search',
+      Glob: 'Find files',
+      WebFetch: 'Fetch',
+      WebSearch: 'Search web',
+      Agent: 'Subagent',
+      Task: 'Subagent',
+      Subagent: 'Subagent',
+      TodoWrite: 'Tasks',
+      Plan: 'Tasks',
+      Skill: 'Skill',
+      ExitPlanMode: 'Plan',
+      Delete: 'Delete',
+      Move: 'Move',
+      Search: 'Search',
+      Think: 'Think',
+      Fetch: 'Fetch',
+      Mode: 'Switch mode',
+      Tool: 'Tool'
+    },
+    group: {
+      run: (n: number) => `Ran ${count(n, 'command', 'commands')}`,
+      read: (n: number) => `Read ${count(n, 'file', 'files')}`,
+      edit: (n: number) => `Edited ${count(n, 'file', 'files')}`,
+      search: (n: number) => `Searched ${times(n)}`,
+      fetch: (n: number) => `Read ${count(n, 'web page', 'web pages')}`,
+      todo: () => 'Updated tasks',
+      output: (n: number) => `Read output ${times(n)}`,
+      stop: (n: number) => `Stopped ${count(n, 'command', 'commands')}`,
+      write: (n: number) => `Wrote ${count(n, 'file', 'files')}`,
+      delete: (n: number) => `Deleted ${count(n, 'file', 'files')}`,
+      move: (n: number) => `Moved ${count(n, 'file', 'files')}`,
+      'web-search': (n: number) => `Searched the web ${times(n)}`,
+      skill: (n: number, args: readonly string[]) => (n === 1 && args[0] ? `Used Skill ${args[0]}` : `Used ${count(n, 'Skill', 'Skills')}`),
+      think: (n: number) => `Thought ${times(n)}`,
+      mode: () => 'Switched mode',
+      tool: (n: number) => `Used tools ${times(n)}`
+    },
+    otherTool: (name: string, n: number) => `Used ${name} ${times(n)}`,
+    groupSeparator: ', ',
+    wantsRun: (agent: string) => `${agent} wants to run a command`,
+    wantsEdit: (agent: string) => `${agent} wants to edit files`,
+    wantsRead: (agent: string) => `${agent} wants to read files`,
+    wantsNetwork: (agent: string) => `${agent} wants to access the network`,
+    wantsTool: (agent: string, tool: string) => `${agent} wants to use ${tool}`,
+    wantsConfirm: (agent: string) => `${agent} needs your confirmation`,
+    plan: 'Plan',
+    planNamed: (name: string) => `Plan: ${name}`,
+    commands: 'Commands',
+    model: 'Model',
+    effort: 'Effort',
+    permissions: 'Permissions',
+    mode: 'Mode'
+  }
+})
 
 // --- the feed (Figma 49″C) ----------------------------------------------------------------------------------------
 
@@ -301,9 +442,9 @@ export function userBubble(text: string): { header: string | null; body: string 
 
 /** 「思考了 8s」 (rounded up to whole seconds; minutes past a minute), or 「思考了」 when the agent gave no duration. */
 export function thinkingLabel(ms: number | undefined): string {
-  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return '思考了'
+  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return pick(M).thought
   const seconds = Math.max(1, Math.round(ms / 1000))
-  return seconds < 60 ? `思考了 ${seconds}s` : `思考了 ${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  return pick(M).thoughtFor(seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`)
 }
 
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
@@ -317,35 +458,42 @@ export type ToolIcon = 'file-text' | 'file-plus' | 'pencil' | 'terminal' | 'squa
  * patch and search calls (named Bash / Edit / WebSearch by its parsers); the ACP tool kinds (acp.ts). Any other tool
  * (MCP, an agent's own) is a wrench with its own name.
  */
-const TOOL_WORDS: Readonly<Record<string, readonly [ToolIcon, string]>> = {
-  Read: ['file-text', '读取'],
-  Edit: ['pencil', '编辑'],
-  MultiEdit: ['pencil', '编辑'],
-  Write: ['file-plus', '写入'],
-  NotebookEdit: ['pencil', '编辑'],
-  Bash: ['terminal', '运行'],
-  BashOutput: ['terminal', '读取输出'],
-  KillShell: ['square', '停止'],
-  Grep: ['search', '搜索'],
-  Glob: ['folder-search', '查找文件'],
-  WebFetch: ['globe', '读取'],
-  WebSearch: ['globe', '搜索网页'],
-  Agent: ['bot', '子 agent'],
-  Task: ['bot', '子 agent'],
+const TOOL_ICONS: Readonly<Record<keyof (typeof M)['zh']['verbs'], ToolIcon>> = {
+  Read: 'file-text',
+  Edit: 'pencil',
+  MultiEdit: 'pencil',
+  Write: 'file-plus',
+  NotebookEdit: 'pencil',
+  Bash: 'terminal',
+  BashOutput: 'terminal',
+  KillShell: 'square',
+  Grep: 'search',
+  Glob: 'folder-search',
+  WebFetch: 'globe',
+  WebSearch: 'globe',
+  Agent: 'bot',
+  Task: 'bot',
   // Codex's collab agent call (codex-app-server.ts).
-  Subagent: ['bot', '子 agent'],
-  TodoWrite: ['list-todo', '任务'],
+  Subagent: 'bot',
+  TodoWrite: 'list-todo',
   // Codex's and ACP agents' plan (codex-app-server.ts, acp.ts).
-  Plan: ['list-todo', '任务'],
-  Skill: ['sparkles', 'Skill'],
-  ExitPlanMode: ['clipboard-list', '计划'],
-  Delete: ['trash', '删除'],
-  Move: ['move-right', '移动'],
-  Search: ['search', '搜索'],
-  Think: ['brain', '思考'],
-  Fetch: ['globe', '读取'],
-  Mode: ['toggle', '切换模式'],
-  Tool: ['wrench', '工具']
+  Plan: 'list-todo',
+  Skill: 'sparkles',
+  ExitPlanMode: 'clipboard-list',
+  Delete: 'trash',
+  Move: 'move-right',
+  Search: 'search',
+  Think: 'brain',
+  Fetch: 'globe',
+  Mode: 'toggle',
+  Tool: 'wrench'
+}
+
+/** A known tool's icon and verb (own keys only: a tool named `constructor` is not Object's); undefined for any other. */
+function toolWords(name: string): readonly [ToolIcon, string] | undefined {
+  if (!Object.hasOwn(TOOL_ICONS, name)) return undefined
+  const known = name as keyof typeof TOOL_ICONS
+  return [TOOL_ICONS[known], pick(M).verbs[known]]
 }
 
 export interface ToolView {
@@ -383,8 +531,7 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ?.split('\n')
     .map((line) => line.trim())
     .find((line) => line !== '')
-  // Own keys only: a tool named `constructor` is not Object's.
-  const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? ['wrench', item.name]
+  const [icon, verb] = toolWords(item.name) ?? ['wrench', item.name]
   // Without output a command is worth opening only when the row shows less of it (its lines, its length).
   const hidden = item.input !== undefined && item.input.trim() !== item.arg
   // A change to several files counts all of them.
@@ -440,39 +587,39 @@ export function stepParts(items: readonly StepItem[], apart: (item: StepItem) =>
 }
 
 /**
- * What a group's summary says of each kind of call, by the tool's name (the same names `TOOL_WORDS` reads, so every
+ * What a group's summary says of each kind of call, by the tool's name (the same names `TOOL_ICONS` reads, so every
  * agent's): `distinct` counts files or pages, not calls. Any other tool (MCP, an agent's own) is 用了 <name> N 次.
  */
-const GROUP_WORDS: Readonly<Record<string, { kind: string; say: (n: number, args: readonly string[]) => string; distinct?: true }>> = (() => {
-  const run = { kind: 'run', say: (n: number) => `运行了 ${n} 条命令` }
-  const read = { kind: 'read', say: (n: number) => `读取了 ${n} 个文件`, distinct: true as const }
-  const edit = { kind: 'edit', say: (n: number) => `编辑了 ${n} 个文件`, distinct: true as const }
-  const search = { kind: 'search', say: (n: number) => `搜索了 ${n} 次` }
-  const fetch = { kind: 'fetch', say: (n: number) => `读取了 ${n} 个网页`, distinct: true as const }
-  const todo = { kind: 'todo', say: () => '更新了任务' }
+const GROUP_WORDS: Readonly<Record<string, { kind: GroupKind; distinct?: true }>> = (() => {
+  const run = { kind: 'run' } as const
+  const read = { kind: 'read', distinct: true } as const
+  const edit = { kind: 'edit', distinct: true } as const
+  const search = { kind: 'search' } as const
+  const fetch = { kind: 'fetch', distinct: true } as const
+  const todo = { kind: 'todo' } as const
   return {
     Bash: run,
-    BashOutput: { kind: 'output', say: (n) => `读取了 ${n} 次输出` },
-    KillShell: { kind: 'stop', say: (n) => `停止了 ${n} 条命令` },
+    BashOutput: { kind: 'output' },
+    KillShell: { kind: 'stop' },
     Read: read,
     Edit: edit,
     MultiEdit: edit,
     NotebookEdit: edit,
-    Write: { kind: 'write', say: (n) => `写入了 ${n} 个文件`, distinct: true },
-    Delete: { kind: 'delete', say: (n) => `删除了 ${n} 个文件`, distinct: true },
-    Move: { kind: 'move', say: (n) => `移动了 ${n} 个文件`, distinct: true },
+    Write: { kind: 'write', distinct: true },
+    Delete: { kind: 'delete', distinct: true },
+    Move: { kind: 'move', distinct: true },
     Grep: search,
     Glob: search,
     Search: search,
-    WebSearch: { kind: 'web-search', say: (n) => `搜索了 ${n} 次网页` },
+    WebSearch: { kind: 'web-search' },
     WebFetch: fetch,
     Fetch: fetch,
     TodoWrite: todo,
     Plan: todo,
-    Skill: { kind: 'skill', say: (n, args) => (n === 1 && args[0] ? `用了 Skill ${args[0]}` : `用了 ${n} 个 Skill`), distinct: true },
-    Think: { kind: 'think', say: (n) => `思考了 ${n} 次` },
-    Mode: { kind: 'mode', say: () => '切换了模式' },
-    Tool: { kind: 'tool', say: (n) => `用了 ${n} 次工具` }
+    Skill: { kind: 'skill', distinct: true },
+    Think: { kind: 'think' },
+    Mode: { kind: 'mode' },
+    Tool: { kind: 'tool' }
   }
 })()
 
@@ -490,7 +637,8 @@ export interface GroupView {
 }
 
 export function groupView(items: readonly StepItem[]): GroupView {
-  const kinds = new Map<string, { say: (n: number, args: readonly string[]) => string; distinct: boolean; calls: number; args: Set<string> }>()
+  const m = pick(M)
+  const kinds = new Map<string, { say: GroupSay; distinct: boolean; calls: number; args: Set<string> }>()
   let live: GroupView['live']
   let failed = 0
   let added = 0
@@ -500,7 +648,7 @@ export function groupView(items: readonly StepItem[]): GroupView {
     const words = Object.hasOwn(GROUP_WORDS, item.name) ? GROUP_WORDS[item.name] : undefined
     const key = words?.kind ?? `other:${item.name}`
     let kind = kinds.get(key)
-    if (!kind) kinds.set(key, (kind = { say: words?.say ?? ((n) => `用了 ${item.name} ${n} 次`), distinct: !!words?.distinct, calls: 0, args: new Set() }))
+    if (!kind) kinds.set(key, (kind = { say: words ? m.group[words.kind] : (n) => m.otherTool(item.name, n), distinct: !!words?.distinct, calls: 0, args: new Set() }))
     kind.calls++
     const files = item.files ?? (item.diff ? [item.diff] : [])
     for (const arg of files.length > 0 ? files.map((f) => f.path) : [item.arg]) kind.args.add(arg)
@@ -509,9 +657,9 @@ export function groupView(items: readonly StepItem[]): GroupView {
       removed += file.removed
     }
     if (item.state === 'error') failed++
-    if (item.state === 'running') live = { verb: (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name]?.[1] : undefined) ?? item.name, arg: item.arg }
+    if (item.state === 'running') live = { verb: toolWords(item.name)?.[1] ?? item.name, arg: item.arg }
   }
-  const text = [...kinds.values()].map((k) => k.say(k.distinct ? k.args.size : k.calls, [...k.args])).join('，')
+  const text = [...kinds.values()].map((k) => k.say(k.distinct ? k.args.size : k.calls, [...k.args])).join(m.groupSeparator)
   return { text, running: live !== undefined, ...(live ? { live } : {}), failed, ...(added > 0 ? { added } : {}), ...(removed > 0 ? { removed } : {}) }
 }
 
@@ -585,40 +733,44 @@ export function permissionBody(prompt: Extract<GuiPrompt, { kind: 'permission' }
 
 /** The permission card's title (「Claude 要运行一条命令」): what the tool does, by its name. */
 export function permissionTitle(agentLabel: string, tool: string): string {
+  const m = pick(M)
   switch (tool) {
     case 'Bash':
     case 'commandExecution':
     case 'execute':
-      return `${agentLabel} 要运行一条命令`
+      return m.wantsRun(agentLabel)
     case 'Edit':
     case 'MultiEdit':
     case 'Write':
     case 'NotebookEdit':
     case 'fileChange':
     case 'edit':
-      return `${agentLabel} 要修改文件`
+      return m.wantsEdit(agentLabel)
     case 'Read':
     case 'read':
-      return `${agentLabel} 要读取文件`
+      return m.wantsRead(agentLabel)
     case 'WebFetch':
     case 'WebSearch':
     case 'fetch':
-      return `${agentLabel} 要访问网络`
+      return m.wantsNetwork(agentLabel)
     default:
-      return tool ? `${agentLabel} 要使用 ${tool}` : `${agentLabel} 要你确认`
+      return tool ? m.wantsTool(agentLabel, tool) : m.wantsConfirm(agentLabel)
   }
 }
 
 /** 49″D: the plan's title (「计划：…」 from its first heading or line) and the rest as the body. */
 export function planParts(plan: string): { title: string; body: string } {
+  const m = pick(M)
   const lines = plan.replace(/\r\n/g, '\n').split('\n')
   const at = lines.findIndex((line) => line.trim() !== '')
-  if (at < 0) return { title: '计划', body: '' }
+  if (at < 0) return { title: m.plan, body: '' }
   const first = lines[at]!.trim()
   const heading = /^#{1,6}\s+(.*)$/.exec(first)
-  if (!heading) return { title: '计划', body: lines.slice(at).join('\n').trim() }
-  const name = heading[1]!.replace(/^计划[:：]\s*/, '').trim()
-  return { title: name ? `计划：${name}` : '计划', body: lines.slice(at + 1).join('\n').trim() }
+  if (!heading) return { title: m.plan, body: lines.slice(at).join('\n').trim() }
+  // The agent's own heading, in either language (Claude writes the plan in the user's).
+  // eslint-disable-next-line no-restricted-syntax -- matches agent output (a 计划: heading), not UI text
+  const name = heading[1]!.replace(/^(?:计划[:：]|Plan:)\s*/i, '').trim()
+  return { title: name ? m.planNamed(name) : m.plan, body: lines.slice(at + 1).join('\n').trim() }
 }
 
 /** A question card's choice: an option by index, or 其他… with what the user typed. */
@@ -711,7 +863,7 @@ export function slashQuery(draft: string): string | null {
 
 /** Figma 59H: the `/` menu's groups — 命令, then Skills — each with where it starts in the keys' order. */
 export interface SlashGroup {
-  title: '命令' | 'Skills'
+  title: string
   commands: GuiCommand[]
   /** The index of its first entry in the menu's order (commands, then skills). */
   start: number
@@ -721,7 +873,7 @@ export function slashGroups(matches: readonly GuiCommand[]): SlashGroup[] {
   const commands = matches.filter((c) => c.kind !== 'skill')
   const skills = matches.filter((c) => c.kind === 'skill')
   const groups: SlashGroup[] = []
-  if (commands.length > 0) groups.push({ title: '命令', commands, start: 0 })
+  if (commands.length > 0) groups.push({ title: pick(M).commands, commands, start: 0 })
   if (skills.length > 0) groups.push({ title: 'Skills', commands: skills, start: commands.length })
   return groups
 }
@@ -807,13 +959,13 @@ export function modeChanges(choice: ModeChoice, planning: boolean): [string, str
 export function pickerSectionTitle(option: GuiConfigOption): string {
   switch (option.category) {
     case 'model':
-      return '模型'
+      return pick(M).model
     case 'thought_level':
-      return '推理强度'
+      return pick(M).effort
     case 'permission':
-      return '权限'
+      return pick(M).permissions
     case 'mode':
-      return '模式'
+      return pick(M).mode
     default:
       return option.label
   }

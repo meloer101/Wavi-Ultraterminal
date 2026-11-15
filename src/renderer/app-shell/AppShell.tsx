@@ -42,6 +42,7 @@ import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import { useMainFullScreen } from './full-screen'
 import styles from './AppShell.module.css'
+import { useLang } from '../ui/i18n'
 
 const subscribeResize = (onChange: () => void) => {
   window.addEventListener('resize', onChange)
@@ -62,6 +63,8 @@ const windowWidth = () => window.innerWidth
  * when not even its minimum width fits (B13, layout.ts). The sidebar and the panel open and close as drawers (drawer-motion).
  */
 export function AppShell() {
+  // A language change re-renders the whole window from here (memo'd components subscribe themselves).
+  useLang()
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const fullScreen = useMainFullScreen()
   const overview = useWorkspace((s) => s.mainView === 'overview')

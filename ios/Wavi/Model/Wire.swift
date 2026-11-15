@@ -10,7 +10,7 @@ enum SessionStatus: String, Codable, Hashable, Sendable {
     self = SessionStatus(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .idle
   }
 
-  var label: String { Shared.data.statusLabel[rawValue] ?? rawValue }
+  var label: String { Shared.statusLabel(rawValue) ?? rawValue }
 }
 
 struct RemoteProject: Codable, Hashable, Sendable, Identifiable {
@@ -320,14 +320,19 @@ enum PhoneCommand: Sendable {
   }
 }
 
-/// A request's answer: `data` on success, the Mac's (Chinese) reason otherwise.
+/// A request's answer: `data` on success, the reason otherwise (the Mac's, in the Mac's language for now: PRD v1.193).
 enum RemoteResult: Sendable {
   case ok(JSONValue?)
   case failed(String)
+  /// No answer within the time the request allowed.
+  case timedOut
 
   var error: String? {
-    if case .failed(let e) = self { return e }
-    return nil
+    switch self {
+    case .ok: nil
+    case .failed(let e): e
+    case .timedOut: String(localized: "超时")
+    }
   }
 
   func decode<T: Decodable>(_ type: T.Type) -> T? {

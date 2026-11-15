@@ -2,6 +2,9 @@
 // for this session, never the agent's own defaults. GUI sessions map their composer pickers (gui-chat.ts); terminal
 // sessions are driven by typing into the agent's TUI (terminal-settings.ts). Pure; session-settings.test.ts.
 import type { GuiConfigOption } from './gui-chat'
+import { defineMessages, pick } from './i18n'
+
+const M = defineMessages({ zh: { plan: '计划' }, en: { plan: 'Plan' } })
 
 export type SettingKind = 'model' | 'effort' | 'permission'
 
@@ -90,7 +93,7 @@ export function guiSettings(config: readonly GuiConfigOption[]): SessionSettings
     const values = [...permission.values]
     // 计划 before 自动 (64C), at the end when there is no 自动.
     const auto = values.findIndex((x) => x.value === 'auto')
-    if (plan) values.splice(auto < 0 ? values.length : auto, 0, { value: PLAN_VALUE, label: '计划' })
+    if (plan) values.splice(auto < 0 ? values.length : auto, 0, { value: PLAN_VALUE, label: pick(M).plan })
     items.push({ kind: 'permission', current: plan?.current === 'on' ? PLAN_VALUE : permission.current, values })
   }
   return items.length > 0 ? { items } : undefined

@@ -9,9 +9,9 @@ private let unasked: Set<String> = ["auto", "full-access", "danger-full-access",
 
 private func kindLabel(_ kind: String) -> String {
   switch kind {
-  case "model": "模型"
-  case "effort": "思考程度"
-  default: "模式"
+  case "model": String(localized: "模型")
+  case "effort": String(localized: "思考程度")
+  default: String(localized: "模式")
   }
 }
 
@@ -44,7 +44,7 @@ struct SettingsPill: View {
     .opacity(settings.locked != nil ? 0.4 : 1)
     .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityLabel("会话设置")
-    .accessibilityValue(settings.items.map(\.currentLabel).joined(separator: "，"))
+    .accessibilityValue(settings.items.map(\.currentLabel).joined(separator: String(localized: "，", comment: "Between the items of a list")))
     .sheet(isPresented: $open) { SessionSettingsSheet(session: session.id) }
   }
 }
@@ -71,11 +71,11 @@ struct SessionSettingsSheet: View {
               risky: item.kind == "permission" && unasked.contains(value.value)) { pick(item, value) }
           })
         } else if let settings {
-          header("会话设置", back: false)
+          header(String(localized: "会话设置"), back: false)
           if settings.locked != nil {
-            Notice(tone: .info, message: "这一轮结束后可以改")
+            Notice(tone: .info, message: String(localized: "这一轮结束后可以改"))
           } else if settings.readOnly == true, let remote {
-            Notice(tone: .info, message: "终端里的 \(Shared.agent(remote.agent).name) 不能只改这个会话")
+            Notice(tone: .info, message: String(localized: "终端里的 \(Shared.agent(remote.agent).name) 不能只改这个会话"))
           }
           let editable = settings.locked == nil && settings.readOnly != true
           group(settings.items.map { item in
@@ -84,8 +84,8 @@ struct SessionSettingsSheet: View {
             }
           })
         } else {
-          header("会话设置", back: false)
-          Notice(tone: .info, message: "这个会话不能在手机上改")
+          header(String(localized: "会话设置"), back: false)
+          Notice(tone: .info, message: String(localized: "这个会话不能在手机上改"))
         }
       }
     } actions: {
@@ -121,7 +121,7 @@ struct SessionSettingsSheet: View {
     Task {
       let result = await model.call(.setSetting(session: session, kind: item.kind, value: value.value))
       busy = nil
-      if let failure = result.error { error = "没有改成：\(failure)" } else { page = nil }
+      if let failure = result.error { error = String(localized: "没有改成：\(failure)") } else { page = nil }
     }
   }
 }

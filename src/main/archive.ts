@@ -17,6 +17,22 @@ import { mainWorktreeIndex, parseWorktreePorcelain, type PorcelainWorktree } fro
 import { archiveCommit, captureWorktreeArchive, dropWorktreeArchive, restoreWorktreeArchive } from './archive-ref'
 import { isProjectRoot } from './workspace-store'
 import { gitText, lastLines } from './git/run'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    notListed: '它已经不在 git worktree 列表里',
+    isMain: '项目主目录不能归档',
+    gone: '文件夹已经不在了，归档时的记录也找不到',
+    occupied: (path: string) => `${path} 已经被别的文件占用`
+  },
+  en: {
+    notListed: 'It is no longer in the git worktree list',
+    isMain: "The project's main folder can't be archived",
+    gone: 'The folder is gone and its archive record is missing',
+    occupied: (path: string) => `${path} is already taken by other files`
+  }
+})
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 60_000
@@ -65,8 +81,8 @@ export async function captureArchive(root: unknown, worktree: unknown, id: unkno
     if (!isPath(worktree)) throw new Error('invalid worktree path')
     const archiveId = safeId(id)
     const listed = await listedWorktree(realRoot, worktree)
-    if (!listed || !existsSync(listed.real)) return { ok: false, message: '它已经不在 git worktree 列表里' }
-    if (listed.isMain) return { ok: false, message: '项目主目录不能归档' }
+    if (!listed || !existsSync(listed.real)) return { ok: false, message: pick(M).notListed }
+    if (listed.isMain) return { ok: false, message: pick(M).isMain }
     const head = (await git(listed.real, ['rev-parse', 'HEAD'])).trim()
     const saved = await captureWorktreeArchive(listed.real, archiveId)
     return { ok: true, commit: saved.commit, dirty: saved.commit !== head }
@@ -103,10 +119,10 @@ export async function restoreArchive(raw: unknown): Promise<ArchiveRestoreResult
       if (commit) await dropWorktreeArchive(realRoot, request.id)
       return { ok: true, recreated: false }
     }
-    if (!commit) return { ok: false, message: '文件夹已经不在了，归档时的记录也找不到' }
+    if (!commit) return { ok: false, message: pick(M).gone }
     await git(realRoot, ['check-ref-format', '--branch', request.branch])
     if (existsSync(request.worktree) && readdirSync(request.worktree).length > 0) {
-      return { ok: false, message: `${request.worktree} 已经被别的文件占用` }
+      return { ok: false, message: pick(M).occupied(request.worktree) }
     }
     await git(realRoot, ['worktree', 'prune'])
     // A dirty snapshot is a stash-shaped `wavi-archive` commit whose first parent is the HEAD it was taken on;

@@ -297,7 +297,8 @@ test('the theme never changes by itself: no stale migration, arrows on the swatc
   expect((await readSettings(page)).appearance.theme).toBe('system')
 
   const settings = await openSettings(app)
-  await settings.getByRole('radio', { name: '跟随系统' }).click()
+  // 语言 has a 跟随系统 too (Figma 89).
+  await settings.getByRole('radiogroup', { name: '主题' }).getByRole('radio', { name: '跟随系统' }).click()
   await settings.keyboard.press('ArrowDown')
   await settings.keyboard.press('ArrowRight')
   await settings.waitForTimeout(200)

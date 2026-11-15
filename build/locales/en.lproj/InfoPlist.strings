@@ -1,0 +1,4 @@
+/* Prompts for what programs in Wavi's terminals ask for (electron-builder.yml extendInfo). */
+"NSAppleEventsUsageDescription" = "A program running in Wavi wants to control other apps.";
+"NSMicrophoneUsageDescription" = "A program running in Wavi wants to use the microphone.";
+"NSCameraUsageDescription" = "A program running in Wavi wants to use the camera.";

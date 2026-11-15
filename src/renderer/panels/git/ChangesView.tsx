@@ -20,6 +20,8 @@ import type { ShipPreflight } from '@shared/ship'
 import type { Worktree } from '@shared/types'
 import type { DiffLayout } from '@shared/workspace-file'
 import { commentPicked } from '@shared/review-comments'
+import { defineMessages } from '@shared/i18n'
+import { useLang, useMessages } from '../../ui/i18n'
 import { loadSavedReview } from '../../review/background'
 import { ReviewBlock, useReviewShown } from '../../review/ReviewBlock'
 import { ReviewButton } from '../../review/ReviewButton'
@@ -38,7 +40,7 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { registerPrimaryExit } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, endsOpenFile, preflightKey, runUnticked, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow, type ViewMark } from './changes-model'
+import { changedFilesLabel, changeItems, endsOpenFile, preflightKey, runUnticked, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow, type ViewMark } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
@@ -53,7 +55,56 @@ import { useViewed } from './viewed'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
 import styles from './GitView.module.css'
 
-const STATUS_LABEL: Record<GitFileChange['status'], string> = { M: '已修改', A: '新增', D: '已删除', R: '重命名', U: '冲突' }
+const M = defineMessages({
+  zh: {
+    status: { M: '已修改', A: '新增', D: '已删除', R: '重命名', U: '冲突' } as Record<GitFileChange['status'], string>,
+    reading: '正在读取改动…',
+    readError: (error: string) => `无法读取改动：${error}`,
+    notRepo: '不是 git 仓库',
+    noAgent: '这个 worktree 没有 agent 会话',
+    pickComments: '勾选要发送的审阅意见',
+    sendTitle: (agent: string) => `放进 ${agent} 的输入行，看过后按回车发送`,
+    sendFailed: '没能发送',
+    sendTo: (agent: string, picked: number) => `发给 ${agent} · ${picked}`,
+    discard: '放弃',
+    untickAll: '不提交未提交的文件',
+    tickAll: '提交全部未提交的文件',
+    commitFile: (path: string) => `提交 ${path}`,
+    openInEditor: '用默认编辑器打开',
+    fold: (path: string) => `收起 ${path}`,
+    untracked: '（未跟踪）',
+    renamedFrom: (path: string) => ` · 原 ${path}`,
+    comments: (n: number) => `${n} 条评论`,
+    viewMark: { unviewed: '未看', viewed: '已看', stale: '看过后又改了' } as Record<ViewMark, string>,
+    nested: '嵌套仓库',
+    tooLarge: '文件太大',
+    binary: '二进制'
+  },
+  en: {
+    status: { M: 'Modified', A: 'Added', D: 'Deleted', R: 'Renamed', U: 'Conflict' },
+    reading: 'Reading changes…',
+    readError: (error: string) => `Can't read changes: ${error}`,
+    notRepo: 'Not a git repository',
+    noAgent: 'This worktree has no agent session',
+    pickComments: 'Tick the review comments to send',
+    sendTitle: (agent: string) => `Put into ${agent}'s input line; press Return to send once you've checked it`,
+    sendFailed: "Couldn't send",
+    sendTo: (agent: string, picked: number) => `Send to ${agent} · ${picked}`,
+    discard: 'Discard',
+    untickAll: "Don't commit the uncommitted files",
+    tickAll: 'Commit all uncommitted files',
+    commitFile: (path: string) => `Commit ${path}`,
+    openInEditor: 'Open in default editor',
+    fold: (path: string) => `Collapse ${path}`,
+    untracked: ' (untracked)',
+    renamedFrom: (path: string) => ` · was ${path}`,
+    comments: (n: number) => `${n} ${n === 1 ? 'comment' : 'comments'}`,
+    viewMark: { unviewed: 'Not viewed', viewed: 'Viewed', stale: 'Changed since viewed' },
+    nested: 'Nested repo',
+    tooLarge: 'File too large',
+    binary: 'Binary'
+  }
+})
 /** Items rendered beyond each edge of the viewport. */
 const OVERSCAN = 20
 
@@ -71,6 +122,9 @@ function usePreflight(target: PrTarget | null, key: string): ShipPreflight | nul
 }
 
 export function ChangesView({ root, git, worktree, layout }: { root: string; git: RootGit; worktree: Worktree; layout: DiffLayout }) {
+  const m = useMessages(M)
+  // The items' words are picked when they are built: build them again in the other language.
+  const lang = useLang()
   const changes = git.changes
   const active = useActiveSession()
   const projectRoot = useWorkspace((s) => s.projects.find((p) => p.id === worktree.projectId)?.rootPath ?? null)
@@ -98,7 +152,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       changes
         ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, unticked, { marks: marks ?? {}, unviewedOnly })
         : [],
-    [changes, git.expanded, git.diffs, comments, place, layout, unticked, marks, unviewedOnly]
+    [changes, git.expanded, git.diffs, comments, place, layout, unticked, marks, unviewedOnly, lang] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -138,8 +192,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const risks = useRisks(prTarget, changeKey)
   useRadarMark(projectRoot, worktree.path)
 
-  if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
-  if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
+  if (changes === undefined) return <p className={styles.empty}>{m.reading}</p>
+  if (changes === null) return <p className={styles.empty}>{git.changesError ? m.readError(git.changesError) : m.notRepo}</p>
 
   // The footer's 发给 / 放弃 are for the user's own comments; review findings are sent from the review block.
   const mine = comments?.filter((c) => c.origin !== 'review') ?? []
@@ -189,7 +243,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     <>
       <PrimaryExitShortcut worktreePath={worktree.path} run={shortcutExit} />
       {reviewSession && <ReviewBlock sessionId={reviewSession} root={root} />}
-      <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件" data-layout={layout}>
+      <div ref={scroller} className={styles.files} role="list" aria-label={changedFilesLabel()} data-layout={layout}>
         {stickyItem?.kind === 'file' && (
           <div className={styles.stickyFile} data-testid="sticky-file" role="presentation" style={{ transform: `translateY(${stickyShift}px)` }}>
             <FileRow item={stickyItem} pinned onToggle={() => fold(sticky!, stickyItem.key)} />
@@ -227,10 +281,10 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                     disabled={!target || picked === 0}
                     title={
                       !target
-                        ? '这个 worktree 没有 agent 会话'
+                        ? m.noAgent
                         : picked === 0
-                          ? '勾选要发送的审阅意见'
-                          : `放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`
+                          ? m.pickComments
+                          : m.sendTitle(agentLabel(target.kind))
                     }
                     onClick={() => {
                       if (!target) return
@@ -239,10 +293,10 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                     }}
                   >
                     <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
-                    {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${picked}`}
+                    {sendError ? m.sendFailed : m.sendTo(target ? agentLabel(target.kind) : 'agent', picked)}
                   </button>
                   <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
-                    放弃
+                    {m.discard}
                   </button>
                 </>
               ) : chain?.second?.id === 'abort' ? (
@@ -302,6 +356,7 @@ function Item({
   /** A Ship run is open: the checkboxes show its selection and cannot change it. */
   locked: boolean
 }) {
+  const m = useMessages(M)
   const style = { top }
   const edge = end || undefined
   switch (item.kind) {
@@ -315,7 +370,7 @@ function Item({
               role="checkbox"
               className={styles.tick}
               aria-checked={state === 'all' ? true : state === 'none' ? false : 'mixed'}
-              aria-label={state === 'all' ? '不提交未提交的文件' : '提交全部未提交的文件'}
+              aria-label={state === 'all' ? m.untickAll : m.tickAll}
               disabled={locked}
               onClick={() => setAllTicked(root, state !== 'all')}
             >
@@ -337,7 +392,7 @@ function Item({
               role="checkbox"
               className={styles.tick}
               aria-checked={ticked}
-              aria-label={`提交 ${item.change.path}`}
+              aria-label={m.commitFile(item.change.path)}
               disabled={locked}
               onClick={() => toggleTicked(root, item.change.path)}
             >
@@ -393,7 +448,7 @@ function Item({
           {item.text}
           {item.open && (
             <button type="button" className={styles.noteAction} onClick={() => void window.tr.worktree.open(root, item.open!)}>
-              用默认编辑器打开
+              {m.openInEditor}
             </button>
           )}
         </p>
@@ -403,6 +458,7 @@ function Item({
 
 /** A file's row (Figma FileRow 12:79 / 12:85): chevron, path, comment count, +/−. Also drawn pinned (sticky). */
 function FileRow({ item, onToggle, pinned = false }: { item: Extract<ChangeItem, { kind: 'file' }>; onToggle: () => void; pinned?: boolean }) {
+  const m = useMessages(M)
   const { change, open } = item
   const Chevron = open ? ChevronDown : ChevronRight
   return (
@@ -410,14 +466,14 @@ function FileRow({ item, onToggle, pinned = false }: { item: Extract<ChangeItem,
       type="button"
       className={styles.fileRow}
       aria-expanded={open}
-      aria-label={pinned ? `收起 ${change.path}` : undefined}
-      title={`${STATUS_LABEL[change.status]}${change.untracked ? '（未跟踪）' : ''}${change.oldPath ? ` · 原 ${change.oldPath}` : ''}`}
+      aria-label={pinned ? m.fold(change.path) : undefined}
+      title={`${m.status[change.status]}${change.untracked ? m.untracked : ''}${change.oldPath ? m.renamedFrom(change.oldPath) : ''}`}
       onClick={onToggle}
     >
       <Chevron size={16} strokeWidth={1.75} className={styles.fileChevron} />
       <span className={styles.filePath}>{change.path}</span>
       {item.comments > 0 && (
-        <span className={styles.fileComments} aria-label={`${item.comments} 条评论`}>
+        <span className={styles.fileComments} aria-label={m.comments(item.comments)}>
           <MessageSquare size={12} strokeWidth={1.75} aria-hidden />
           {item.comments}
         </span>
@@ -427,16 +483,13 @@ function FileRow({ item, onToggle, pinned = false }: { item: Extract<ChangeItem,
   )
 }
 
-const VIEW_MARK: Record<ViewMark, { label: string; Icon: typeof Circle }> = {
-  unviewed: { label: '未看', Icon: Circle },
-  viewed: { label: '已看', Icon: CircleCheck },
-  stale: { label: '看过后又改了', Icon: CircleDot }
-}
+const VIEW_MARK_ICON: Record<ViewMark, typeof Circle> = { unviewed: Circle, viewed: CircleCheck, stale: CircleDot }
 
 /** The 已看 mark at the end of a file row (Figma 73A): ○ 未看, ✓ 已看, ◉ 看过后又改了 — told apart by shape. A click marks
  *  the row viewed at its current diff (an open file folds) or, when viewed, unmarks it. */
 function ViewMarkButton({ mark, path, onToggle }: { mark: ViewMark; path: string; onToggle: () => void }) {
-  const { label, Icon } = VIEW_MARK[mark]
+  const label = useMessages(M).viewMark[mark]
+  const Icon = VIEW_MARK_ICON[mark]
   return (
     <button type="button" className={styles.viewMark} aria-label={label} title={`${label} · ${path}`} data-mark={mark} onClick={onToggle}>
       <Icon size={16} strokeWidth={1.75} aria-hidden />
@@ -445,9 +498,10 @@ function ViewMarkButton({ mark, path, onToggle }: { mark: ViewMark; path: string
 }
 
 function FileCounts({ change }: { change: GitFileChange }) {
-  if (change.nested) return <span className={styles.binary}>嵌套仓库</span>
-  if (change.tooLarge) return <span className={styles.binary}>文件太大</span>
-  if (change.added === null) return <span className={styles.binary}>二进制</span>
+  const m = useMessages(M)
+  if (change.nested) return <span className={styles.binary}>{m.nested}</span>
+  if (change.tooLarge) return <span className={styles.binary}>{m.tooLarge}</span>
+  if (change.added === null) return <span className={styles.binary}>{m.binary}</span>
   return (
     <>
       <span className={styles.added}>+{change.added}</span>

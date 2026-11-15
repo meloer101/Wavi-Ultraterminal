@@ -6,6 +6,7 @@
 // pre-push review that found a P0 / P1 stopped the push: 让 <agent> 修 (the findings into its input line) or 照样推送.
 import { ArrowDown, ArrowUp, Check, CircleAlert, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
+import { defineMessages } from '@shared/i18n'
 import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
 import type { ShipKind } from '@shared/ship'
 import { runChainCommand } from './chain-actions'
@@ -40,7 +41,41 @@ import {
   type ShipState
 } from './ship-flow'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { useMessages } from '../ui/i18n'
 import styles from './ShipBlock.module.css'
+
+const M = defineMessages({
+  zh: {
+    notStarted: '没有开始',
+    notDone: '没有完成',
+    close: '关闭',
+    cancel: '取消',
+    pushAnyway: '照样推送',
+    haveFix: (agent: string) => `让 ${agent} 修`,
+    createPrInstead: '改为创建 PR',
+    retry: '重试',
+    commitMessage: '提交说明',
+    title: '标题',
+    body: '正文',
+    into: (base: string) => `合到 ${base}`,
+    draft: '草稿'
+  },
+  en: {
+    notStarted: 'Not started',
+    notDone: 'Not done',
+    close: 'Close',
+    cancel: 'Cancel',
+    pushAnyway: 'Push anyway',
+    haveFix: (agent: string) => `Have ${agent} fix it`,
+    createPrInstead: 'Create PR instead',
+    retry: 'Retry',
+    commitMessage: 'Commit message',
+    title: 'Title',
+    body: 'Body',
+    into: (base: string) => `Into ${base}`,
+    draft: 'Draft'
+  }
+})
 
 const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
   main: GitMerge,
@@ -78,6 +113,7 @@ function chainLabel(id: ChainActionId, base: string): string {
 }
 
 export function ShipBlock({ worktree, base }: { worktree: string; base: string }) {
+  const m = useMessages(M)
   const state = useShips((s) => s.byWorktree[worktree])
   // 交给 <agent> types into the session the run started with: it names and enables the button.
   const handoffSession = useShipHandoffSession(worktree)
@@ -149,7 +185,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
           {state.steps.map((step) =>
             step.id === held?.step ? (
               <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
-                <span className={styles.glyph} role="img" aria-label="没有开始">
+                <span className={styles.glyph} role="img" aria-label={m.notStarted}>
                   <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
                 </span>
                 <span className={styles.stepBody} role="alert">
@@ -162,7 +198,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
               // 拉取 <base> whose base could not catch up did not happen as its label says (Figma 73K1): held, the
               // reason on its own row.
               <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
-                <span className={styles.glyph} role="img" aria-label="没有完成">
+                <span className={styles.glyph} role="img" aria-label={m.notDone}>
                   <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
                 </span>
                 <span className={styles.stepBody}>
@@ -197,7 +233,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
       </div>
       <div className={styles.footer}>
         <button type="button" className={styles.ghost} disabled={running} onClick={() => cancelShip(worktree)}>
-          {finished ? '关闭' : '取消'}
+          {finished ? m.close : m.cancel}
         </button>
         <span className={styles.spacer} />
         {state.error ? (
@@ -206,7 +242,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
             {way?.kind === 'review' ? (
               <>
                 <button type="button" className={styles.ghost} onClick={() => pushPastReview(worktree)}>
-                  照样推送
+                  {m.pushAnyway}
                 </button>
                 <button
                   type="button"
@@ -215,12 +251,12 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
                   title={hasSession ? undefined : CHAIN_TEXT.noAgent}
                   onClick={() => void handFindingsToAgent(worktree)}
                 >
-                  {`让 ${handoffAgent ?? 'agent'} 修`}
+                  {m.haveFix(handoffAgent ?? 'agent')}
                 </button>
               </>
             ) : way?.kind === 'create-pr' ? (
               <button type="button" className={canRetry ? styles.ghost : styles.primary} onClick={() => switchToPr(worktree)}>
-                改为创建 PR
+                {m.createPrInstead}
               </button>
             ) : way?.kind === 'chain' ? (
               <button type="button" className={canRetry ? styles.ghost : styles.primary} data-way={way.id} onClick={() => follow(way.id)}>
@@ -239,7 +275,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
             ) : null}
             {canRetry && (
               <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
-                重试
+                {m.retry}
                 {showFields && <span className={styles.shortcut}>⌘↵</span>}
               </button>
             )}
@@ -271,6 +307,7 @@ function StepFailure({ state }: { state: ShipState }) {
 }
 
 function Fields({ state, worktree, base }: { state: ShipState; worktree: string; base: string }) {
+  const m = useMessages(M)
   const { texts } = state
   return (
     <div className={styles.fields}>
@@ -279,7 +316,7 @@ function Fields({ state, worktree, base }: { state: ShipState; worktree: string;
           case 'commit':
             return (
               <label key={field} className={styles.field}>
-                <span className={styles.label}>提交说明</span>
+                <span className={styles.label}>{m.commitMessage}</span>
                 <textarea
                   className={styles.mono}
                   data-size="message"
@@ -292,14 +329,14 @@ function Fields({ state, worktree, base }: { state: ShipState; worktree: string;
           case 'title':
             return (
               <label key={field} className={styles.field}>
-                <span className={styles.label}>标题</span>
+                <span className={styles.label}>{m.title}</span>
                 <input className={styles.input} value={texts.title} spellCheck={false} onChange={(e) => editShip(worktree, { title: e.currentTarget.value })} />
               </label>
             )
           case 'body':
             return (
               <label key={field} className={styles.field}>
-                <span className={styles.label}>正文</span>
+                <span className={styles.label}>{m.body}</span>
                 <textarea
                   className={styles.mono}
                   data-size="body"
@@ -312,7 +349,7 @@ function Fields({ state, worktree, base }: { state: ShipState; worktree: string;
           case 'base':
             return (
               <div key={field} className={styles.optionRow}>
-                <span className={styles.option}>合到 {base}</span>
+                <span className={styles.option}>{m.into(base)}</span>
                 <span className={styles.spacer} />
                 <button
                   type="button"
@@ -324,7 +361,7 @@ function Fields({ state, worktree, base }: { state: ShipState; worktree: string;
                   <span className={styles.box} aria-hidden>
                     {texts.draft && <Check size={12} strokeWidth={2.5} />}
                   </span>
-                  草稿
+                  {m.draft}
                 </button>
               </div>
             )

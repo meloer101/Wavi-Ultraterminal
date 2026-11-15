@@ -3,8 +3,32 @@
 // conflict, and how to rebase without an editor.
 import type { RadarMark, RadarTarget, RadarWorktree } from '@shared/conflict-radar'
 import type { MergeConflict } from '@shared/git-merge'
+import { defineMessages, pick } from '@shared/i18n'
 import type { Project, Session, Worktree } from '@shared/types'
 import { conflictReason, rebaseInstruction } from '@shared/ship-chain'
+
+const M = defineMessages({
+  zh: {
+    listSeparator: '、',
+    fileReason: (path: string, reason: string) => `${path}（${reason}）`,
+    conflictWith: (name: string) => `和 ${name} 冲突`,
+    willConflictWith: (name: string, reasons: string) => `和 ${name} 会冲突：\n${reasons}`,
+    mergeWillConflict: (base: string, reasons: string) => `合并到 ${base} 会冲突：\n${reasons}`,
+    baseMoved: (base: string, behind: number) => `${base} 已前进，落后 ${behind} 个提交`,
+    uncommitted: '含未提交的改动',
+    uncommittedTitle: '冲突检查包括还没提交的改动'
+  },
+  en: {
+    listSeparator: ', ',
+    fileReason: (path: string, reason: string) => `${path} (${reason})`,
+    conflictWith: (name: string) => `Conflicts with ${name}`,
+    willConflictWith: (name: string, reasons: string) => `Will conflict with ${name}:\n${reasons}`,
+    mergeWillConflict: (base: string, reasons: string) => `Merging into ${base} will conflict:\n${reasons}`,
+    baseMoved: (base: string, behind: number) => `${base} moved on, ${behind} ${behind === 1 ? 'commit' : 'commits'} behind`,
+    uncommitted: 'Includes uncommitted changes',
+    uncommittedTitle: 'The conflict check includes changes not yet committed'
+  }
+})
 
 /** 让 agent rebase: the shared instruction (src/shared/ship-chain.ts), which the merge chain's 同步 hand-off builds on. */
 export function rebasePrompt(self: Pick<RadarWorktree, 'base' | 'branch' | 'behind' | 'baseConflicts' | 'uncommitted'>): string {
@@ -38,21 +62,22 @@ export interface RadarDetailLine {
 
 /** The Worktree view's detail lines for a mark: one per conflicting worktree, one for the base, one for a moved base. */
 export function radarDetailLines(mark: RadarMark): RadarDetailLine[] {
-  const files = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => c.path).join('、')
-  const reasons = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => `${c.path}（${conflictReason(c)}）`).join('\n')
+  const m = pick(M)
+  const files = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => c.path).join(m.listSeparator)
+  const reasons = (conflicts: readonly MergeConflict[]): string => conflicts.map((c) => m.fileReason(c.path, conflictReason(c))).join('\n')
   const lines: RadarDetailLine[] = mark.pairs.map((pair) => ({
-    text: `和 ${pair.name} 冲突`,
+    text: m.conflictWith(pair.name),
     files: files(pair.conflicts),
-    title: `和 ${pair.name} 会冲突：\n${reasons(pair.conflicts)}`
+    title: m.willConflictWith(pair.name, reasons(pair.conflicts))
   }))
   const { self } = mark
   if (self.baseConflicts.length > 0) {
-    lines.push({ text: `和 ${self.base} 冲突`, files: files(self.baseConflicts), title: `合并到 ${self.base} 会冲突：\n${reasons(self.baseConflicts)}` })
+    lines.push({ text: m.conflictWith(self.base), files: files(self.baseConflicts), title: m.mergeWillConflict(self.base, reasons(self.baseConflicts)) })
   }
   if (self.behind > 0 && (self.baseMoved || self.baseConflicts.length > 0)) {
-    const text = `${self.base} 已前进，落后 ${self.behind} 个提交`
+    const text = m.baseMoved(self.base, self.behind)
     lines.push({ text, files: '', title: text })
   }
-  if (lines.length > 0 && self.uncommitted) lines.push({ text: '含未提交的改动', files: '', title: '冲突检查包括还没提交的改动' })
+  if (lines.length > 0 && self.uncommitted) lines.push({ text: m.uncommitted, files: '', title: m.uncommittedTitle })
   return lines
 }

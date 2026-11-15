@@ -9,14 +9,18 @@ const BOLD = '\x1b[1m'
 const RESET = '\x1b[0m'
 
 export const SAMPLE_LINES: readonly string[] = [
+  // eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the Chinese font and 2-cell alignment in both languages
   `${DIM}> 把登录态迁移到 httpOnly cookie，过期后自动刷新${RESET}`,
   '',
+  // eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the Chinese font and 2-cell alignment in both languages
   '● 我先看一下现在的会话是怎么存的。',
   `${GREEN}●${RESET} ${BOLD}Read${RESET}(src/auth/session.ts)`,
   `${DIM}  ⎿  Read 84 lines${RESET}`,
   '',
+  // eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the Chinese font and 2-cell alignment in both languages
   `  中英混排 ${BLUE}abc${RESET} 对齐 ${GREEN}123${RESET} 检查`,
   `${DIM}  ┌──────────┬──────────┐${RESET}`,
+  // eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the Chinese font and 2-cell alignment in both languages
   `${DIM}  │ 中文宽度 │ ASCII    │${RESET}`,
   `${DIM}  └──────────┴──────────┘${RESET}`,
   '',
@@ -25,6 +29,7 @@ export const SAMPLE_LINES: readonly string[] = [
 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m/g
+// eslint-disable-next-line no-restricted-syntax -- character ranges for CJK cell width, not UI text
 const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿豈-﫿＀-｠￠-￦]/
 
 /** Terminal cells a string occupies: CJK and fullwidth forms take 2, everything else 1. */

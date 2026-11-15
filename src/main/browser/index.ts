@@ -9,6 +9,22 @@ import { BrowserHost, isPageContents, warmBrowserSession } from './host'
 import { portsOf, scanPortsFresh, startPortScanning, unwatchPorts, watchPorts } from './ports'
 import { RememberedPages } from './remembered'
 import { parseBoolean, parseBounds, parsePageCommand, parsePoint, parseUrl, parseWorktree } from './validate'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    endTitle: (port: number) => `结束监听 :${port} 的进程？`,
+    endDetail: (label: string, pid: number) => `${label}（pid ${pid}）会收到 SIGTERM。`,
+    process: '进程',
+    end: '结束进程'
+  },
+  en: {
+    endTitle: (port: number) => `End the process listening on :${port}?`,
+    endDetail: (label: string, pid: number) => `${label} (pid ${pid}) will get SIGTERM.`,
+    process: 'The process',
+    end: 'End process'
+  }
+})
 
 const hosts = new WeakMap<WebContents, BrowserHost>()
 
@@ -83,9 +99,9 @@ export function registerBrowserHandlers(): void {
     if (!entry) return false
     const ok = await confirm(
       {
-        message: `结束监听 :${entry.port} 的进程？`,
-        detail: `${entry.label || '进程'}（pid ${entry.pid}）会收到 SIGTERM。`,
-        confirmLabel: '结束进程',
+        message: pick(M).endTitle(entry.port),
+        detail: pick(M).endDetail(entry.label || pick(M).process, entry.pid),
+        confirmLabel: pick(M).end,
         destructive: true
       },
       BrowserWindow.fromWebContents(host.owner)

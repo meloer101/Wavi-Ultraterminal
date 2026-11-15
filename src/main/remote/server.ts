@@ -8,6 +8,12 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import { PAIRING_ALPHABET, PAIRING_CODE_LENGTH, parsePhoneRequest, REMOTE_LIMITS, REMOTE_PROTOCOL, type PhoneEvent, type PhoneRequest, type PhoneResponse, type RemoteResult } from '@shared/remote'
 import { authProof, b64u, FrameCipher, fromB64u, open, pairingKey, pakeReply, proofMatches, seal, sessionKeys, type Identity } from './crypto'
 import type { DeviceStore } from './devices'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { invalid: '无效的请求', failed: '处理请求时出错' },
+  en: { invalid: 'Invalid request', failed: 'Something went wrong handling the request' }
+})
 
 export interface RemoteConnection {
   /** One per socket. */
@@ -281,14 +287,14 @@ export class RemoteServer {
         const parsed = parsePhoneRequest(request)
         if (!parsed) {
           const id = typeof (request as { id?: unknown }).id === 'number' ? (request as { id: number }).id : -1
-          current.connection.send({ re: id, ok: false, error: '无效的请求' })
+          current.connection.send({ re: id, ok: false, error: pick(M).invalid })
           return
         }
         void this.options
           .handle(current.connection, parsed)
           .catch((error: unknown): RemoteResult => {
             console.error('[remote] request failed:', error)
-            return { ok: false, error: '处理请求时出错' }
+            return { ok: false, error: pick(M).failed }
           })
           .then((result) => current.connection.send({ re: parsed.id, ...result }))
         return

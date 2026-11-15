@@ -2,12 +2,37 @@
 // it signals and a clock. Hooks can drop events, so the reducer also knows how to self-heal.
 import type { ProgramStatus } from './program-status'
 import { currentAction } from './current-action'
+import { defineMessages, pick } from './i18n'
 import type { AgentEvent } from './agent-events'
 import type { AgentMarker } from './agent-launch'
 import { blockedAction, blockedReasonOf, readScreen, type BlockedReason } from './startup-screen'
 import { toolCallKey } from './tool-call'
 import { isLiveRun, workflowLine } from './workflow-run'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
+
+const M = defineMessages({
+  zh: {
+    confirm: '等你确认',
+    confirmAction: (action: string) => `等你确认：${action}`,
+    answer: '等你回答',
+    signIn: '等你登录',
+    asksInAll: (label: string, n: number) => `${label}（共 ${n} 项）`,
+    error: '出错了',
+    crashed: (code: number) => `进程异常退出，退出码 ${code}`
+  },
+  en: {
+    confirm: 'Needs confirmation',
+    confirmAction: (action: string) => `Confirm: ${action}`,
+    answer: 'Needs an answer',
+    signIn: 'Needs sign-in',
+    asksInAll: (label: string, n: number) => `${label} (${n} in all)`,
+    error: 'Something went wrong',
+    crashed: (code: number) => `Process exited abnormally, exit code ${code}`
+  }
+})
+
+/** `等你确认：<action>`, or `等你确认` when the action is unknown. */
+const confirmLabel = (action: string | undefined): string => (action ? pick(M).confirmAction(action) : pick(M).confirm)
 
 /**
  * Claude: `running` with an idle `✳` title and no hook event for this long is a turn that ended without a Stop
@@ -228,8 +253,8 @@ const NO_ASKS: Ask[] = []
 /** `needs_you` names the oldest ask (the one the TUI shows) and how many wait. */
 function askLabel(asks: Ask[]): string {
   const first = asks[0]
-  if (!first) return '等你确认'
-  return asks.length > 1 ? `${first.label}（共 ${asks.length} 项）` : first.label
+  if (!first) return pick(M).confirm
+  return asks.length > 1 ? pick(M).asksInAll(first.label, asks.length) : first.label
 }
 
 /** What the session is doing apart from its asks. */
@@ -329,7 +354,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     }
 
     case 'permission-request': {
-      const label = `等你确认：${currentAction(event.tool, event.input)}`
+      const label = pick(M).confirmAction(currentAction(event.tool, event.input))
       return addAsk(state, { key: toolCallKey(event.tool, event.input), agent: event.agentId ?? '', label, at: now }, now)
     }
 
@@ -342,7 +367,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
       if (event.kind === 'permission' || event.kind === 'question') {
         // Its PermissionRequest (about 6 s earlier) already named what is asked.
         if (state.asks.length > 0) return touched
-        const label = event.kind === 'permission' ? (state.toolAction ? `等你确认：${state.toolAction}` : '等你确认') : (state.toolAction ?? '等你回答')
+        const label = event.kind === 'permission' ? confirmLabel(state.toolAction) : (state.toolAction ?? pick(M).answer)
         return addAsk(state, { key: '', agent: '', label, at: now }, now)
       }
       // Claude sends idle_prompt only while its prompt is idle: no turn, no dialog up, no background agent (PRD §6.6).
@@ -493,7 +518,7 @@ function reduceScreen(state: SessionState, text: string, now: number): SessionSt
     // A dialog no hook announced (its PermissionRequest and the Notification after it both lost, or hooks silent):
     // the title went idle mid-turn and the screen shows the dialog. Without hooks also a background agent's, after it.
     if (claude && state.titleIdle && reading.askDialog && (state.status === 'running' || (state.hooksSilent && (state.status === 'idle' || state.status === 'done_unread')))) {
-      return addAsk(state, { key: '', agent: '', label: state.toolAction ? `等你确认：${state.toolAction}` : '等你确认', at: now }, now)
+      return addAsk(state, { key: '', agent: '', label: confirmLabel(state.toolAction), at: now }, now)
     }
     // Claude is up and its hooks stayed silent: the header says status follows the title only.
     if (claude && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent && now - state.phaseSince >= STARTUP_TIMEOUT_MS) {
@@ -538,7 +563,7 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
       ...state,
       titleIdle: false,
       status: 'needs_you',
-      currentAction: state.toolAction ? `等你确认：${state.toolAction}` : '等你确认',
+      currentAction: confirmLabel(state.toolAction),
       under: underneath(state),
       titleAction: true,
       titleRun: false,
@@ -604,14 +629,14 @@ function reduceProgramStatus(state: SessionState, status: ProgramStatus, now: nu
       if (up.status === 'running' && !up.asks.length) return up
       return { ...up, status: 'running', currentAction: status.message ?? up.toolAction, asks: NO_ASKS, under: undefined, titleRun: false, lastActivityAt: now, ...(up.status === 'needs_you' ? {} : { lastReply: undefined }) }
     case 'blocked': {
-      const label = status.message ?? (status.kind === 'question' ? '等你回答' : status.kind === 'auth' ? '等你登录' : up.toolAction ? `等你确认：${up.toolAction}` : '等你确认')
+      const label = status.message ?? (status.kind === 'question' ? pick(M).answer : status.kind === 'auth' ? pick(M).signIn : confirmLabel(up.toolAction))
       if (up.status === 'needs_you' && up.currentAction === label) return up
       return { ...up, status: 'needs_you', currentAction: label, under: up.status === 'needs_you' ? up.under : underneath(up), lastActivityAt: now }
     }
     case 'done':
       return { ...up, status: up.viewing ? 'idle' : 'done_unread', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined, titleRun: false, finishedAt: now, lastActivityAt: now }
     case 'error':
-      return { ...up, status: 'error', currentAction: status.message ?? '出错了', asks: NO_ASKS, under: undefined, titleRun: false, lastActivityAt: now }
+      return { ...up, status: 'error', currentAction: status.message ?? pick(M).error, asks: NO_ASKS, under: undefined, titleRun: false, lastActivityAt: now }
     case 'idle':
     case 'clear':
       if (up.status === 'idle' || up.status === 'done_unread' || up.status === 'error') return up
@@ -672,7 +697,7 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
       return {
         ...state,
         status: crashed ? 'error' : 'exited',
-        currentAction: crashed && marker.type === 'exit' ? `进程异常退出，退出码 ${marker.code}` : undefined,
+        currentAction: crashed && marker.type === 'exit' ? pick(M).crashed(marker.code) : undefined,
         toolAction: undefined,
         phase: 'exited',
         phaseSince: now,
@@ -706,7 +731,7 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
       return {
         ...state,
         status: crashed ? 'error' : 'exited',
-        currentAction: crashed ? `进程异常退出，退出码 ${signal.code}` : undefined,
+        currentAction: crashed ? pick(M).crashed(signal.code) : undefined,
         toolAction: undefined,
         lastActivityAt: now,
         ended: true,

@@ -5,11 +5,17 @@
 // waits on the user, never the main checkout, once per event. Pure apart from the deps the caller passes
 // (pull-requests/auto-archive.ts wires them to the stores, the chain and archiveWorktree).
 import { archiveBlocker } from '@shared/archive'
+import { defineMessages, pick } from '@shared/i18n'
 import type { PrState } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 import type { ChainState } from '@shared/ship-chain'
 import type { Session } from '@shared/types'
 import type { BasePush } from './base-ci'
+
+const M = defineMessages({
+  zh: { notArchived: (message: string) => `没有自动归档：${message}` },
+  en: { notArchived: (message: string) => `Not archived automatically: ${message}` }
+})
 
 export const AUTO_ARCHIVE = {
   /** A 推送 of the base whose CI never answered (not on GitHub, gh not ready, no checks registered): settled after this. */
@@ -146,7 +152,7 @@ export function createAutoArchiver(deps: AutoArchiveDeps): AutoArchiver {
           .archive(worktree)
           .catch((error: unknown) => ({ ok: false as const, message: error instanceof Error ? error.message : String(error) }))
           .then((outcome) => {
-            if (!outcome.ok) deps.say(worktree, `没有自动归档：${outcome.message}`)
+            if (!outcome.ok) deps.say(worktree, pick(M).notArchived(outcome.message))
           })
       })
   }

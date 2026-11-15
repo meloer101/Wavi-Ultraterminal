@@ -11,6 +11,7 @@ import {
   type SimTouch,
   type SimulatorScreen
 } from '@shared/simulator'
+import { defineMessages, localized } from '@shared/i18n'
 import { SimHelper, type HelperRuntime } from './helper'
 import { FrameStream, HID_TAG, InputSocket } from './stream'
 
@@ -35,12 +36,22 @@ const RECONNECT_MS = 500
 const MAX_STREAM_RETRIES = 5
 
 /** Failures shown in the view; UI copy. */
-const ERROR = {
-  missing: '找不到这台模拟器',
-  boot: '模拟器没能启动',
-  helper: '没能连接到模拟器',
-  stopped: '模拟器已关闭'
-} as const
+const ERROR = localized(
+  defineMessages({
+    zh: {
+      missing: '找不到这台模拟器',
+      boot: '模拟器没能启动',
+      helper: '没能连接到模拟器',
+      stopped: '模拟器已关闭'
+    },
+    en: {
+      missing: "Can't find this simulator",
+      boot: "The simulator didn't start",
+      helper: "Couldn't connect to the simulator",
+      stopped: 'The simulator was closed'
+    }
+  })
+)
 
 class DeviceSession {
   readonly viewers = new Set<SimViewer>()

@@ -21,6 +21,12 @@ import {
 } from './claude-stream'
 import { isRec, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { initFailed: (why: string) => `Claude 没有完成初始化：${why}` },
+  en: { initFailed: (why: string) => `Claude didn't finish starting up: ${why}` }
+})
 
 type ControlOutcome = { ok: true; response: Rec } | { ok: false; error: string }
 
@@ -112,7 +118,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   async function handshake(): Promise<void> {
     const outcome = await control({ subtype: 'initialize' }, INIT_TIMEOUT_MS)
     if (!outcome.ok) {
-      io.fail(`Claude 没有完成初始化：${outcome.error}`)
+      io.fail(pick(M).initFailed(outcome.error))
       return
     }
     takeInit(outcome.response)

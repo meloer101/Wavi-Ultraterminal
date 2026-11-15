@@ -3,14 +3,36 @@
 // downloads or installs anything itself (PRD §7). Replaces settings' 关于 pane.
 import { useCallback, useRef, useState } from 'react'
 import { CircleArrowUp } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
 import type { UpdateInfo } from '@shared/ipc'
+import { useMessages } from '../ui/i18n'
 import { Popover } from '../session-meta/Popover'
 import { NavItem } from './NavItem'
 import styles from './UpdateEntry.module.css'
 
+const M = defineMessages({
+  zh: {
+    update: '更新',
+    checking: '正在检查…',
+    latest: '已是最新版本',
+    available: (version: string) => `有新版本 ${version}`,
+    download: (version: string) => `下载 ${version}`,
+    check: '检查更新'
+  },
+  en: {
+    update: 'Update',
+    checking: 'Checking…',
+    latest: "You're up to date",
+    available: (version: string) => `New version ${version}`,
+    download: (version: string) => `Download ${version}`,
+    check: 'Check for updates'
+  }
+})
+
 type UpdateState = { phase: 'idle' } | { phase: 'checking' } | { phase: 'latest' } | { phase: 'available'; info: UpdateInfo }
 
 export function UpdateEntry() {
+  const m = useMessages(M)
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<UpdateState>({ phase: 'idle' })
   const anchor = useRef<HTMLButtonElement>(null)
@@ -29,14 +51,14 @@ export function UpdateEntry() {
       <NavItem
         ref={anchor}
         icon={<CircleArrowUp size={16} strokeWidth={1.75} />}
-        label="更新"
+        label={m.update}
         selected={open}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       />
       {open && (
-        <Popover anchor={anchor} label="更新" onClose={close} placement="above" className={styles.panel} testId="update-popover">
+        <Popover anchor={anchor} label={m.update} onClose={close} placement="above" className={styles.panel} testId="update-popover">
           <div className={styles.version}>
             <span className={styles.name}>Wavi</span>
             <span className={styles.number} data-testid="app-version">
@@ -45,18 +67,18 @@ export function UpdateEntry() {
           </div>
           {state.phase !== 'idle' && (
             <p className={styles.status} role="status" aria-live="polite" data-new={state.phase === 'available'}>
-              {state.phase === 'checking' && '正在检查…'}
-              {state.phase === 'latest' && '已是最新版本'}
-              {state.phase === 'available' && `有新版本 ${state.info.version}`}
+              {state.phase === 'checking' && m.checking}
+              {state.phase === 'latest' && m.latest}
+              {state.phase === 'available' && m.available(state.info.version)}
             </p>
           )}
           {state.phase === 'available' ? (
             <a className={`${styles.button} ${styles.primary}`} href={state.info.url} target="_blank" rel="noreferrer">
-              下载 {state.info.version}
+              {m.download(state.info.version)}
             </a>
           ) : (
             <button type="button" className={styles.button} onClick={check} disabled={state.phase === 'checking'}>
-              检查更新
+              {m.check}
             </button>
           )}
         </Popover>

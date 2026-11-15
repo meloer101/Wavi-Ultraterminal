@@ -19,6 +19,7 @@ import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
 import type { UsageDataset } from './usage-stats'
 import type { AppSettings, SettingsPatch } from './settings'
+import type { Lang } from './i18n'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 import type { WindowKey, WindowStateEvent } from './window-layout'
@@ -359,6 +360,10 @@ export type AgentVersions = Partial<Record<CliAgent, string | null>>
 export interface AppInfoApi {
   /** package.json version of the running app. */
   version: string
+  /** The interface language when the window loaded (main resolves 设置 · 外观 · 语言 against the system). */
+  language: Lang
+  /** Later changes of the interface language. */
+  onLanguage(listener: (lang: Lang) => void): Unsubscribe
   /** Latest GitHub release if newer than the running version, else null. Never throws. */
   checkForUpdates(): Promise<UpdateInfo | null>
   /** Keeps main informed about live sessions (quit confirmation). */
@@ -541,6 +546,8 @@ export const IPC = {
   settingsSaveFailed: 'settings:save-failed',
   /** sync: returns the app version */
   appVersion: 'app:version',
+  appLanguage: 'app:language',
+  appLanguageChanged: 'app:language-changed',
   appCheckForUpdates: 'app:check-for-updates',
   appReportActivity: 'app:report-activity',
   /** renderer → main, payload boolean */

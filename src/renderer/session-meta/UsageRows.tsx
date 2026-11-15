@@ -16,10 +16,14 @@ import {
   type UsageVendor,
   type UsageWindow
 } from '@shared/session-meta'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { AgentIcon } from '../ui/AgentIcon'
 import { PaceMeter } from './MetaChips'
 import meta from './SessionMeta.module.css'
 import styles from './UsageRows.module.css'
+
+const M = defineMessages({ zh: { resetsAt: (clock: string) => `${clock} 恢复` }, en: { resetsAt: (clock: string) => `resets ${clock}` } })
 
 /** The agent's mark sits on the column's left edge; the name follows it, where the window labels start (Figma 33I). */
 export function UsageAgentRow({ agent, name, status }: { agent: CliAgent; name: string; status: string }) {
@@ -37,6 +41,7 @@ export function UsageAgentRow({ agent, name, status }: { agent: CliAgent; name: 
 }
 
 export function UsageWindowRow({ vendor, w, now, testIdPrefix }: { vendor: UsageVendor; w: UsageWindow; now: number; testIdPrefix: string }) {
+  const m = useMessages(M)
   const bar = paceBar(w, now)
   const level = bar.exhausted ? 'exhausted' : bar.ahead || isHigh(w.percent) ? 'ahead' : 'normal'
   return (
@@ -44,7 +49,7 @@ export function UsageWindowRow({ vendor, w, now, testIdPrefix }: { vendor: Usage
       <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes, w.scope)}</span>
       <PaceMeter w={w} now={now} />
       <span className={styles.value}>{w.percent}%</span>
-      <span className={styles.reset}>{w.resetsAt === undefined ? '' : bar.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)}</span>
+      <span className={styles.reset}>{w.resetsAt === undefined ? '' : bar.exhausted ? m.resetsAt(formatClock(w.resetsAt, now)) : formatReset(w.resetsAt, now)}</span>
     </div>
   )
 }
