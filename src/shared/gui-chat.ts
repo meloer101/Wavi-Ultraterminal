@@ -5,8 +5,14 @@
 // the same. Pure: no Electron, no Node.
 
 import type { CliAgent } from './agents'
+import { defineMessages, localized, pick } from './i18n'
 import type { ChatItem, FileDiff } from './transcript-chat'
 import type { WorkflowPhase } from './workflow-run'
+
+const M = defineMessages({
+  zh: { permission: '权限', plan: '计划', fast: '快速', off: '关', on: '开' },
+  en: { permission: 'Permissions', plan: 'Plan', fast: 'Fast', off: 'Off', on: 'On' }
+})
 
 export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'pi-rpc' | 'acp'
 
@@ -87,13 +93,26 @@ export const isCliPermission = (value: unknown): value is CliPermission => value
 
 /** A model (or effort) id as an agent names it, safe to pass on a command line and to keep in the workspace file. */
 export const GUI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
-export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' }
+export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = localized(
+  defineMessages<Record<GuiPermission, string>>({
+    zh: { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' },
+    en: { ask: 'Ask', 'accept-edits': 'Accept edits', auto: 'Auto' }
+  })
+)
+
+const onOff = (): GuiConfigOption['values'] => {
+  const m = pick(M)
+  return [
+    { value: 'off', label: m.off },
+    { value: 'on', label: m.on }
+  ]
+}
 
 export function permissionOption(levels: readonly GuiPermission[], current: GuiPermission): GuiConfigOption {
   return {
     id: 'permission',
     category: 'permission',
-    label: '权限',
+    label: pick(M).permission,
     current: levels.includes(current) ? current : levels[0]!,
     values: levels.map((level) => ({ value: level, label: GUI_PERMISSION_LABELS[level] }))
   }
@@ -103,12 +122,9 @@ export function permissionOption(levels: readonly GuiPermission[], current: GuiP
 export const planOption = (on: boolean): GuiConfigOption => ({
   id: 'plan',
   category: 'plan',
-  label: '计划',
+  label: pick(M).plan,
   current: on ? 'on' : 'off',
-  values: [
-    { value: 'off', label: '关' },
-    { value: 'on', label: '开' }
-  ]
+  values: onOff()
 })
 
 /**
@@ -118,12 +134,9 @@ export const planOption = (on: boolean): GuiConfigOption => ({
 export const fastOption = (on: boolean, hint?: string): GuiConfigOption => ({
   id: 'fast',
   category: 'fast',
-  label: '快速',
+  label: pick(M).fast,
   current: on ? 'on' : 'off',
-  values: [
-    { value: 'off', label: '关' },
-    { value: 'on', label: '开' }
-  ],
+  values: onOff(),
   ...(hint ? { hint } : {})
 })
 
@@ -137,10 +150,7 @@ export const ultracodeOption = (on: boolean): GuiConfigOption => ({
   category: 'ultracode',
   label: 'Ultracode',
   current: on ? 'on' : 'off',
-  values: [
-    { value: 'off', label: '关' },
-    { value: 'on', label: '开' }
-  ]
+  values: onOff()
 })
 
 /**
@@ -207,8 +217,11 @@ export function sanitizeGuiPicks(raw: unknown, agents: ReadonlySet<string>): Rec
 }
 
 /** Figma 56: reasoning effort in the same words for every agent; a level not listed keeps the agent's own name. */
-const EFFORT_LABELS: Readonly<Record<string, string>> = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' }
-export const effortLabel = (value: string, own?: string): string => EFFORT_LABELS[value.toLowerCase()] ?? own ?? value
+const EFFORT_LABELS = defineMessages<Readonly<Record<string, string>>>({
+  zh: { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' },
+  en: { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' }
+})
+export const effortLabel = (value: string, own?: string): string => pick(EFFORT_LABELS)[value.toLowerCase()] ?? own ?? value
 
 /** An entry of the `/` menu (Figma 49C), as the agent lists it. */
 export interface GuiCommand {

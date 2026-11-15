@@ -4,6 +4,7 @@
 // has one too (`/model <slug> --reasoning=…`, `/permissions :…`) but no list of its models to offer yet; Pi, Cursor and
 // Grok save every change as the default. Pure: reads screens, says which keys; terminal-settings.test.ts.
 import { effortLabel } from './gui-chat'
+import { defineMessages, pick } from './i18n'
 import type { SessionSettings } from './session-settings'
 
 export const KEY = { down: '\x1b[B', up: '\x1b[A', left: '\x1b[D', right: '\x1b[C', shiftTab: '\x1b[Z', esc: '\x1b', modelPicker: '\x1bp', sessionOnly: 's' } as const
@@ -13,7 +14,10 @@ export const CLAUDE_MODELS = ['opus', 'fable', 'sonnet', 'haiku'] as const
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 /** shift+tab's cycle, in order (2.1.319): manual → accept edits → plan → auto → manual. */
 export const CLAUDE_PERMISSIONS = ['default', 'acceptEdits', 'plan', 'auto'] as const
-const PERMISSION_LABELS: Record<string, string> = { default: '询问', acceptEdits: '接受编辑', plan: '计划', auto: '自动' }
+const PERMISSION_LABELS = defineMessages<Record<string, string>>({
+  zh: { default: '询问', acceptEdits: '接受编辑', plan: '计划', auto: '自动' },
+  en: { default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', auto: 'Auto' }
+})
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -51,7 +55,7 @@ export function claudeTerminalSettings(reported: { model?: string; effort?: stri
   const effort = CLAUDE_EFFORTS.find((e) => e === reported.effort)
   if (effort) items.push({ kind: 'effort', current: effort, values: CLAUDE_EFFORTS.map((e) => ({ value: e, label: effortLabel(e) })) })
   const permission = (CLAUDE_PERMISSIONS as readonly string[]).find((p) => p === reported.permission)
-  if (permission) items.push({ kind: 'permission', current: permission, values: CLAUDE_PERMISSIONS.map((p) => ({ value: p, label: PERMISSION_LABELS[p] ?? p })) })
+  if (permission) items.push({ kind: 'permission', current: permission, values: CLAUDE_PERMISSIONS.map((p) => ({ value: p, label: pick(PERMISSION_LABELS)[p] ?? p })) })
   if (items.length === 0) return undefined
   return { items, ...(running ? { locked: 'running' as const } : {}) }
 }

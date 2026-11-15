@@ -1,6 +1,7 @@
 // Normalized agent signals (PRD §3, F2, F3). Claude Code hooks feed these in M2; Codex hooks in M3.
 // main/hooks turns raw hook payloads into these shapes; the renderer never sees raw hook JSON.
 import type { TeamState } from './agent-team'
+import { defineMessages, pick } from './i18n'
 import type { AllowAlwaysScope } from './permission-scope'
 import type { ContextUsage } from './session-meta'
 import type { TodoItem } from './todo-progress'
@@ -9,6 +10,23 @@ import type { SessionId } from './types'
 import type { WorkflowRun } from './workflow-run'
 
 export type { AllowAlwaysScope } from './permission-scope'
+
+const M = defineMessages({
+  zh: {
+    everyMinutes: (n: number) => `每 ${n} 分钟`,
+    everyMinute: '每分钟',
+    everyHours: (n: number) => `每 ${n} 小时`,
+    everyHour: '每小时',
+    daily: (time: string) => `每天 ${time}`
+  },
+  en: {
+    everyMinutes: (n: number) => `every ${n} min`,
+    everyMinute: 'every minute',
+    everyHours: (n: number) => `every ${n} h`,
+    everyHour: 'every hour',
+    daily: (time: string) => `daily at ${time}`
+  }
+})
 
 /** The CLIs whose hooks Wavi injects per launch (PRD §6.6, §6.7; the others since v1.68, ROADMAP 7 ②). */
 export type HookAgent = 'claude' | 'codex' | 'gemini' | 'qwen' | 'opencode' | 'pi'
@@ -106,11 +124,14 @@ export function cronLabel(cron: string): string {
   const [min, hour, dom, mon, dow] = f as [string, string, string, string, string]
   const rest = dom === '*' && mon === '*' && dow === '*'
   const n = (s: string, prefix: string): number | null => (s.startsWith(prefix) && /^\d+$/.test(s.slice(prefix.length)) ? Number(s.slice(prefix.length)) : null)
-  if (rest && hour === '*' && n(min, '*/') !== null) return `每 ${n(min, '*/')} 分钟`
-  if (rest && hour === '*' && min === '*') return '每分钟'
-  if (rest && /^\d+$/.test(min) && n(hour, '*/') !== null) return `每 ${n(hour, '*/')} 小时`
-  if (rest && /^\d+$/.test(min) && hour === '*') return '每小时'
-  if (rest && /^\d+$/.test(min) && /^\d+$/.test(hour)) return `每天 ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
+  const m = pick(M)
+  const everyMin = n(min, '*/')
+  if (rest && hour === '*' && everyMin !== null) return m.everyMinutes(everyMin)
+  if (rest && hour === '*' && min === '*') return m.everyMinute
+  const everyHour = n(hour, '*/')
+  if (rest && /^\d+$/.test(min) && everyHour !== null) return m.everyHours(everyHour)
+  if (rest && /^\d+$/.test(min) && hour === '*') return m.everyHour
+  if (rest && /^\d+$/.test(min) && /^\d+$/.test(hour)) return m.daily(`${hour.padStart(2, '0')}:${min.padStart(2, '0')}`)
   return cron
 }
 
