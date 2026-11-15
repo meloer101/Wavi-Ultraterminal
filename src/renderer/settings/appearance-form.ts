@@ -11,19 +11,42 @@ import {
   type ThemePreference,
   type WindowMaterial
 } from '@shared/settings'
+import { defineMessages, localized, pick } from '@shared/i18n'
 import type { SelectOption } from './controls'
 import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, groupCjkFamilies, withCurrent } from './fonts'
 
-export const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'dark', label: '深色' },
-  { value: 'light', label: '浅色' }
-]
+const M = defineMessages({
+  zh: { lineHeight: '行高', systemUiFont: '跟随系统' },
+  en: { lineHeight: 'line height', systemUiFont: 'System' }
+})
 
-export const BACKGROUND_OPTIONS: ReadonlyArray<{ value: AppearanceSettings['terminalBackground']['mode']; label: string }> = [
-  { value: 'theme', label: '跟随主题' },
-  { value: 'custom', label: '自定义' }
-]
+export const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = localized(
+  defineMessages<ReadonlyArray<{ value: ThemePreference; label: string }>>({
+    zh: [
+      { value: 'system', label: '跟随系统' },
+      { value: 'dark', label: '深色' },
+      { value: 'light', label: '浅色' }
+    ],
+    en: [
+      { value: 'system', label: 'System' },
+      { value: 'dark', label: 'Dark' },
+      { value: 'light', label: 'Light' }
+    ]
+  })
+)
+
+export const BACKGROUND_OPTIONS: ReadonlyArray<{ value: AppearanceSettings['terminalBackground']['mode']; label: string }> = localized(
+  defineMessages<ReadonlyArray<{ value: AppearanceSettings['terminalBackground']['mode']; label: string }>>({
+    zh: [
+      { value: 'theme', label: '跟随主题' },
+      { value: 'custom', label: '自定义' }
+    ],
+    en: [
+      { value: 'theme', label: 'Theme' },
+      { value: 'custom', label: 'Custom' }
+    ]
+  })
+)
 
 /** Whether two appearance values are the same; the object-valued ones (底色, imported colors) compare by content. */
 export function sameAppearanceValue(a: unknown, b: unknown): boolean {
@@ -45,7 +68,7 @@ export function displayFamily(family: string): string {
 
 /** Caption under the preview: "JetBrains Mono 13 · PingFang SC · 行高 1.40". */
 export function previewCaption(a: Pick<AppearanceSettings, 'latinFont' | 'cjkFont' | 'fontSize' | 'lineHeight'>): string {
-  return `${displayFamily(a.latinFont)} ${a.fontSize} · ${displayFamily(a.cjkFont)} · 行高 ${a.lineHeight.toFixed(2)}`
+  return `${displayFamily(a.latinFont)} ${a.fontSize} · ${displayFamily(a.cjkFont)} · ${pick(M).lineHeight} ${a.lineHeight.toFixed(2)}`
 }
 
 export function formatLineHeight(value: number): string {
@@ -58,18 +81,33 @@ export function formatPercent(value: number): string {
 
 // --- 对话 and 窗口 · 材质 (PRD F23 v1.127, Figma 51D) ------------------------------------------------------------------
 
-export const CHAT_WIDTH_OPTIONS: ReadonlyArray<{ value: ChatWidth; label: string }> = [
-  { value: 'narrow', label: '窄' },
-  { value: 'medium', label: '中' },
-  { value: 'wide', label: '宽' },
-  { value: 'full', label: '铺满' }
-]
+export const CHAT_WIDTH_OPTIONS: ReadonlyArray<{ value: ChatWidth; label: string }> = localized(
+  defineMessages<ReadonlyArray<{ value: ChatWidth; label: string }>>({
+    zh: [
+      { value: 'narrow', label: '窄' },
+      { value: 'medium', label: '中' },
+      { value: 'wide', label: '宽' },
+      { value: 'full', label: '铺满' }
+    ],
+    en: [
+      { value: 'narrow', label: 'Narrow' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'wide', label: 'Wide' },
+      { value: 'full', label: 'Full' }
+    ]
+  })
+)
 
-const WEIGHT_NAMES: Record<ChatWeight, string> = { 300: '细', 400: '常规', 500: '中等' }
-export const CHAT_WEIGHT_OPTIONS: ReadonlyArray<{ value: `${ChatWeight}`; label: string }> = CHAT_WEIGHTS.map((weight) => ({
-  value: `${weight}` as const,
-  label: WEIGHT_NAMES[weight]
-}))
+const WEIGHT_NAMES = defineMessages<Record<ChatWeight, string>>({
+  zh: { 300: '细', 400: '常规', 500: '中等' },
+  en: { 300: 'Light', 400: 'Regular', 500: 'Medium' }
+})
+const weightOptions = (names: Record<ChatWeight, string>): ReadonlyArray<{ value: `${ChatWeight}`; label: string }> =>
+  CHAT_WEIGHTS.map((weight) => ({ value: `${weight}` as const, label: names[weight] }))
+export const CHAT_WEIGHT_OPTIONS: ReadonlyArray<{ value: `${ChatWeight}`; label: string }> = localized({
+  zh: weightOptions(WEIGHT_NAMES.zh),
+  en: weightOptions(WEIGHT_NAMES.en)
+})
 
 export const CHAT_SIZE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = Array.from(
   { length: LIMITS.chatFontSize.max - LIMITS.chatFontSize.min + 1 },
@@ -77,16 +115,24 @@ export const CHAT_SIZE_OPTIONS: ReadonlyArray<{ value: string; label: string }> 
 ).map((size) => ({ value: size, label: size }))
 
 /** 材质 (Figma 66′): the engine behind 玻璃 (Liquid Glass or vibrancy) is the window's business, not a choice. */
-export const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: string }> = [
-  { value: 'glass', label: '玻璃' },
-  { value: 'solid', label: '实色' }
-]
+export const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: string }> = localized(
+  defineMessages<ReadonlyArray<{ value: WindowMaterial; label: string }>>({
+    zh: [
+      { value: 'glass', label: '玻璃' },
+      { value: 'solid', label: '实色' }
+    ],
+    en: [
+      { value: 'glass', label: 'Glass' },
+      { value: 'solid', label: 'Solid' }
+    ]
+  })
+)
 
 /** 对话's English font menu: the system UI font first ('' in settings), then the proportional families. */
-export const SYSTEM_UI_FONT = '跟随系统'
+const systemUiFont = (): string => pick(M).systemUiFont
 
 export function chatPreviewCaption(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont' | 'fontSize' | 'fontWeight'>): string {
-  return `${c.latinFont ? displayFamily(c.latinFont) : SYSTEM_UI_FONT} ${c.fontSize} · ${displayFamily(c.cjkFont)} · ${WEIGHT_NAMES[c.fontWeight]}`
+  return `${c.latinFont ? displayFamily(c.latinFont) : systemUiFont()} ${c.fontSize} · ${displayFamily(c.cjkFont)} · ${pick(WEIGHT_NAMES)[c.fontWeight]}`
 }
 
 // --- Three pages (Figma 66) ------------------------------------------------------------------------------------------
@@ -119,7 +165,7 @@ export function latinOption(family: string): SelectOption {
 
 /** 对话's English font menu: '' is the system UI font. */
 export function uiOption(family: string): SelectOption {
-  if (family === '') return { value: '', label: SYSTEM_UI_FONT, labelStyle: { fontFamily: 'var(--font-ui)' }, sample: LATIN_SAMPLE, sampleStyle: { fontFamily: 'var(--font-ui)' } }
+  if (family === '') return { value: '', label: systemUiFont(), labelStyle: { fontFamily: 'var(--font-ui)' }, sample: LATIN_SAMPLE, sampleStyle: { fontFamily: 'var(--font-ui)' } }
   const face = { fontFamily: cssFamily(family, 'sans-serif') }
   return { value: family, label: displayFamily(family), labelStyle: face, sample: LATIN_SAMPLE, sampleStyle: face }
 }

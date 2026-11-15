@@ -20,12 +20,14 @@ import {
   type Weekday
 } from '@shared/schedule'
 import type { ProjectId, SessionId, SessionUi } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { Field, SelectButton } from '../new-session/NewSessionSheet'
 import { binaryInstalled, listedAgents, uiRow } from '../new-session/model'
 import { SheetMenu, type SheetMenuSection } from '../new-session/SheetMenu'
 import { useWorkspace } from '../state/workspace'
 import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { useMessages } from '../i18n'
 import { canReceive } from './model'
 import { closeSheet, useNow, useSchedules, type SheetState } from './store'
 import sheet from '../new-session/NewSessionSheet.module.css'
@@ -37,39 +39,134 @@ type What = ScheduleAction['kind']
 type TimingKind = ScheduleTiming['kind']
 type Permission = GuiPermission | 'default'
 
-const WHATS: ReadonlyArray<{ value: What; label: string }> = [
-  { value: 'new', label: '开新会话' },
-  { value: 'send', label: '发给已有会话' }
-]
+const M = defineMessages({
+  zh: {
+    newTitle: '新建定时任务',
+    editTitle: '编辑定时任务',
+    name: '名称',
+    what: '做什么',
+    session: '会话',
+    pickSession: '选一个会话',
+    project: '项目',
+    base: '基于',
+    agent: '智能体',
+    interface: '界面',
+    model: '模型',
+    permission: '权限',
+    defaultChoice: '默认',
+    message: '消息',
+    time: '时间',
+    every: '每隔',
+    interval: '间隔',
+    unit: '单位',
+    weekdays: '星期',
+    date: '日期',
+    clockTime: '时刻',
+    never: '不会再运行',
+    until: '到某天为止',
+    untilDate: '截止日期',
+    missed: '错过了',
+    autoArchive: '自动归档',
+    whenUnchanged: '这一轮没有改动时',
+    precheck: '前置检查',
+    noPrecheck: '没有',
+    oneCommand: '一条命令',
+    cancel: '取消',
+    save: '保存',
+    installed: '已安装',
+    localBranches: '本地分支',
+    remoteBranches: '远程分支',
+    projectDefault: '项目默认',
+    cannotTellIdle: '看不出空闲',
+    noProjects: '没有项目',
+    searchBranches: '搜索分支',
+    searchAgents: '搜索智能体',
+    noMatchingAgents: '没有匹配的智能体',
+    noModels: '没有模型',
+    searchSessions: '搜索会话',
+    noSessions: '没有会话',
+    copyName: (name: string) => `${name} 副本`,
+    next: (when: string) => `下次 ${when}`
+  },
+  en: {
+    newTitle: 'New scheduled task',
+    editTitle: 'Edit scheduled task',
+    name: 'Name',
+    what: 'Action',
+    session: 'Session',
+    pickSession: 'Choose a session',
+    project: 'Project',
+    base: 'Based on',
+    agent: 'Agent',
+    interface: 'Interface',
+    model: 'Model',
+    permission: 'Permissions',
+    defaultChoice: 'Default',
+    message: 'Message',
+    time: 'Time',
+    every: 'Every',
+    interval: 'Interval',
+    unit: 'Unit',
+    weekdays: 'Days of the week',
+    date: 'Date',
+    clockTime: 'Time of day',
+    never: 'Won’t run again',
+    until: 'Until a date',
+    untilDate: 'End date',
+    missed: 'If missed',
+    autoArchive: 'Auto-archive',
+    whenUnchanged: 'When the turn changes nothing',
+    precheck: 'Pre-check',
+    noPrecheck: 'None',
+    oneCommand: 'A command',
+    cancel: 'Cancel',
+    save: 'Save',
+    installed: 'Installed',
+    localBranches: 'Local branches',
+    remoteBranches: 'Remote branches',
+    projectDefault: 'Project default',
+    cannotTellIdle: 'Can’t tell when it’s idle',
+    noProjects: 'No projects',
+    searchBranches: 'Search branches',
+    searchAgents: 'Search agents',
+    noMatchingAgents: 'No matching agents',
+    noModels: 'No models',
+    searchSessions: 'Search sessions',
+    noSessions: 'No sessions',
+    copyName: (name: string) => `${name} copy`,
+    next: (when: string) => `Next ${when}`
+  }
+})
+
+const OPTIONS = defineMessages({
+  zh: {
+    what: { new: '开新会话', send: '发给已有会话' } as Record<What, string>,
+    timing: { interval: '间隔', daily: '每天', weekdays: '工作日', weekly: '每周', once: '一次' } as Record<TimingKind, string>,
+    missed: { 'catch-up': '补跑一次', skip: '跳过' } as Record<Schedule['missed'], string>,
+    unit: { minutes: '分钟', hours: '小时' } as Record<'minutes' | 'hours', string>,
+    weekday: { 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 0: '日' } as Record<Weekday, string>
+  },
+  en: {
+    what: { new: 'New session', send: 'Existing session' },
+    timing: { interval: 'Interval', daily: 'Daily', weekdays: 'Weekdays', weekly: 'Weekly', once: 'Once' },
+    missed: { 'catch-up': 'Run once', skip: 'Skip' },
+    unit: { minutes: 'minutes', hours: 'hours' },
+    weekday: { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' }
+  }
+})
+
+const WHATS: readonly What[] = ['new', 'send']
 const UIS: ReadonlyArray<{ value: SessionUi; label: string }> = [
   { value: 'gui', label: 'GUI' },
   { value: 'cli', label: 'CLI' }
 ]
-const TIMINGS: ReadonlyArray<{ value: TimingKind; label: string }> = [
-  { value: 'interval', label: '间隔' },
-  { value: 'daily', label: '每天' },
-  { value: 'weekdays', label: '工作日' },
-  { value: 'weekly', label: '每周' },
-  { value: 'once', label: '一次' }
-]
-const MISSED: ReadonlyArray<{ value: Schedule['missed']; label: string }> = [
-  { value: 'catch-up', label: '补跑一次' },
-  { value: 'skip', label: '跳过' }
-]
-const UNITS: ReadonlyArray<{ value: 'minutes' | 'hours'; label: string }> = [
-  { value: 'minutes', label: '分钟' },
-  { value: 'hours', label: '小时' }
-]
+const TIMINGS: readonly TimingKind[] = ['interval', 'daily', 'weekdays', 'weekly', 'once']
+const MISSED: ReadonlyArray<Schedule['missed']> = ['catch-up', 'skip']
+const UNITS: ReadonlyArray<'minutes' | 'hours'> = ['minutes', 'hours']
 /** Monday first, as the Mac's calendar shows a week here. */
-const WEEK: ReadonlyArray<{ value: Weekday; label: string }> = [
-  { value: 1, label: '一' },
-  { value: 2, label: '二' },
-  { value: 3, label: '三' },
-  { value: 4, label: '四' },
-  { value: 5, label: '五' },
-  { value: 6, label: '六' },
-  { value: 0, label: '日' }
-]
+const WEEK: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0]
+const labelled = <T,>(values: readonly T[], labels: Record<T & PropertyKey, string>): Array<{ value: T; label: string }> =>
+  values.map((value) => ({ value, label: labels[value as T & PropertyKey] }))
 
 const dayOf = (t: number): string => {
   const d = new Date(t)
@@ -137,7 +234,7 @@ function initialForm(source: Schedule | undefined, copy: boolean, projectId: Pro
   const t = source.timing
   return {
     ...base,
-    name: copy ? `${source.name} 副本`.slice(0, 60) : source.name,
+    name: copy ? pick(M).copyName(source.name).slice(0, 60) : source.name,
     what: a.kind,
     prompt: source.prompt,
     missed: source.missed,
@@ -195,6 +292,8 @@ function Sheet({ state }: { state: SheetState }) {
   const [saving, setSaving] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  const m = useMessages(M)
+  const o = useMessages(OPTIONS)
   const project = projects.find((p) => p.id === form.projectId) ?? null
   const loaded = project ? infos[project.id] : undefined
   const info = loaded && loaded !== 'error' ? loaded : null
@@ -309,24 +408,24 @@ function Sheet({ state }: { state: SheetState }) {
         .filter((id): id is CliAgent => id !== 'shell' && (!found || found[id] === true))
         .filter((id) => !q || agentName(id).toLowerCase().includes(q) || AGENT_SPECS[id].binary.includes(q))
         .map((id) => ({ value: id, label: agentName(id), icon: check(id === form.agent) }))
-      return [{ title: '已安装', items }]
+      return [{ title: m.installed, items }]
     },
-    [found, form.agent]
+    [found, form.agent, m]
   )
   const branchSections = useCallback(
     (query: string): SheetMenuSection[] => {
       if (!info) return []
       const groups = groupBranches(info.branches, info.defaultBranch, query)
       return [
-        { title: '本地分支', items: groups.local.map((b) => ({ value: b.name, label: b.name, icon: b.name === base ? <Check {...ICON} /> : <GitBranch {...ICON} />, meta: b.name === info.defaultBranch ? '项目默认' : undefined })) },
-        { title: '远程分支', items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: b.name === base ? <Check {...ICON} /> : <Globe {...ICON} /> })) }
+        { title: m.localBranches, items: groups.local.map((b) => ({ value: b.name, label: b.name, icon: b.name === base ? <Check {...ICON} /> : <GitBranch {...ICON} />, meta: b.name === info.defaultBranch ? m.projectDefault : undefined })) },
+        { title: m.remoteBranches, items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: b.name === base ? <Check {...ICON} /> : <Globe {...ICON} /> })) }
       ]
     },
-    [info, base]
+    [info, base, m]
   )
   const modelSections = useCallback(
-    (): SheetMenuSection[] => [{ items: [{ value: '', label: '默认', icon: check(form.model === '') }, ...models.map((m) => ({ value: m.value, label: m.label, icon: check(m.value === form.model) }))] }],
-    [models, form.model]
+    (): SheetMenuSection[] => [{ items: [{ value: '', label: m.defaultChoice, icon: check(form.model === '') }, ...models.map((x) => ({ value: x.value, label: x.label, icon: check(x.value === form.model) }))] }],
+    [models, form.model, m]
   )
   const sessionSections = useCallback(
     (query: string): SheetMenuSection[] => {
@@ -341,143 +440,143 @@ function Sheet({ state }: { state: SheetState }) {
               value: s.id,
               label: s.title,
               icon: <StatusGlyph status={s.status} />,
-              meta: canReceive(s) ? agentName(s.kind) : '看不出空闲'
+              meta: canReceive(s) ? agentName(s.kind) : m.cannotTellIdle
             }))
         }))
         .filter((section) => section.items.length > 0)
     },
-    [projects, sessions, worktrees]
+    [projects, sessions, worktrees, m]
   )
-  const modelLabel = useMemo(() => (form.model ? (models.find((m) => m.value === form.model)?.label ?? form.model) : '默认'), [form.model, models])
-  const timeInput = <input className={styles.time} type="time" aria-label="时刻" value={form.time} onChange={(e) => e.currentTarget.value && set('time', e.currentTarget.value)} />
+  const modelLabel = useMemo(() => (form.model ? (models.find((x) => x.value === form.model)?.label ?? form.model) : m.defaultChoice), [form.model, models, m])
+  const timeInput = <input className={styles.time} type="time" aria-label={m.clockTime} value={form.time} onChange={(e) => e.currentTarget.value && set('time', e.currentTarget.value)} />
 
   return (
     <div className={sheet.scrim} onMouseDown={onScrimMouseDown} data-region="schedule-sheet">
       <div ref={sheetRef} className={`${sheet.sheet} ${styles.sheet}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown} data-testid="schedule-sheet">
         <header className={sheet.context}>
           <h2 id={titleId} className={sheet.title}>
-            {state.mode === 'edit' ? '编辑定时任务' : '新建定时任务'}
+            {state.mode === 'edit' ? m.editTitle : m.newTitle}
           </h2>
         </header>
 
         <div className={`${sheet.fields} ${styles.fields}`}>
-          <Field label="名称">
-            <input className={styles.text} aria-label="名称" value={form.name} maxLength={60} onChange={(e) => set('name', e.currentTarget.value)} autoFocus={state.mode === 'new'} />
+          <Field label={m.name}>
+            <input className={styles.text} aria-label={m.name} value={form.name} maxLength={60} onChange={(e) => set('name', e.currentTarget.value)} autoFocus={state.mode === 'new'} />
           </Field>
-          <Field label="做什么">
-            <Segmented label="做什么" value={form.what} options={WHATS} onChange={(v) => set('what', v)} />
+          <Field label={m.what}>
+            <Segmented label={m.what} value={form.what} options={labelled(WHATS, o.what)} onChange={(v) => set('what', v)} />
           </Field>
 
           {form.what === 'send' ? (
-            <Field label="会话">
+            <Field label={m.session}>
               <SelectButton
-                label="会话"
-                value={target ? `${target.title} · ${projects.find((p) => worktrees.some((w) => w.id === target.worktreeId && w.projectId === p.id))?.name ?? ''} · ${agentName(target.kind)}` : '选一个会话'}
+                label={m.session}
+                value={target ? `${target.title} · ${projects.find((p) => worktrees.some((w) => w.id === target.worktreeId && w.projectId === p.id))?.name ?? ''} · ${agentName(target.kind)}` : m.pickSession}
                 expanded={menu?.kind === 'session'}
                 onClick={(anchor) => toggleMenu('session', anchor)}
               />
             </Field>
           ) : (
             <>
-              <Field label="项目">
-                <SelectButton label="项目" value={project?.name ?? '—'} expanded={menu?.kind === 'project'} onClick={(anchor) => toggleMenu('project', anchor)} />
+              <Field label={m.project}>
+                <SelectButton label={m.project} value={project?.name ?? '—'} expanded={menu?.kind === 'project'} onClick={(anchor) => toggleMenu('project', anchor)} />
               </Field>
-              <Field label="基于">
-                <SelectButton label="基于" value={base ?? '—'} expanded={menu?.kind === 'base'} disabled={!info} onClick={(anchor) => toggleMenu('base', anchor)} />
+              <Field label={m.base}>
+                <SelectButton label={m.base} value={base ?? '—'} expanded={menu?.kind === 'base'} disabled={!info} onClick={(anchor) => toggleMenu('base', anchor)} />
               </Field>
-              <Field label="智能体">
-                <SelectButton label="智能体" value={agentName(form.agent)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
+              <Field label={m.agent}>
+                <SelectButton label={m.agent} value={agentName(form.agent)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
               </Field>
               {ui && (
-                <Field label="界面">
-                  <Segmented label="界面" value={ui.value} options={UIS.map((o) => (o.value === 'gui' ? { ...o, disabled: ui.guiDisabled, title: ui.guiTitle } : o))} onChange={(v) => set('ui', v)} />
+                <Field label={m.interface}>
+                  <Segmented label={m.interface} value={ui.value} options={UIS.map((o) => (o.value === 'gui' ? { ...o, disabled: ui.guiDisabled, title: ui.guiTitle } : o))} onChange={(v) => set('ui', v)} />
                 </Field>
               )}
-              <Field label="模型">
-                <SelectButton label="模型" value={modelLabel} expanded={menu?.kind === 'model'} onClick={(anchor) => toggleMenu('model', anchor)} />
+              <Field label={m.model}>
+                <SelectButton label={m.model} value={modelLabel} expanded={menu?.kind === 'model'} onClick={(anchor) => toggleMenu('model', anchor)} />
               </Field>
-              <Field label="权限">
+              <Field label={m.permission}>
                 <Segmented
-                  label="权限"
+                  label={m.permission}
                   value={permission}
-                  options={permissions.map((p) => ({ value: p, label: p === 'default' ? '默认' : GUI_PERMISSION_LABELS[p] }))}
+                  options={permissions.map((p) => ({ value: p, label: p === 'default' ? m.defaultChoice : GUI_PERMISSION_LABELS[p] }))}
                   onChange={(v) => set('permission', v)}
                 />
               </Field>
             </>
           )}
 
-          <Field label="消息">
-            <textarea className={styles.prompt} aria-label="消息" value={form.prompt} rows={3} onChange={(e) => set('prompt', e.currentTarget.value)} />
+          <Field label={m.message}>
+            <textarea className={styles.prompt} aria-label={m.message} value={form.prompt} rows={3} onChange={(e) => set('prompt', e.currentTarget.value)} />
           </Field>
 
-          <Field label="时间">
-            <Segmented label="时间" value={form.timing} options={TIMINGS} onChange={(v) => set('timing', v)} />
+          <Field label={m.time}>
+            <Segmented label={m.time} value={form.timing} options={labelled(TIMINGS, o.timing)} onChange={(v) => set('timing', v)} />
             <div className={styles.line}>
               {form.timing === 'interval' && (
                 <>
-                  <span className={styles.word}>每隔</span>
+                  <span className={styles.word}>{m.every}</span>
                   <input
                     className={styles.number}
                     type="number"
-                    aria-label="间隔"
+                    aria-label={m.interval}
                     min={form.unit === 'hours' ? 1 : MIN_INTERVAL_MINUTES}
                     value={form.every}
                     onChange={(e) => set('every', Number(e.currentTarget.value))}
                   />
-                  <Segmented label="单位" value={form.unit} options={UNITS} onChange={(v) => set('unit', v)} />
+                  <Segmented label={m.unit} value={form.unit} options={labelled(UNITS, o.unit)} onChange={(v) => set('unit', v)} />
                 </>
               )}
               {form.timing === 'weekly' && (
-                <div className={styles.days} role="group" aria-label="星期">
+                <div className={styles.days} role="group" aria-label={m.weekdays}>
                   {WEEK.map((d) => (
                     <button
-                      key={d.value}
+                      key={d}
                       type="button"
                       className={styles.day}
-                      aria-pressed={form.days.includes(d.value)}
-                      onClick={() => set('days', form.days.includes(d.value) ? form.days.filter((x) => x !== d.value) : [...form.days, d.value])}
+                      aria-pressed={form.days.includes(d)}
+                      onClick={() => set('days', form.days.includes(d) ? form.days.filter((x) => x !== d) : [...form.days, d])}
                     >
-                      {d.label}
+                      {o.weekday[d]}
                     </button>
                   ))}
                 </div>
               )}
-              {form.timing === 'once' && <input className={styles.date} type="date" aria-label="日期" value={form.onceDay} onChange={(e) => e.currentTarget.value && set('onceDay', e.currentTarget.value)} />}
+              {form.timing === 'once' && <input className={styles.date} type="date" aria-label={m.date} value={form.onceDay} onChange={(e) => e.currentTarget.value && set('onceDay', e.currentTarget.value)} />}
               {form.timing !== 'interval' && timeInput}
-              <span className={styles.next}>{next !== null ? `下次 ${whenLabel(next, now)}` : '不会再运行'}</span>
+              <span className={styles.next}>{next !== null ? m.next(whenLabel(next, now)) : m.never}</span>
             </div>
             {form.timing !== 'once' && (
               <div className={styles.line}>
                 <label className={styles.check}>
                   <input type="checkbox" checked={form.hasUntil} onChange={(e) => set('hasUntil', e.currentTarget.checked)} />
-                  到某天为止
+                  {m.until}
                 </label>
-                {form.hasUntil && <input className={styles.date} type="date" aria-label="截止日期" value={form.until} onChange={(e) => e.currentTarget.value && set('until', e.currentTarget.value)} />}
+                {form.hasUntil && <input className={styles.date} type="date" aria-label={m.untilDate} value={form.until} onChange={(e) => e.currentTarget.value && set('until', e.currentTarget.value)} />}
               </div>
             )}
           </Field>
 
-          <Field label="错过了">
-            <Segmented label="错过了" value={form.missed} options={MISSED} onChange={(v) => set('missed', v)} />
+          <Field label={m.missed}>
+            <Segmented label={m.missed} value={form.missed} options={labelled(MISSED, o.missed)} onChange={(v) => set('missed', v)} />
           </Field>
 
           {form.what === 'new' && (
             <>
-              <Field label="自动归档">
+              <Field label={m.autoArchive}>
                 <label className={`${styles.check} ${styles.checkRow}`}>
                   <input type="checkbox" checked={form.autoArchive} onChange={(e) => set('autoArchive', e.currentTarget.checked)} />
-                  这一轮没有改动时
+                  {m.whenUnchanged}
                 </label>
               </Field>
               {precheckOpen ? (
-                <Field label="前置检查">
-                  <input className={styles.mono} aria-label="前置检查" value={form.precheck} spellCheck={false} placeholder="一条命令" onChange={(e) => set('precheck', e.currentTarget.value)} />
+                <Field label={m.precheck}>
+                  <input className={styles.mono} aria-label={m.precheck} value={form.precheck} spellCheck={false} placeholder={m.oneCommand} onChange={(e) => set('precheck', e.currentTarget.value)} />
                 </Field>
               ) : (
                 <button type="button" className={sheet.advanced} aria-expanded={false} onClick={() => setPrecheckOpen(true)}>
-                  <span className={sheet.label}>前置检查</span>
-                  <span className={sheet.advancedBranch}>没有</span>
+                  <span className={sheet.label}>{m.precheck}</span>
+                  <span className={sheet.advancedBranch}>{m.noPrecheck}</span>
                   <span className={sheet.spacer} />
                   <ChevronRight {...ICON} />
                 </button>
@@ -488,10 +587,10 @@ function Sheet({ state }: { state: SheetState }) {
 
         <footer className={sheet.footer}>
           <button type="button" className={sheet.cancel} onClick={() => closeSheet()}>
-            取消
+            {m.cancel}
           </button>
           <button type="button" className={sheet.primary} disabled={!draft || saving} onClick={() => void save()}>
-            保存
+            {m.save}
             <span className={sheet.shortcut}>⌘↵</span>
           </button>
         </footer>
@@ -500,10 +599,10 @@ function Sheet({ state }: { state: SheetState }) {
       {menu?.kind === 'project' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="项目"
+          label={m.project}
           sections={projectSections}
           selected={form.projectId}
-          empty="没有项目"
+          empty={m.noProjects}
           onPick={(id) => {
             setForm((f) => ({ ...f, projectId: id, base: null }))
             closeMenu(true)
@@ -514,10 +613,10 @@ function Sheet({ state }: { state: SheetState }) {
       {menu?.kind === 'base' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="基于"
+          label={m.base}
           sections={branchSections}
           selected={base}
-          search="搜索分支"
+          search={m.searchBranches}
           onPick={(name) => {
             set('base', name)
             closeMenu(true)
@@ -528,11 +627,11 @@ function Sheet({ state }: { state: SheetState }) {
       {menu?.kind === 'agent' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="智能体"
+          label={m.agent}
           sections={agentSections}
           selected={form.agent}
-          search="搜索智能体"
-          empty="没有匹配的智能体"
+          search={m.searchAgents}
+          empty={m.noMatchingAgents}
           align="selected"
           onPick={(value) => {
             if ((CLI_AGENTS as readonly string[]).includes(value)) setForm((f) => ({ ...f, agent: value as CliAgent, model: '' }))
@@ -544,10 +643,10 @@ function Sheet({ state }: { state: SheetState }) {
       {menu?.kind === 'model' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="模型"
+          label={m.model}
           sections={modelSections}
           selected={form.model}
-          empty="没有模型"
+          empty={m.noModels}
           onPick={(value) => {
             set('model', value)
             closeMenu(true)
@@ -558,11 +657,11 @@ function Sheet({ state }: { state: SheetState }) {
       {menu?.kind === 'session' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="会话"
+          label={m.session}
           sections={sessionSections}
           selected={form.sessionId}
-          search="搜索会话"
-          empty="没有会话"
+          search={m.searchSessions}
+          empty={m.noSessions}
           onPick={(id) => {
             const picked = sessions.find((s) => s.id === id)
             if (!picked || !canReceive(picked)) return

@@ -8,21 +8,39 @@ import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability } from '@shared/ipc'
 import { orderByTightest, vendorStatus, VENDOR_LABEL, windowKey } from '@shared/session-meta'
 import type { AlertSettings } from '@shared/settings'
+import { defineMessages } from '@shared/i18n'
 import { heatmap, isStatsAgent, usageView, type StatsPeriod, type UsageDataset } from '@shared/usage-stats'
 import { useMetaNow } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
 import { UsageAgentRow, UsageWindowRow } from '../session-meta/UsageRows'
 import { Segmented } from '../ui/Segmented'
+import { useMessages } from '../i18n'
 import { Row, Section, Toggle } from './controls'
 import { Breakdowns, Kpis, UsageChart, UsageHeatmap } from './usage/UsageStats'
 import styles from './UsagePane.module.css'
 
-const PERIODS: { value: StatsPeriod; label: string }[] = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
-  { value: 'all', label: '全部' }
-]
+const M = defineMessages({
+  zh: {
+    title: '额度',
+    period: '统计周期',
+    periods: { week: '周', month: '月', year: '年', all: '全部' },
+    loading: '读取中…',
+    failed: '读取失败',
+    alerts: '提醒',
+    usageAlert: '用到 75%、90% 和用完时发通知'
+  },
+  en: {
+    title: 'Usage',
+    period: 'Period',
+    periods: { week: 'Week', month: 'Month', year: 'Year', all: 'All' },
+    loading: 'Loading…',
+    failed: 'Couldn’t read usage',
+    alerts: 'Alerts',
+    usageAlert: 'Notify at 75%, 90% and when out of usage'
+  }
+})
+
+const PERIODS: readonly StatsPeriod[] = ['week', 'month', 'year', 'all']
 
 type Stats = { state: 'loading' } | { state: 'failed' } | { state: 'ok'; data: UsageDataset }
 
@@ -33,6 +51,7 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
   const [found, setFound] = useState<AgentAvailability | null>(null)
   const [period, setPeriod] = useState<StatsPeriod>('month')
   const [stats, setStats] = useState<Stats>({ state: 'loading' })
+  const m = useMessages(M)
 
   useEffect(() => {
     // Looking at the page asks every account now, vendors never used here included, and reads the logs.
@@ -67,8 +86,8 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
     <div className={styles.page}>
       <div className={styles.form}>
         <div className={styles.head}>
-          <h1 className={styles.title}>额度</h1>
-          <Segmented label="统计周期" value={period} options={PERIODS} onChange={setPeriod} semantics="tab" arrows="focus" />
+          <h1 className={styles.title}>{m.title}</h1>
+          <Segmented label={m.period} value={period} options={PERIODS.map((value) => ({ value, label: m.periods[value] }))} onChange={setPeriod} semantics="tab" arrows="focus" />
         </div>
         <div className={styles.plans}>
           {planRows.map(({ vendor }) => {
@@ -84,8 +103,8 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
           })}
         </div>
         <div className={styles.rule} />
-        {stats.state === 'loading' && <p className={styles.note}>读取中…</p>}
-        {stats.state === 'failed' && <p className={styles.note}>读取失败</p>}
+        {stats.state === 'loading' && <p className={styles.note}>{m.loading}</p>}
+        {stats.state === 'failed' && <p className={styles.note}>{m.failed}</p>}
         {view && heat && (
           <div className={styles.stats} data-testid="usage-stats">
             <Kpis view={view} />
@@ -96,9 +115,9 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
         )}
         <div className={styles.rule} />
         {alerts && (
-          <Section title="提醒">
-            <Row label="用到 75%、90% 和用完时发通知">
-              <Toggle label="用到 75%、90% 和用完时发通知" checked={alerts.usage} onChange={(on) => updateAlerts({ usage: on })} />
+          <Section title={m.alerts}>
+            <Row label={m.usageAlert}>
+              <Toggle label={m.usageAlert} checked={alerts.usage} onChange={(on) => updateAlerts({ usage: on })} />
             </Row>
           </Section>
         )}
