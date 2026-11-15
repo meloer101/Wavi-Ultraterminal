@@ -6,6 +6,12 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { REMOTE_LIMITS, type RemotePhoto } from '@shared/remote'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { tooLarge: '照片太大', unsupported: '不支持这种图片格式', heic: '没能把 HEIC 照片转成 JPEG' },
+  en: { tooLarge: 'The photo is too large', unsupported: 'This image format is not supported', heic: "Couldn't convert the HEIC photo to JPEG" }
+})
 
 export type PhotoType = 'jpg' | 'png' | 'gif' | 'webp' | 'heic'
 
@@ -37,9 +43,9 @@ export async function savePhotos(dir: string, photos: readonly RemotePhoto[], to
   const paths: string[] = []
   for (const photo of photos) {
     const bytes = Buffer.from(photo.data, 'base64')
-    if (bytes.length === 0 || bytes.length > REMOTE_LIMITS.photoBytes) throw new PhotoError('照片太大')
+    if (bytes.length === 0 || bytes.length > REMOTE_LIMITS.photoBytes) throw new PhotoError(pick(M).tooLarge)
     const type = sniffPhoto(bytes)
-    if (!type) throw new PhotoError('不支持这种图片格式')
+    if (!type) throw new PhotoError(pick(M).unsupported)
     const stem = join(dir, `phone-${Date.now()}-${randomBytes(3).toString('hex')}`)
     if (type !== 'heic') {
       await writeFile(`${stem}.${type}`, bytes)
@@ -50,7 +56,7 @@ export async function savePhotos(dir: string, photos: readonly RemotePhoto[], to
     try {
       await toJpeg(`${stem}.heic`, `${stem}.jpg`)
     } catch {
-      throw new PhotoError('没能把 HEIC 照片转成 JPEG')
+      throw new PhotoError(pick(M).heic)
     } finally {
       await unlink(`${stem}.heic`).catch(() => undefined)
     }

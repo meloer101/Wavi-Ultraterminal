@@ -6,6 +6,28 @@ import { trackedDirtyPaths } from '@shared/git-merge'
 import { parseWorktreePorcelain, type PorcelainWorktree } from '@shared/git-worktrees'
 import { operationOnBranch } from './operation'
 import { git, gitOut, lastLines, pinned, pushEnv, type Ran } from './run'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    diverged: (base: string, name: string) => `${base} 和 ${name} 各有对方没有的提交，没法快进`,
+    busy: (base: string, busy: string, name: string) => `${base} 有进行中的 ${busy}，没有快进到 ${name}`,
+    cannot: (base: string, why: string) => `没能快进 ${base}：${why}`,
+    moved: (base: string) => `${base} 在快进时又变了：再试一次`,
+    statusFailed: (base: string, why: string) => `没能检查 ${base} 的工作区：${why}`,
+    dirty: (base: string, name: string) => `${base} 的工作区有未提交的改动，没有快进到 ${name}`,
+    busyBase: (base: string) => `正在合并、推送或提交 ${base}：等它完成再试`
+  },
+  en: {
+    diverged: (base: string, name: string) => `${base} and ${name} each have commits the other lacks; can't fast-forward`,
+    busy: (base: string, busy: string, name: string) => `${base} has a ${busy} in progress; not fast-forwarded to ${name}`,
+    cannot: (base: string, why: string) => `Couldn't fast-forward ${base}: ${why}`,
+    moved: (base: string) => `${base} changed during the fast-forward: try again`,
+    statusFailed: (base: string, why: string) => `Couldn't check ${base}'s working tree: ${why}`,
+    dirty: (base: string, name: string) => `${base}'s working tree has uncommitted changes; not fast-forwarded to ${name}`,
+    busyBase: (base: string) => `Merging, pushing or committing ${base}: try again when it finishes`
+  }
+})
 
 const FETCH_TIMEOUT_MS = 60_000
 /** A fast-forward checks files out. */
@@ -51,26 +73,26 @@ export async function fastForwardBase(cwd: string, base: string, to: string, nam
   if (!old || !target || old === target) return { ok: true, moved: false }
   if ((await git(cwd, ['merge-base', '--is-ancestor', target, old])).code === 0) return { ok: true, moved: false }
   if ((await git(cwd, ['merge-base', '--is-ancestor', old, target])).code !== 0) {
-    return { ok: false, reason: 'diverged', message: `${base} 和 ${name} 各有对方没有的提交，没法快进` }
+    return { ok: false, reason: 'diverged', message: pick(M).diverged(base, name) }
   }
   const listing = parseWorktreePorcelain(await gitOut(cwd, ['worktree', 'list', '--porcelain']))
   const busy = await operationOnBranch(listing, base)
-  if (busy) return { ok: false, reason: 'busy', message: `${base} 有进行中的 ${busy}，没有快进到 ${name}` }
+  if (busy) return { ok: false, reason: 'busy', message: pick(M).busy(base, busy, name) }
   const holder = checkoutIn(listing, base)
-  const cannot = (ran: Ran): FastForward => ({ ok: false, reason: 'failed', message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` })
+  const cannot = (ran: Ran): FastForward => ({ ok: false, reason: 'failed', message: pick(M).cannot(base, lastLines(ran.stderr || ran.stdout)) })
   if (!holder) {
     const ran = await git(cwd, ['update-ref', '-m', `wavi: fast-forward ${base} to ${name}`, baseRef, target, old])
-    return ran.code === 0 ? { ok: true, moved: true } : { ok: false, reason: 'moved', message: `${base} 在快进时又变了：再试一次` }
+    return ran.code === 0 ? { ok: true, moved: true } : { ok: false, reason: 'moved', message: pick(M).moved(base) }
   }
   const status = await git(holder.path, ['status', '--porcelain=v1', '-z', '--untracked-files=no', '--ignore-submodules=dirty'])
-  if (status.code !== 0) return { ok: false, reason: 'failed', message: `没能检查 ${base} 的工作区：${lastLines(status.stderr || status.stdout)}` }
+  if (status.code !== 0) return { ok: false, reason: 'failed', message: pick(M).statusFailed(base, lastLines(status.stderr || status.stdout)) }
   const dirty = trackedDirtyPaths(status.stdout)
   if (dirty.length > 0) {
     const changed = new Set((await gitOut(cwd, ['diff-tree', '-r', '--name-only', '-z', old, target])).split('\0').filter(Boolean))
     const touched = dirty.filter((path) => changed.has(path))
-    if (touched.length > 0) return { ok: false, reason: 'dirty', message: `${base} 的工作区有未提交的改动，没有快进到 ${name}`, files: touched.slice(0, 20) }
+    if (touched.length > 0) return { ok: false, reason: 'dirty', message: pick(M).dirty(base, name), files: touched.slice(0, 20) }
   }
-  if ((await commitOf(holder.path, 'HEAD')) !== old) return { ok: false, reason: 'moved', message: `${base} 在快进时又变了：再试一次` }
+  if ((await commitOf(holder.path, 'HEAD')) !== old) return { ok: false, reason: 'moved', message: pick(M).moved(base) }
   const ran = await git(holder.path, pinned.merge('--ff-only', '--quiet', '--no-edit', target), {
     timeout: CHECKOUT_TIMEOUT_MS,
     env: { GIT_EDITOR: 'true', GIT_SEQUENCE_EDITOR: 'true' }
@@ -83,7 +105,7 @@ export async function fastForwardBase(cwd: string, base: string, to: string, nam
 const heldBases = new Set<string>()
 
 /** Why an operation on the base was refused: another of Wavi's own is moving it. */
-export const baseBusyMessage = (base: string): string => `正在合并、推送或提交 ${base}：等它完成再试`
+export const baseBusyMessage = (base: string): string => pick(M).busyBase(base)
 
 /**
  * Runs `work` while no other of Wavi's operations holds `base` of the repository at `root` (keyed by the repository's

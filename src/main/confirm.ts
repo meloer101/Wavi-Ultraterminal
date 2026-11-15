@@ -5,6 +5,9 @@ import { IPC } from '@shared/ipc'
 import type { ConfirmOptions } from '@shared/lifecycle'
 import { getActivity } from './activity'
 import { parseConfirmOptions } from './confirm-spec'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({ zh: { cancel: '取消' }, en: { cancel: 'Cancel' } })
 
 /**
  * End-to-end seam, only created when the launcher sets TR_E2E_DIALOGS=1. Dialogs are recorded in
@@ -26,7 +29,7 @@ export async function confirm(options: ConfirmOptions, parent?: BrowserWindow | 
     hook.requests.push(options)
     return hook.answer
   }
-  const buttons = [options.confirmLabel, options.cancelLabel ?? '取消']
+  const buttons = [options.confirmLabel, options.cancelLabel ?? pick(M).cancel]
   const messageOptions = {
     type: 'warning' as const,
     message: options.message,

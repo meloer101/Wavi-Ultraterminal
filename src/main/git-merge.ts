@@ -34,6 +34,12 @@ import { operationOnBranch } from './git/operation'
 import { baseRemoteFor, renamedUpstream } from './git/remote'
 import { lastLines, pinned, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { renamedUpstream: (base: string, renamed: string) => `${base} 跟踪的是 ${renamed}，不是同名分支，没有推送` },
+  en: { renamedUpstream: (base: string, renamed: string) => `${base} tracks ${renamed}, not a branch of the same name; not pushed` }
+})
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 30_000
@@ -359,7 +365,7 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
  *  renamedUpstream). */
 export async function pushBase(realRoot: string, base: string, remote = 'origin', source = `refs/heads/${base}`): Promise<string> {
   const renamed = await renamedUpstream(realRoot, base, remote)
-  if (renamed) return `${base} 跟踪的是 ${renamed}，不是同名分支，没有推送`
+  if (renamed) return pick(M).renamedUpstream(base, renamed)
   const ran = await runGit(realRoot, pinned.push('--quiet', '--', remote, `${source}:refs/heads/${base}`), {
     timeout: PUSH_TIMEOUT_MS,
     maxStdout: MAX_BUFFER,
