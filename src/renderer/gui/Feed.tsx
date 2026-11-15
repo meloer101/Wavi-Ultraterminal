@@ -10,6 +10,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { Editor } from '@tiptap/react'
 import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
+import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
 import type { ChatItem, FileDiff } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
@@ -52,7 +53,33 @@ import {
   type ToolView,
   type WaviMessage
 } from './model'
+import { useLang, useMessages } from '../i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: {
+    pictures: '图片',
+    edit: '编辑',
+    editMessage: '编辑消息',
+    cancel: '取消',
+    send: '发送',
+    failed: (count: number) => `${count} 个失败`,
+    waiting: '等你确认',
+    copyOutput: '复制输出',
+    thinking: '思考中'
+  },
+  en: {
+    pictures: 'Pictures',
+    edit: 'Edit',
+    editMessage: 'Edit message',
+    cancel: 'Cancel',
+    send: 'Send',
+    failed: (count: number) => `${count} failed`,
+    waiting: 'Needs you',
+    copyOutput: 'Copy output',
+    thinking: 'Thinking'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -247,6 +274,8 @@ const Block = memo(
     /** What it draws of the runs (workflowKey). */
     workflowShape: string
   }) {
+    // A memo: a language switch redraws its rows (their words come from model.ts) through this.
+    useLang()
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
@@ -344,6 +373,7 @@ interface UserMessageProps {
  * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
 const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
+  const m = useMessages(M)
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
   const pictures = item.attachments ?? []
@@ -355,7 +385,7 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
         ) : (
           <>
             {pictures.length > 0 && (
-              <ul className={`${styles.attachments} ${styles.sentPictures}`} aria-label="图片" data-testid="gui-message-pictures">
+              <ul className={`${styles.attachments} ${styles.sentPictures}`} aria-label={m.pictures} data-testid="gui-message-pictures">
                 {pictures.map((path, i) => (
                   <Attachment key={`${i}:${path}`} path={path} />
                 ))}
@@ -371,7 +401,7 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
               <span className={styles.messageTime}>{timeOf(item.at)}</span>
               <CopyButton text={item.text} />
               {editable && (
-                <button type="button" className={styles.actionIcon} aria-label="编辑" title="编辑" onClick={() => onStartEdit(item.id)}>
+                <button type="button" className={styles.actionIcon} aria-label={m.edit} title={m.edit} onClick={() => onStartEdit(item.id)}>
                   <Pencil {...ICON} />
                 </button>
               )}
@@ -386,6 +416,7 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
 
 /** 54C: the message as text to change; ⏎ sends it in the original's place (the rest is dropped), ⎋ cancels. */
 function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void; onSave(text: string): Promise<string | null> }) {
+  const m = useMessages(M)
   const [draft, setDraft] = useState(text)
   const [sending, setSending] = useState(false)
   const editorRef = useRef<Editor | null>(null)
@@ -424,13 +455,13 @@ function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void
         onCancel()
       }}
     >
-      <ComposerEditor draft={draft} onChange={setDraft} onKeyDown={onKeyDown} editorRef={editorRef} label="编辑消息" autoFocus />
+      <ComposerEditor draft={draft} onChange={setDraft} onKeyDown={onKeyDown} editorRef={editorRef} label={m.editMessage} autoFocus />
       <div className={styles.editButtons}>
         <button type="button" className={styles.button} disabled={sending} onClick={onCancel}>
-          取消
+          {m.cancel}
         </button>
         <button type="button" className={styles.button} data-primary="true" disabled={sending || !draft.trim()} onClick={submit}>
-          发送
+          {m.send}
         </button>
       </div>
     </div>
@@ -469,6 +500,7 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
  * line as under a subagent's row, up to 320 high.
  */
 function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: ReadonlyMap<string, readonly NestedItem[]> }) {
+  const m = useMessages(M)
   const [open, setOpen] = useState(false)
   const view = groupView(items)
   return (
@@ -485,7 +517,7 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
         <span className={styles.groupFill} />
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
-        {view.failed > 0 && <span className={styles.failed}>{view.failed} 个失败</span>}
+        {view.failed > 0 && <span className={styles.failed}>{m.failed(view.failed)}</span>}
       </button>
       {open && (
         <div className={`${styles.subagentSteps} ${styles.groupSteps}`} data-testid="gui-tool-group-steps">
@@ -512,6 +544,7 @@ function Tool({
   waitingTool: string | null
   nested?: ReadonlyMap<string, readonly NestedItem[]>
 }) {
+  const m = useMessages(M)
   const subagent = isSubagentTool(item.name)
   const children = (subagent && nested.get(item.id)) || NO_CHILDREN
   // null: as the row's state says (a subagent's open while it runs); a click decides from then on.
@@ -533,7 +566,7 @@ function Tool({
         {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
-        {view.waiting && <span className={styles.waiting}>等你确认</span>}
+        {view.waiting && <span className={styles.waiting}>{m.waiting}</span>}
         {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
         {subagent && <Elapsed item={item} />}
       </button>
@@ -562,6 +595,7 @@ function Tool({
 
 /** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
 function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
+  const m = useMessages(M)
   return (
     <>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
@@ -579,7 +613,7 @@ function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind:
           )}
           <CopyButton
             text={() => (files.length > 0 ? diffText(files) : view.output?.trim() ? view.output : (view.command ?? ''))}
-            label="复制输出"
+            label={m.copyOutput}
             className={styles.cornerCopy}
           />
         </div>
@@ -652,6 +686,7 @@ function Output({ raw, command }: { raw: string; command?: string }) {
 
 /** The block being streamed: the agent's text so far with a caret, or its thinking going on. */
 function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
+  const m = useMessages(M)
   if (live.kind === 'thinking') {
     return (
       <div className={styles.steps}>
@@ -659,7 +694,7 @@ function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
           <StepMark>
             <Brain {...ICON} />
           </StepMark>
-          <p className={styles.thinkingLive}>思考中</p>
+          <p className={styles.thinkingLive}>{m.thinking}</p>
         </div>
       </div>
     )

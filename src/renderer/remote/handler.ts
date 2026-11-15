@@ -2,6 +2,7 @@
 // Esc, start a session, or take Git · 变更's exits and 归档 (exits.ts). Everything goes through the same code as the desktop's own buttons: the send protocol
 // (§6.9), the new-session sheet's plan (F4) and the first-message launch dispatch uses (F21).
 import type { CliAgent } from '@shared/agents'
+import { defineMessages, pick } from '@shared/i18n'
 import type { AgentAvailability } from '@shared/ipc'
 import { generateBranchName } from '@shared/new-session'
 import { remoteFail, type RemoteResult, type RemoteWindowCommand } from '@shared/remote'
@@ -19,12 +20,35 @@ import { useLiveSessions } from '../terminal/live-sessions'
 import { remoteArchive, remoteExits, remoteShipAction } from './exits'
 import { agentModels } from './model'
 
+const M = defineMessages({
+  zh: {
+    noSession: '会话不存在',
+    exited: 'agent 已经退出',
+    noProject: '项目不存在',
+    notInstalled: 'Mac 上没有安装这个智能体',
+    noBase: '找不到这个基线分支',
+    loading: '项目还在加载',
+    badBranch: '分支名不能用',
+    createFailed: '没能新建会话'
+  },
+  en: {
+    noSession: 'Session not found',
+    exited: 'The agent has exited',
+    noProject: 'Project not found',
+    notInstalled: 'This agent isn’t installed on the Mac',
+    noBase: 'Can’t find this base branch',
+    loading: 'The project is still loading',
+    badBranch: 'This branch name can’t be used',
+    createFailed: 'Couldn’t create the session'
+  }
+})
+
 const failure = (error: unknown): RemoteResult => remoteFail(error instanceof Error ? error.message : String(error))
 
 async function send(sessionId: string, text: string, paths: string[]): Promise<RemoteResult> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (!session || session.kind === 'shell') return remoteFail('会话不存在')
-  if (session.phase === 'exited') return remoteFail('agent 已经退出')
+  if (!session || session.kind === 'shell') return remoteFail(pick(M).noSession)
+  if (session.phase === 'exited') return remoteFail(pick(M).exited)
   // A session restored after a restart starts when first shown; the phone counts as showing it.
   if (session.phase === 'not-started' || session.phase === 'starting') {
     startEagerly(sessionId)
@@ -64,9 +88,9 @@ async function modelsOf(agent: CliAgent): Promise<RemoteResult> {
 async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-session' }>): Promise<RemoteResult> {
   const workspace = useWorkspace.getState()
   const project = workspace.projects.find((p) => p.id === command.project)
-  if (!project) return remoteFail('项目不存在')
+  if (!project) return remoteFail(pick(M).noProject)
   const [installed, info] = await Promise.all([window.tr.app.detectAgents(), window.tr.gitWorktrees.newSessionInfo(project.rootPath)])
-  if (!installed[command.agent]) return remoteFail('Mac 上没有安装这个智能体')
+  if (!installed[command.agent]) return remoteFail(pick(M).notInstalled)
   const ui = phoneUi(command.agent, installed)
   // The model picked under the agent is the user's pick, as one in the desktop's menu (Figma 65): the new session
   // starts with it, and so does the agent's next one.
@@ -78,9 +102,9 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
     const branch = command.branch ?? generateBranchName(info.prefix, new Set(info.branches.map((b) => b.name)))
     const planned = planCreate(project.rootPath, info, { workdir: 'worktree', base: command.base ?? info.defaultBranch, branch, prepare: info.includeCount > 0 || info.hasSetup })
     if (!planned.plan) {
-      if (planned.problem === 'no-base') return remoteFail('找不到这个基线分支')
-      if (planned.problem === 'loading') return remoteFail('项目还在加载')
-      return remoteFail(branchProblemText(planned.problem, branch) ?? '分支名不能用')
+      if (planned.problem === 'no-base') return remoteFail(pick(M).noBase)
+      if (planned.problem === 'loading') return remoteFail(pick(M).loading)
+      return remoteFail(branchProblemText(planned.problem, branch) ?? pick(M).badBranch)
     }
     const plan = planned.plan
     if (plan.type === 'current') {
@@ -95,7 +119,7 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
       }
     }
   }
-  if (!id) return remoteFail('没能新建会话')
+  if (!id) return remoteFail(pick(M).createFailed)
   if (model) workspace.rememberGuiPicks(command.agent, { model })
   // A first message starts the session as a dispatch does, which takes its model from the launch, not the picks.
   if (command.prompt) setLaunch(id, { initialPrompt: command.prompt, ...(model ? { model } : {}) })
@@ -109,7 +133,7 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
  */
 function open(sessionId: string): RemoteResult {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (!session || session.kind === 'shell') return remoteFail('会话不存在')
+  if (!session || session.kind === 'shell') return remoteFail(pick(M).noSession)
   const { loaded, live } = useLiveSessions.getState()
   if (shouldAutoStart(session) && loaded && !live[sessionId]) {
     startEagerly(sessionId)

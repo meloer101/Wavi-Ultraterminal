@@ -2,6 +2,7 @@
 // sessions and Ship runs drive it; the chain is read fresh before anything is archived, and archiving is the existing
 // 归档 (archive/actions.ts) as the phone runs it — an archive script still waiting for its approval stops it. Once per
 // window.
+import { defineMessages, pick } from '@shared/i18n'
 import { archiveTargetFor, archiveWorktree } from '../archive/actions'
 import { gitOf } from '../panels/git/store'
 import { useWorkspace } from '../state/workspace'
@@ -12,6 +13,11 @@ import { chainPlace, chainPlanOf } from './chain-actions'
 import { loadPreflight } from './chain-store'
 import { useShips } from './ship-runner'
 import { setPrNotice, usePullRequests } from './store'
+
+const M = defineMessages({
+  zh: { noWorktree: '找不到这个 worktree' },
+  en: { noWorktree: 'Can’t find this worktree' }
+})
 
 let started = false
 
@@ -55,7 +61,7 @@ export function startAutoArchive(): () => void {
     archive: async (worktree) => {
       const w = record(worktree)
       const target = w ? archiveTargetFor(w.id) : null
-      if (!target) return { ok: false, message: '找不到这个 worktree' }
+      if (!target) return { ok: false, message: pick(M).noWorktree }
       // Nobody may be at the Mac: an archive script not yet approved stops here, as on the phone; a failing one does not.
       const outcome = await archiveWorktree(target, { unattended: true, ignoreScriptFailure: true })
       return outcome.ok ? { ok: true } : { ok: false, message: outcome.message }

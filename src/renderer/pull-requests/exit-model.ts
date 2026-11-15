@@ -4,6 +4,7 @@
 // and blockers come from the chain's actions. The exits ship only what is committed (提交 is a run of its own). Pure;
 // Git · 变更 and the phone (PRD F22) both read it.
 import type { GitChanges } from '@shared/git-graph/log'
+import { defineMessages, pick } from '@shared/i18n'
 import { livePr, unpushedOf, type GhState, type PrStatus, type PullRequestInfo } from '@shared/pull-requests'
 import type { AppSettings } from '@shared/settings'
 import type { ShipExitKind, ShipPreflight } from '@shared/ship'
@@ -12,6 +13,11 @@ import type { Session, SessionId } from '@shared/types'
 import type { ShipContext } from './ship-runner'
 
 export { livePr, unpushedOf }
+
+const M = defineMessages({
+  zh: { openPr: (number: number) => `打开 PR #${number}` },
+  en: { openPr: (number: number) => `Open PR #${number}` }
+})
 
 export type ShipExit =
   | { kind: 'main'; label: string; blocker: string | null }
@@ -45,7 +51,7 @@ function exitsOf(chain: ChainState, input: ChainInput): Exits {
     // The chain's own count: the PR poll can lag behind the preflight's remote branch. Uncommitted files are not
     // something to push: 提交 commits them first.
     if (chain.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
-    return { primary: { kind: 'open-pr', number, label: `打开 PR #${number}`, blocker: null }, secondary: null }
+    return { primary: { kind: 'open-pr', number, label: pick(M).openPr(number), blocker: null }, secondary: null }
   }
   if (preflight.remote === null || preflight.remoteOnGitHub === false) return { primary: main, secondary: null }
   return both(input.remembered ?? preflight.suggested)

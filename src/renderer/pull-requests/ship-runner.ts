@@ -8,6 +8,7 @@
 import { create } from 'zustand'
 import { agentName, hasHooks, headlessAgent } from '@shared/agents'
 import type { GitFailure } from '@shared/git-failures'
+import { defineMessages, pick } from '@shared/i18n'
 import { reviewEvidence, evidenceBlock, withEvidence } from '@shared/pull-requests'
 import { findingsPrompt } from '@shared/review-comments'
 import type { PrTarget } from '@shared/pull-requests'
@@ -72,6 +73,63 @@ import {
   type ShipTexts
 } from './ship-flow'
 import { setPrNotice } from './store'
+
+const M = defineMessages({
+  zh: {
+    handFailed: (error: string) => `没能交给 agent：${error}`,
+    createPr: '创建 PR',
+    noReviewer: '没有可用的审阅',
+    nothingToReview: '没有要审阅的提交',
+    startFailed: (error: string) => `没能开始：${error}`,
+    noReview: '没有审阅',
+    reviewCancelled: '审阅已取消',
+    reviewFailed: (message: string) => `审阅失败：${message}`,
+    cancelled: '已取消',
+    notIdle: (agent: string) => `等了 10 分钟，${agent} 还没空下来`,
+    turnFailed: (agent: string, message: string | undefined) => `${agent} 这一轮出错了${message ? `：${message}` : ''}`,
+    exited: (agent: string) => `${agent} 退出了`,
+    nothingWritten: (agent: string, pr: boolean) => `${agent} 这一轮结束了，但没有写出可用的${pr ? '标题和正文' : '提交说明'}`,
+    notWritten: (agent: string) => `等了 10 分钟，${agent} 还没写好`,
+    merged: (base: string) => `已合并到 ${base}`,
+    mergedAt: (base: string, commit: string) => `已合并到 ${base} · ${commit}`,
+    noRemote: '没有远程，没有推送',
+    pushedAt: (base: string, commit: string) => `已推送 ${base} · ${commit}`,
+    baseNoRemote: (base: string) => `${base} 没有远程，没有推送`,
+    createdPr: (number: number) => `已创建 PR #${number}`,
+    created: '已创建 PR',
+    committed: (commit: string) => `已提交 · ${commit}`,
+    synced: (base: string) => `已同步 ${base}`,
+    pulledLabel: (label: string) => `已${label}`,
+    pulled: (from: string) => `已拉取 ${from}`
+  },
+  en: {
+    handFailed: (error: string) => `Couldn’t hand to agent: ${error}`,
+    createPr: 'Create PR',
+    noReviewer: 'No reviewer available',
+    nothingToReview: 'No commits to review',
+    startFailed: (error: string) => `Couldn’t start: ${error}`,
+    noReview: 'Not reviewed',
+    reviewCancelled: 'Review cancelled',
+    reviewFailed: (message: string) => `Review failed: ${message}`,
+    cancelled: 'Cancelled',
+    notIdle: (agent: string) => `Waited 10 minutes, ${agent} is still busy`,
+    turnFailed: (agent: string, message: string | undefined) => `${agent}’s turn failed${message ? `: ${message}` : ''}`,
+    exited: (agent: string) => `${agent} exited`,
+    nothingWritten: (agent: string, pr: boolean) => `${agent}’s turn ended without a usable ${pr ? 'title and body' : 'commit message'}`,
+    notWritten: (agent: string) => `Waited 10 minutes, ${agent} hasn’t finished writing`,
+    merged: (base: string) => `Merged into ${base}`,
+    mergedAt: (base: string, commit: string) => `Merged into ${base} · ${commit}`,
+    noRemote: 'No remote, not pushed',
+    pushedAt: (base: string, commit: string) => `Pushed ${base} · ${commit}`,
+    baseNoRemote: (base: string) => `${base} has no remote, not pushed`,
+    createdPr: (number: number) => `Created PR #${number}`,
+    created: 'Created PR',
+    committed: (commit: string) => `Committed · ${commit}`,
+    synced: (base: string) => `Synced ${base}`,
+    pulledLabel: (label: string) => (label.startsWith('Pull ') ? `Pulled ${label.slice('Pull '.length)}` : label),
+    pulled: (from: string) => `Pulled ${from}`
+  }
+})
 
 /** Everything a run needs that does not change while it runs: what is saved with it, and the settings. */
 export type ShipContext = SavedShipContext & { settings: Pick<AppSettings, 'review' | 'pr'> }
@@ -357,7 +415,7 @@ export async function handConflictsToAgent(worktree: string): Promise<void> {
             ...s,
             error: {
               ...s.error,
-              message: `没能交给 agent：${errorText(error)}`
+              message: pick(M).handFailed(errorText(error))
             }
           }
         : s
@@ -372,7 +430,7 @@ export function switchToPr(worktree: string): void {
   if (!run || !current(worktree)?.error?.pushRefused) return
   const { ctx } = run
   cancelShip(worktree)
-  startShip({ ...ctx, paths: null }, 'pr', '创建 PR')
+  startShip({ ...ctx, paths: null }, 'pr', pick(M).createPr)
 }
 
 async function drive(worktree: string, token: number): Promise<void> {
@@ -496,7 +554,7 @@ export async function handFindingsToAgent(worktree: string): Promise<void> {
     useWorkspace.getState().requestTerminalFocus()
     cancelShip(worktree)
   } catch (error) {
-    patch(worktree, run.token, (s) => (s.error ? { ...s, error: { ...s.error, message: `没能交给 agent：${errorText(error)}` } } : s))
+    patch(worktree, run.token, (s) => (s.error ? { ...s, error: { ...s.error, message: pick(M).handFailed(errorText(error)) } } : s))
   }
 }
 
@@ -555,17 +613,17 @@ async function reviewStep(worktree: string, token: number, run: Run): Promise<vo
   const { ctx } = run
   const agent = reviewAgentOf(ctx)
   if (!agent) {
-    patch(worktree, token, (s) => complete(s, 'review', '没有可用的审阅'))
+    patch(worktree, token, (s) => complete(s, 'review', pick(M).noReviewer))
     return
   }
   if (!run.range) {
-    patch(worktree, token, (s) => complete(s, 'review', run.remoteMissing ? unreviewedNote(ctx.base) : '没有要审阅的提交'))
+    patch(worktree, token, (s) => complete(s, 'review', run.remoteMissing ? unreviewedNote(ctx.base) : pick(M).nothingToReview))
     return
   }
   try {
     await startBackgroundReview(ctx.worktree, agent, 'push', ctx.base, false, run.range)
   } catch (error) {
-    patch(worktree, token, (s) => markFailed(s, 'review', `没能开始：${errorText(error)}`))
+    patch(worktree, token, (s) => markFailed(s, 'review', pick(M).startFailed(errorText(error))))
     return
   }
   await new Promise<void>((resolve) => {
@@ -584,7 +642,7 @@ async function reviewStep(worktree: string, token: number, run: Run): Promise<vo
   const review = useBackgroundReview.getState().byRoot[ctx.worktree]
   // Skipped (the switch went off, nothing to read): nothing was judged, so nothing stops the push.
   if (!review || review.phase === 'skipped') {
-    patch(worktree, token, (s) => complete(s, 'review', review?.note ?? review?.message ?? '没有审阅'))
+    patch(worktree, token, (s) => complete(s, 'review', review?.note ?? review?.message ?? pick(M).noReview))
   } else if (review.phase === 'done') {
     const verdict = reviewVerdict(reviewFindings(ctx.worktree))
     const label = reviewLabel(run.commits ?? 0, WRITER_NAME[review.agent])
@@ -592,7 +650,7 @@ async function reviewStep(worktree: string, token: number, run: Run): Promise<vo
       const named = withLabel(s, 'review', label)
       return verdict.stop ? fail(named, { step: 'review', message: verdict.message, reviewStop: true }) : complete(named, 'review', verdict.note)
     })
-  } else patch(worktree, token, (s) => markFailed(s, 'review', review.phase === 'cancelled' ? '审阅已取消' : `审阅失败：${review.message}`))
+  } else patch(worktree, token, (s) => markFailed(s, 'review', review.phase === 'cancelled' ? pick(M).reviewCancelled : pick(M).reviewFailed(review.message)))
 }
 
 /** The facts the PR text ends with: this turn's checks and the review's counts (PRD F16 v1.63's evidence block). */
@@ -671,8 +729,8 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
         WRITE_TIMEOUT_MS,
         () => alive(worktree, token)
       )
-      if (waited === 'cancelled') return { ok: false, message: '已取消' }
-      if (waited === 'timeout') return { ok: false, message: `等了 10 分钟，${agent} 还没空下来` }
+      if (waited === 'cancelled') return { ok: false, message: pick(M).cancelled }
+      if (waited === 'timeout') return { ok: false, message: pick(M).notIdle(agent) }
       patch(worktree, token, (s) => begin(s, 'write'))
     }
     const since = Date.now()
@@ -683,8 +741,8 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
     const off = window.tr.agent.onEvent(({ sessionId: id, at, event }) => {
       if (id !== sessionId || at < since) return
       if (event.type === 'stop') gate.open(null)
-      else if (event.type === 'stop-failure') gate.open(`${agent} 这一轮出错了${event.message ? `：${event.message}` : ''}`)
-      else if (event.type === 'agent-exit' || event.type === 'session-end') gate.open(`${agent} 退出了`)
+      else if (event.type === 'stop-failure') gate.open(pick(M).turnFailed(agent, event.message))
+      else if (event.type === 'agent-exit' || event.type === 'session-end') gate.open(pick(M).exited(agent))
     })
     try {
       await submitPrompt(sessionId, handoffPrompt(context))
@@ -743,7 +801,7 @@ async function awaitTexts(
   })
   let late = 0
   for (;;) {
-    if (!alive(worktree, token)) return { ok: false, message: '已取消' }
+    if (!alive(worktree, token)) return { ok: false, message: pick(M).cancelled }
     try {
       const found = await read()
       if (found) return { ok: true, texts: found }
@@ -756,10 +814,10 @@ async function awaitTexts(
       if (++late > 4)
         return {
           ok: false,
-          message: `${opts.agent} 这一轮结束了，但没有写出可用的${opts.wantsPr ? '标题和正文' : '提交说明'}`
+          message: pick(M).nothingWritten(opts.agent, opts.wantsPr)
         }
     }
-    if (Date.now() > deadline) return { ok: false, message: `等了 10 分钟，${opts.agent} 还没写好` }
+    if (Date.now() > deadline) return { ok: false, message: pick(M).notWritten(opts.agent) }
     if (ended === undefined) await Promise.race([sleep(POLL_MS), opts.stop])
     else await sleep(700)
   }
@@ -782,7 +840,7 @@ async function writeHeadless(worktree: string, token: number, ctx: ShipContext, 
       if (!made.ok) return { ok: false, message: made.message }
       if (made.kind === 'commit') texts.commit = made.message
     }
-    if (!alive(worktree, token)) return { ok: false, message: '已取消' }
+    if (!alive(worktree, token)) return { ok: false, message: pick(M).cancelled }
     if (kind === 'pr') {
       const made = await window.tr.pr.write({ ...base, kind: 'pr' })
       if (!made.ok) return { ok: false, message: made.message }
@@ -931,7 +989,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     if (!alive(worktree, token)) return
     if (now?.ok && now.merged) {
       patch(worktree, token, (s) => complete(s, 'merge'))
-      return finish(worktree, token, `已合并到 ${ctx.base}`)
+      return finish(worktree, token, pick(M).merged(ctx.base))
     }
   }
   const title = sessionOf(ctx.sessionId)?.title.trim()
@@ -952,7 +1010,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     return
   }
   patch(worktree, token, (s) => complete(s, 'merge', result.commit.slice(0, 7)))
-  finish(worktree, token, `已合并到 ${ctx.base} · ${result.commit.slice(0, 7)}`)
+  finish(worktree, token, pick(M).mergedAt(ctx.base, result.commit.slice(0, 7)))
 }
 
 /** The tip the push node's review read, which main pushes exactly (nothing when prepush answered none). */
@@ -984,9 +1042,9 @@ async function runPushBase(worktree: string, token: number, run: Run): Promise<v
     patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.pushError!, failure, refused ? { pushRefused: true } : {})))
     return
   }
-  patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
+  patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : pick(M).noRemote))
   if (result.pushed) noteBasePush(worktree, { sha: result.commit, at: Date.now() })
-  finish(worktree, token, result.pushed ? `已推送 ${ctx.base} · ${result.commit.slice(0, 7)}` : `${ctx.base} 没有远程，没有推送`)
+  finish(worktree, token, result.pushed ? pick(M).pushedAt(ctx.base, result.commit.slice(0, 7)) : pick(M).baseNoRemote(ctx.base))
 }
 
 /** 创建 PR can work for the run's branch: its remote is a GitHub repository and gh is installed and signed in (the
@@ -1042,13 +1100,13 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
   }
   patch(worktree, token, (s) => complete(complete(s, 'push'), 'create'))
   openPullRequest(ctx.openIn, created.url)
-  finish(worktree, token, created.number ? `已创建 PR #${created.number}` : '已创建 PR')
+  finish(worktree, token, created.number ? pick(M).createdPr(created.number) : pick(M).created)
 }
 
 /** 提交 (Figma 73F1): commit the ticked files with the message — the only run that commits. */
 async function runCommit(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
-  if (await resumeCommit(worktree, token, run, state)) return finish(worktree, token, `已提交 · ${run.commit!.slice(0, 7)}`)
+  if (await resumeCommit(worktree, token, run, state)) return finish(worktree, token, pick(M).committed(run.commit!.slice(0, 7)))
   if (!alive(worktree, token)) return
   patch(worktree, token, (s) => begin(s, 'commit'))
   const made = await window.tr.pr.commit({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, paths: ctx.paths ?? [] })
@@ -1062,7 +1120,7 @@ async function runCommit(worktree: string, token: number, run: Run, state: ShipS
   const hash = made.ok ? made.commit : landed!
   run.commit = hash
   patch(worktree, token, (s) => complete(s, 'commit', hash.slice(0, 7)))
-  finish(worktree, token, `已提交 · ${hash.slice(0, 7)}`)
+  finish(worktree, token, pick(M).committed(hash.slice(0, 7)))
 }
 
 /** 同步 <base> (Figma 73D1 / 73D2): main fetches, brings the base in, and on conflicts starts nothing. */
@@ -1075,7 +1133,7 @@ async function runSync(worktree: string, token: number, run: Run): Promise<void>
     patch(worktree, token, (s) => complete(complete(syncOnto(s, result.onto), 'sync', result.baseNotCaughtUp), 'merge'))
     // The local base could not catch up with its remote: the block stays, saying so on the step, until it is closed.
     if (result.baseNotCaughtUp) window.tr.pr.refresh(worktree)
-    else finish(worktree, token, `已同步 ${ctx.base}`)
+    else finish(worktree, token, pick(M).synced(ctx.base))
     return
   }
   if (result.reason === 'blocked') {
@@ -1114,7 +1172,7 @@ async function runPull(worktree: string, token: number, run: Run): Promise<void>
     patch(worktree, token, (s) => complete(s, 'sync'))
     // The step names what was fetched (its upstream, which may be named otherwise than the local branch).
     const label = current(worktree)?.steps.find((s) => s.id === 'sync')?.label
-    finish(worktree, token, label ? `已${label}` : `已拉取 ${ctx.remote ?? 'origin'}/${ctx.branch}`)
+    finish(worktree, token, label ? pick(M).pulledLabel(label) : pick(M).pulled(`${ctx.remote ?? 'origin'}/${ctx.branch}`))
     return
   }
   if (result.reason === 'blocked') patch(worktree, token, (s) => fail(s, { step: 'sync', message: result.message }))

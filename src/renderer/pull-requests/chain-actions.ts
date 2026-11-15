@@ -4,6 +4,7 @@
 // otherwise starts the Ship run, opens the sheet, or puts the hand-off into the agent's input line (never pressing Enter).
 import { headlessAgent } from '@shared/agents'
 import type { GitChanges } from '@shared/git-graph/log'
+import { defineMessages, pick } from '@shared/i18n'
 import type { PrStatus } from '@shared/pull-requests'
 import type { ShipPreflight } from '@shared/ship'
 import { agentHandoffPrompt, CHAIN_LABEL, CHAIN_TEXT, type ChainState } from '@shared/ship-chain'
@@ -28,6 +29,25 @@ import { exitPlan, shipContextFor, type ExitPlan } from './exit-model'
 import { commitTitle, divergedPrompt } from './ship-flow'
 import { readRemembered, startShip, useShips } from './ship-runner'
 import { setPrNotice, usePullRequests } from './store'
+
+const M = defineMessages({
+  zh: {
+    handFailed: (agent: string, error: string) => `没能交给 ${agent}：${error}`,
+    notNow: '现在不能这样做',
+    reviewFailed: (error: string) => `没能开始审阅：${error}`,
+    notGit: '不是 git 仓库',
+    listSeparator: '、',
+    checksLine: (checks: string) => `这一轮的检查：${checks}`
+  },
+  en: {
+    handFailed: (agent: string, error: string) => `Couldn’t hand to ${agent}: ${error}`,
+    notNow: 'Can’t do that right now',
+    reviewFailed: (error: string) => `Couldn’t start the review: ${error}`,
+    notGit: 'Not a git repository',
+    listSeparator: ', ',
+    checksLine: (checks: string) => `Checks this turn: ${checks}`
+  }
+})
 
 export interface ChainPlace {
   worktree: Worktree
@@ -121,7 +141,7 @@ async function handTo(place: ChainPlace, text: string): Promise<void> {
     await insertIntoTerminal(agent.id, text)
     useWorkspace.getState().requestTerminalFocus()
   } catch (error) {
-    say(place.worktree.path, `没能交给 ${agentLabel(agent.kind)}：${errorText(error)}`)
+    say(place.worktree.path, pick(M).handFailed(agentLabel(agent.kind), errorText(error)))
   }
 }
 
@@ -139,7 +159,7 @@ function blockerOf(chain: ChainState, command: ChainCommand): string | null {
   if (command === 'merge-sheet') return chain.actions.find((a) => a.id === 'main')?.blocker ?? null
   if (command === 'handoff' || command === 'continue' || command === 'abort') {
     const move = [chain.next, chain.second].find((m) => m?.id === command)
-    return move ? move.blocker : '现在不能这样做'
+    return move ? move.blocker : pick(M).notNow
   }
   if (command === 'review' || command === 'open-pr') return null
   return chain.actions.find((a) => a.id === command)?.blocker ?? null
@@ -170,12 +190,12 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
   if (command === 'review') {
     const reviewer = headlessAgent(place.agent?.kind)
     if (!reviewer) return say(path, CHAIN_TEXT.noAgent)
-    await startBackgroundReview(path, reviewer, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, `没能开始审阅：${errorText(error)}`))
+    await startBackgroundReview(path, reviewer, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, pick(M).reviewFailed(errorText(error))))
     return
   }
   if (useShips.getState().byWorktree[path]) return
   const sources = await freshSources(place)
-  if (!sources) return say(path, '不是 git 仓库')
+  if (!sources) return say(path, pick(M).notGit)
   const { plan, chain, ticked } = chainPlanOf(place, sources)
   const blocker = blockerOf(chain, command)
   if (blocker) return say(path, blocker)
@@ -193,7 +213,7 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     }))
     void loadChanges(path)
     bumpChain(path)
-    if (result && !result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(kind, result.files.length) : result.reason === 'blocked' ? result.message : result.files.join('、'))
+    if (result && !result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(kind, result.files.length) : result.reason === 'blocked' ? result.message : result.files.join(pick(M).listSeparator))
     return
   }
   if (command === 'handoff') {
@@ -214,7 +234,7 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     pr: plan.pr,
     agentSession: place.agent?.id ?? null,
     openIn: openIn ?? place.agent?.id ?? null,
-    checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
+    checksLine: checks ? pick(M).checksLine(checksText(checks)) : null,
     settings: { review: settings.review, pr: settings.pr }
   })
   const label = chain.actions.find((a) => a.id === command)?.label ?? ''

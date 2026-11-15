@@ -4,17 +4,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usageVendor } from '@shared/agents'
 import { contextHigh, VENDOR_LABEL, vendorStatus, windowKey, type ContextUsage } from '@shared/session-meta'
+import { defineMessages } from '@shared/i18n'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useMetaNow } from '../session-meta/MetaChips'
 import { Popover } from '../session-meta/Popover'
 import { useSessionMeta } from '../session-meta/store'
 import { UsageAgentRow, UsageContextRow, UsageWindowRow } from '../session-meta/UsageRows'
+import { useMessages } from '../i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: { used: (percent: number) => `context 已用 ${percent}%`, contextAndUsage: 'context 和额度' },
+  en: { used: (percent: number) => `${percent}% of context used`, contextAndUsage: 'Context and usage' }
+})
 
 const RADIUS = 7
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 export function ContextButton({ sessionId, agent }: { sessionId: SessionId; agent: AgentKind }) {
+  const m = useMessages(M)
   const context = useSessionMeta((s) => s.bySession[sessionId]?.context)
   // Off the plan (a third-party endpoint), the account's usage is not this session's.
   const onPlan = useSessionMeta((s) => s.bySession[sessionId]?.plan !== false)
@@ -30,8 +38,8 @@ export function ContextButton({ sessionId, agent }: { sessionId: SessionId; agen
         ref={anchor}
         type="button"
         className={styles.barIcon}
-        aria-label={context ? `context 已用 ${percent}%` : 'context 和额度'}
-        title={context ? `context 已用 ${percent}%` : 'context 和额度'}
+        aria-label={context ? m.used(percent) : m.contextAndUsage}
+        title={context ? m.used(percent) : m.contextAndUsage}
         aria-haspopup="dialog"
         aria-expanded={open}
         data-testid="gui-context-ring"
@@ -44,7 +52,7 @@ export function ContextButton({ sessionId, agent }: { sessionId: SessionId; agen
         </svg>
       </button>
       {open && (
-        <Popover anchor={anchor} label="context 和额度" onClose={close} placement="above-end" className={styles.contextPopover} testId="gui-context-popover">
+        <Popover anchor={anchor} label={m.contextAndUsage} onClose={close} placement="above-end" className={styles.contextPopover} testId="gui-context-popover">
           <ContextPanel context={context} vendor={vendor} />
         </Popover>
       )}

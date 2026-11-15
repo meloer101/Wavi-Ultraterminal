@@ -5,12 +5,49 @@
 // (the chat routes them, see ChatPane).
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { GuiAnswer, GuiPrompt } from '@shared/gui-chat'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
 import { DiffBlock } from './DiffBlock'
 import { permissionBody, permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
+import { useMessages } from '../i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: {
+    confirm: '等你确认',
+    deny: '拒绝',
+    alwaysAllow: '总是允许',
+    allow: '允许',
+    answer: '等你回答',
+    otherOption: '其他…',
+    other: '其他',
+    skip: '跳过',
+    next: '下一个',
+    submit: '提交',
+    confirmPlan: '等你确认计划',
+    keepPlanning: '继续规划',
+    approveAsk: '批准，编辑时问我',
+    approveAuto: '批准并自动接受编辑'
+  },
+  en: {
+    confirm: 'Confirm',
+    deny: 'Deny',
+    alwaysAllow: 'Always allow',
+    allow: 'Allow',
+    answer: 'Answer',
+    otherOption: 'Other…',
+    other: 'Other',
+    skip: 'Skip',
+    next: 'Next',
+    submit: 'Submit',
+    confirmPlan: 'Confirm plan',
+    keepPlanning: 'Keep planning',
+    approveAsk: 'Approve, ask before edits',
+    approveAuto: 'Approve and auto-accept edits'
+  }
+})
 
 /** A card's key handler; true when the key did something. */
 export type CardKeys = (key: NonNullable<CardKey>) => boolean
@@ -59,6 +96,7 @@ function Button({ label, shortcut, primary = false, disabled, onClick, title }: 
 }
 
 function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardProps<Extract<GuiPrompt, { kind: 'permission' }>>) {
+  const m = useMessages(M)
   const buttons = permissionButtons(prompt.options)
   const body = permissionBody(prompt)
   const primary = permissionPrimary(buttons)
@@ -73,7 +111,7 @@ function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardP
     return () => bindKeys(null)
   })
   return (
-    <Card label="等你确认" title={permissionTitle(agentLabel, prompt.tool)} testId="gui-permission">
+    <Card label={m.confirm} title={permissionTitle(agentLabel, prompt.tool)} testId="gui-permission">
       {body.detail && <pre className={styles.cardDetail}>{body.detail}</pre>}
       {/* Figma 59I: a change shows each file, its path on the block's header; several scroll together. */}
       {body.files.length > 0 && (
@@ -84,15 +122,16 @@ function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardP
         </div>
       )}
       <div className={styles.cardActions}>
-        {buttons.reject && <Button label="拒绝" shortcut="⎋" disabled={pending} onClick={() => choose(buttons.reject?.id)} />}
-        {buttons.always && buttons.always !== primary && <Button label="总是允许" title={buttons.always.label} disabled={pending} onClick={() => choose(buttons.always?.id)} />}
-        {primary && <Button label={primary === buttons.always ? '总是允许' : '允许'} shortcut="↵" primary disabled={pending} onClick={() => choose(primary.id)} />}
+        {buttons.reject && <Button label={m.deny} shortcut="⎋" disabled={pending} onClick={() => choose(buttons.reject?.id)} />}
+        {buttons.always && buttons.always !== primary && <Button label={m.alwaysAllow} title={buttons.always.label} disabled={pending} onClick={() => choose(buttons.always?.id)} />}
+        {primary && <Button label={primary === buttons.always ? m.alwaysAllow : m.allow} shortcut="↵" primary disabled={pending} onClick={() => choose(primary.id)} />}
       </div>
     </Card>
   )
 }
 
 function QuestionCard({ prompt, answer, pending, bindKeys }: CardProps<Extract<GuiPrompt, { kind: 'question' }>>) {
+  const m = useMessages(M)
   const [step, setStep] = useState(0)
   const [choices, setChoices] = useState<(QuestionChoice | undefined)[]>([])
   const [focused, setFocused] = useState(0)
@@ -170,9 +209,9 @@ function QuestionCard({ prompt, answer, pending, bindKeys }: CardProps<Extract<G
 
   const picked = (index: number): boolean => (index === question.options.length ? choice?.kind === 'other' : choice?.kind === 'option' && choice.indexes.includes(index))
   return (
-    <Card label="等你回答" title={question.question} testId="gui-question">
+    <Card label={m.answer} title={question.question} testId="gui-question">
       <div className={styles.options} role={question.multiSelect ? 'group' : 'radiogroup'} aria-label={question.header ?? question.question}>
-        {[...question.options.map((o) => o.label), '其他…'].map((label, index) => (
+        {[...question.options.map((o) => o.label), m.otherOption].map((label, index) => (
           <button
             key={index}
             type="button"
@@ -191,7 +230,7 @@ function QuestionCard({ prompt, answer, pending, bindKeys }: CardProps<Extract<G
           <input
             ref={otherRef}
             className={styles.otherInput}
-            aria-label="其他"
+            aria-label={m.other}
             value={choice.text}
             onChange={(e) => {
               const text = e.currentTarget.value
@@ -213,14 +252,15 @@ function QuestionCard({ prompt, answer, pending, bindKeys }: CardProps<Extract<G
         )}
       </div>
       <div className={styles.cardActions}>
-        <Button label="跳过" shortcut="⎋" disabled={pending} onClick={skip} />
-        <Button label={step < prompt.questions.length - 1 ? '下一个' : '提交'} shortcut="↵" primary disabled={pending} onClick={primary} />
+        <Button label={m.skip} shortcut="⎋" disabled={pending} onClick={skip} />
+        <Button label={step < prompt.questions.length - 1 ? m.next : m.submit} shortcut="↵" primary disabled={pending} onClick={primary} />
       </div>
     </Card>
   )
 }
 
 function PlanCard({ sessionId, prompt, answer, pending, bindKeys }: CardProps<Extract<GuiPrompt, { kind: 'plan' }>>) {
+  const m = useMessages(M)
   const { title, body } = planParts(prompt.plan)
   const decide = (decision: 'keep-planning' | 'approve-ask' | 'approve-auto'): boolean => {
     if (pending) return false
@@ -232,12 +272,12 @@ function PlanCard({ sessionId, prompt, answer, pending, bindKeys }: CardProps<Ex
     return () => bindKeys(null)
   })
   return (
-    <Card label="等你确认计划" title={title} testId="gui-plan">
+    <Card label={m.confirmPlan} title={title} testId="gui-plan">
       {body && <ChatMarkdown sessionId={sessionId} text={body} className={styles.planBody} />}
       <div className={`${styles.cardActions} ${styles.planActions}`}>
-        <Button label="继续规划" disabled={pending} onClick={() => decide('keep-planning')} />
-        <Button label="批准，编辑时问我" disabled={pending} onClick={() => decide('approve-ask')} />
-        <Button label="批准并自动接受编辑" shortcut="↵" primary disabled={pending} onClick={() => decide('approve-auto')} />
+        <Button label={m.keepPlanning} disabled={pending} onClick={() => decide('keep-planning')} />
+        <Button label={m.approveAsk} disabled={pending} onClick={() => decide('approve-ask')} />
+        <Button label={m.approveAuto} shortcut="↵" primary disabled={pending} onClick={() => decide('approve-auto')} />
       </div>
     </Card>
   )

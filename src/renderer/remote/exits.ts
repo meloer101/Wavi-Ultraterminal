@@ -3,6 +3,7 @@
 // and 推送 of the base; a primary only the Mac runs (提交, 同步, 拉取, 交给 agent, 继续) is shown blocked with the chain's
 // state line and where it runs. The run's progress reaches the phone with the session list (model.ts `remoteShip`).
 import { remoteFail, type RemoteExit, type RemoteExits, type RemoteMacMove, type RemoteResult, type RemoteShipAction } from '@shared/remote'
+import { defineMessages, pick } from '@shared/i18n'
 import type { ShipPreflight } from '@shared/ship'
 import { CHAIN_LABEL, type ChainMove, type ChainState } from '@shared/ship-chain'
 import { checksText, turnCheckView } from '@shared/turn-checks'
@@ -20,6 +21,61 @@ import { usePullRequests } from '../pull-requests/store'
 import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
 import { hidePaths } from './model'
+
+const M = defineMessages({
+  zh: {
+    stopped: '自动修复停下了，在 Mac 上回答后才能用出口',
+    readingPr: '正在读取 PR…',
+    onMac: (label: string) => `在 Mac 上${label}`,
+    joined: (line: string, where: string) => `${line}；${where}`,
+    noWorktree: '找不到这个 worktree',
+    approveScript: '这个仓库的 archive 脚本要先在 Mac 上批准一次',
+    noSession: '会话不存在',
+    notGit: '不是 git 仓库',
+    openPr: (number: number) => `打开 PR #${number}`,
+    exitUnavailable: '这个出口现在不能用',
+    exitRunning: '这个 worktree 已经有一个出口在进行',
+    checking: '正在检查…',
+    checksLine: (checks: string) => `这一轮的检查：${checks}`,
+    exitEnded: '这个出口已经结束了',
+    cantEdit: '现在不能改',
+    notWritten: '还没写好',
+    nothingToRetry: '没有要重试的步骤',
+    reviewStop: '审阅找到了 P0 / P1：在 Mac 上选择让 agent 修或照样推送',
+    cantCancel: '正在执行，不能取消',
+    noConflicts: '没有冲突要交给 agent',
+    noAgent: '这个 worktree 没有 agent 会话',
+    handFailed: '没能交给 agent',
+    notRefused: '推送没有被拒绝',
+    archiveAnyway: (message: string) => `${message}；可以在 Mac 上选择仍然归档`
+  },
+  en: {
+    stopped: 'Auto-fix stopped. Answer it on the Mac before using the exits',
+    readingPr: 'Reading the PR…',
+    onMac: (label: string) => `${label} on the Mac`,
+    joined: (line: string, where: string) => `${line}; ${where}`,
+    noWorktree: 'Can’t find this worktree',
+    approveScript: 'This repository’s archive script must be approved once on the Mac',
+    noSession: 'Session not found',
+    notGit: 'Not a git repository',
+    openPr: (number: number) => `Open PR #${number}`,
+    exitUnavailable: 'This exit can’t be used right now',
+    exitRunning: 'An exit is already running for this worktree',
+    checking: 'Checking…',
+    checksLine: (checks: string) => `Checks this turn: ${checks}`,
+    exitEnded: 'This exit has already ended',
+    cantEdit: 'Can’t edit right now',
+    notWritten: 'Not written yet',
+    nothingToRetry: 'No step to retry',
+    reviewStop: 'Review found P0 / P1: on the Mac, choose to have the agent fix it or push anyway',
+    cantCancel: 'Running, can’t cancel',
+    noConflicts: 'No conflicts to hand to the agent',
+    noAgent: 'This worktree has no agent session',
+    handFailed: 'Couldn’t hand to agent',
+    notRefused: 'The push wasn’t refused',
+    archiveAnyway: (message: string) => `${message}; you can choose to archive anyway on the Mac`
+  }
+})
 
 interface Place {
   session: Session
@@ -46,7 +102,7 @@ function stoppedFix(worktreePath: string, prNumber: number | null): boolean {
   const base = useBaseCi.getState().automation[worktreePath]
   return (pr !== undefined && prNumber !== null && pr.number === prNumber && pr.run?.kind === 'stopped') || base?.run?.kind === 'stopped'
 }
-const STOPPED = '自动修复停下了，在 Mac 上回答后才能用出口'
+const STOPPED = (): string => pick(M).stopped
 
 /** What Git · 变更 would read: the changes, the preflight and the PR, then the plan. */
 async function planFor(place: Place) {
@@ -81,7 +137,7 @@ async function planFor(place: Place) {
 
 function phoneExit(place: Place, exit: ShipExit, plan: ExitPlan, stopped: boolean): RemoteExit {
   const url = exit.kind === 'open-pr' ? plan.pr?.url : undefined
-  const blocker = stopped ? STOPPED : (plan.blocker(exit) ?? (exit.kind === 'open-pr' && !url ? '正在读取 PR…' : null))
+  const blocker = stopped ? STOPPED() : (plan.blocker(exit) ?? (exit.kind === 'open-pr' && !url ? pick(M).readingPr : null))
   return { kind: exit.kind, label: exit.label, blocker: blocker ? hidePaths(blocker, [place.worktree.path, place.project.rootPath]) : null, ...(url ? { url } : {}) }
 }
 
@@ -90,31 +146,31 @@ const macMove = (move: ChainMove | null): move is ChainMove & { id: RemoteMacMov
 
 /** A primary only the Mac runs: shown blocked, with the chain's state line and where it runs. */
 function onMac(place: Place, chain: ChainState, move: ChainMove & { id: RemoteMacMove }): RemoteExit {
-  const where = `在 Mac 上${move.label}`
+  const where = pick(M).onMac(move.label)
   const line = move.blocker ?? chain.headline?.text ?? null
-  return { kind: move.id, label: move.label, blocker: hidePaths(line && line !== where ? `${line}；${where}` : where, [place.worktree.path, place.project.rootPath]) }
+  return { kind: move.id, label: move.label, blocker: hidePaths(line && line !== where ? pick(M).joined(line, where) : where, [place.worktree.path, place.project.rootPath]) }
 }
 
 async function archiveBlocker(place: Place): Promise<string | null> {
   const target = archiveTargetFor(place.worktree.id)
-  if (!target) return '找不到这个 worktree'
+  if (!target) return pick(M).noWorktree
   const blocker = blockerFor(target)
   if (blocker) return blocker
   // The archive script's approval is a dialog on the Mac, which nobody may be in front of.
   const info = await window.tr.repoScripts.get(target.worktreePath).catch(() => null)
-  return info?.scripts.archive !== undefined && !info.approved ? '这个仓库的 archive 脚本要先在 Mac 上批准一次' : null
+  return info?.scripts.archive !== undefined && !info.approved ? pick(M).approveScript : null
 }
 
 export async function remoteExits(sessionId: string): Promise<RemoteResult> {
   const place = placeOf(sessionId)
-  if (!place) return remoteFail('会话不存在')
+  if (!place) return remoteFail(pick(M).noSession)
   const found = await planFor(place)
-  if (!found) return remoteFail('不是 git 仓库')
+  if (!found) return remoteFail(pick(M).notGit)
   const { preflight, plan } = found
   const { chain } = plan
   const { primary, secondary } = plan.exits
   const stopped = stoppedFix(place.worktree.path, plan.pr?.number ?? null)
-  const open: ShipExit | null = plan.idlePr ? { kind: 'open-pr', number: plan.idlePr.number, label: `打开 PR #${plan.idlePr.number}`, blocker: null } : null
+  const open: ShipExit | null = plan.idlePr ? { kind: 'open-pr', number: plan.idlePr.number, label: pick(M).openPr(plan.idlePr.number), blocker: null } : null
   const next = chain.next
   const hide = (text: string | null): string | null => (text ? hidePaths(text, [place.worktree.path, place.project.rootPath]) : null)
   // The chain's primary decides: 推送 of the base the phone runs; a move only the Mac runs is shown blocked, the exit
@@ -122,7 +178,7 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
   const exitBeside = chain.second && (chain.second.id === 'main' || chain.second.id === 'pr') ? [primary, secondary].find((e) => e?.kind === chain.second!.id) : undefined
   const [first, other]: [RemoteExit | null, RemoteExit | null] =
     next?.id === 'push-base'
-      ? [{ kind: 'push-base', label: next.label, blocker: stopped ? STOPPED : hide(next.blocker) }, null]
+      ? [{ kind: 'push-base', label: next.label, blocker: stopped ? STOPPED() : hide(next.blocker) }, null]
       : macMove(next)
         ? [onMac(place, chain, next), exitBeside ? phoneExit(place, exitBeside, plan, stopped) : null]
         : plan.nothingToShip
@@ -146,16 +202,16 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
 
 async function start(place: Place, kind: 'main' | 'pr' | 'push-pr' | 'push-base'): Promise<RemoteResult> {
   const found = await planFor(place)
-  if (!found) return remoteFail('不是 git 仓库')
+  if (!found) return remoteFail(pick(M).notGit)
   const { changes, preflight, plan } = found
   // 推送 of the base is a chain action, not one of the two exits: its own blocker.
   const pushBase = kind === 'push-base' ? plan.chain.actions.find((a) => a.id === 'push-base')! : null
   const exit = pushBase ? null : [plan.exits.primary, plan.exits.secondary].find((e) => e?.kind === kind)
-  if (!pushBase && (!exit || plan.nothingToShip)) return remoteFail('这个出口现在不能用')
-  if (useShips.getState().byWorktree[place.worktree.path]) return remoteFail('这个 worktree 已经有一个出口在进行')
-  if (stoppedFix(place.worktree.path, plan.pr?.number ?? null)) return remoteFail(STOPPED)
+  if (!pushBase && (!exit || plan.nothingToShip)) return remoteFail(pick(M).exitUnavailable)
+  if (useShips.getState().byWorktree[place.worktree.path]) return remoteFail(pick(M).exitRunning)
+  if (stoppedFix(place.worktree.path, plan.pr?.number ?? null)) return remoteFail(STOPPED())
   const blocker = pushBase ? pushBase.blocker : exit ? plan.blocker(exit) : null
-  if (blocker || !preflight.ok) return fail(place, blocker ?? '正在检查…')
+  if (blocker || !preflight.ok) return fail(place, blocker ?? pick(M).checking)
   const { session, worktree, project } = place
   const state = useWorkspace.getState()
   const agent = commentTarget(worktree, state.sessions, state.worktrees, session.id)
@@ -169,7 +225,7 @@ async function start(place: Place, kind: 'main' | 'pr' | 'push-pr' | 'push-base'
     pr: plan.pr,
     agentSession: agent?.id ?? null,
     openIn: session.id,
-    checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
+    checksLine: checks ? pick(M).checksLine(checksText(checks)) : null,
     settings: { review: settings.review, pr: settings.pr }
   })
   // The tip the run starts from and where the base goes: the preflight just read, as the desktop's commands pass it.
@@ -191,47 +247,47 @@ async function start(place: Place, kind: 'main' | 'pr' | 'push-pr' | 'push-base'
 
 export async function remoteShipAction(sessionId: string, action: RemoteShipAction): Promise<RemoteResult> {
   const place = placeOf(sessionId)
-  if (!place) return remoteFail('会话不存在')
+  if (!place) return remoteFail(pick(M).noSession)
   const path = place.worktree.path
   if (action.do === 'start') return start(place, action.exit)
   const state = useShips.getState().byWorktree[path]
-  if (!state) return remoteFail('这个出口已经结束了')
+  if (!state) return remoteFail(pick(M).exitEnded)
   // The text can be changed while it is shown: at the last look, and after a failed run (Ship block `showFields`).
   const failedInRun = state.error !== null && state.failedIn === 'running'
   switch (action.do) {
     case 'edit':
-      if (state.stage !== 'glance' && !failedInRun) return remoteFail('现在不能改')
+      if (state.stage !== 'glance' && !failedInRun) return remoteFail(pick(M).cantEdit)
       editShip(path, action.texts)
       return { ok: true }
     case 'submit': {
-      if (state.stage !== 'glance' || state.error) return remoteFail('还没写好')
+      if (state.stage !== 'glance' || state.error) return remoteFail(pick(M).notWritten)
       const blocker = submitBlocker(state)
       if (blocker) return remoteFail(blocker)
       submitShip(path)
       return { ok: true }
     }
     case 'retry': {
-      if (!state.error) return remoteFail('没有要重试的步骤')
+      if (!state.error) return remoteFail(pick(M).nothingToRetry)
       // The push node's review stopped it: 让 <agent> 修 and 照样推送 are the Mac's buttons, not another review.
-      if (state.error.reviewStop) return remoteFail('审阅找到了 P0 / P1：在 Mac 上选择让 agent 修或照样推送')
+      if (state.error.reviewStop) return remoteFail(pick(M).reviewStop)
       const blocker = failedInRun ? submitBlocker(state) : null
       if (blocker) return remoteFail(blocker)
       retryShip(path)
       return { ok: true }
     }
     case 'cancel':
-      if (state.stage === 'running' && !state.error) return remoteFail('正在执行，不能取消')
+      if (state.stage === 'running' && !state.error) return remoteFail(pick(M).cantCancel)
       cancelShip(path)
       return { ok: true }
     case 'conflicts': {
-      if (!state.error?.conflicts) return remoteFail('没有冲突要交给 agent')
+      if (!state.error?.conflicts) return remoteFail(pick(M).noConflicts)
       const ws = useWorkspace.getState()
-      if (!commentTarget(place.worktree, ws.sessions, ws.worktrees, place.session.id)) return remoteFail('这个 worktree 没有 agent 会话')
+      if (!commentTarget(place.worktree, ws.sessions, ws.worktrees, place.session.id)) return remoteFail(pick(M).noAgent)
       await handConflictsToAgent(path)
-      return useShips.getState().byWorktree[path] ? fail(place, useShips.getState().byWorktree[path]!.error?.message ?? '没能交给 agent') : { ok: true }
+      return useShips.getState().byWorktree[path] ? fail(place, useShips.getState().byWorktree[path]!.error?.message ?? pick(M).handFailed) : { ok: true }
     }
     case 'switch-pr':
-      if (!state.error?.pushRefused) return remoteFail('推送没有被拒绝')
+      if (!state.error?.pushRefused) return remoteFail(pick(M).notRefused)
       switchToPr(path)
       return { ok: true }
   }
@@ -239,11 +295,11 @@ export async function remoteShipAction(sessionId: string, action: RemoteShipActi
 
 export async function remoteArchive(sessionId: string): Promise<RemoteResult> {
   const place = placeOf(sessionId)
-  if (!place) return remoteFail('会话不存在')
+  if (!place) return remoteFail(pick(M).noSession)
   const blocker = await archiveBlocker(place)
   if (blocker) return remoteFail(blocker)
   const target = archiveTargetFor(place.worktree.id)!
   const outcome = await archiveWorktree(target, { unattended: true })
   if (outcome.ok) return { ok: true }
-  return fail(place, outcome.stage === 'script' ? `${outcome.message}；可以在 Mac 上选择仍然归档` : outcome.message)
+  return fail(place, outcome.stage === 'script' ? pick(M).archiveAnyway(outcome.message) : outcome.message)
 }

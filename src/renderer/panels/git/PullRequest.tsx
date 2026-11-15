@@ -9,7 +9,7 @@ import type { Session, SessionId, Worktree } from '@shared/types'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
 import { baseBrokenChecks, prHeadline } from '../../pull-requests/auto-fix-model'
-import { PR_QUERY_FAILED, setPrNotice, usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
+import { prQueryFailed, setPrNotice, usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
@@ -28,7 +28,7 @@ export function usePrLines(worktree: Worktree) {
   const live = pr.state === 'open' || pr.state === 'draft'
   const threads = live ? actionableThreads(pr) : []
   // The poll failed (合入链路 v2, Figma 73I3): the last state read may be stale, so the line says so and why.
-  if (error) return { pr, live, threads: [], headline: PR_QUERY_FAILED, facts: [error.message], failed: true }
+  if (error) return { pr, live, threads: [], headline: prQueryFailed(), facts: [error.message], failed: true }
   const broken = automation?.number === pr.number ? baseBrokenChecks(automation) : []
   return { pr, live, threads, failed: false, ...prHeadline(pr, prStateLabel(pr.state), threads.length, { name: worktree.baseBranch ?? 'main', checks: broken }) }
 }
@@ -76,7 +76,7 @@ export function PrStatusLine({
           <CircleHelp {...MARK} />
         </span>
         <span className={ci.headlineText}>
-          {PR_QUERY_FAILED}
+          {prQueryFailed()}
           <span className={ci.headlineRest}>{error.message}</span>
         </span>
       </p>
