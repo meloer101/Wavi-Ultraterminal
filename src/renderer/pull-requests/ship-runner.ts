@@ -1,13 +1,15 @@
 // Runs Git · 变更's two exits (PRD F16 v1.78, Figma 29C–29I) and the chain's other runs: the session's agent writes the
 // text (a handoff file, or a headless run when the session cannot take a message), the user looks at it, then Wavi runs
 // the mechanical steps. Only 提交 commits; the exits ship what is committed. 合并 has no text: it squashes into the
-// local base straight away and pushes nothing (推送 of the base is a run of its own).
+// local base straight away and pushes nothing (推送 of the base is a run of its own). Every push (推送 of the base, 推送到
+// PR #N, 创建 PR) is the same node: pull first, the pre-push review (a P0 / P1 stops it), then the push.
 // The state lives here, per worktree, so the Ship block can close and open (图谱 ↔ 变更) without losing a run; the
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
 import { agentName, hasHooks, headlessAgent } from '@shared/agents'
 import type { GitFailure } from '@shared/git-failures'
 import { reviewEvidence, evidenceBlock, withEvidence } from '@shared/pull-requests'
+import { findingsPrompt } from '@shared/review-comments'
 import type { PrTarget } from '@shared/pull-requests'
 import type { AppSettings } from '@shared/settings'
 import { handoffPrompt, parseCommitHandoff, parsePrHandoff, type HandoffContext, type HandoffKind } from '@shared/ship-handoff'
@@ -15,13 +17,14 @@ import { writerFor } from '@shared/ship-writer'
 import type { ReviewAgent } from '@shared/background-review'
 import type { SavedShipContext, SavedShipRun } from '@shared/saved-runs'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { ShipError, ShipPreflight, StepId } from '@shared/ship'
-import { agentHandoffPrompt, mergeConflictPrompt } from '@shared/ship-chain'
+import type { CommitRange, ShipError, ShipPreflight, StepId } from '@shared/ship'
+import { agentHandoffPrompt, mergeConflictPrompt, protectedBasePrompt } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from '../review/background'
 import { insertIntoTerminal, submitPrompt } from '../session-io'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
+import { commentsOf, removeComments } from '../state/review-comments'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
 import {
@@ -41,6 +44,12 @@ import {
   markFailed,
   parseRemembered,
   POLL_MS,
+  prepushOf,
+  prePushReview,
+  pulledFirst,
+  pullFirstFailed,
+  reviewLabel,
+  reviewVerdict,
   rememberedKey,
   rememberedKindOf,
   retry,
@@ -84,6 +93,11 @@ interface Run {
   restored?: boolean
   /** 同步: how far the branch is behind the base when it started (the hand-off names it); null when not known. */
   behind?: number | null
+  /** A push: pulled first in this window (a retry after a reload pulls again); what the push sends that the remote
+   *  lacks (the review's range, null: nothing) and how many commits. */
+  prepared?: boolean
+  range?: CommitRange | null
+  commits?: number
 }
 
 /** What a run of 同步 needs beyond its context. */
@@ -96,7 +110,7 @@ export interface ShipStartOptions {
   head?: string
   /** 推送 of the base: where it is pushed (the preflight's `baseRemote`), for the push step's label. */
   baseRemote?: string | null
-  /** 拉取: what it fetches (the preflight's `pullFrom`), for the step's label. */
+  /** 拉取: what it fetches (the preflight's `pullFrom`), for the step's label; a push of the branch goes there too. */
   pullFrom?: string | null
 }
 
@@ -156,12 +170,9 @@ function reviewAgentOf(ctx: ShipContext): ReviewAgent | null {
   return headlessAgent(sessionOf(ctx.sessionId)?.kind)
 }
 
-/** 推送前审阅 before a push of the branch (创建 PR, 推送到 PR #N); 合并 is local and reviews nothing. */
+/** 推送前审阅 before every push the chain starts (推送 of the base, 推送到 PR #N, 创建 PR); 合并 is local and reviews nothing. */
 function reviewWanted(ctx: ShipContext, kind: ShipKind): boolean {
-  const { review } = ctx.settings
-  if (kind !== 'pr' && kind !== 'push-pr') return false
-  if (review.mode !== 'builtin' || !reviewAgentOf(ctx)) return false
-  return review.beforePush
+  return prePushReview({ origin: 'chain', kind, review: ctx.settings.review, reviewer: reviewAgentOf(ctx) !== null })
 }
 
 // --- the remembered exit ------------------------------------------------------------------------------------------
@@ -302,7 +313,8 @@ export function submitShip(worktree: string): void {
 export function retryShip(worktree: string): void {
   const run = runs.get(worktree)
   const state = current(worktree)
-  if (!run || !state?.error) return
+  // A review that stopped the push is not tried again: 照样推送 or 让 <agent> 修.
+  if (!run || !state?.error || state.error.reviewStop) return
   if (patch(worktree, run.token, retry)) void drive(worktree, run.token)
 }
 
@@ -357,10 +369,105 @@ export function switchToPr(worktree: string): void {
   startShip({ ...ctx, paths: null }, 'pr', '创建 PR')
 }
 
-function drive(worktree: string, token: number): Promise<void> {
+async function drive(worktree: string, token: number): Promise<void> {
+  const run = runs.get(worktree)
+  if (!run || !current(worktree) || !alive(worktree, token)) return
+  // A push pulls first, before its review reads what it will send.
+  if (prepushOf(run.kind) && !run.prepared && !(await pullFirst(worktree, token, run))) return
   const state = current(worktree)
-  if (!state || !alive(worktree, token)) return Promise.resolve()
+  if (!state || !alive(worktree, token)) return
   return state.stage === 'running' ? runPhase(worktree, token) : writePhase(worktree, token)
+}
+
+/**
+ * The push node's pull first (main's prepush): the remote's commits come in before anything else, and main says what
+ * the push will send (the review's range). A step shows only when something came in or it failed. Whether to go on.
+ */
+async function pullFirst(worktree: string, token: number, run: Run): Promise<boolean> {
+  const { ctx } = run
+  const push = prepushOf(run.kind)!
+  let result
+  try {
+    result = await window.tr.ship.prepush({ root: ctx.root, worktree: ctx.worktree, push })
+  } catch (error) {
+    result = { ok: false as const, reason: 'blocked' as const, message: errorText(error) }
+  }
+  if (!alive(worktree, token)) return false
+  const from = ('from' in result && result.from) || (push === 'base' ? `${ctx.remote ?? 'origin'}/${ctx.base}` : `${ctx.remote ?? 'origin'}/${ctx.branch}`)
+  if (result.ok) {
+    run.prepared = true
+    run.range = result.range
+    run.commits = result.commits
+    patch(worktree, token, (s) => {
+      const pulled = pulledFirst(s, result.pulled)
+      return result.commits > 0 && pulled.steps.some((step) => step.id === 'review') ? withLabel(pulled, 'review', reviewLabel(result.commits)) : pulled
+    })
+    return true
+  }
+  if (result.reason === 'failed') {
+    patch(worktree, token, (s) => {
+      const error = stepError(s, run, 'sync', result.failure.message, result.failure)
+      const { step: _step, ...rest } = error
+      return pullFirstFailed(s, from, rest)
+    })
+    return false
+  }
+  if (result.reason === 'conflicts') {
+    // The rebase of the base stopped where the base is checked out. Here (the main checkout on its base) the agent can
+    // take it; elsewhere the main checkout's own chain offers it.
+    const here = ctx.branch === ctx.base
+    const message = result.message
+    const files = result.files
+    patch(worktree, token, (s) =>
+      pullFirstFailed(
+        s,
+        from,
+        here
+          ? { message, conflicts: files, prompt: agentHandoffPrompt({ kind: 'operation', operation: 'rebase', files }) }
+          : { message, failure: { kind: 'conflicts', message, next: null, tail: '' } }
+      )
+    )
+    return false
+  }
+  const message = result.message
+  patch(worktree, token, (s) => pullFirstFailed(s, from, { message }))
+  return false
+}
+
+const withLabel = (state: ShipState, id: StepId, label: string): ShipState => ({ ...state, steps: state.steps.map((s) => (s.id === id ? { ...s, label } : s)) })
+
+/** The pre-push review's findings: those of the worktree's latest review still in Git · 变更. */
+const reviewFindings = (worktree: string) => commentsOf(worktree).filter((c) => c.origin === 'review')
+
+/** 照样推送: the review stopped the push on a P0 / P1; the push goes ahead without reviewing again. */
+export function pushPastReview(worktree: string): void {
+  const run = runs.get(worktree)
+  const state = current(worktree)
+  if (!run || !state?.error?.reviewStop) return
+  const note = reviewVerdict(reviewFindings(run.ctx.worktree)).note
+  const resumed = (s: ShipState): ShipState => ({ ...complete(s, 'review', note), error: null, failedIn: null, stage: s.failedIn ?? 'writing' })
+  if (patch(worktree, run.token, resumed)) void drive(worktree, run.token)
+}
+
+/** 让 <agent> 修: the P0 / P1 findings that stopped the push go into the agent's input line (no Enter, as the review
+ *  block's 发给) and the run ends; nothing is pushed. */
+export async function handFindingsToAgent(worktree: string): Promise<void> {
+  const run = runs.get(worktree)
+  const session = shipHandoffSession(worktree)
+  if (!run || !session || !current(worktree)?.error?.reviewStop) return
+  const findings = reviewFindings(run.ctx.worktree).filter((c) => c.severity === 'P0' || c.severity === 'P1')
+  // Sent from the review block meanwhile: nothing left to hand over, and still nothing pushed.
+  if (findings.length === 0) return cancelShip(worktree)
+  try {
+    useWorkspace.getState().setActiveSession(session.id)
+    await ensureAgentUp(session.id)
+    await insertIntoTerminal(session.id, findingsPrompt(findings))
+    removeComments(run.ctx.worktree, new Set(findings.map((c) => c.id)))
+    useWorkspace.getState().requestTerminalFocus()
+    cancelShip(worktree)
+  } catch (error) {
+    patch(worktree, run.token, (s) => (s.error ? { ...s, error: { ...s.error, message: `没能交给 agent：${errorText(error)}` } } : s))
+  }
 }
 
 // --- writing ------------------------------------------------------------------------------------------------------
@@ -372,11 +479,12 @@ async function writePhase(worktree: string, token: number): Promise<void> {
   const first = current(worktree)
   if (!first) return
   if (first.steps.some((s) => s.id === 'review' && (s.state === 'working' || s.state === 'pending'))) {
-    await reviewStep(worktree, token, ctx)
+    await reviewStep(worktree, token, run)
     if (!alive(worktree, token)) return
   }
   const state = current(worktree)
-  if (!state) return
+  // The review stopped the push (a P0 / P1): the block waits for 让 <agent> 修 or 照样推送.
+  if (!state || state.error) return
   if (!state.steps.some((s) => s.id === 'write')) {
     if (patch(worktree, token, toRunning)) await runPhase(worktree, token)
     return
@@ -408,14 +516,24 @@ async function headlessWriterInstalled(ctx: ShipContext): Promise<boolean> {
 
 type Written = { ok: true; texts: ShipTexts } | { ok: false; message: string }
 
-async function reviewStep(worktree: string, token: number, ctx: ShipContext): Promise<void> {
+/**
+ * The push node's review of what the push sends (the range main's prepush answered; nothing to send: nothing to read).
+ * The run waits for it. A P0 or P1 among its findings stops the run before the push; P2 / P3 are only counted; a
+ * review that failed does not stop the push.
+ */
+async function reviewStep(worktree: string, token: number, run: Run): Promise<void> {
+  const { ctx } = run
   const agent = reviewAgentOf(ctx)
   if (!agent) {
     patch(worktree, token, (s) => complete(s, 'review', '没有可用的审阅'))
     return
   }
+  if (!run.range) {
+    patch(worktree, token, (s) => complete(s, 'review', '没有要审阅的提交'))
+    return
+  }
   try {
-    await startBackgroundReview(ctx.worktree, agent, 'push', ctx.base)
+    await startBackgroundReview(ctx.worktree, agent, 'push', ctx.base, false, run.range)
   } catch (error) {
     patch(worktree, token, (s) => markFailed(s, 'review', `没能开始：${errorText(error)}`))
     return
@@ -434,9 +552,16 @@ async function reviewStep(worktree: string, token: number, ctx: ShipContext): Pr
   })
   if (!alive(worktree, token)) return
   const review = useBackgroundReview.getState().byRoot[ctx.worktree]
-  if (!review || review.phase === 'done' || review.phase === 'skipped') {
-    const found = review?.found ?? 0
-    patch(worktree, token, (s) => complete(s, 'review', found > 0 ? `找到 ${found} 条` : (review?.note ?? '没有发现问题')))
+  // Skipped (the switch went off, nothing to read): nothing was judged, so nothing stops the push.
+  if (!review || review.phase === 'skipped') {
+    patch(worktree, token, (s) => complete(s, 'review', review?.note ?? review?.message ?? '没有审阅'))
+  } else if (review.phase === 'done') {
+    const verdict = reviewVerdict(reviewFindings(ctx.worktree))
+    const label = reviewLabel(run.commits ?? 0, WRITER_NAME[review.agent])
+    patch(worktree, token, (s) => {
+      const named = withLabel(s, 'review', label)
+      return verdict.stop ? fail(named, { step: 'review', message: verdict.message, reviewStop: true }) : complete(named, 'review', verdict.note)
+    })
   } else patch(worktree, token, (s) => markFailed(s, 'review', review.phase === 'cancelled' ? '审阅已取消' : `审阅失败：${review.message}`))
 }
 
@@ -804,6 +929,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
 /** 推送 of the base a local 合并 left ahead of its upstream: main pushes the base alone and watches its CI. */
 async function runPushBase(worktree: string, token: number, run: Run): Promise<void> {
   const { ctx } = run
+  patch(worktree, token, (s) => begin(s, 'push'))
   const result = await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree })
   if (!alive(worktree, token)) return
   if (!result.ok) {
@@ -811,6 +937,13 @@ async function runPushBase(worktree: string, token: number, run: Run): Promise<v
     return
   }
   if (result.pushError) {
+    // The main checkout on its base has no branch to propose: the agent moves the commits to one and opens the PR.
+    if (result.pushRefused === true && ctx.branch === ctx.base) {
+      const failure = result.failure ? { ...result.failure, next: 'handoff' as const } : undefined
+      const prompt = protectedBasePrompt({ base: ctx.base, remote: ctx.remote ?? 'origin', commits: run.commits ?? null })
+      patch(worktree, token, (s) => fail(s, { ...stepError(s, run, 'push', result.pushError!, failure), prompt }))
+      return
+    }
     // 改为创建 PR only where a PR can be made.
     const refused = result.pushRefused === true && (await prPossible(ctx))
     if (!alive(worktree, token)) return

@@ -74,18 +74,28 @@ describe('flowSteps', () => {
     expect(startState(input({ kind: 'main' }), '合并到 main')).toMatchObject({ stage: 'running', steps: [{ id: 'merge', state: 'working' }] })
   })
 
-  it('推送 of the base: the push alone, straight away', () => {
+  // The push node: the review (when it runs) before the push, as every push has it.
+  it('推送 of the base: the push alone, or the review first', () => {
     expect(labels({ kind: 'push-base' })).toEqual(['推送 origin/main'])
-    expect(startState(input({ kind: 'push-base', review: true }), '推送 main')).toMatchObject({ stage: 'running', steps: [{ id: 'push', state: 'working' }] })
+    expect(startState(input({ kind: 'push-base' }), '推送 main')).toMatchObject({ stage: 'running', steps: [{ id: 'push', state: 'working' }] })
+    expect(startState(input({ kind: 'push-base', review: true }), '推送 main')).toMatchObject({
+      stage: 'writing',
+      steps: [
+        { id: 'review', state: 'working' },
+        { id: 'push', state: 'pending' }
+      ]
+    })
   })
 
   // 提交 is its own run: no exit has a 提交 step, whatever is left uncommitted.
   it('exit B: write title and body, push the branch, create the PR', () => {
-    expect(labels({ kind: 'pr', agent: 'Codex' })).toEqual(['Codex 写标题和正文', '推送 feat/x', '创建 PR'])
+    expect(labels({ kind: 'pr', agent: 'Codex' })).toEqual(['Codex 写标题和正文', '推送 origin/feat/x', '创建 PR'])
   })
 
   it('pushing to an open PR: just the push', () => {
-    expect(labels({ kind: 'push-pr' })).toEqual(['推送 feat/x'])
+    expect(labels({ kind: 'push-pr' })).toEqual(['推送 origin/feat/x'])
+    // The remote branch the branch was pushed to, when it is named otherwise.
+    expect(labels({ kind: 'push-pr', pullFrom: 'fork/feature' })).toEqual(['推送 fork/feature'])
   })
 
   it('no exit commits: 提交 is a step of the 提交 run only', () => {

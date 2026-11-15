@@ -119,7 +119,19 @@ beforeEach(() => {
     tr: {
       pr: { write: async (r: { kind: string }) => (r.kind === 'pr' ? { ok: true, kind: 'pr', agent: 'claude', title: 'feat: new', body: '' } : { ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit, create, push: async () => ({ ok: true, message: '已推送' }) },
       git: { changes },
-      ship: { shipToMain, pushBase, preflight, sync, pull, diffSince, diffSinceWithCut, handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }), readHandoff },
+      ship: {
+        shipToMain,
+        pushBase,
+        preflight,
+        sync,
+        pull,
+        diffSince,
+        diffSinceWithCut,
+        handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }),
+        readHandoff,
+        // The push node's pull first: nothing came in, nothing to review.
+        prepush: async () => ({ ok: true, pulled: null, range: null, commits: 0 })
+      },
       agent: { onEvent: () => () => {} },
       app: { detectAgents },
       ui: { notify: () => {} }

@@ -83,6 +83,15 @@ describe('parseReviewRequest / triggerAllowed', () => {
     for (const bad of ['加一个登录页', [1], null, [{}]]) expect(() => parseReviewRequest({ ...ok, asked: bad })).toThrow('invalid asked')
   })
 
+  it('takes a commit range of two full commit ids only (the push node), and rejects any other shape', () => {
+    const ok = { root: '/w', agent: 'claude', trigger: 'push' }
+    const range = { from: 'a'.repeat(40), to: 'b'.repeat(40) }
+    expect(parseReviewRequest({ ...ok, range })).toEqual({ ...ok, range })
+    for (const bad of [null, 'a..b', { from: 'HEAD', to: 'b'.repeat(40) }, { from: 'a'.repeat(40) }, { from: '-a', to: 'b'.repeat(40) }]) {
+      expect(() => parseReviewRequest({ ...ok, range: bad })).toThrow('invalid range')
+    }
+  })
+
   it('runs automatic triggers only when their switch is on and the built-in reviewer is chosen', () => {
     const off = DEFAULT_SETTINGS.review
     expect(triggerAllowed('manual', off)).toBe(true)
@@ -97,6 +106,25 @@ describe('parseReviewRequest / triggerAllowed', () => {
 
 // Each case runs git and a fake CLI and waits up to 10 s for the review to settle: the case's own limit is above that.
 describe('startReview', { timeout: 15_000 }, () => {
+  it('reviews only the commits of a range: nothing uncommitted or untracked reaches the reviewer', async () => {
+    const root = repo('range')
+    const from = git(root, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(root, 'pushed.ts'), 'export const pushed = 1\n')
+    git(root, 'add', '.')
+    git(root, 'commit', '-q', '-m', 'the commit the push sends')
+    const to = git(root, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(root, 'a.ts'), 'export const a = notCommitted\n')
+    writeFileSync(join(root, 'loose.ts'), 'untracked\n')
+    fake('claude', `printf '%s' '${claudeJson([])}'`)
+    const o = owner()
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual', range: { from, to } })
+    expect((await settled(o, root)).phase).toBe('done')
+    const stdin = readFileSync(join(bin, 'claude.stdin'), 'utf8')
+    expect(stdin).toContain('+++ b/pushed.ts')
+    expect(stdin).not.toContain('notCommitted')
+    expect(stdin).not.toContain('loose.ts')
+  })
+
   it('sends the diff on stdin, read-only flags on argv, and lands the findings as comments', async () => {
     const root = repo('claude')
     writeFileSync(join(root, 'a.ts'), 'export const a = items[i]\n')

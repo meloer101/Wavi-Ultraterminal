@@ -237,7 +237,8 @@ describe('exitPlan', () => {
   it('pushes to the PR when the chain sees unpushed commits the PR poll has not seen yet', () => {
     const status = { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'aaa', remoteAhead: false } }
     const p = plan({ preflight: ok({ openPr: 7, pushed: true, upstream: { ahead: 1, behind: 0 } }), prStatus: status })
-    expect(p.chain.next?.label).toBe('推送到 PR #7')
+    // The button reads 推送 (the ⋯ menu and ⌘K name the PR).
+    expect(p.chain.next?.label).toBe('推送')
     expect(p.unpushed).toBe(true)
     expect(p.idlePr).toBeNull()
     expect(p.exits.primary).toMatchObject({ kind: 'push-pr', number: 7, label: '推送到 PR #7', blocker: null })

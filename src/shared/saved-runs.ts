@@ -197,7 +197,8 @@ function sanitizeShipState(raw: unknown): ShipState | null {
       ...optional('conflicts', conflicts),
       ...optional('pushRefused', e.pushRefused === true ? true : undefined),
       ...optional('failure', failure),
-      ...optional('prompt', isText(e.prompt, 4096) ? e.prompt : undefined)
+      ...optional('prompt', isText(e.prompt, 4096) ? e.prompt : undefined),
+      ...(e.reviewStop === true ? { reviewStop: true as const } : {})
     }
   }
   if (raw.failedIn !== null && !STAGES.has(raw.failedIn)) return null

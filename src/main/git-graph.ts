@@ -28,6 +28,7 @@ import {
 } from '@shared/git-graph/log'
 import { stampDiffGroup, untrackedFileDiff } from '@shared/background-review'
 import { changeStamp } from '@shared/review-progress'
+import { parseCommitRange } from '@shared/ship-requests'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
 import { appPath, gitEnv, NO_OPTIONAL_LOCKS, pushEnv, runProcess } from './git/run'
 import { isInside, normalizeRelative, workspaceFolder } from './worktree-files'
@@ -458,16 +459,23 @@ async function untrackedDiff(cwd: string, entry: string): Promise<string | null>
 
 /**
  * The text a background review reads: 未提交 (index + working tree vs HEAD, then untracked text files) and 已提交
- * (`base...HEAD`), the same two groups and line numbers as Git · 变更, so its findings land as F5 comments there.
+ * (`base...HEAD`), the same two groups and line numbers as Git · 变更, so its findings land as F5 comments there. With
+ * `range` (two full commit ids) only `from...to`, as 已提交.
  */
-export async function reviewDiff(root: unknown, base: unknown): Promise<ReviewDiff | null> {
+export async function reviewDiff(root: unknown, base: unknown, range?: unknown): Promise<ReviewDiff | null> {
   const cwd = await topLevel(root)
   if (!cwd) return null
+  // Paths as they are (not octal-quoted), like the untracked files' headers, so the review can name every file.
+  const flags = ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '-M']
+  if (range !== undefined) {
+    // The push node's review: only the commits the push sends (`from...to`), nothing uncommitted or untracked.
+    const commits = parseCommitRange(range)
+    if (!commits) return null
+    return { cwd, text: stampDiffGroup(await git(cwd, [...flags, `${commits.from}...${commits.to}`, '--']), 'committed'), skipped: 0 }
+  }
   const listing = await changes(cwd, base)
   if (!listing) return null
   const hasHead = (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() !== ''
-  // Paths as they are (not octal-quoted), like the untracked files' headers, so the review can name every file.
-  const flags = ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '-M']
   const [tracked, untracked, committed] = await Promise.all([
     git(cwd, [...flags, hasHead ? 'HEAD' : EMPTY_TREE, '--']),
     listUntracked(cwd),

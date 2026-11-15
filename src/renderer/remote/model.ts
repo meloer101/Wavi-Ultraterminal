@@ -48,7 +48,8 @@ export function remoteShip(state: ShipState, folders: readonly string[] = []): R
           message: text(error.message, 2000),
           ...(error.output ? { output: hidePaths(error.output, folders).slice(-8000) } : {}),
           conflicts: Boolean(error.conflicts?.length),
-          pushRefused: error.pushRefused === true
+          pushRefused: error.pushRefused === true,
+          ...(error.reviewStop ? { reviewStop: true as const } : {})
         }
       : null
   }

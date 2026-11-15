@@ -91,6 +91,24 @@ describe('sanitizeShipRuns', () => {
     expect(sanitizeShipRuns([pushBase], worktrees)).toEqual([pushBase])
   })
 
+  it('keeps a push the pre-push review stopped (a P0 / P1), with its pull-first step', () => {
+    const steps = [
+      { id: 'sync', label: '拉取 origin/main', state: 'done' },
+      { id: 'review', label: 'Codex 审阅 2 个提交', state: 'failed' },
+      { id: 'push', label: '推送 origin/main', state: 'pending' }
+    ]
+    const stopped = {
+      ...shipRun,
+      kind: 'push-base',
+      state: { ...shipState, kind: 'push-base', title: '推送 main', stage: 'writing', steps, error: { step: 'review', message: '1 个 P1，没有推送', reviewStop: true }, failedIn: 'writing' }
+    }
+    expect(sanitizeShipRuns([stopped], worktrees)).toEqual([stopped])
+    // Anything but true is not a stop.
+    const odd = { ...stopped, state: { ...stopped.state, error: { ...stopped.state.error, reviewStop: 'yes' } } }
+    const { reviewStop: _gone, ...plain } = stopped.state.error
+    expect(sanitizeShipRuns([odd], worktrees)).toEqual([{ ...stopped, state: { ...stopped.state, error: plain } }])
+  })
+
   it('keeps 合入链路 v2 runs (提交 / 同步 / 拉取), the merge method and a classified failure with its hand-off', () => {
     const failure = { kind: 'commit-hook', message: 'pre-commit hook 没通过', next: 'handoff', tail: 'lint failed' }
     const commit = {

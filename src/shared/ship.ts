@@ -81,6 +81,9 @@ export type ShipPreflight =
       /** What 拉取 fetches: `<remote>/<the branch there>` of the branch's upstream (or same-named remote branch), which
        *  can be named otherwise than the local branch; null when the branch was never pushed. Absent from an older main. */
       pullFrom?: string | null
+      /** The project's main checkout on its base (branch === base): the answer is about the base and its upstream
+       *  (`baseUnpushed`, `baseRemote`), with nothing of a branch's own to merge or propose. Absent otherwise. */
+      onBase?: true
     }
   | {
       ok: false
@@ -151,6 +154,35 @@ export interface PushBaseRequest extends PrTarget {
   commit?: string
 }
 
+/**
+ * What a push is about to send, before the push node's review (ShipApi.prepush): `base` the local base (推送 of the
+ * base, also from the main checkout on it), `branch` the branch to its remote branch (推送到 PR #N, 推送), `new-pr` the
+ * branch as a PR proposes it (创建 PR).
+ */
+export interface ShipPrepushRequest extends PrTarget {
+  push: 'base' | 'branch' | 'new-pr'
+}
+
+/** Two full commit ids: the commits `to` has that `from` lacks, read as `git diff from...to`. */
+export interface CommitRange {
+  from: string
+  to: string
+}
+
+/**
+ * The push node's first step (pull first): the remote's commits the local ref lacks are brought in — a fast-forward,
+ * or, for a base with unpushed commits, a rebase of those onto its upstream (never a pushed branch, never a force-push).
+ * `pulled`: what was brought in (null: the remote had nothing new); `range` / `commits`: what the push will send that
+ * the remote lacks (null / 0: nothing). `from` names the remote ref, `<remote>/<branch>`.
+ */
+export type ShipPrepushResult =
+  | { ok: true; pulled: { from: string; commits: number } | null; range: CommitRange | null; commits: number }
+  /** Nothing ran, or what ran was undone: why, in words (a rebase that conflicted away from any checkout is aborted). */
+  | { ok: false; reason: 'blocked'; message: string; from?: string }
+  | { ok: false; reason: 'failed'; failure: GitFailure; from?: string }
+  /** The rebase of the base stopped on these files in the checkout that has the base out (left there to resolve). */
+  | { ok: false; reason: 'conflicts'; files: string[]; from: string; message: string; checkout: string }
+
 /** The diff of the worktree's branch from `since` to HEAD (a fix the agent committed, before Wavi pushes it). */
 export interface DiffSinceRequest extends PrTarget {
   since: string
@@ -187,8 +219,10 @@ export interface ShipApi {
   /** The text the agent wrote, or null while the file is not there yet. */
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
-  /** 推送 of the base after a local 合并 (or after a push failed): pushes the base (nothing is merged). */
+  /** 推送 of the base after a local 合并 (or after a push failed): pulls first, then pushes the base (nothing is merged). */
   pushBase(request: PushBaseRequest): Promise<ShipMainResult>
+  /** The push node's pull first, and what the push will send (the pre-push review's range). Never pushes. */
+  prepush(request: ShipPrepushRequest): Promise<ShipPrepushResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
   /** The same diff, saying whether it was cut at the cap (a file list read from a cut diff is not the whole list). */
   diffSinceWithCut(request: DiffSinceRequest): Promise<DiffSinceAnswer | null>
@@ -222,6 +256,8 @@ export const SHIP_IPC = {
   shipToMain: 'ship:to-main',
   /** invoke(PushBaseRequest) → ShipMainResult */
   pushBase: 'ship:push-base',
+  /** invoke(ShipPrepushRequest) → ShipPrepushResult */
+  prepush: 'ship:prepush',
   /** invoke(DiffSinceRequest) → string | null */
   diffSince: 'ship:diff-since',
   /** invoke(DiffSinceRequest) → DiffSinceAnswer | null */
@@ -350,6 +386,8 @@ export interface ShipError {
   failure?: GitFailure
   /** What 交给 <agent> puts into the agent's input line (never sent): a conflict or a failure, worked out when it happened. */
   prompt?: string
+  /** The pre-push review found a P0 or P1: nothing was pushed; the ways on are 让 <agent> 修 and 照样推送. */
+  reviewStop?: true
 }
 
 export interface ShipState {

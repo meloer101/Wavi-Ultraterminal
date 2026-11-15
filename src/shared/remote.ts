@@ -174,7 +174,8 @@ export interface RemoteShip {
   fields: RemoteShipField[]
   submitLabel: string
   submitBlocker: string | null
-  error: { step: string; message: string; output?: string; conflicts: boolean; pushRefused: boolean } | null
+  /** `reviewStop`: the pre-push review found a P0 / P1 and nothing was pushed (让 <agent> 修 / 照样推送 are on the Mac). */
+  error: { step: string; message: string; output?: string; conflicts: boolean; pushRefused: boolean; reviewStop?: true } | null
 }
 
 /** What the phone may do to an exit (the Ship block's buttons). */
@@ -520,7 +521,7 @@ function windowShip(raw: unknown): RemoteShip | null {
     const message = cleanText(e?.message, 2000)
     const output = e?.output === undefined ? undefined : cleanText(e.output, 8000)
     if (!e || typeof e.step !== 'string' || message === null || output === null) return null
-    error = { step: e.step.slice(0, 20), message, ...(output ? { output } : {}), conflicts: e.conflicts === true, pushRefused: e.pushRefused === true }
+    error = { step: e.step.slice(0, 20), message, ...(output ? { output } : {}), conflicts: e.conflicts === true, pushRefused: e.pushRefused === true, ...(e.reviewStop === true ? { reviewStop: true as const } : {}) }
   }
   return { kind: v.kind, title, agent, stage: v.stage, steps, texts: { commit, title: shipTitle, body, draft: t.draft }, fields: v.fields as RemoteShipField[], submitLabel, submitBlocker, error }
 }

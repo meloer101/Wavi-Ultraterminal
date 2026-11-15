@@ -3,9 +3,10 @@
 // the state line, the primary and secondary move, and every chain action in a fixed order with the reason it cannot
 // run now. Pure; Git · 变更, the phone (PRD F22) and ⌘K read it. Rules, first match decides (a–g):
 //   a. a merge / rebase / cherry-pick stopped → hand the conflicts to the agent, or 继续; 中止 beside it
-//   b. the main checkout on its base → 提交 while files are ticked, every other action waits with the reason; a failed
-//      preflight (detached HEAD) / no project → only the reason (while the preflight runs: d and e still apply, else
-//      提交 while files are ticked, else the two exits wait as 正在检查…)
+//   b. the main checkout on its base → 提交 while files are ticked, else 推送 of the base while it has commits its
+//      upstream lacks, every other action waits with the reason; a failed preflight (detached HEAD) / no project → only
+//      the reason (while the preflight runs: d and e still apply, else 提交 while files are ticked, else the two exits
+//      wait as 正在检查…)
 //   c. an open PR → 拉取 (or hand a diverged branch to the agent), else 提交 while files are ticked, else 同步 <base>
 //      while it conflicts with the base, else 推送 to it, else 合并 PR #N… (once the PR's details are read)
 //   d. merged (PR merged, or the branch's work is in the base) and clean → 已经全部合并, 归档… (still checking while the
@@ -42,7 +43,7 @@ export type ChainMoveId = ChainActionId | 'handoff' | 'continue' | 'abort'
 /** ok: done (merged) · blocked: something stands in the way · working: Wavi is still checking · info: a fact to act on. */
 export type ChainTone = 'ok' | 'blocked' | 'working' | 'info'
 
-/** Which rule decided (a–g above); `base`: the main checkout on its base (rule b, only 提交 runs); `checking` while the
+/** Which rule decided (a–g above); `base`: the main checkout on its base (rule b: 提交, 推送 of the base); `checking` while the
  *  preflight runs; `unpushed`: merged into the local base, which its upstream lacks (rule d, 推送 of the base). */
 export type ChainStage = 'operation' | 'stuck' | 'base' | 'checking' | 'pr' | 'merged' | 'unpushed' | 'empty' | 'conflicts' | 'exits'
 
@@ -356,6 +357,10 @@ export function shipChain(input: ChainInput): ChainState {
 
   // 提交 needs neither a branch of its own nor the preflight's answer: it runs on the base in the main checkout.
   const commitBlocked = onBase ? first(operation && CHAIN_TEXT.operation(operation.kind), !input.projectRoot && CHAIN_TEXT.noProject) : blocked
+  // 推送 of the base runs there too (path ①), once the preflight answers about the base.
+  const pushBaseBlocked = onBase
+    ? first(operation && CHAIN_TEXT.operation(operation.kind), !input.projectRoot && CHAIN_TEXT.noProject, !preflight && CHAIN_TEXT.checking, preflight?.ok === false && preflight.message)
+    : blocked
 
   const own: Record<ChainActionId, { label: string; blocker: string | null }> = {
     commit: { label: CHAIN_LABEL.commit, blocker: first(uncommitted === 0 && CHAIN_TEXT.nothingToCommit, ticked === 0 && CHAIN_TEXT.noTicked) },
@@ -433,11 +438,12 @@ export function shipChain(input: ChainInput): ChainState {
   const actions: ChainAction[] = CHAIN_ACTION_IDS.map((id) => ({
     id,
     label: own[id].label,
-    blocker: id === 'archive' ? own[id].blocker : ((id === 'commit' ? commitBlocked : blocked) ?? own[id].blocker)
+    blocker: id === 'archive' ? own[id].blocker : ((id === 'commit' ? commitBlocked : id === 'push-base' ? pushBaseBlocked : blocked) ?? own[id].blocker)
   }))
   const move = (id: ChainActionId): ChainMove => {
     const found = actions.find((a) => a.id === id)!
-    return { id, label: found.label, blocker: found.blocker }
+    // Every push reads 推送 on the button; the ⋯ menu and ⌘K name the PR (推送到 PR #N).
+    return { id, label: id === 'pr' && pr ? CHAIN_LABEL.push : found.label, blocker: found.blocker }
   }
   const handoff: ChainMove = { id: 'handoff', label: CHAIN_LABEL.handoff(input.agent), blocker: input.agent ? null : CHAIN_TEXT.noAgent }
   const headlineOf = (next: ChainMove | null): ChainHeadline | null =>
@@ -463,8 +469,13 @@ export function shipChain(input: ChainInput): ChainState {
     return state('operation', { tone: 'info', text: CHAIN_TEXT.operation(operation.kind) }, { id: 'continue', label: CHAIN_LABEL.continue, blocker: null }, abort)
   }
 
-  // b. On the base in the main checkout only 提交 runs; nowhere to go otherwise.
-  if (onBase) return state('base', { tone: 'info', text: CHAIN_TEXT.onBase }, ticked > 0 ? move('commit') : null)
+  // b. On the base in the main checkout: 提交 while files are ticked, else 推送 of the base's own commits (path ①).
+  if (onBase) {
+    if (ticked > 0) return state('base', { tone: 'info', text: CHAIN_TEXT.onBase }, move('commit'))
+    const push = move('push-base')
+    if (baseUnpushed > 0 && !push.blocker) return state('base', { tone: 'info', text: CHAIN_TEXT.baseUnpushed(base, baseUnpushed) }, push)
+    return state('base', { tone: 'info', text: CHAIN_TEXT.onBase }, null)
+  }
   if (!input.projectRoot) return state('stuck', { tone: 'blocked', text: CHAIN_TEXT.noProject }, null)
   if (preflight?.ok === false) return state('stuck', { tone: 'blocked', text: preflight.message }, null)
 
@@ -711,6 +722,23 @@ export function mergeConflictPrompt(input: { base: string; branch: string; confl
   const tail = `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${branchArg(base, '基线分支')}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。${NO_PUSH}`
   if (input.conflicts.length === 0) return marked(`${head}。${tail}`)
   return withFiles(head, '：', input.conflicts, tail, true)
+}
+
+/**
+ * 交给 <agent> when the remote refused 推送 of the base as protected in the main checkout on it (path ①): put these
+ * commits on a new branch, reset the local base to its upstream, push the new branch and open a PR with gh; never push
+ * the base, never force. Branch names are quoted data.
+ */
+export function protectedBasePrompt(input: { base: string; remote: string; commits: number | null }): string {
+  const base = refText(input.base, '基线分支')
+  const remote = shellWord(input.remote) ?? '<远程仓库>'
+  const upstream = shellWord(input.base) === null || shellWord(input.remote) === null ? '<远程的基线分支>' : (shellWord(`refs/remotes/${input.remote}/${input.base}`) ?? '<远程的基线分支>')
+  // `git branch -f` takes the branch's name (a full ref would make a branch of that name).
+  const name = shellWord(input.base) ?? '<基线分支>'
+  const count = input.commits && input.commits > 0 ? ` ${input.commits} 个` : ''
+  return marked(
+    `${base} 受保护，${refText(input.remote, '远程仓库')} 不收直接推送${NAMES_QUOTED(false)}。请在当前目录里把本地 ${base} 上还没推送的${count}提交移到一个新分支（git switch -c <新分支名>），再把本地 ${base} 重置到远程的（git branch -f ${name} ${upstream}），然后把新分支推送到 ${remote}，用 gh pr create --base ${name} 开一个 PR，完成后告诉我。不要推送 ${base}，不要强推。`
+  )
 }
 
 /** What the chain hands to the agent: 同步's conflicts (by the step it would have run) or an operation's. `base` is the

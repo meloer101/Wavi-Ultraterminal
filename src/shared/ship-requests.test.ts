@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
+import { parseCommitRange, parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
 
 const target = { root: '/r', worktree: '/w' }
 
@@ -40,6 +40,22 @@ describe('parsePushBaseRequest', () => {
     expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'abc1234' })).toEqual({ root: '/r', worktree: '/w', commit: 'abc1234' })
     expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'HEAD~1' })).toBeNull()
     expect(parsePushBaseRequest({ root: 'r', worktree: '/w' })).toBeNull()
+  })
+})
+
+describe('parsePrepushRequest / parseCommitRange (the push node)', () => {
+  it('accepts the three pushes only', () => {
+    for (const push of ['base', 'branch', 'new-pr']) expect(parsePrepushRequest({ ...target, push })).toEqual({ ...target, push })
+    for (const push of ['force', '', undefined, 'toString']) expect(parsePrepushRequest({ ...target, push })).toBeNull()
+    expect(parsePrepushRequest({ root: 'r', worktree: '/w', push: 'base' })).toBeNull()
+  })
+
+  it('takes two full commit ids, nothing git could read as an option or a revision expression', () => {
+    const range = { from: 'a'.repeat(40), to: 'b'.repeat(64) }
+    expect(parseCommitRange(range)).toEqual(range)
+    for (const bad of [null, 'a..b', { from: 'HEAD~1', to: 'b'.repeat(40) }, { from: 'a'.repeat(39), to: 'b'.repeat(40) }, { from: 'A'.repeat(40), to: 'b'.repeat(40) }, { from: '--all', to: 'b'.repeat(40) }]) {
+      expect(parseCommitRange(bad)).toBeNull()
+    }
   })
 })
 

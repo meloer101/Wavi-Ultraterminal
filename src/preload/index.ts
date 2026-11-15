@@ -259,6 +259,7 @@ const api: TrApi = {
     readHandoff: (request) => ipcRenderer.invoke(SHIP_IPC.readHandoff, request),
     shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
     pushBase: (target) => ipcRenderer.invoke(SHIP_IPC.pushBase, target),
+    prepush: (request) => ipcRenderer.invoke(SHIP_IPC.prepush, request),
     diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
     diffSinceWithCut: (request) => ipcRenderer.invoke(SHIP_IPC.diffSinceWithCut, request),
     discardSince: (request) => ipcRenderer.invoke(SHIP_IPC.discardSince, request),

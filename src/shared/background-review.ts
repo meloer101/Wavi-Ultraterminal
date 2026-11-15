@@ -2,6 +2,7 @@
 // reviewer CLI is invoked, and how its JSON becomes F5 comments. Nothing here starts a process.
 import { headlessAgent, type HeadlessAgent } from './agents'
 import { clipCode, sanitizeReviewComments, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
+import type { CommitRange } from './ship'
 import { isWaviText } from './ship-chain'
 
 /** Claude Code 2.1.303 still sends 2_900_000 characters; ~2_950_000 is a local `Prompt is too long`. */
@@ -792,6 +793,9 @@ export interface ReviewRequest {
   force?: boolean
   /** What the user asked of the agent in this worktree's session, oldest first (its hooks' prompts); shown to the reviewer. */
   asked?: string[]
+  /** Only these commits (the push node's review: what a push sends that the remote lacks): committed changes alone,
+   *  nothing uncommitted or untracked, always read in full. Absent: the worktree's whole change. */
+  range?: CommitRange
 }
 
 /** `incremental`: only what changed since the worktree's previous review was read; its other findings were kept. */

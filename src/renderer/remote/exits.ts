@@ -168,6 +168,8 @@ export async function remoteShipAction(sessionId: string, action: RemoteShipActi
     }
     case 'retry': {
       if (!state.error) return remoteFail('没有要重试的步骤')
+      // The push node's review stopped it: 让 <agent> 修 and 照样推送 are the Mac's buttons, not another review.
+      if (state.error.reviewStop) return remoteFail('审阅找到了 P0 / P1：在 Mac 上选择让 agent 修或照样推送')
       const blocker = failedInRun ? submitBlocker(state) : null
       if (blocker) return remoteFail(blocker)
       retryShip(path)

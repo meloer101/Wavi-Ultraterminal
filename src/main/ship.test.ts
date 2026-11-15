@@ -82,7 +82,7 @@ vi.mock('@shared/risk-markers', () => ({
 
 const { detectGh, checkWorktree, pushBranch, watchTargets, unwatch } = await import('./pull-requests')
 const { changes } = await import('./git-graph')
-const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, diffSinceWithCut, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipRisks, shipToMain, syncWorktree } = await import('./ship')
+const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, diffSinceWithCut, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipPrepush, shipRisks, shipToMain, syncWorktree } = await import('./ship')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 Object.assign(process.env, identity, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false' })
@@ -168,13 +168,14 @@ afterEach(() => resetShip())
 afterAll(() => rmSync(base, { recursive: true, force: true }))
 
 describe('preflight', () => {
-  it('refuses folders that are not workspace projects, not their worktrees, or the base itself', async () => {
+  it('refuses folders that are not workspace projects, not their worktrees, or a detached HEAD', async () => {
     const { root, wt } = setup()
     expect(await shipPreflight({ root: join(base, 'elsewhere'), worktree: wt })).toMatchObject({ ok: false })
     expect(await shipPreflight({ root, worktree: join(base, 'nope') })).toMatchObject({ ok: false, message: '不是这个项目的 worktree' })
     expect(await shipPreflight({ root, worktree: 'relative' })).toEqual({ ok: false, message: '请求无效', operation: null })
     expect(await shipPreflight(null)).toEqual({ ok: false, message: '请求无效', operation: null })
-    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: false, message: '这是基线分支本身，没有可以合并的改动' })
+    // The main checkout on its base answers about the base (path ①, the push node).
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: true, onBase: true, base: 'main', branch: 'main' })
     git(wt, 'checkout', '-q', '--detach')
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: false, message: '处于分离 HEAD，没有分支可以合并' })
   })
@@ -1529,5 +1530,169 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
     expect(sha(bare, 'main')).toBe(first.commit)
     expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: first.commit, url: `https://github.com/acme/widget/commit/${first.commit}/checks` })
+  })
+})
+
+// The push node: every push pulls first (a base with unpushed commits is rebased onto its upstream, never force-pushed),
+// and says what it will send (the pre-push review's range). Path ①: the main checkout on its base pushes the base.
+describe('the push node · pull first', () => {
+  /** The remote's main moves on (another clone pushes `file`), and the local main has one commit of its own. */
+  function aheadAndBehind(options: { conflict?: boolean } = {}): { root: string; wt: string; bare: string; own: string; upstream: string } {
+    const made = setup({ github: false })
+    const other = cloneOf(made.bare)
+    commit(other, options.conflict ? 'a.txt' : 'up.txt', options.conflict ? 'one\nTWO UPSTREAM\nthree\n' : 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    commit(made.root, 'a.txt', options.conflict ? 'one\nTWO LOCAL\nthree\n' : 'one\ntwo\nthree\nfour\n', 'local work on main')
+    return { ...made, own: sha(made.root, 'main'), upstream: sha(other, 'main') }
+  }
+  const subjects = (cwd: string, ref: string) => git(cwd, 'log', '--format=%s', ref).trim().split('\n')
+  const worktreeCount = (root: string) => git(root, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).length
+
+  it('rebases the base\'s unpushed commits onto its upstream in the main checkout, then pushes', async () => {
+    const { root, wt, bare, upstream } = aheadAndBehind()
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'main'))
+    expect(subjects(root, 'main').slice(0, 3)).toEqual(['local work on main', 'upstream work', 'init'])
+    expect(git(root, 'merge-base', '--is-ancestor', upstream, 'main')).toBe('')
+    // Still on main, nothing left over in the main checkout.
+    expect(git(root, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('main')
+    expect(git(root, 'status', '--porcelain')).toBe('')
+  })
+
+  it('rebases the base away from every working tree when nobody has it out, and leaves no worktree behind', async () => {
+    const { root, wt, bare, own } = aheadAndBehind()
+    git(root, 'checkout', '-q', '--detach')
+    const listed = worktreeCount(root)
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'refs/heads/main'))
+    expect(subjects(root, 'refs/heads/main').slice(0, 2)).toEqual(['local work on main', 'upstream work'])
+    // The detached main checkout was not touched; no temporary worktree stays listed.
+    expect(sha(root, 'HEAD')).toBe(own)
+    expect(worktreeCount(root)).toBe(listed)
+  })
+
+  it('aborts a rebase away from the working trees on conflicts: the base and the remote stay as they were', async () => {
+    const { root, wt, bare, own } = aheadAndBehind({ conflict: true })
+    git(root, 'checkout', '-q', '--detach')
+    const remoteBefore = sha(bare, 'main')
+    const listed = worktreeCount(root)
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: false, step: 'push', reason: 'blocked' })
+    expect(result.ok ? '' : result.message).toMatch(/^把 main 的提交变基到 origin\/main 时冲突（a\.txt），已放弃，main 没有变化/)
+    expect(sha(root, 'refs/heads/main')).toBe(own)
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(worktreeCount(root)).toBe(listed)
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toMatchObject({ ok: false, reason: 'blocked', from: 'origin/main' })
+  })
+
+  it('leaves the rebase stopped in the main checkout on conflicts there (rule a takes it), nothing pushed', async () => {
+    const { root, bare } = aheadAndBehind({ conflict: true })
+    const remoteBefore = sha(bare, 'main')
+    const result = await shipPrepush({ root, worktree: root, push: 'base' })
+    expect(result).toMatchObject({ ok: false, reason: 'conflicts', files: ['a.txt'], from: 'origin/main', checkout: realpathSync(root) })
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: false, operation: { kind: 'rebase', unresolved: ['a.txt'] } })
+    git(root, 'rebase', '--abort')
+  })
+
+  it('refuses to rebase a base whose checkout has uncommitted tracked changes', async () => {
+    const { root, wt, own } = aheadAndBehind()
+    writeFileSync(join(root, 'a.txt'), 'dirty\n')
+    const result = await shipPrepush({ root, worktree: wt, push: 'base' })
+    expect(result).toMatchObject({ ok: false, reason: 'blocked', from: 'origin/main' })
+    expect(result.ok ? '' : 'message' in result ? result.message : '').toContain('main 的工作区有未提交的改动')
+    expect(sha(root, 'main')).toBe(own)
+  })
+
+  it('says what a push of the base will send once pulled: the range upstream..base', async () => {
+    const { root, wt } = aheadAndBehind()
+    const result = await shipPrepush({ root, worktree: wt, push: 'base' })
+    expect(result).toMatchObject({ ok: true, pulled: { from: 'origin/main', commits: 1 }, commits: 1 })
+    if (!result.ok) throw new Error('not pulled')
+    expect(result.range).toEqual({ from: sha(root, 'refs/remotes/origin/main'), to: sha(root, 'main') })
+    // Pulled already: nothing more comes in the second time.
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toMatchObject({ ok: true, pulled: null, commits: 1 })
+  })
+
+  it('fast-forwards a pushed branch to its remote branch first, and sends only what the remote lacks', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const other = cloneOf(bare)
+    git(other, 'checkout', '-q', 'feat')
+    commit(other, 'remote.txt', 'r\n', 'pushed from elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    const pulled = await shipPrepush({ root, worktree: wt, push: 'branch' })
+    expect(pulled).toMatchObject({ ok: true, pulled: { from: 'origin/feat', commits: 1 }, range: null, commits: 0 })
+    expect(sha(wt, 'HEAD')).toBe(sha(other, 'feat'))
+    commit(wt, 'mine.txt', 'm\n', 'mine')
+    const next = await shipPrepush({ root, worktree: wt, push: 'branch' })
+    expect(next).toMatchObject({ ok: true, pulled: null, commits: 1, range: { from: sha(other, 'feat'), to: sha(wt, 'HEAD') } })
+    // 创建 PR proposes everything since the base.
+    expect(await shipPrepush({ root, worktree: wt, push: 'new-pr' })).toMatchObject({ ok: true, commits: 3, range: { from: sha(root, 'main'), to: sha(wt, 'HEAD') } })
+  })
+
+  it('never rebases a pushed branch: diverged from its remote branch fails as diverged', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const other = cloneOf(bare)
+    git(other, 'checkout', '-q', 'feat')
+    commit(other, 'remote.txt', 'r\n', 'pushed from elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    commit(wt, 'mine.txt', 'm\n', 'mine')
+    const before = sha(wt, 'HEAD')
+    expect(await shipPrepush({ root, worktree: wt, push: 'branch' })).toMatchObject({ ok: false, reason: 'failed', failure: { kind: 'diverged' }, from: 'origin/feat' })
+    expect(sha(wt, 'HEAD')).toBe(before)
+  })
+
+  it('refuses a request that is not one of the three pushes', async () => {
+    const { root, wt } = setup({ github: false })
+    expect(await shipPrepush({ root, worktree: wt, push: 'force' })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
+    expect(await shipPrepush({ root: join(base, 'elsewhere'), worktree: wt, push: 'base' })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
+  })
+})
+
+describe('path ① · the main checkout on its base', () => {
+  it('answers the preflight on the base: its unpushed commits, where it goes', async () => {
+    const { root } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({
+      ok: true,
+      onBase: true,
+      branch: 'main',
+      base: 'main',
+      ahead: 0,
+      merged: false,
+      baseUnpushed: 1,
+      baseRemote: 'origin',
+      remote: 'origin',
+      pullFrom: 'origin/main',
+      openPr: null
+    })
+    // A linked worktree on the base is no main checkout: still nothing to ship there.
+    const linked = join(base, `wt-base-${++counter}`)
+    git(root, 'checkout', '-q', '--detach')
+    git(root, 'worktree', 'add', '-q', linked, 'main')
+    expect(await shipPreflight({ root, worktree: linked })).toMatchObject({ ok: false, message: '这是基线分支本身，没有可以合并的改动' })
+  })
+
+  it('pushes HEAD of the base from the main checkout and watches its CI keyed by the main checkout', async () => {
+    const { root, bare } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    const head = sha(root, 'main')
+    expect(await pushBaseAgain({ root, worktree: root })).toEqual({ ok: true, commit: head, pushed: true })
+    expect(sha(bare, 'main')).toBe(head)
+    expect(await checkBaseCi(root, true)).toMatchObject({ base: 'main', sha: head, worktree: root })
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: true, onBase: true, baseUnpushed: 0 })
+  })
+
+  it('says a refused push of the base is one (the run offers the hand-off there)', async () => {
+    const { root, bare } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    const hook = join(bare, 'hooks', 'pre-receive')
+    writeFileSync(hook, '#!/bin/sh\necho "remote: error: GH006: Protected branch update failed for refs/heads/main." >&2\nexit 1\n')
+    chmodSync(hook, 0o755)
+    expect(await pushBaseAgain({ root, worktree: root })).toMatchObject({ ok: true, pushed: false, pushRefused: true, failure: { kind: 'protected-branch' } })
   })
 })

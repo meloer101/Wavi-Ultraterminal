@@ -232,10 +232,10 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     case 'pull':
       return startShip({ ...ctx, paths: null }, 'pull', label, { head, ...(preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {}) })
     case 'push':
-      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label, { head })
+      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label, { head, ...(preflight.pullFrom ? { pullFrom: preflight.pullFrom } : {}) })
     case 'pr':
       // The chain's open PR (the poll's, else the preflight's number while gh is not ready): a push to it, never 创建 PR.
-      return startShip(ctx, prRunKind(chain), label, { head })
+      return startShip(ctx, prRunKind(chain), label, { head, ...(preflight.pullFrom ? { pullFrom: preflight.pullFrom } : {}) })
     case 'main':
       // 合并: the local squash, straight away; the block's title names the base.
       return startShip({ ...ctx, paths: null }, 'main', CHAIN_LABEL.mergeTo(chain.base), { head })

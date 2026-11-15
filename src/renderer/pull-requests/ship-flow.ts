@@ -2,8 +2,11 @@
 // which steps each run has (the two exits, 推送 of the base, 推送 to a PR, 提交, 同步 <base>, 拉取), how they advance, what a failure leaves
 // and what gets the user on. Pure; ship-runner.ts does the work and ShipBlock.tsx draws it.
 import type { GitFailure, GitFailureKind, GitFailureNext } from '@shared/git-failures'
-import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
+import type { ReviewComment } from '@shared/review-comments'
+import type { ReviewSettings } from '@shared/settings'
+import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipPrepushRequest, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import { AS_DATA, branchArg, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
+import { countsText } from '../review/review-block-model'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
@@ -17,7 +20,8 @@ export interface FlowInput {
   remote: string | null
   /** 推送 of the base: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
   baseRemote?: string | null
-  /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`); omitted: `<remote>/<branch>`. */
+  /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`), which is also where a push of the
+   *  branch goes; omitted: `<remote>/<branch>`. */
   pullFrom?: string | null
   /** The background review runs first (推送前 / 合并前审阅 is on and the diff has none). */
   review: boolean
@@ -82,16 +86,19 @@ export function flowSteps(input: FlowInput): FlowStep[] {
   // 合并 is local, a plain action: one squash into the base, titled after the session — no text to write, no review,
   // no push (推送 of the base is the chain's next run).
   if (kind === 'main') return [step('merge', `合并到 ${base}`)]
+  // The push node: pull first (a step only once it brought something in), the review, the push.
+  if (input.review) steps.push(step('review', '审阅'))
   if (kind === 'push-base') {
     const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
-    return [step('push', `推送 ${pushTo ?? 'origin'}/${base}`)]
+    return [...steps, step('push', `推送 ${pushTo ?? 'origin'}/${base}`)]
   }
-  if (input.review) steps.push(step('review', '审阅'))
-  // The exits ship only what is committed: 提交 is a run of its own, never a step of theirs.
+  // The exits ship only what is committed: 提交 is a run of its own, never a step of theirs. The push names the remote
+  // branch it goes to.
+  const pushTo = `推送 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`
   if (kind === 'pr') {
-    steps.push(write('写标题和正文'), step('push', `推送 ${branch}`), step('create', '创建 PR'))
+    steps.push(write('写标题和正文'), step('push', pushTo), step('create', '创建 PR'))
   } else {
-    steps.push(step('push', `推送 ${branch}`))
+    steps.push(step('push', pushTo))
   }
   return steps
 }
@@ -299,9 +306,10 @@ export const isExitRun = (kind: ShipKind): boolean => kind === 'main' || kind ==
  * 拉取, 提交…, …), 改为创建 PR, or 交给 <agent>; `retry` for a step Wavi refused before git ran (no failure) or a network
  * error; null: only 取消 (the message says where to go).
  */
-export type FailureWay = { kind: 'chain'; id: ChainActionId } | { kind: 'create-pr' } | { kind: 'handoff' } | { kind: 'retry' } | null
+export type FailureWay = { kind: 'chain'; id: ChainActionId } | { kind: 'create-pr' } | { kind: 'handoff' } | { kind: 'retry' } | { kind: 'review' } | null
 
-export function failureWay(error: Pick<ShipError, 'failure' | 'pushRefused' | 'conflicts' | 'prompt'>): FailureWay {
+export function failureWay(error: Pick<ShipError, 'failure' | 'pushRefused' | 'conflicts' | 'prompt' | 'reviewStop'>): FailureWay {
+  if (error.reviewStop) return { kind: 'review' }
   if (error.conflicts && error.conflicts.length > 0) return { kind: 'handoff' }
   const failure = error.failure
   if (!failure) return error.pushRefused ? { kind: 'create-pr' } : { kind: 'retry' }
@@ -387,6 +395,58 @@ export function divergedPrompt(input: { branch: string; remote: string }): strin
 /** The icon of the block's title: a run's kind, or `push` for the chain's plain 推送 (a push-pr run with no PR). */
 export function titleIcon(state: Pick<ShipState, 'kind' | 'title'>): ShipKind | 'push' {
   return state.kind === 'push-pr' && state.title === CHAIN_LABEL.push ? 'push' : state.kind
+}
+
+// --- the push node: pull first → pre-push review → push ----------------------------------------------------------
+
+/** Who starts a push: the chain (a button, the ⋯ menu, ⌘K, the phone) or 自动修复, whose fixes are never reviewed (its
+ *  brakes ran instead). */
+export type PushOrigin = 'chain' | 'auto-fix'
+
+/** The pull first a run starts with (ShipPrepushRequest's `push`), or null for a run that pushes nothing. */
+export function prepushOf(kind: ShipKind): ShipPrepushRequest['push'] | null {
+  if (kind === 'push-base') return 'base'
+  if (kind === 'push-pr') return 'branch'
+  if (kind === 'pr') return 'new-pr'
+  return null
+}
+
+/** The push node's review runs: a push the chain started, the 推送前审阅 switch on with the built-in reviewer, and a
+ *  headless reviewer for the session's agent. Never for 自动修复. */
+export function prePushReview(input: { origin: PushOrigin; kind: ShipKind; review: Pick<ReviewSettings, 'mode' | 'beforePush'>; reviewer: boolean }): boolean {
+  if (input.origin !== 'chain' || prepushOf(input.kind) === null) return false
+  return input.review.mode === 'builtin' && input.review.beforePush && input.reviewer
+}
+
+export const pullLabel = (from: string): string => `拉取 ${from}`
+
+/** `审阅 3 个提交`, `Codex 审阅 3 个提交` once the reviewer is known. */
+export const reviewLabel = (commits: number, reviewer?: string): string => `${reviewer ? `${reviewer} ` : ''}审阅 ${commits} 个提交`
+
+const pullStep = (from: string, state: StepState): FlowStep => ({ id: 'sync', label: pullLabel(from), state })
+
+/** Pulling first went through: what it brought in shows as a done step before the others; nothing brought in shows
+ *  nothing (a step an earlier try failed at is done). */
+export function pulledFirst(state: ShipState, pulled: { from: string } | null): ShipState {
+  const has = state.steps.some((s) => s.id === 'sync')
+  if (!pulled) return has ? complete(state, 'sync') : state
+  const step = pullStep(pulled.from, 'done')
+  return { ...state, steps: has ? state.steps.map((s) => (s.id === 'sync' ? step : s)) : [step, ...state.steps] }
+}
+
+/** Pulling first failed: the step shows, failed, before the others, which wait again. */
+export function pullFirstFailed(state: ShipState, from: string, error: Omit<ShipError, 'step'>): ShipState {
+  const steps = state.steps.some((s) => s.id === 'sync') ? state.steps : [pullStep(from, 'pending'), ...state.steps]
+  const waiting = steps.map((s): FlowStep => (s.state === 'working' ? { ...s, state: 'pending', note: undefined } : s))
+  return fail({ ...state, steps: waiting }, { ...error, step: 'sync' })
+}
+
+/** What the pre-push review's findings mean for the push: any P0 or P1 stops it (`message`, under the step); P2 / P3
+ *  only say how many (`note`, beside it). */
+export function reviewVerdict(findings: readonly Pick<ReviewComment, 'severity'>[]): { stop: boolean; note: string; message: string } {
+  const counts = countsText(findings)
+  const stop = findings.some((f) => f.severity === 'P0' || f.severity === 'P1')
+  return { stop, note: counts || '没有发现问题', message: `${counts}，没有推送` }
 }
 
 /**

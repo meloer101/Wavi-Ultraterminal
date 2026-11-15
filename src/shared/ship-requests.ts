@@ -1,7 +1,7 @@
 // Validation of what the renderer sends to the ship handlers (src/shared/ship.ts): main trusts none of it. Pure.
 import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, oneLine, type MergeMethod } from './git-merge'
 import { MAX_SHIP_FILES, parsePrTarget } from './pull-requests'
-import type { DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest, ShipOperationRequest } from './ship'
+import type { CommitRange, DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest, ShipOperationRequest, ShipPrepushRequest } from './ship'
 import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
 
 const MAX_PATH = 4096
@@ -44,6 +44,23 @@ export function parsePushBaseRequest(raw: unknown): PushBaseRequest | null {
   if (!target || !isRecord(raw)) return null
   if (raw.commit === undefined) return target
   return typeof raw.commit === 'string' && SINCE.test(raw.commit) ? { ...target, commit: raw.commit } : null
+}
+
+const PREPUSH: ReadonlySet<unknown> = new Set(['base', 'branch', 'new-pr'])
+
+/** The push node's pull first: a worktree and which push. */
+export function parsePrepushRequest(raw: unknown): ShipPrepushRequest | null {
+  const target = parsePrTarget(raw)
+  if (!target || !isRecord(raw) || !PREPUSH.has(raw.push)) return null
+  return { ...target, push: raw.push as ShipPrepushRequest['push'] }
+}
+
+/** A commit range the renderer passes on (the pre-push review's): two full commit ids, nothing a shell or git could read
+ *  as an option or a revision expression. */
+export function parseCommitRange(raw: unknown): CommitRange | null {
+  if (!isRecord(raw) || typeof raw.from !== 'string' || typeof raw.to !== 'string') return null
+  if (!FULL_SHA.test(raw.from) || !FULL_SHA.test(raw.to)) return null
+  return { from: raw.from, to: raw.to }
 }
 
 export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
