@@ -250,7 +250,7 @@ export function Sidebar() {
           }
           onClick={onOverview}
         />
-        <NavItem icon={<Gauge {...ICON} />} label={m.usage} shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
+        <NavItem icon={<Clock {...ICON} />} label={m.schedules} shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
         <SelectionDrops ids={inPanes} />
@@ -309,7 +309,7 @@ export function Sidebar() {
       </div>
       <div className={styles.footer}>
         <UpdateEntry />
-        <NavItem icon={<Clock {...ICON} />} label={m.schedules} shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
+        <NavItem icon={<Gauge {...ICON} />} label={m.usage} shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
         <NavItem icon={<SlidersHorizontal {...ICON} />} label={m.settings} shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
       </div>
     </>
