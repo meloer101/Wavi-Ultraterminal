@@ -16,8 +16,11 @@ import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
+import { useLang } from '../i18n'
 
 export function SecondaryShell() {
+  // A language change re-renders the whole window from here (memo'd components subscribe themselves).
+  useLang()
   const { win } = useWindowScope()
   const record = useSecondaryWindow()
   const collapsed = useSidebarCollapsed()
