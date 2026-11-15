@@ -320,7 +320,7 @@ enum PhoneCommand: Sendable {
   }
 }
 
-/// A request's answer: `data` on success, the reason otherwise (the Mac's, in the language the phone told it).
+/// A request's answer: `data` on success, the reason otherwise (the Mac's, in the Mac's language for now: PRD v1.193).
 enum RemoteResult: Sendable {
   case ok(JSONValue?)
   case failed(String)

@@ -58,7 +58,7 @@ struct Shared: Decodable, Sendable {
 }
 
 /// The language the app shows: the one iOS picked for it from the bundle's localizations (Settings › Wavi › Language,
-/// else the system's order). The Mac is told it in `hello` and writes what it sends in it (PRD F22).
+/// else the system's order). The Mac is told it in `hello`; what the Mac writes is still in its own language (PRD v1.193).
 enum AppLanguage: String, Sendable {
   case zh, en
 

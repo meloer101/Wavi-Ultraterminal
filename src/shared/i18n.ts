@@ -59,8 +59,8 @@ export function onLangChange(listener: (lang: Lang) => void): () => void {
 }
 
 /**
- * Runs `fn` with `lang` as the current language and restores the previous one: text built for someone else, such
- * as the phone, which shows its own language (PRD F22). Synchronous only — the language is process-wide.
+ * Runs `fn` with `lang` as the current language and restores the previous one: text built in a language other than
+ * this process's (the iPhone's word tables in phone-assets.test.ts). Synchronous only — the language is process-wide.
  */
 export function withLang<T>(lang: Lang, fn: () => T): T {
   const previous = current

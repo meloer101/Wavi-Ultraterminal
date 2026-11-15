@@ -11,7 +11,7 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
-import { defineMessages, LANGS, pick } from './i18n'
+import { defineMessages, LANGS, pick, type Lang } from './i18n'
 import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
 import type { SessionId, SessionStatus, SessionUi } from './types'
@@ -711,7 +711,14 @@ const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '
 /** A title between either language's quotes: one capture group per language, the matching one set. */
 const TITLE = `(?:${LANGS.map((lang) => `${escapeRe(M[lang].open)}(.+?)${escapeRe(M[lang].close)}`).join('|')})`
 const REPORT_HEAD = new RegExp(`^— ${TITLE} · (.+) · id (\\S+)$`)
-const HINT_LINE = new RegExp(`^(?:${LANGS.map((lang) => `${escapeRe(M[lang].hintOpen)}.*${escapeRe(M[lang].hintClose)}`).join('|')})$`)
+/** Wavi's own hint lines in a report (noReply, tooLong, cutShort), with the child's id as any word. */
+const hintOf = (lang: Lang): string[] => {
+  const id = '\u0000'
+  return [M[lang].noReply, M[lang].tooLong(id), M[lang].cutShort(id)].map((hint) => escapeRe(hint).split(id).join('\\S+'))
+}
+// Chinese keeps the old reading (any whole line in full-width brackets); English matches only Wavi's hints, so an
+// agent's own line in ASCII parentheses stays in the excerpt.
+const HINT_LINE = new RegExp(`^(?:${escapeRe(M.zh.hintOpen)}.*${escapeRe(M.zh.hintClose)}|${hintOf('en').join('|')})$`)
 const NOTICE_ROW = new RegExp(`^- id (\\S+) · [^·]+ · ${TITLE}`, 'gm')
 const titleOf = (groups: readonly (string | undefined)[]): string => groups.slice(0, LANGS.length).find((t) => t !== undefined) ?? ''
 
