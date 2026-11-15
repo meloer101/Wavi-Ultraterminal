@@ -30,17 +30,57 @@ import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
+import { defineMessages, pick } from '@shared/i18n'
+import { useLang, useMessages } from '../i18n'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
+
+const M = defineMessages({
+  zh: {
+    group: '分组',
+    byProject: '项目',
+    byStatus: '状态',
+    groupSessions: '会话分组',
+    hideSidebar: '隐藏侧栏',
+    nav: '导航',
+    openProject: '打开项目…',
+    jumpTo: '跳转到…',
+    board: '看板',
+    waiting: (n: number) => `${n} 个会话需要你`,
+    usage: '额度',
+    newSession: '新建会话',
+    noProjects: '还没有项目',
+    schedules: '定时任务',
+    settings: '设置'
+  },
+  en: {
+    group: 'Group by',
+    byProject: 'Project',
+    byStatus: 'Status',
+    groupSessions: 'Group sessions',
+    hideSidebar: 'Hide sidebar',
+    nav: 'Navigation',
+    openProject: 'Open project…',
+    jumpTo: 'Jump to…',
+    board: 'Board',
+    waiting: (n: number) => (n === 1 ? '1 session needs you' : `${n} sessions need you`),
+    usage: 'Usage',
+    newSession: 'New session',
+    noProjects: 'No projects yet',
+    schedules: 'Scheduled tasks',
+    settings: 'Settings'
+  }
+})
 
 /** The titlebar's 会话分组 button (Figma 53C): 项目 or 状态, kept in the workspace file. */
 async function chooseGroupBy(anchor: Element): Promise<void> {
   const current = useWorkspace.getState().sidebarGroupBy
+  const m = pick(M)
   const choice = await popupMenu(
     [
-      { type: 'header', label: '分组' },
-      { type: 'item', id: 'project', label: '项目', checked: current === 'project' },
-      { type: 'item', id: 'status', label: '状态', checked: current === 'status' }
+      { type: 'header', label: m.group },
+      { type: 'item', id: 'project', label: m.byProject, checked: current === 'project' },
+      { type: 'item', id: 'status', label: m.byStatus, checked: current === 'status' }
     ],
     anchor
   )
@@ -52,6 +92,9 @@ async function chooseGroupBy(anchor: Element): Promise<void> {
  * (F20 · 多窗口) it lists only that project; the row of the session the keyboard is in, in this window, is selected.
  */
 export function Sidebar() {
+  const m = useMessages(M)
+  // Row text (phase lines, 已完成 · …, team lines) is built in the memos below: they follow the language.
+  const lang = useLang()
   const windowKey = useWindowKey()
   const scope = useSecondaryWindow()?.projectId ?? null
   const {
@@ -150,10 +193,12 @@ export function Sidebar() {
     }
     for (const [id, waiting] of Object.entries(pendingItems(confirms))) out[id] = [...waiting, ...(out[id] ?? [])]
     return out
-  }, [subagentLists, runLists, sessions, folded, confirms, teams])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lang: the lines' text follows the interface language
+  }, [subagentLists, runLists, sessions, folded, confirms, teams, lang])
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
-    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lang: the rows' text follows the interface language
+    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, lang]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   const waiting = useMemo(() => sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency), [sessions])
@@ -179,22 +224,22 @@ export function Sidebar() {
       <div className={styles.titlebar}>
         {/* Native traffic lights (hiddenInset, x=16 y=17) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
-        <IconButton label="会话分组" aria-haspopup="menu" onClick={(e) => void chooseGroupBy(e.currentTarget)}>
+        <IconButton label={m.groupSessions} aria-haspopup="menu" onClick={(e) => void chooseGroupBy(e.currentTarget)}>
           <ListTree {...ICON} />
         </IconButton>
-        <IconButton label="隐藏侧栏" title={`隐藏侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
+        <IconButton label={m.hideSidebar} title={`${m.hideSidebar} · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft {...ICON} />
         </IconButton>
       </div>
-      <nav className={styles.nav} aria-label="导航">
-        <NavItem icon={<Folder {...ICON} />} label="打开项目…" shortcut={formatAccelerator(SHORTCUTS['open-project'])} onClick={() => void openProjectInteractive()} />
-        <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut={formatAccelerator(SHORTCUTS['command-palette'])} onClick={openCommandPalette} />
+      <nav className={styles.nav} aria-label={m.nav}>
+        <NavItem icon={<Folder {...ICON} />} label={m.openProject} shortcut={formatAccelerator(SHORTCUTS['open-project'])} onClick={() => void openProjectInteractive()} />
+        <NavItem icon={<Search {...ICON} />} label={m.jumpTo} shortcut={formatAccelerator(SHORTCUTS['command-palette'])} onClick={openCommandPalette} />
         <NavItem
           icon={<LayoutList {...ICON} />}
-          label="看板"
+          label={m.board}
           shortcut={formatAccelerator(SHORTCUTS['toggle-overview'])}
           selected={overview}
-          title={waiting.length > 0 ? `${waiting.length} 个会话需要你 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}` : `看板 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}`}
+          title={waiting.length > 0 ? `${m.waiting(waiting.length)} · ${formatAccelerator(SHORTCUTS['toggle-overview'])}` : `${m.board} · ${formatAccelerator(SHORTCUTS['toggle-overview'])}`}
           badge={
             waiting[0] && (
               <>
@@ -205,7 +250,7 @@ export function Sidebar() {
           }
           onClick={onOverview}
         />
-        <NavItem icon={<Gauge {...ICON} />} label="额度" shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
+        <NavItem icon={<Gauge {...ICON} />} label={m.usage} shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
         <SelectionDrops ids={inPanes} />
@@ -248,24 +293,24 @@ export function Sidebar() {
             {group.kind === 'project' && !group.collapsed && group.sessionCount === 0 && (
               <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(group.id)}>
                 <Plus {...ICON} />
-                新建会话
+                {m.newSession}
               </button>
             )}
           </section>
         ))}
-        {groups.length === 0 && projects.length === 0 && <p className={styles.empty}>还没有项目</p>}
+        {groups.length === 0 && projects.length === 0 && <p className={styles.empty}>{m.noProjects}</p>}
         {/* 按状态 with no sessions yet: no project header offers ＋, so this row does (the sheet picks the project). */}
         {groups.length === 0 && projects[0] && (
           <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(projects[0]!.id)}>
             <Plus {...ICON} />
-            新建会话
+            {m.newSession}
           </button>
         )}
       </div>
       <div className={styles.footer}>
         <UpdateEntry />
-        <NavItem icon={<Clock {...ICON} />} label="定时任务" shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
-        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
+        <NavItem icon={<Clock {...ICON} />} label={m.schedules} shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
+        <NavItem icon={<SlidersHorizontal {...ICON} />} label={m.settings} shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
       </div>
     </>
   )

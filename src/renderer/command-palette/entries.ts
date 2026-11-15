@@ -1,6 +1,7 @@
 // Pure palette model: what can be jumped to or run, and in which order. No React, no store access.
 import { agentName } from '@shared/agents'
 import { archivedAgo } from '@shared/archive'
+import { defineMessages, pick } from '@shared/i18n'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
@@ -8,6 +9,58 @@ import type { PersistedRightPanel as PanelView, SidebarGroupBy } from '@shared/w
 import type { ChainCommand, PaletteGitAction } from '../pull-requests/chain-zone'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
+
+// Keywords are what a search also matches: each language's own words (Chinese keeps its pinyin).
+const M = defineMessages({
+  zh: {
+    newSession: '新建会话…',
+    newSessionKeys: 'new session worktree branch xinjian huihua',
+    newClaude: '新建 Claude Code 会话',
+    newCodex: '新建 Codex 会话',
+    newShell: '新建终端',
+    newShellKeys: 'new shell terminal session zhongduan',
+    sameTask: '同任务多解…',
+    sameTaskKeys: 'best of n attempts compare same task 一题多解 再开几份 tongrenwu duojie',
+    openProject: '打开项目…',
+    schedules: '定时任务',
+    schedulesKeys: 'schedule scheduled task cron loop automation 定时 dingshi renwu',
+    closeBoard: '关闭看板',
+    openBoard: '打开看板',
+    boardKeys: 'overview kanban board github issue pr 状态 总览 进度 kanban zonglan',
+    toggleSidebar: '切换侧栏',
+    closeRightPanel: '关闭右侧栏',
+    openRightPanel: '打开右侧栏',
+    rightPanelKeys: 'right panel files git browser worktree terminal shell ios simulator 文件 终端 模拟器 youcelan',
+    themeSystem: '主题：跟随系统',
+    themeDark: '主题：深色',
+    themeLight: '主题：浅色',
+    historyKeys: '历史 归档 恢复 history archive restore lishi guidang'
+  },
+  en: {
+    newSession: 'New session…',
+    newSessionKeys: 'new session worktree branch',
+    newClaude: 'New Claude Code session',
+    newCodex: 'New Codex session',
+    newShell: 'New terminal',
+    newShellKeys: 'new shell terminal session',
+    sameTask: 'Same task, several tries…',
+    sameTaskKeys: 'best of n attempts compare same task several tries',
+    openProject: 'Open project…',
+    schedules: 'Scheduled tasks',
+    schedulesKeys: 'schedule scheduled task cron loop automation',
+    closeBoard: 'Close board',
+    openBoard: 'Open board',
+    boardKeys: 'overview kanban board github issue pr status progress',
+    toggleSidebar: 'Toggle sidebar',
+    closeRightPanel: 'Close right panel',
+    openRightPanel: 'Open right panel',
+    rightPanelKeys: 'right panel files git browser worktree terminal shell ios simulator',
+    themeSystem: 'Theme: System',
+    themeDark: 'Theme: Dark',
+    themeLight: 'Theme: Light',
+    historyKeys: 'history archive restore'
+  }
+})
 
 /** `history`: archived worktrees (PRD F15), restored by picking them. `git`: the merge chain's actions for the active
  *  session's worktree (合入链路 v2, Figma 73H). */
@@ -221,30 +274,31 @@ export function currentProject(input: Pick<PaletteInput, 'projects' | 'worktrees
 }
 
 export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
+  const m = pick(M)
   const project = currentProject(input)
   const entries: PaletteEntry[] = []
   if (project) {
     entries.push(
-      action('new-session', '新建会话…', 'plus', 'new session worktree branch xinjian huihua', project.name),
-      action('new-claude', '新建 Claude Code 会话', 'plus', 'new claude code session', project.name),
-      action('new-codex', '新建 Codex 会话', 'plus', 'new codex session', project.name),
-      action('new-shell', '新建终端', 'plus', 'new shell terminal session zhongduan', project.name)
+      action('new-session', m.newSession, 'plus', m.newSessionKeys, project.name),
+      action('new-claude', m.newClaude, 'plus', 'new claude code session', project.name),
+      action('new-codex', m.newCodex, 'plus', 'new codex session', project.name),
+      action('new-shell', m.newShell, 'plus', m.newShellKeys, project.name)
     )
   }
   // 同任务多解 (PRD F4 v1.68) from the session with the keyboard: an agent session's.
   const active = input.sessions.find((s) => s.id === input.activeSessionId)
   if (active && active.kind !== 'shell') {
-    entries.push(action('same-task', '同任务多解…', 'compare', 'best of n attempts compare same task 一题多解 再开几份 tongrenwu duojie', active.title))
+    entries.push(action('same-task', m.sameTask, 'compare', m.sameTaskKeys, active.title))
   }
   entries.push(
-    action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),
-    action('schedules', '定时任务', 'clock', 'schedule scheduled task cron loop automation 定时 dingshi renwu'),
-    action('toggle-overview', input.mainView === 'overview' ? '关闭看板' : '打开看板', 'overview', 'overview kanban board github issue pr 状态 总览 进度 kanban zonglan'),
-    action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
-    action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree terminal shell ios simulator 文件 终端 模拟器 youcelan'),
-    action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),
-    action('theme-dark', '主题：深色', 'moon', 'theme dark appearance'),
-    action('theme-light', '主题：浅色', 'sun', 'theme light appearance')
+    action('open-project', m.openProject, 'folder-plus', 'open add project folder'),
+    action('schedules', m.schedules, 'clock', m.schedulesKeys),
+    action('toggle-overview', input.mainView === 'overview' ? m.closeBoard : m.openBoard, 'overview', m.boardKeys),
+    action('toggle-sidebar', m.toggleSidebar, 'sidebar', 'toggle sidebar'),
+    action('toggle-right-panel', input.rightPanel ? m.closeRightPanel : m.openRightPanel, 'panel', m.rightPanelKeys),
+    action('theme-system', m.themeSystem, 'monitor', 'theme system auto appearance'),
+    action('theme-dark', m.themeDark, 'moon', 'theme dark appearance'),
+    action('theme-light', m.themeLight, 'sun', 'theme light appearance')
   )
   return entries
 }
@@ -279,7 +333,7 @@ export function buildHistoryEntries(input: PaletteInput): PaletteEntry[] {
         { key: 'project', text: projectName, weight: 2 },
         { key: 'branch', text: worktree.branch, weight: 2 },
         { key: 'sessions', text: sessions.map((s) => s.title).join(' '), weight: 1.5 },
-        { key: 'keywords', text: '历史 归档 恢复 history archive restore lishi guidang', weight: 0.5 }
+        { key: 'keywords', text: pick(M).historyKeys, weight: 0.5 }
       ]
     })
   }

@@ -22,6 +22,8 @@ import {
 import { AGENT_SPECS, agentName, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { generateBranchName, groupBranches, type NewSessionInfo } from '@shared/new-session'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { useWorkspace } from '../state/workspace'
 import { Field, SelectButton } from '../new-session/NewSessionSheet'
 import { isElsewhere } from '../new-session/model'
@@ -33,6 +35,61 @@ import styles from './SameTaskSheet.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
+const M = defineMessages({
+  zh: {
+    localBranches: '本地分支',
+    origin: '原会话',
+    remoteBranches: '远程分支',
+    already: (n: number) => `已有 ${n} 份`,
+    installed: '已安装',
+    notRepo: '不是 git 仓库',
+    originBranch: (branch: string) => `${branch}（原会话）`,
+    noBranch: '没有分支',
+    title: '同任务多解',
+    reportTo: '汇报给',
+    task: '任务',
+    tooLong: (n: number) => `最多 ${n} 个字`,
+    taskFrom: '任务来自',
+    placeholder: '写要交给每一份的任务',
+    base: '基于',
+    copies: '份数',
+    copiesOf: (agent: string) => `${agent} 份数`,
+    fewer: (agent: string) => `${agent} 少一份`,
+    more: (agent: string) => `${agent} 多一份`,
+    addAgent: '加一个智能体',
+    cancel: '取消',
+    searchBranches: '搜索分支',
+    searchAgents: '搜索智能体',
+    noAgents: '没有匹配的智能体'
+  },
+  en: {
+    localBranches: 'Local branches',
+    origin: 'Original session',
+    remoteBranches: 'Remote branches',
+    already: (n: number) => (n === 1 ? '1 already' : `${n} already`),
+    installed: 'Installed',
+    notRepo: 'Not a git repository',
+    originBranch: (branch: string) => `${branch} (original session)`,
+    noBranch: 'No branches',
+    title: 'Same task, several tries',
+    reportTo: 'Report to',
+    task: 'Task',
+    tooLong: (n: number) => `At most ${n} characters`,
+    taskFrom: 'Task from',
+    placeholder: 'Write the task to give each try',
+    base: 'Based on',
+    copies: 'Tries',
+    copiesOf: (agent: string) => `${agent} tries`,
+    fewer: (agent: string) => `One fewer ${agent}`,
+    more: (agent: string) => `One more ${agent}`,
+    addAgent: 'Add an agent',
+    cancel: 'Cancel',
+    searchBranches: 'Search branches',
+    searchAgents: 'Search agents',
+    noAgents: 'No matching agents'
+  }
+})
+
 export function SameTaskSheet() {
   const sessionId = useSameTaskSheet((s) => s.sessionId)
   const generation = useSameTaskSheet((s) => s.generation)
@@ -42,6 +99,7 @@ export function SameTaskSheet() {
 type Menu = 'source' | 'base' | 'agent'
 
 function Dialog() {
+  const m = useMessages(M)
   const sessionId = useSameTaskSheet((s) => s.sessionId)
   const sources = useSameTaskSheet((s) => s.sources)
   const session = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId))
@@ -163,13 +221,13 @@ function Dialog() {
         name === base ? <Check {...ICON} /> : remote ? <Globe {...ICON} /> : other ? <GitFork {...ICON} /> : <GitBranch {...ICON} />
       return [
         {
-          title: '本地分支',
-          items: groups.local.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, false, isElsewhere(b)), meta: b.name === own ? '原会话' : undefined }))
+          title: m.localBranches,
+          items: groups.local.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, false, isElsewhere(b)), meta: b.name === own ? m.origin : undefined }))
         },
-        { title: '远程分支', items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, true, false) })) }
+        { title: m.remoteBranches, items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, true, false) })) }
       ]
     },
-    [repo, base, own]
+    [repo, base, own, m]
   )
 
   const agentSections = useCallback(
@@ -179,15 +237,15 @@ function Dialog() {
         .filter((id) => q === '' || agentName(id).toLowerCase().includes(q) || AGENT_SPECS[id].binary.includes(q))
         .map((id) => {
           const count = rows.find((r) => r.kind === id)?.count ?? 0
-          return { value: id, label: agentName(id), icon: count > 0 ? <Check {...ICON} /> : null, meta: count > 0 ? `已有 ${count} 份` : (versions[id] ?? undefined) }
+          return { value: id, label: agentName(id), icon: count > 0 ? <Check {...ICON} /> : null, meta: count > 0 ? m.already(count) : (versions[id] ?? undefined) }
         })
-      return [{ title: '已安装', items }]
+      return [{ title: m.installed, items }]
     },
-    [installed, rows, versions]
+    [installed, rows, versions, m]
   )
 
   if (!session) return null
-  const baseValue = info === null ? '…' : !repo ? '不是 git 仓库' : base ? (base === own ? `${base}（原会话）` : base) : '没有分支'
+  const baseValue = info === null ? '…' : !repo ? m.notRepo : base ? (base === own ? m.originBranch(base) : base) : m.noBranch
 
   return (
     <div className={sheet.scrim} onMouseDown={onScrimMouseDown} data-region="same-task">
@@ -203,21 +261,21 @@ function Dialog() {
       >
         <header className={sheet.context}>
           <h2 id={titleId} className={sheet.title}>
-            同任务多解
+            {m.title}
           </h2>
         </header>
 
         <div className={sheet.fields}>
-          <Field label="汇报给">
+          <Field label={m.reportTo}>
             <span className={styles.value} title={session.title}>
               {[session.title, originName].filter(Boolean).join(' · ')}
             </span>
           </Field>
 
-          <Field label="任务" error={plan?.problem === 'prompt-too-long' ? `最多 ${MAX_ATTEMPT_PROMPT} 个字` : null}>
+          <Field label={m.task} error={plan?.problem === 'prompt-too-long' ? m.tooLong(MAX_ATTEMPT_PROMPT) : null}>
             {sources.length > 0 && source && (
               <SelectButton
-                label="任务来自"
+                label={m.taskFrom}
                 value={sourceLabel(source, sources.find((s) => s.source === source)?.text ?? '', originName)}
                 expanded={menu?.kind === 'source'}
                 onClick={(anchor) => toggleMenu('source', anchor)}
@@ -226,30 +284,30 @@ function Dialog() {
             <textarea
               ref={taskRef}
               className={styles.textarea}
-              aria-label="任务"
+              aria-label={m.task}
               value={task}
               spellCheck={false}
-              placeholder="写要交给每一份的任务"
+              placeholder={m.placeholder}
               onChange={(event) => setTask(event.currentTarget.value)}
             />
           </Field>
 
-          <Field label="基于">
-            <SelectButton label="基于" value={baseValue} disabled={!repo} expanded={menu?.kind === 'base'} onClick={(anchor) => toggleMenu('base', anchor)} />
+          <Field label={m.base}>
+            <SelectButton label={m.base} value={baseValue} disabled={!repo} expanded={menu?.kind === 'base'} onClick={(anchor) => toggleMenu('base', anchor)} />
           </Field>
 
-          <Field label="份数">
+          <Field label={m.copies}>
             <div className={styles.rows}>
               {rows.map((row) => (
-                <div key={row.kind} className={styles.row} role="group" aria-label={`${agentName(row.kind)} 份数`}>
+                <div key={row.kind} className={styles.row} role="group" aria-label={m.copiesOf(agentName(row.kind))}>
                   <span className={styles.name}>{agentName(row.kind)}</span>
-                  <button type="button" className={styles.step} aria-label={`${agentName(row.kind)} 少一份`} onClick={() => setRows(stepRow(rows, row.kind, -1))}>
+                  <button type="button" className={styles.step} aria-label={m.fewer(agentName(row.kind))} onClick={() => setRows(stepRow(rows, row.kind, -1))}>
                     <Minus {...ICON} />
                   </button>
                   <span className={styles.count} aria-live="polite">
                     {row.count}
                   </span>
-                  <button type="button" className={styles.step} aria-label={`${agentName(row.kind)} 多一份`} disabled={total >= MAX_ATTEMPTS} onClick={() => setRows(stepRow(rows, row.kind, 1))}>
+                  <button type="button" className={styles.step} aria-label={m.more(agentName(row.kind))} disabled={total >= MAX_ATTEMPTS} onClick={() => setRows(stepRow(rows, row.kind, 1))}>
                     <Plus {...ICON} />
                   </button>
                 </div>
@@ -264,7 +322,7 @@ function Dialog() {
                   onClick={(event) => toggleMenu('agent', event.currentTarget)}
                 >
                   <Plus {...ICON} />
-                  加一个智能体
+                  {m.addAgent}
                 </button>
               </span>
             </div>
@@ -273,7 +331,7 @@ function Dialog() {
 
         <footer className={sheet.footer}>
           <button type="button" className={sheet.cancel} onClick={() => closeSameTask(true)}>
-            取消
+            {m.cancel}
           </button>
           <button type="button" className={sheet.primary} disabled={!plan?.members} onClick={send}>
             {attemptButtonLabel(total)}
@@ -285,7 +343,7 @@ function Dialog() {
       {menu?.kind === 'source' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="任务来自"
+          label={m.taskFrom}
           sections={sourceSections}
           selected={source}
           onPick={(value) => {
@@ -302,10 +360,10 @@ function Dialog() {
       {menu?.kind === 'base' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="基于"
+          label={m.base}
           sections={branchSections}
           selected={base}
-          search="搜索分支"
+          search={m.searchBranches}
           onPick={(name) => {
             setBaseChoice(name)
             closeMenu(true)
@@ -316,11 +374,11 @@ function Dialog() {
       {menu?.kind === 'agent' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="加一个智能体"
+          label={m.addAgent}
           sections={agentSections}
           selected={null}
-          search="搜索智能体"
-          empty="没有匹配的智能体"
+          search={m.searchAgents}
+          empty={m.noAgents}
           onPick={(value) => {
             if ((CLI_AGENTS as readonly string[]).includes(value)) setRows(addAgentRow(rows, value as CliAgent))
             closeMenu(true)

@@ -1,6 +1,7 @@
 // Executes a palette entry against the real stores. Kept apart from the pure model so
 // entries.ts stays free of side effects.
 import type { AgentKind } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { restoreArchivedWorktree } from '../archive/actions'
 import { openSchedules } from '../schedules/store'
 import { openSameTaskForActive } from '../attempts/same-task-store'
@@ -13,6 +14,11 @@ import { runChainCommand } from '../pull-requests/chain-actions'
 import type { ChainCommand } from '../pull-requests/chain-zone'
 import { closeCommandPalette } from './palette-store'
 import { currentProject, type ActionId, type PaletteEntry } from './entries'
+
+const M = defineMessages({
+  zh: { restoreFailed: '没能恢复这个归档', ok: '好', close: '关闭' },
+  en: { restoreFailed: "Couldn't restore this archive", ok: 'OK', close: 'Close' }
+})
 
 const NEW_KIND: Partial<Record<ActionId, AgentKind>> = {
   'new-claude': 'claude',
@@ -101,11 +107,12 @@ async function restoreFromHistory(worktreeId: string): Promise<void> {
   try {
     await restoreArchivedWorktree(worktreeId)
   } catch (error) {
+    const m = pick(M)
     await window.tr.ui.confirm({
-      message: '没能恢复这个归档',
+      message: m.restoreFailed,
       detail: error instanceof Error ? error.message : String(error),
-      confirmLabel: '好',
-      cancelLabel: '关闭'
+      confirmLabel: m.ok,
+      cancelLabel: m.close
     })
   }
 }

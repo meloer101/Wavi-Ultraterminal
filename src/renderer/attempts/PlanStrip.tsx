@@ -2,13 +2,21 @@
 // dialog from the plan's text. Approving or rejecting stays in the agent's own TUI.
 import { agentName } from '@shared/agents'
 import { promptPreview } from '@shared/attempt-groups'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
+import { useMessages } from '../i18n'
 import { useSessionView } from '../state/workspace'
 import { PromptStrip } from './PromptStrip'
 import { openSameTask } from './same-task-store'
 import { useTaskSources } from './sources'
 
+const M = defineMessages({
+  zh: { planned: (agent: string) => `${agent} 写好了计划`, sameTask: '同任务多解…' },
+  en: { planned: (agent: string) => `${agent} wrote a plan`, sameTask: 'Same task, several tries…' }
+})
+
 export function PlanStrip({ sessionId }: { sessionId: SessionId }) {
+  const m = useMessages(M)
   const active = useSessionView(sessionId)
   const session = active?.session
   const plan = useTaskSources((s) => (session ? s.plans[session.id] : undefined))
@@ -16,9 +24,9 @@ export function PlanStrip({ sessionId }: { sessionId: SessionId }) {
   return (
     <PromptStrip
       testId="plan-strip"
-      question={`${agentName(session.kind)} 写好了计划`}
+      question={m.planned(agentName(session.kind))}
       detail={promptPreview(plan, 200)}
-      actions={[{ label: '同任务多解…', keys: '⇧⌘N', onClick: () => openSameTask(session.id, '') }]}
+      actions={[{ label: m.sameTask, keys: '⇧⌘N', onClick: () => openSameTask(session.id, '') }]}
     />
   )
 }

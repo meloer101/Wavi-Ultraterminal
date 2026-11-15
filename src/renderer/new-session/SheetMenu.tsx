@@ -5,6 +5,8 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import styles from './NewSessionSheet.module.css'
 
 export interface SheetMenuItem {
@@ -19,6 +21,8 @@ export interface SheetMenuSection {
   items: SheetMenuItem[]
 }
 
+const M = defineMessages({ zh: { noBranches: '没有匹配的分支' }, en: { noBranches: 'No matching branches' } })
+
 const GAP = 4
 /** The menu is a little wider than its control (Figma: 446 under a 440 select). */
 const OUTSET = 4
@@ -32,7 +36,7 @@ export function SheetMenu({
   selected,
   search,
   hint,
-  empty = '没有匹配的分支',
+  empty,
   align = 'below',
   onPick,
   onClose
@@ -50,6 +54,7 @@ export function SheetMenu({
   onPick: (value: string) => void
   onClose: (refocus: boolean) => void
 }) {
+  const m = useMessages(M)
   const [query, setQuery] = useState('')
   const listed = useMemo(() => sections(query), [sections, query])
   const flat = useMemo(() => listed.flatMap((section) => section.items), [listed])
@@ -187,7 +192,7 @@ export function SheetMenu({
             })}
           </Fragment>
         ))}
-        {flat.length === 0 && <div className={styles.menuEmpty}>{empty}</div>}
+        {flat.length === 0 && <div className={styles.menuEmpty}>{empty ?? m.noBranches}</div>}
       </div>
       {hint && <p className={styles.menuHint}>{hint}</p>}
     </div>,

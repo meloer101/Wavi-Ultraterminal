@@ -27,12 +27,43 @@ import {
 } from '@shared/session-meta'
 import { todoProgress, todoRowState, type TodoItem } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { insertSlashCommand } from '../session-io'
 import { subscribeClock } from '../sidebar/clock'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { Popover } from './Popover'
 import { useSessionMeta } from './store'
 import styles from './SessionMeta.module.css'
+
+const M = defineMessages({
+  zh: {
+    todoAria: (done: number, total: number, current: string) => `任务 ${done}/${total}：${current}`,
+    tasks: '任务',
+    doneOf: (done: number, total: number) => `${done} / ${total} 已完成`,
+    todoFooter: '来自 Claude 的 TodoWrite · 只读',
+    notInserted: '没有放进输入行',
+    contextAria: (percent: number) => `context 已用 ${percent}%`,
+    compactTitle: '把 /compact 放进输入行（不回车）',
+    usageAria: (vendor: string, window: string, exhausted: boolean, percent: number) =>
+      `${vendor} 额度 ${window}${exhausted ? '已用完' : `已用 ${percent}%`}`,
+    usage: '额度',
+    resetsAt: (clock: string) => `${clock} 恢复`
+  },
+  en: {
+    todoAria: (done: number, total: number, current: string) => `Tasks ${done}/${total}: ${current}`,
+    tasks: 'Tasks',
+    doneOf: (done: number, total: number) => `${done} / ${total} done`,
+    todoFooter: "From Claude's TodoWrite · read-only",
+    notInserted: "Couldn't put it into the input line",
+    contextAria: (percent: number) => `context ${percent}% used`,
+    compactTitle: 'Put /compact into the input line (without Enter)',
+    usageAria: (vendor: string, window: string, exhausted: boolean, percent: number) =>
+      `${vendor} usage ${window} ${exhausted ? 'used up' : `${percent}% used`}`,
+    usage: 'Usage',
+    resetsAt: (clock: string) => `resets ${clock}`
+  }
+})
 
 const CLOCK_MS = 15_000
 
@@ -61,7 +92,8 @@ export function TodoChip({ items }: { items: TodoItem[] }) {
   const progress = todoProgress(items)
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
-  const close = useCallback(() => setOpen(false), [])
+  const m = useMessages(M)
+  const close = useCallback(() => setOpen(false), [setOpen])
   if (!progress) return null
   return (
     <>
@@ -73,7 +105,7 @@ export function TodoChip({ items }: { items: TodoItem[] }) {
         data-testid="todo-chip"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`任务 ${progress.done}/${progress.total}：${progress.current}`}
+        aria-label={m.todoAria(progress.done, progress.total, progress.current)}
         onMouseDown={keepFocus}
         onClick={() => setOpen((v) => !v)}
       >
@@ -86,7 +118,7 @@ export function TodoChip({ items }: { items: TodoItem[] }) {
         </span>
       </button>
       {open && (
-        <Popover anchor={anchor} label="任务" onClose={close} testId="todo-popover">
+        <Popover anchor={anchor} label={m.tasks} onClose={close} testId="todo-popover">
           <TodoList items={items} done={progress.done} />
         </Popover>
       )}
@@ -96,13 +128,12 @@ export function TodoChip({ items }: { items: TodoItem[] }) {
 
 /** Figma TodoPopover 261:9986. */
 function TodoList({ items, done }: { items: TodoItem[]; done: number }) {
+  const m = useMessages(M)
   return (
     <>
       <div className={styles.popoverHeader}>
-        <span className={styles.popoverTitle}>任务</span>
-        <span className={styles.popoverMeta}>
-          {done} / {items.length} 已完成
-        </span>
+        <span className={styles.popoverTitle}>{m.tasks}</span>
+        <span className={styles.popoverMeta}>{m.doneOf(done, items.length)}</span>
       </div>
       <ol className={styles.todoItems}>
         {items.map((item, index) => {
@@ -117,7 +148,7 @@ function TodoList({ items, done }: { items: TodoItem[]; done: number }) {
           )
         })}
       </ol>
-      <p className={styles.popoverFooter}>来自 Claude 的 TodoWrite · 只读</p>
+      <p className={styles.popoverFooter}>{m.todoFooter}</p>
     </>
   )
 }
@@ -172,6 +203,7 @@ export function PaceMeter({ w, now, mini = false }: { w: UsageWindow; now: numbe
  * /compact puts the command into the input line.
  */
 export function ContextChip({ sessionId, context, compact = true }: { sessionId: SessionId; context: ContextUsage; compact?: boolean }) {
+  const m = useMessages(M)
   const high = contextHigh(context)
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
@@ -182,7 +214,7 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
   const closeRefusal = useCallback(() => setRefusal(null), [])
   const insertCompact = (): void => {
     setRefusal(null)
-    insertSlashCommand(sessionId, '/compact').catch((error: unknown) => setRefusal(error instanceof Error ? error.message : '没有放进输入行'))
+    insertSlashCommand(sessionId, '/compact').catch((error: unknown) => setRefusal(error instanceof Error ? error.message : m.notInserted))
   }
   return (
     <span className={styles.chipGroup} data-testid="context-chip" data-level={high ? 'high' : 'normal'}>
@@ -194,7 +226,7 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
         data-open={open}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`context 已用 ${context.percent}%`}
+        aria-label={m.contextAria(context.percent)}
         onMouseDown={keepFocus}
         onClick={() => setOpen((v) => !v)}
       >
@@ -207,7 +239,7 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
           ref={compactButton}
           type="button"
           className={styles.compact}
-          title="把 /compact 放进输入行（不回车）"
+          title={m.compactTitle}
           onMouseDown={keepFocus}
           onClick={insertCompact}
         >
@@ -263,6 +295,7 @@ function ContextPanel({ context }: { context: ContextUsage }) {
  * with `opensOnRequest` it also opens when a usage notification was clicked (store · usageOpenPending).
  */
 export function UsageChip({ usage, current, all, opensOnRequest = false }: { usage: VendorUsage; current: UsageVendor | null; all: VendorUsage[]; opensOnRequest?: boolean }) {
+  const m = useMessages(M)
   const now = useMetaNow()
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
@@ -295,7 +328,7 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
         data-testid={`usage-chip-${usage.vendor}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label} 额度 ${windowLabel(usage.vendor, top.minutes, top.scope)}${pace.exhausted ? '已用完' : `已用 ${top.percent}%`}`}
+        aria-label={m.usageAria(label, windowLabel(usage.vendor, top.minutes, top.scope), pace.exhausted, top.percent)}
         onMouseDown={keepFocus}
         onClick={() => setOpen((v) => !v)}
       >
@@ -306,7 +339,7 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
         <span className={styles.usageValue}>{usageChipText(top, now)}</span>
       </button>
       {open && (
-        <Popover anchor={anchor} label="额度" onClose={close} testId="usage-popover">
+        <Popover anchor={anchor} label={m.usage} onClose={close} testId="usage-popover">
           <UsageList all={all} current={current} now={now} />
         </Popover>
       )}
@@ -335,6 +368,7 @@ function UsageList({ all, current, now }: { all: VendorUsage[]; current: UsageVe
 
 /** Figma 27B: name · % · reset and the PaceMeter; used past the window's time (or high) reads heavier. */
 function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; now: number }) {
+  const m = useMessages(M)
   const pace = windowPace(w, now)
   const level = pace.exhausted ? 'exhausted' : paceBar(w, now).ahead || isHigh(w.percent) ? 'ahead' : 'normal'
   return (
@@ -343,7 +377,7 @@ function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; 
         <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes, w.scope)}</span>
         <span className={styles.windowValue}>{w.percent}%</span>
         <span className={styles.windowReset}>
-          {w.resetsAt !== undefined ? (pace.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)) : ''}
+          {w.resetsAt !== undefined ? (pace.exhausted ? m.resetsAt(formatClock(w.resetsAt, now)) : formatReset(w.resetsAt, now)) : ''}
         </span>
       </div>
       <PaceMeter w={w} now={now} />

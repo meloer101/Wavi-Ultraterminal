@@ -17,6 +17,8 @@ import {
   type BatchCandidate
 } from '@shared/batch-actions'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { interruptAgent, submitPrompt } from '../session-io'
 import { useWorkspace } from '../state/workspace'
@@ -24,9 +26,49 @@ import { IconButton } from '../ui/IconButton'
 import enterStyles from './EnterButton.module.css'
 import styles from './BatchBar.module.css'
 
+const M = defineMessages({
+  zh: {
+    withBranch: (title: string, branch: string) => `${title}（${branch}）`,
+    toolbar: '批量操作',
+    picked: (n: number) => `已选 ${n} 个`,
+    sendMessage: '发送消息…',
+    stopTitle: (recipients: string) => `${recipients}：向每个 agent 发送一次 Esc，先确认`,
+    noneRunning: '选中的会话都没在运行',
+    stopping: '正在停止…',
+    closeTitle: (recipients: string) => `${recipients}，先确认`,
+    clear: '取消选择',
+    clearTitle: '取消选择 · Esc',
+    messageLabel: '要发送的消息',
+    placeholder: '发给选中的每个 agent 的同一段话',
+    tooLong: (n: number) => `最多 ${n} 个字`,
+    cancel: '取消',
+    sendTitle: '先确认，再把这段话发给每个会话并按回车（用你自己的额度）',
+    sending: '正在发送…'
+  },
+  en: {
+    withBranch: (title: string, branch: string) => `${title} (${branch})`,
+    toolbar: 'Batch actions',
+    picked: (n: number) => `${n} selected`,
+    sendMessage: 'Send message…',
+    stopTitle: (recipients: string) => `${recipients}: sends Esc to each agent once, after you confirm`,
+    noneRunning: 'None of the selected sessions is running',
+    stopping: 'Stopping…',
+    closeTitle: (recipients: string) => `${recipients}, after you confirm`,
+    clear: 'Clear selection',
+    clearTitle: 'Clear selection · Esc',
+    messageLabel: 'Message to send',
+    placeholder: 'The same message for every selected agent',
+    tooLong: (n: number) => `At most ${n} characters`,
+    cancel: 'Cancel',
+    sendTitle: 'Asks first, then sends this to every session and presses Enter (uses your own usage)',
+    sending: 'Sending…'
+  }
+})
+
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[]; onClear(): void; /** The keyboard goes back to the list. */ onSettled(): void }) {
+  const m = useMessages(M)
   const { sessions, worktrees } = useWorkspace(useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees })))
   const candidates = useMemo(() => {
     const picked = ids.flatMap((id) => sessions.filter((x) => x.id === id))
@@ -34,10 +76,10 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
     const repeated = (title: string) => picked.filter((x) => x.title === title).length > 1
     return picked.map((s): BatchCandidate => {
       const branch = worktrees.find((w) => w.id === s.worktreeId)?.branch
-      const title = repeated(s.title) && branch ? `${s.title}（${branch}）` : s.title
+      const title = repeated(s.title) && branch ? m.withBranch(s.title, branch) : s.title
       return { id: s.id, kind: s.kind, title, status: s.status, ...(s.phase ? { phase: s.phase } : {}) }
     })
-  }, [ids, sessions, worktrees])
+  }, [ids, sessions, worktrees, m])
   const [composing, setComposing] = useState(false)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState<BatchAction | null>(null)
@@ -97,24 +139,24 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
   const skipped = skippedText(send)
 
   return (
-    <div className={styles.bar} role="toolbar" aria-label="批量操作" data-testid="batch-bar">
+    <div className={styles.bar} role="toolbar" aria-label={m.toolbar} data-testid="batch-bar">
       <div className={styles.line}>
-        <span className={styles.count}>已选 {candidates.length} 个</span>
+        <span className={styles.count}>{m.picked(candidates.length)}</span>
         {!composing && (
           <>
             <button type="button" className={enterStyles.enter} disabled={send.targets.length === 0 || busy !== null} onClick={() => setComposing(true)} title={recipientsLine(send)}>
-              发送消息…
+              {m.sendMessage}
             </button>
             <button
               type="button"
               className={enterStyles.enter}
               disabled={stop.targets.length === 0 || busy !== null}
-              title={stop.targets.length > 0 ? `${recipientsLine(stop)}：向每个 agent 发送一次 Esc，先确认` : '选中的会话都没在运行'}
+              title={stop.targets.length > 0 ? m.stopTitle(recipientsLine(stop)) : m.noneRunning}
               onClick={() => void run('stop')}
             >
-              {busy === 'stop' ? '正在停止…' : batchButtonLabel('stop', stop.targets.length)}
+              {busy === 'stop' ? m.stopping : batchButtonLabel('stop', stop.targets.length)}
             </button>
-            <button type="button" className={enterStyles.enter} disabled={busy !== null} title={`${recipientsLine(close)}，先确认`} onClick={() => void run('close')}>
+            <button type="button" className={enterStyles.enter} disabled={busy !== null} title={m.closeTitle(recipientsLine(close))} onClick={() => void run('close')}>
               {batchButtonLabel('close', close.targets.length)}
             </button>
           </>
@@ -125,7 +167,7 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
           </span>
         )}
         <span className={styles.spacer} />
-        <IconButton label="取消选择" title="取消选择 · Esc" onClick={onClear}>
+        <IconButton label={m.clear} title={m.clearTitle} onClick={onClear}>
           <X size={16} strokeWidth={1.75} />
         </IconButton>
       </div>
@@ -134,8 +176,8 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
           <textarea
             ref={textRef}
             className={styles.textarea}
-            aria-label="要发送的消息"
-            placeholder="发给选中的每个 agent 的同一段话"
+            aria-label={m.messageLabel}
+            placeholder={m.placeholder}
             value={text}
             rows={2}
             spellCheck={false}
@@ -157,20 +199,20 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
             <span className={styles.recipients} data-testid="batch-recipients">
               {recipientsLine(send)}
               {skipped && <span className={styles.skipped}> · {skipped}</span>}
-              {tooLong && <span className={styles.skipped}> · 最多 {MAX_BROADCAST_TEXT} 个字</span>}
+              {tooLong && <span className={styles.skipped}> · {m.tooLong(MAX_BROADCAST_TEXT)}</span>}
             </span>
             <span className={styles.spacer} />
             <button type="button" className={enterStyles.enter} onClick={() => setComposing(false)}>
-              取消
+              {m.cancel}
             </button>
             <button
               type="button"
               className={styles.primary}
               disabled={!canSend || busy !== null}
-              title="先确认，再把这段话发给每个会话并按回车（用你自己的额度）"
+              title={m.sendTitle}
               onClick={() => void run('send')}
             >
-              {busy === 'send' ? '正在发送…' : batchButtonLabel('send', send.targets.length)}
+              {busy === 'send' ? m.sending : batchButtonLabel('send', send.targets.length)}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           </div>

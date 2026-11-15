@@ -5,10 +5,17 @@ import { memo } from 'react'
 import { Check, CircleHelp, X } from 'lucide-react'
 import { checksDescription, KIND_LABEL, runNote, turnCheckView, type CheckOutcome, type CheckRun, type TurnCheckView } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
+import { useLang, useMessages } from '../i18n'
 import { useSessionMeta } from '../session-meta/store'
 import styles from './TurnChecks.module.css'
 
 const MARK_ICON = { size: 12, strokeWidth: 2, 'aria-hidden': true } as const
+
+const M = defineMessages({
+  zh: { note: (note: string) => `（${note}）`, previous: '上一轮', none: '没跑检查', notRun: '未跑' },
+  en: { note: (note: string) => ` (${note})`, previous: 'Last turn', none: 'No checks run', notRun: 'not run' }
+})
 
 export function CheckMark({ outcome }: { outcome: CheckOutcome }) {
   return (
@@ -23,7 +30,7 @@ const RUN_MARK: Record<CheckOutcome, string> = { pass: '✓', fail: '✗', unkno
 /** One line per run for a tooltip: `✗ npm run lint`, `? npm test | tail（看不出结果）`. */
 export function runLine(run: CheckRun): string {
   const note = runNote(run)
-  return `${RUN_MARK[run.outcome]} ${run.command}${note ? `（${note}）` : ''}`
+  return `${RUN_MARK[run.outcome]} ${run.command}${note ? pick(M).note(note) : ''}`
 }
 
 /** The session's turn checks as a view, or null when there is nothing to say. */
@@ -33,13 +40,14 @@ export function useTurnCheckView(sessionId: SessionId | undefined): TurnCheckVie
 }
 
 export function TurnChecksBody({ view }: { view: TurnCheckView }) {
+  const m = useMessages(M)
   const description = checksDescription(view)
   const tooltip = [description, ...view.runs.map(runLine)].join('\n')
   return (
     <span className={styles.tag} role="img" aria-label={description} title={tooltip} data-testid="turn-checks" data-turn={view.turn}>
-      {view.turn === 'previous' && <span className={styles.when}>上一轮</span>}
+      {view.turn === 'previous' && <span className={styles.when}>{m.previous}</span>}
       {view.kinds.length === 0 ? (
-        <span className={styles.none}>没跑检查</span>
+        <span className={styles.none}>{m.none}</span>
       ) : (
         view.kinds.map((k, i) => (
           <span key={k.kind} className={styles.item} data-kind={k.kind} data-status={k.status}>
@@ -49,7 +57,7 @@ export function TurnChecksBody({ view }: { view: TurnCheckView }) {
               </span>
             )}
             <span className={styles.label}>{KIND_LABEL[k.kind]}</span>
-            {k.status === 'not-run' ? <span className={styles.notRun}>未跑</span> : <CheckMark outcome={k.status} />}
+            {k.status === 'not-run' ? <span className={styles.notRun}>{m.notRun}</span> : <CheckMark outcome={k.status} />}
           </span>
         ))
       )}
@@ -59,6 +67,8 @@ export function TurnChecksBody({ view }: { view: TurnCheckView }) {
 
 /** The tag for a session, or nothing (it neither edited nor checked, this turn or the last one that did). */
 export const TurnChecksTag = memo(function TurnChecksTag({ sessionId }: { sessionId: SessionId }) {
+  // Memo'd: the body (and the shared check words in it) follows the interface language.
+  useLang()
   const view = useTurnCheckView(sessionId)
   return view ? <TurnChecksBody view={view} /> : null
 })

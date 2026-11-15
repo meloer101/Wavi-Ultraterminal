@@ -20,10 +20,63 @@ import { addFiles } from '../terminal/file-input'
 import { readViewport } from '../terminal/registry'
 import { ultracodeOnScreen } from '@shared/startup-screen'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { useSessionMeta } from '../session-meta/store'
 import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
+
+const M = defineMessages({
+  zh: {
+    showSidebar: '显示侧栏',
+    openBoard: '打开看板 · ⇧⌘A',
+    waiting: (n: number) => `${n} 个会话需要你`,
+    dragTitle: '拖动到别的格或边上 · 双击重命名',
+    scheduledBefore: '由定时任务「',
+    scheduledAfter: '」开出',
+    hooksTitle: 'hooks 不可用，状态只能按终端标题判断',
+    hooks: '状态仅按标题判断',
+    addFiles: '添加文件或文件夹',
+    addFilesTitle: '添加文件或文件夹 · 也可以拖进终端，或 ⌘V 粘贴截图',
+    rightPanel: '右侧栏',
+    sessionMenu: '会话菜单',
+    closePane: '关掉这一格',
+    closePaneTitle: '关掉这一格，会话继续运行',
+    runStart: '运行 run 脚本',
+    runShow: '显示正在运行的 run',
+    runStop: '停止 run 脚本',
+    ultracode: 'Ultracode 开着：每个任务都编排多个 agent 并行做',
+    sessionName: '会话名称',
+    dispatchedTitle: (title: string) => `这个会话是「${title}」里的 agent 开的，它做完的结果会报告给那边 · 点击前往`,
+    dispatchedBefore: '由「',
+    dispatchedAfter: '」派出'
+  },
+  en: {
+    showSidebar: 'Show sidebar',
+    openBoard: 'Open board · ⇧⌘A',
+    waiting: (n: number) => (n === 1 ? '1 session needs you' : `${n} sessions need you`),
+    dragTitle: 'Drag to another pane or an edge · double-click to rename',
+    scheduledBefore: 'Started by scheduled task “',
+    scheduledAfter: '”',
+    hooksTitle: "Hooks unavailable: status can only be read from the terminal's title",
+    hooks: 'Status from title only',
+    addFiles: 'Add files or folders',
+    addFilesTitle: 'Add files or folders · or drag them into the terminal, or paste a screenshot with ⌘V',
+    rightPanel: 'Right panel',
+    sessionMenu: 'Session menu',
+    closePane: 'Close this pane',
+    closePaneTitle: 'Close this pane; the session keeps running',
+    runStart: 'Run the run script',
+    runShow: 'Show the running run',
+    runStop: 'Stop the run script',
+    ultracode: 'Ultracode is on: every task is split across several agents working in parallel',
+    sessionName: 'Session name',
+    dispatchedTitle: (title: string) => `An agent in “${title}” started this session and reports its result there · click to go`,
+    dispatchedBefore: 'Dispatched from “',
+    dispatchedAfter: '”'
+  }
+})
 
 /** Right panel switcher (Figma 13 "Pane switcher" 149:6398 · 76A): one icon per view, the open one in Active. */
 const PANE_ICONS: { view: PanelView; icon: LucideIcon }[] = [
@@ -61,6 +114,7 @@ export type SessionHeaderPart = 'full' | 'title' | 'tools'
  * active session; in a split each pane has its own (`pane`).
  */
 export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessionId?: string; pane?: PaneChrome; part?: SessionHeaderPart } = {}) {
+  const m = useMessages(M)
   const active = useSessionView(sessionId)
   const focused = pane?.focused ?? true
   const lead = pane?.lead ?? true
@@ -109,17 +163,17 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
   return (
     <header className={styles.header} data-region="session-header" data-part={part} data-sidebar-collapsed={sidebarCollapsed && showTitle} data-focused={focused} data-drag-region={pane?.top ?? true}>
       {showTitle && sidebarCollapsed && (
-        <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
+        <IconButton label={m.showSidebar} title={`${m.showSidebar} · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />
         </IconButton>
       )}
       {/* With the sidebar hidden nothing else says another session is waiting (B9). */}
       {showTitle && sidebarCollapsed && waiting > 0 && mostUrgent && (
-        <button type="button" className={styles.waiting} title="打开看板 · ⇧⌘A" onClick={openOverview}>
+        <button type="button" className={styles.waiting} title={m.openBoard} onClick={openOverview}>
           <span aria-hidden className={styles.waitingGlyph}>
             <StatusGlyph status={mostUrgent} />
           </span>
-          {waiting} 个会话需要你
+          {m.waiting(waiting)}
         </button>
       )}
       {active && showTitle && (
@@ -137,7 +191,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             <h1
               className={styles.title}
               data-movable={pane?.onTitlePointerDown !== undefined}
-              title={pane?.onTitlePointerDown ? '拖动到别的格或边上 · 双击重命名' : undefined}
+              title={pane?.onTitlePointerDown ? m.dragTitle : undefined}
               onPointerDown={pane?.onTitlePointerDown}
               onDoubleClick={() => setRenaming(active.session.id)}
             >
@@ -160,7 +214,9 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
               onClick={() => openSchedules(active.session.scheduledBy?.id)}
               data-testid="scheduled-by"
             >
-              由定时任务「<span className={styles.dispatchedByName}>{active.session.scheduledBy.name}</span>」开出
+              {m.scheduledBefore}
+              <span className={styles.dispatchedByName}>{active.session.scheduledBy.name}</span>
+              {m.scheduledAfter}
             </button>
           )}
         </>
@@ -180,9 +236,9 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             {limitResume && <LimitResumeButton sessionId={active.session.id} />}
           </SessionMetaChips>
           {agentUp && hooks === 'unavailable' && (
-            <span className={styles.hooks} data-testid="hooks-unavailable" title="hooks 不可用，状态只能按终端标题判断">
+            <span className={styles.hooks} data-testid="hooks-unavailable" title={m.hooksTitle}>
               <CircleAlert size={16} strokeWidth={1.75} />
-              状态仅按标题判断
+              {m.hooks}
             </span>
           )}
         </>
@@ -204,8 +260,8 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
         {/* PRD F19: the files' paths go into the input line; the agent makes images attachments. */}
         {showTools && focused && active && (
           <IconButton
-            label="添加文件或文件夹"
-            title="添加文件或文件夹 · 也可以拖进终端，或 ⌘V 粘贴截图"
+            label={m.addFiles}
+            title={m.addFilesTitle}
             data-testid="add-files"
             onClick={() => {
               const id = active.session.id
@@ -217,7 +273,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
         )}
         {/* The right panel is the main window's (F20 · 多窗口: not in other windows yet). */}
         {showTools && focused && active && windowKey === MAIN_WINDOW && (
-          <span className={styles.panes} role="group" aria-label="右侧栏">
+          <span className={styles.panes} role="group" aria-label={m.rightPanel}>
             {PANE_ICONS.map(({ view, icon: Icon }) => (
               <IconButton
                 key={view}
@@ -233,7 +289,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
         )}
         {active && (showTools || pane?.onClose) && (
           <IconButton
-            label="会话菜单"
+            label={m.sessionMenu}
             aria-haspopup="menu"
             onClick={(e) => {
               const id = active.session.id
@@ -246,7 +302,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
           </IconButton>
         )}
         {showTitle && pane?.onClose && (
-          <IconButton label="关掉这一格" title={`关掉这一格，会话继续运行 · ${formatAccelerator(SHORTCUTS['close-pane'])}`} onClick={pane.onClose}>
+          <IconButton label={m.closePane} title={`${m.closePaneTitle} · ${formatAccelerator(SHORTCUTS['close-pane'])}`} onClick={pane.onClose}>
             <X size={16} strokeWidth={1.75} />
           </IconButton>
         )}
@@ -255,10 +311,10 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
   )
 }
 
-const RUN_LABEL: Record<RunAction, string> = { start: '运行 run 脚本', show: '显示正在运行的 run', stop: '停止 run 脚本' }
-
 /** Play starts the worktree's run script (or shows it while it runs elsewhere); in the run session itself, Square stops it. */
 function RunButton({ action, command, port, onPress }: { action: RunAction; command: string; port: number | null; onPress(action: RunAction): void }) {
+  const m = useMessages(M)
+  const RUN_LABEL: Record<RunAction, string> = { start: m.runStart, show: m.runShow, stop: m.runStop }
   const firstLine = command.split('\n')[0] ?? ''
   const title = [RUN_LABEL[action], firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine, port !== null ? `TR_PORT ${port}` : null]
     .filter(Boolean)
@@ -279,6 +335,7 @@ const ULTRACODE_READ_MS = 1_500
  * no prompt box keeps the last answer.
  */
 function UltracodeBadge({ sessionId }: { sessionId: SessionId }) {
+  const m = useMessages(M)
   const [on, setOn] = useState(false)
   useEffect(() => {
     const read = (): void => {
@@ -291,7 +348,7 @@ function UltracodeBadge({ sessionId }: { sessionId: SessionId }) {
   }, [sessionId])
   if (!on) return null
   return (
-    <span className={styles.ultracode} data-testid="ultracode-badge" title="Ultracode 开着：每个任务都编排多个 agent 并行做">
+    <span className={styles.ultracode} data-testid="ultracode-badge" title={m.ultracode}>
       <Workflow size={14} strokeWidth={1.75} aria-hidden />
       Ultracode
     </span>
@@ -300,6 +357,7 @@ function UltracodeBadge({ sessionId }: { sessionId: SessionId }) {
 
 /** The title as a text field: ↵ or leaving it saves, Esc cancels (IME composition keeps its own ↵ / Esc). */
 function TitleEditor({ initial, onDone }: { initial: string; onDone(value: string | null): void }) {
+  const m = useMessages(M)
   const [value, setValue] = useState(initial)
   const [done, setDone] = useState(false)
   const finish = (result: string | null) => {
@@ -321,7 +379,7 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone(value: strin
   return (
     <input
       className={styles.titleInput}
-      aria-label="会话名称"
+      aria-label={m.sessionName}
       value={value}
       maxLength={200}
       spellCheck={false}
@@ -336,17 +394,20 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone(value: strin
 
 /** 由「…」派出 (PRD F21): the session whose agent started this one; a click goes there. */
 function DispatchedBy({ parentId }: { parentId: string }) {
+  const m = useMessages(M)
   const title = useWorkspace((s) => s.sessions.find((x) => x.id === parentId)?.title)
   if (title === undefined) return null
   return (
     <button
       type="button"
       className={styles.dispatchedBy}
-      title={`这个会话是「${title}」里的 agent 开的，它做完的结果会报告给那边 · 点击前往`}
+      title={m.dispatchedTitle(title)}
       onClick={() => useWorkspace.getState().setActiveSession(parentId)}
       data-testid="dispatched-by"
     >
-      由「<span className={styles.dispatchedByName}>{title}</span>」派出
+      {m.dispatchedBefore}
+      <span className={styles.dispatchedByName}>{title}</span>
+      {m.dispatchedAfter}
     </button>
   )
 }

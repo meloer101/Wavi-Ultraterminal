@@ -15,12 +15,18 @@ import {
   type ResumeTiming
 } from '@shared/limit-resume'
 import type { SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { submitPrompt } from '../session-io'
 import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
 import { getSurface, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { useLimitResume } from './store'
+
+const M = defineMessages({
+  zh: { sendFailed: (prompt: string, why: string) => `额度已恢复，但没能发送“${prompt}”：${why}` },
+  en: { sendFailed: (prompt: string, why: string) => `Usage is back, but “${prompt}” couldn't be sent: ${why}` }
+})
 
 /** e2e runs shorten the margin and waits (`globalThis.__TR_LIMIT_RESUME_TIMING__`); everyone else gets the defaults. */
 export function timing(): ResumeTiming {
@@ -111,7 +117,7 @@ export function startLimitResumeBridge(): () => void {
     cancel(sessionId)
     submitPrompt(sessionId, RESUME_PROMPT).catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error)
-      notify(sessionId, `额度已恢复，但没能发送“${RESUME_PROMPT}”：${why}`)
+      notify(sessionId, pick(M).sendFailed(RESUME_PROMPT, why))
     })
   }
 
