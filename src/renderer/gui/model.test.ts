@@ -595,7 +595,7 @@ describe('composer', () => {
     expect(buttons).toHaveLength(1)
     expect(mode).toMatchObject({ key: 'permission+plan', label: '自动', mode: { current: 'auto' } })
     expect(mode?.mode?.choices.map((c) => `${c.value}:${c.label}`)).toEqual(['ask:询问', 'accept-edits:接受编辑', 'auto:自动', 'plan:计划'])
-    // 快速 first, then Ultracode, whatever order they came in; only the ones the agent offers (78B: Codex has no Ultracode).
+    // 快速 first, then Ultracode (composerPickers' order); only the ones the agent offers (78B: Codex has no Ultracode).
     expect(mode?.switches?.map((s) => [s.option.id, s.on, s.hint])).toEqual([
       ['fast', true, '快速没有生效：x'],
       ['ultracode', false, undefined]

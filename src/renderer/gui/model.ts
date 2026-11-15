@@ -936,8 +936,8 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   const plan = pickers.find((o) => o.category === 'plan')
   const buttons: PickerButton[] = []
   for (const option of [model, effort]) if (option) buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
-  // 快速 before Ultracode, whatever order the agent reported them in (Figma 78A).
-  const switches = (['fast', 'ultracode'] as const).flatMap((category) => pickers.filter((o) => o.category === category))
+  // 快速 before Ultracode (Figma 78A): composerPickers already puts them in that order.
+  const switches = pickers.filter(isSwitch)
   const levels = (permission?.values ?? []).filter((v): v is { value: GuiPermission; label: string } => isGuiPermission(v.value))
   const hasMode = levels.length + (plan ? 1 : 0) > 1
   if (hasMode) {
