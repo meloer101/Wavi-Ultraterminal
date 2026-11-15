@@ -101,8 +101,7 @@ export function UsageChart({ view }: { view: UsageView }) {
       </div>
       <div className={styles.chart} onMouseLeave={() => setHover(null)}>
         <div className={styles.plot}>
-          <span className={styles.grid} style={{ top: 0 }} />
-          <span className={styles.grid} style={{ top: '50%' }} />
+          <span className={styles.grid} />
           <span className={styles.baseline} />
           {view.firstAt === null && <span className={styles.empty}>{m.noRecords}</span>}
           <div className={styles.bars} style={{ gridTemplateColumns: `repeat(${view.bars.length}, 1fr)` }}>
@@ -147,7 +146,6 @@ export function UsageChart({ view }: { view: UsageView }) {
         </div>
         <div className={styles.axis} aria-hidden>
           <span>{axisLabel(max)}</span>
-          <span>{axisLabel(max / 2, max)}</span>
           <span>0</span>
         </div>
       </div>
