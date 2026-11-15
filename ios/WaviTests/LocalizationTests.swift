@@ -41,6 +41,16 @@ private func en(_ key: String) -> String { english?.localizedString(forKey: key,
     #expect(chinese.isEmpty, "\(chinese.keys.sorted())")
   }
 
+  /// English is the development region (a phone in neither language gets English), so a key without its own
+  /// zh-Hans value would show Chinese users the English: the Chinese table answers every key the English one does.
+  @Test func chineseAnswersEveryKey() throws {
+    let chinese = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj").flatMap(Bundle.init(path:)))
+    let url = try #require(english?.url(forResource: "Localizable", withExtension: "strings"))
+    let keys = try #require(NSDictionary(contentsOf: url) as? [String: String]).keys
+    let missing = keys.filter { chinese.localizedString(forKey: $0, value: "∅", table: nil) == "∅" }
+    #expect(missing.isEmpty, "\(missing.sorted())")
+  }
+
   @Test func theMacIsToldZhOrEn() {
     #expect(AppLanguage(localization: "zh-Hans") == .zh)
     #expect(AppLanguage(localization: "zh-Hant-TW") == .zh)
