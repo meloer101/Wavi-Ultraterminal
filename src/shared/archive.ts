@@ -2,7 +2,27 @@
 // others), keep the worktree's state — uncommitted changes included — on a private git ref, and fold it out of the
 // sidebar. The folder stays where it is; ⌘K 历史 brings it back (recreating the folder from the ref only when it is
 // gone) and the agents resume their conversations. The snapshot itself is src/main/archive-ref.ts.
+import { defineMessages, pick } from './i18n'
 import type { Session } from './types'
+
+const M = defineMessages({
+  zh: {
+    mainBlocked: '项目主目录不能归档',
+    busyBlocked: '会话还在运行，先停下来再归档',
+    justNow: '刚刚归档',
+    minutesAgo: (n: number) => `${n} 分钟前归档`,
+    hoursAgo: (n: number) => `${n} 小时前归档`,
+    daysAgo: (n: number) => `${n} 天前归档`
+  },
+  en: {
+    mainBlocked: "The project's main folder can't be archived",
+    busyBlocked: 'A session is still running. Stop it before archiving',
+    justNow: 'Archived just now',
+    minutesAgo: (n: number) => `Archived ${n} min ago`,
+    hoursAgo: (n: number) => `Archived ${n} h ago`,
+    daysAgo: (n: number) => `Archived ${n} ${n === 1 ? 'day' : 'days'} ago`
+  }
+})
 
 /** Saved on the worktree record while it is archived. */
 export interface WorktreeArchive {
@@ -31,8 +51,9 @@ const BUSY: ReadonlySet<Session['status']> = new Set(['running', 'needs_you'])
 
 /** Why this worktree cannot be archived now (Figma 16D, second frame); null when it can. */
 export function archiveBlocker(sessions: readonly Pick<Session, 'status'>[], isMain: boolean): string | null {
-  if (isMain) return '项目主目录不能归档'
-  if (sessions.some((s) => BUSY.has(s.status))) return '会话还在运行，先停下来再归档'
+  const m = pick(M)
+  if (isMain) return m.mainBlocked
+  if (sessions.some((s) => BUSY.has(s.status))) return m.busyBlocked
   return null
 }
 
@@ -80,10 +101,11 @@ export const ARCHIVE_IPC = {
 
 /** "3 天前归档" — the 历史 row's age. */
 export function archivedAgo(at: number, now: number): string {
+  const m = pick(M)
   const minutes = Math.max(0, Math.floor((now - at) / 60_000))
-  if (minutes < 1) return '刚刚归档'
-  if (minutes < 60) return `${minutes} 分钟前归档`
+  if (minutes < 1) return m.justNow
+  if (minutes < 60) return m.minutesAgo(minutes)
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前归档`
-  return `${Math.floor(hours / 24)} 天前归档`
+  if (hours < 24) return m.hoursAgo(hours)
+  return m.daysAgo(Math.floor(hours / 24))
 }
