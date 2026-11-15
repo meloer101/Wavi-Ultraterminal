@@ -65,6 +65,7 @@ describe('messages', () => {
       '修好登录\n\n- fix: login\n- test: login\n- fixes #7 in the subject\n\nCloses #12\nFixes: acme/web#3, fixes #12\n'
     )
     expect(squashMessage('b', [{ subject: 'a', body: 'a\n\nfixed the prefix (#4)\nprefix #5' }], 't')).toBe('t\n\n- a\n')
+    expect(squashMessage('b', [{ subject: 'a', body: 'a\n\nResolves https://github.com/acme/web/issues/4' }], 't')).toBe('t\n\n- a\n\nResolves https://github.com/acme/web/issues/4\n')
   })
 
   it('oneLine strips control characters and newlines', () => {

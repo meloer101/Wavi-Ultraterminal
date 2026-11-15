@@ -465,6 +465,7 @@ describe('创建 PR 面板 (PRD F16 v1.63)', () => {
     expect(prompt.indexOf('git push')).toBeLessThan(prompt.indexOf('addPullRequestReviewThreadReply'))
     expect(prompt).toContain('resolveReviewThread')
     expect(prompt).toContain('_🤖 Addressed by Codex_')
+    expect(prompt).toContain("-F body=@- <<'EOF'")
     expect(prompt).toContain('只回复原因，不 resolve')
     expect(prompt).toContain('强推')
     expect(prompt.endsWith('   > this')).toBe(true)

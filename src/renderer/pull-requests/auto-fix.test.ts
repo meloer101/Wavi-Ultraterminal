@@ -131,6 +131,9 @@ describe('自动修复 of PR review threads', () => {
       expect(text).toContain('（cccccc')
       expect(text).toContain('PRRT_1、PRRT_2')
       expect(text).toContain('不改代码、不提交、不推送')
+      // Wavi's own message: its prompt-submit must not read as the user taking over, which would reset the brakes.
+      const { isWaviPrompt } = await import('@shared/ship-handoff')
+      expect(isWaviPrompt(text)).toBe(true)
       setAutomation('/repo-wt', null)
     } finally {
       vi.unstubAllGlobals()

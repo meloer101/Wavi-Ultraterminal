@@ -197,8 +197,9 @@ export function mergeMessage(branch: string, base: string): string {
   return base === 'main' || base === 'master' ? `Merge branch '${branch}'` : `Merge branch '${branch}' into ${base}`
 }
 
-/** A GitHub closing keyword and the issue it names ("Closes #12", "fixes: acme/web#3"), anywhere in a line. */
-const CLOSING_REFERENCE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+(?:[\w.-]+\/[\w.-]+)?#\d+/i
+/** A GitHub closing keyword and the issue it names ("Closes #12", "fixes: acme/web#3", "Resolves https://…/issues/4"),
+ *  anywhere in a line. */
+const CLOSING_REFERENCE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+(?:(?:[\w.-]+\/[\w.-]+)?#\d+|https?:\/\/\S+\/issues\/\d+)/i
 
 /**
  * A squash commit's message: the title (the session's) and a list of the commits' subjects (oldest first), one commit

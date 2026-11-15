@@ -414,7 +414,8 @@ async function askForReplies(c: FixCtx, threadIds: readonly string[], sha: strin
   if (!commit) return setPrNotice(c.worktree, { tone: 'error', text: `没能请 ${name} 回复评论：没能读到推送的提交` })
   const number = usePullRequests.getState().byWorktree[c.worktree]?.pr?.number ?? null
   try {
-    await submitPrompt(c.session.id, threadRepliesPrompt(number, commit, threadIds, name))
+    // Opens with Wavi's prompt mark like every fix it sends: the user's own prompt resets the brakes (takenOver), this must not.
+    await submitPrompt(c.session.id, `${AUTO_FIX_MARK} · 回复评论）\n\n${threadRepliesPrompt(number, commit, threadIds, name)}`)
   } catch (error) {
     setPrNotice(c.worktree, { tone: 'error', text: `没能请 ${name} 回复评论：${errorText(error)}` })
   }

@@ -1013,7 +1013,8 @@ export function mergeArgs(repo: GitHubRepo, number: number, method: MergeMethod,
 }
 
 /** A reply on a review thread and resolving it, by the thread's node id (PrThread.id), with the user's own gh. */
-export const THREAD_REPLY_COMMAND = `gh api graphql -f query='mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{url}}}' -f id=<thread id> -f body='<回复>'`
+// The reply goes in on stdin (heredoc): a ' in it (don't) cannot break the command.
+export const THREAD_REPLY_COMMAND = `gh api graphql -f query='mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{url}}}' -f id=<thread id> -F body=@- <<'EOF'\n<回复>\nEOF`
 export const THREAD_RESOLVE_COMMAND = `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread id>`
 
 /**
