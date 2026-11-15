@@ -1,3 +1,4 @@
+import { defineMessages, localized } from './i18n'
 import type { Session, SessionStatus } from './types'
 
 /** Statuses that pull the user in: shown in the sidebar's top queue and counted on the Dock badge. */
@@ -22,11 +23,23 @@ export function compareByUrgency(a: Session, b: Session): number {
   return SORT_ORDER[a.status] - SORT_ORDER[b.status] || b.lastActivityAt - a.lastActivityAt
 }
 
-export const STATUS_LABEL: Record<SessionStatus, string> = {
-  running: '运行中',
-  needs_you: '等你处理',
-  done_unread: '已完成',
-  idle: '空闲',
-  error: '出错',
-  exited: '已退出'
-}
+export const STATUS_LABEL: Record<SessionStatus, string> = localized(
+  defineMessages<Record<SessionStatus, string>>({
+    zh: {
+      running: '运行中',
+      needs_you: '等你处理',
+      done_unread: '已完成',
+      idle: '空闲',
+      error: '出错',
+      exited: '已退出'
+    },
+    en: {
+      running: 'Running',
+      needs_you: 'Needs you',
+      done_unread: 'Done',
+      idle: 'Idle',
+      error: 'Error',
+      exited: 'Exited'
+    }
+  })
+)

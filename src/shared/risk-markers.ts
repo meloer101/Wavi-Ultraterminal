@@ -1,5 +1,30 @@
 // Risk markers (PRD F13 v1.78, Figma 29A): facts read off a unified diff with rules, no model — tests deleted or
 // skipped, checks silenced, CI config, dependencies, migrations. Shown at checkpoint 1 and used by the auto-fix brake.
+import { defineMessages, pick } from './i18n'
+
+// English phrases are lower case: the auto-fix brake puts them mid-sentence; riskLabel capitalises them for a row.
+const M = defineMessages({
+  zh: {
+    testFileDeleted: '删了测试文件',
+    testsDeleted: (n: number) => `删了 ${n} 个测试`,
+    testsSkipped: (n: number) => `跳过了 ${n} 个测试`,
+    checksSilenced: (n: number) => `关掉了 ${n} 处检查`,
+    checkConfig: '改了检查配置',
+    ciConfig: '改了 CI 配置',
+    migration: '有数据库迁移',
+    dependencies: '改了依赖'
+  },
+  en: {
+    testFileDeleted: 'deleted a test file',
+    testsDeleted: (n: number) => (n === 1 ? 'deleted 1 test' : `deleted ${n} tests`),
+    testsSkipped: (n: number) => (n === 1 ? 'skipped 1 test' : `skipped ${n} tests`),
+    checksSilenced: (n: number) => (n === 1 ? 'silenced 1 check' : `silenced ${n} checks`),
+    checkConfig: 'changed check config',
+    ciConfig: 'changed CI config',
+    migration: 'has a database migration',
+    dependencies: 'changed dependencies'
+  }
+})
 
 export type RiskKind = 'test-deleted' | 'test-skipped' | 'check-silenced' | 'ci-config' | 'dependencies' | 'migration'
 
@@ -321,23 +346,25 @@ export function riskMarkers(diff: string): RiskMarker[] {
 
 /** One marker without its path, e.g. "删了 1 个测试" (the auto-fix brake's label uses it). */
 export function riskPhrase(marker: RiskMarker): string {
+  const m = pick(M)
   switch (marker.kind) {
     case 'test-deleted':
-      return marker.wholeFile ? '删了测试文件' : `删了 ${marker.count} 个测试`
+      return marker.wholeFile ? m.testFileDeleted : m.testsDeleted(marker.count)
     case 'test-skipped':
-      return `跳过了 ${marker.count} 个测试`
+      return m.testsSkipped(marker.count)
     case 'check-silenced':
-      return `关掉了 ${marker.count} 处检查`
+      return m.checksSilenced(marker.count)
     case 'ci-config':
-      return isCheckConfig(marker.path) ? '改了检查配置' : '改了 CI 配置'
+      return isCheckConfig(marker.path) ? m.checkConfig : m.ciConfig
     case 'migration':
-      return '有数据库迁移'
+      return m.migration
     case 'dependencies':
-      return '改了依赖'
+      return m.dependencies
   }
 }
 
 /** One marker as its row reads, e.g. "改了 CI 配置 · .github/workflows/ci.yml". */
 export function riskLabel(marker: RiskMarker): string {
-  return `${riskPhrase(marker)} · ${marker.path}`
+  const phrase = riskPhrase(marker)
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} · ${marker.path}`
 }
