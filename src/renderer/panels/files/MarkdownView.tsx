@@ -7,10 +7,17 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { openLink } from '../../state/link-actions'
 import { headingSlug, imagePath, resolveMarkdownHref } from './markdown-model'
 import { setNotice, showPreview } from './store'
 import styles from './MarkdownView.module.css'
+
+const M = defineMessages({
+  zh: { notFound: (path: string) => `找不到 ${path}` },
+  en: { notFound: (path: string) => `Can't find ${path}` }
+})
 
 interface Props {
   root: string
@@ -20,6 +27,7 @@ interface Props {
 }
 
 export const MarkdownView = memo(function MarkdownView({ root, path, sessionId, text }: Props) {
+  const m = useMessages(M)
   const follow = (href: string, e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
     const target = resolveMarkdownHref(href, path)
@@ -31,7 +39,7 @@ export const MarkdownView = memo(function MarkdownView({ root, path, sessionId, 
     } else
       void window.tr.worktree.resolveLinks(root, [target.path]).then(([found]) => {
         if (found) showPreview(root, found, target.line)
-        else setNotice(root, `找不到 ${target.path}`)
+        else setNotice(root, m.notFound(target.path))
       })
   }
 

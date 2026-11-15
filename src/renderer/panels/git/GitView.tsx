@@ -9,6 +9,8 @@ import { reviewFiles, viewedState } from '@shared/review-progress'
 import type { GitLogScope } from '@shared/git-graph/log'
 import type { Worktree } from '@shared/types'
 import { SPLIT_MIN_PANEL_WIDTH, type DiffLayout } from '@shared/workspace-file'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { glyphStatus } from '../../lifecycle/present'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
@@ -40,9 +42,55 @@ import styles from './GitView.module.css'
 /** How often the graph checks whether a ref moved while it is on screen (linked worktrees' refs are not watched). */
 const POLL_MS = 4000
 
-const SCOPE_LABEL: Record<GitLogScope, string> = { all: '全部分支', worktrees: '仅 worktree' }
+const M = defineMessages({
+  zh: {
+    scope: { all: '全部分支', worktrees: '仅 worktree' } as Record<GitLogScope, string>,
+    noGit: '未找到 git。安装 Xcode 命令行工具（xcode-select --install）或 Homebrew 的 git 后重新打开。',
+    fetching: '正在拉取…',
+    fetch: '拉取（fetch）',
+    more: '更多',
+    refresh: '刷新',
+    collapseAll: '全部收起',
+    gitView: 'Git 视图',
+    graph: '图谱',
+    changes: (count: number | null) => `变更${count === null ? '' : ` ${count}`}`,
+    hideRemotes: '隐藏远程分支',
+    showRemotes: '显示远程分支',
+    noRemotes: ' · 无远程',
+    viewed: (done: number, total: number) => `已看 ${done} / ${total}`,
+    unviewed: (count: number) => `未看 ${count}`,
+    fetchFailed: (error: string) => `拉取失败：${error}`,
+    narrow: (width: number) => `右侧栏宽 ${width} 以上才能并排`,
+    diffLayout: 'diff 布局',
+    unified: '统一',
+    split: '并排'
+  },
+  en: {
+    scope: { all: 'All branches', worktrees: 'Worktrees only' },
+    noGit: 'git not found. Install the Xcode command line tools (xcode-select --install) or git from Homebrew, then reopen.',
+    fetching: 'Fetching…',
+    fetch: 'Fetch',
+    more: 'More',
+    refresh: 'Refresh',
+    collapseAll: 'Collapse all',
+    gitView: 'Git view',
+    graph: 'Graph',
+    changes: (count: number | null) => `Changes${count === null ? '' : ` ${count}`}`,
+    hideRemotes: 'Hide remote branches',
+    showRemotes: 'Show remote branches',
+    noRemotes: ' · no remotes',
+    viewed: (done: number, total: number) => `Viewed ${done} / ${total}`,
+    unviewed: (count: number) => `Not viewed ${count}`,
+    fetchFailed: (error: string) => `Fetch failed: ${error}`,
+    narrow: (width: number) => `Side by side needs a right panel at least ${width} wide`,
+    diffLayout: 'Diff layout',
+    unified: 'Unified',
+    split: 'Side by side'
+  }
+})
 
 export function GitView({ worktree }: { worktree: Worktree }) {
+  const m = useMessages(M)
   // Checked once per app run: without git (or with only the macOS install stub) nothing else runs.
   const [installed, setInstalled] = useState<boolean | null>(null)
   useEffect(() => {
@@ -56,7 +104,7 @@ export function GitView({ worktree }: { worktree: Worktree }) {
     return (
       <>
         <PaneHeader title="Git" />
-        <p className={styles.empty}>未找到 git。安装 Xcode 命令行工具（xcode-select --install）或 Homebrew 的 git 后重新打开。</p>
+        <p className={styles.empty}>{m.noGit}</p>
       </>
     )
   }
@@ -65,6 +113,7 @@ export function GitView({ worktree }: { worktree: Worktree }) {
 }
 
 function GitPane({ worktree }: { worktree: Worktree }) {
+  const m = useMessages(M)
   const root = worktree.path
   const git = useGit((s) => s.roots[root]) ?? gitOf(root)
   const projectName = useWorkspace((s) => s.projects.find((p) => p.id === worktree.projectId)?.name ?? '')
@@ -123,7 +172,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
       <PaneHeader title="Git" context={onGraph ? projectName : (git.changes?.branch ?? worktree.branch)}>
         {onGraph && (
           <IconButton
-            label={git.fetching ? '正在拉取…' : '拉取（fetch）'}
+            label={git.fetching ? m.fetching : m.fetch}
             disabled={git.fetching}
             onClick={() => void fetchRemotes(root)}
           >
@@ -131,13 +180,13 @@ function GitPane({ worktree }: { worktree: Worktree }) {
           </IconButton>
         )}
         <IconButton
-          label="更多"
+          label={m.more}
           aria-haspopup="menu"
           onClick={(e) => {
             void popupMenu(
               [
-                { type: 'item', id: 'refresh', label: '刷新' },
-                ...(onGraph ? [] : [{ type: 'item' as const, id: 'collapse', label: '全部收起', enabled: git.expanded.size > 0 }])
+                { type: 'item', id: 'refresh', label: m.refresh },
+                ...(onGraph ? [] : [{ type: 'item' as const, id: 'collapse', label: m.collapseAll, enabled: git.expanded.size > 0 }])
               ],
               e.currentTarget
             ).then((choice) => {
@@ -153,13 +202,13 @@ function GitPane({ worktree }: { worktree: Worktree }) {
       </PaneHeader>
       <div className={styles.viewRow}>
         <Segmented
-          label="Git 视图"
+          label={m.gitView}
           variant="plain"
           semantics="tab"
           value={onGraph ? 'graph' : 'changes'}
           options={[
-            { value: 'graph', label: '图谱' },
-            { value: 'changes', label: `变更${changeCount === null ? '' : ` ${changeCount}`}` }
+            { value: 'graph', label: m.graph },
+            { value: 'changes', label: m.changes(changeCount) }
           ]}
           onChange={(tab) => setTab(root, tab)}
         />
@@ -172,8 +221,8 @@ function GitPane({ worktree }: { worktree: Worktree }) {
             onClick={(e) => {
               void popupMenu(
                 [
-                  ...(['all', 'worktrees'] as const).map((scope) => ({ type: 'item' as const, id: scope, label: SCOPE_LABEL[scope] })),
-                  { type: 'item', id: 'remotes', label: git.remotes ? '隐藏远程分支' : '显示远程分支', enabled: git.scope === 'all' }
+                  ...(['all', 'worktrees'] as const).map((scope) => ({ type: 'item' as const, id: scope, label: m.scope[scope] })),
+                  { type: 'item', id: 'remotes', label: git.remotes ? m.hideRemotes : m.showRemotes, enabled: git.scope === 'all' }
                 ],
                 e.currentTarget
               ).then((choice) => {
@@ -182,8 +231,8 @@ function GitPane({ worktree }: { worktree: Worktree }) {
               })
             }}
           >
-            {SCOPE_LABEL[git.scope]}
-            {git.scope === 'all' && !git.remotes ? ' · 无远程' : ''}
+            {m.scope[git.scope]}
+            {git.scope === 'all' && !git.remotes ? m.noRemotes : ''}
             <ChevronDown size={16} strokeWidth={1.75} />
           </button>
         ) : (
@@ -191,7 +240,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
             {viewed && viewed.total > 0 && (
               <>
                 <span className={styles.viewedCount} data-testid="viewed-count">
-                  已看 {viewed.done} / {viewed.total}
+                  {m.viewed(viewed.done, viewed.total)}
                 </span>
                 <button
                   type="button"
@@ -200,7 +249,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
                   data-testid="viewed-filter"
                   onClick={() => setUnviewedOnly(root, !git.unviewedOnly)}
                 >
-                  未看 {viewed.total - viewed.done}
+                  {m.unviewed(viewed.total - viewed.done)}
                 </button>
               </>
             )}
@@ -213,7 +262,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
       </div>
       {git.fetchError && onGraph && (
         <p className={styles.notice} title={git.fetchError}>
-          拉取失败：{git.fetchError.split('\n')[0]}
+          {m.fetchFailed(git.fetchError.split('\n')[0] ?? '')}
         </p>
       )}
       {onGraph ? <GraphView root={root} git={git} sessions={sessions} /> : <ChangesView root={root} git={git} worktree={worktree} layout={layout} />}
@@ -221,13 +270,12 @@ function GitPane({ worktree }: { worktree: Worktree }) {
   )
 }
 
-const NARROW_HINT = `右侧栏宽 ${SPLIT_MIN_PANEL_WIDTH} 以上才能并排`
-
 /**
  * 统一 / 并排 (PRD F5, Figma 17F / 17H). In a narrow panel 并排 is disabled and hovering the switch says why; picking it
  * earlier is remembered, so widening the panel brings it back.
  */
 function LayoutSwitch({ layout, roomy, onChange }: { layout: DiffLayout; roomy: boolean; onChange(layout: DiffLayout): void }) {
+  const m = useMessages(M)
   const [hint, setHint] = useState(false)
   return (
     <span
@@ -237,18 +285,18 @@ function LayoutSwitch({ layout, roomy, onChange }: { layout: DiffLayout; roomy: 
       aria-describedby={roomy ? undefined : 'diff-layout-hint'}
     >
       <Segmented
-        label="diff 布局"
+        label={m.diffLayout}
         variant="outline"
         value={layout}
         options={[
-          { value: 'unified', label: '统一' },
-          { value: 'split', label: '并排', disabled: !roomy }
+          { value: 'unified', label: m.unified },
+          { value: 'split', label: m.split, disabled: !roomy }
         ]}
         onChange={onChange}
       />
       {!roomy && (
         <span id="diff-layout-hint" role="tooltip" className={styles.layoutHint} data-shown={hint} data-testid="diff-layout-hint">
-          {NARROW_HINT}
+          {m.narrow(SPLIT_MIN_PANEL_WIDTH)}
         </span>
       )}
     </span>

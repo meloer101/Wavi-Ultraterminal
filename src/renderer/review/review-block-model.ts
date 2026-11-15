@@ -2,6 +2,34 @@
 // reviewer's summary and one row per finding. Pure; the component only draws it.
 import { commentPicked, type ReviewComment, type ReviewSeverity } from '@shared/review-comments'
 import { reviewerLabel, type ReviewAgent, type ReviewStatus } from '@shared/background-review'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    count: (n: number, severity: string) => `${n} 个 ${severity}`,
+    header: (who: string, files: number | undefined) => `${who} 审阅${files !== undefined && files > 0 ? ` · ${files} 个文件` : ''}`,
+    ignored: (count: number) => `另有 ${count} 条你之前忽略过`,
+    noIssues: '没有发现问题',
+    reviewing: '审阅中…',
+    failed: (message: string) => `审阅失败：${message}`,
+    send: (agent: string, picked: number) => `发给 ${agent} · ${picked}`
+  },
+  en: {
+    count: (n: number, severity: string) => `${n} ${severity}`,
+    header: (who: string, files: number | undefined) =>
+      files !== undefined && files > 0 ? `${who} reviewed ${files} ${files === 1 ? 'file' : 'files'}` : `${who} review`,
+    ignored: (count: number) => `${count} more you ignored before`,
+    noIssues: 'No issues',
+    reviewing: 'Reviewing…',
+    failed: (message: string) => `Review failed: ${message}`,
+    send: (agent: string, picked: number) => `Send to ${agent} · ${picked}`
+  }
+})
+
+// A failed status saved by an older build may still carry the prefix, in either language.
+// eslint-disable-next-line no-restricted-syntax -- matches the Chinese prefix older builds saved into the review status
+const SAVED_FAILED_ZH = /^审阅失败[:：]\s*/
+const SAVED_FAILED_EN = /^Review failed:\s*/
 
 /** The part of a worktree's review state the block reads (background.ts keeps more). */
 export type BlockStatus = Pick<ReviewStatus, 'phase' | 'agent' | 'message' | 'reviewer' | 'fileCount' | 'segment' | 'hidden'> & { found?: number }
@@ -45,7 +73,7 @@ const MAX_PATH_CHARS = 28
 export function countsText(findings: readonly Pick<ReviewComment, 'severity'>[]): string {
   return SEVERITIES.map((severity) => [severity, findings.filter((f) => f.severity === severity).length] as const)
     .filter(([, n]) => n > 0)
-    .map(([severity, n]) => `${n} 个 ${severity}`)
+    .map(([severity, n]) => pick(M).count(n, severity))
     .join(' · ')
 }
 
@@ -59,8 +87,7 @@ export function shortPath(path: string): string {
 
 /** "Codex 审阅 · 3 个文件" (Figma 29R); without a file count (a result saved by an older version) just "Codex 审阅". */
 export function headerText(status: Pick<BlockStatus, 'agent' | 'reviewer' | 'fileCount'>): string {
-  const who = `${status.reviewer || reviewerLabel(status.agent)} 审阅`
-  return status.fileCount !== undefined && status.fileCount > 0 ? `${who} · ${status.fileCount} 个文件` : who
+  return pick(M).header(status.reviewer || reviewerLabel(status.agent), status.fileCount)
 }
 
 /** P0 first, then by file and line. */
@@ -85,10 +112,11 @@ export function findingRow(comment: ReviewComment): FindingRow {
 /** The right half of the first row once the review is done. */
 function doneCounts(status: BlockStatus, findings: readonly ReviewComment[]): string {
   const counts = countsText(findings)
-  const ignored = status.hidden ? `另有 ${status.hidden} 条你之前忽略过` : ''
+  const m = pick(M)
+  const ignored = status.hidden ? m.ignored(status.hidden) : ''
   if (counts) return ignored ? `${counts} · ${ignored}` : counts
   // Nothing left to show: either the review found nothing, or its findings were sent on.
-  if ((status.found ?? 0) === 0) return ignored ? `没有发现问题 · ${ignored}` : '没有发现问题'
+  if ((status.found ?? 0) === 0) return ignored ? `${m.noIssues} · ${ignored}` : m.noIssues
   return ignored
 }
 
@@ -100,17 +128,17 @@ export function reviewBlockView(status: BlockStatus | undefined, findings: reado
   if (!status) return null
   if (status.phase === 'running') {
     const segment = status.segment && status.segment.count > 1 ? ` ${status.segment.index + 1}/${status.segment.count}` : ''
-    return { kind: 'running', text: `审阅中…${segment}` }
+    return { kind: 'running', text: `${pick(M).reviewing}${segment}` }
   }
   // The prefix is added here only; a status saved by an older build may still carry it.
-  if (status.phase === 'failed') return { kind: 'failed', text: `审阅失败：${status.message.replace(/^审阅失败[:：]\s*/, '')}` }
+  if (status.phase === 'failed') return { kind: 'failed', text: pick(M).failed(status.message.replace(SAVED_FAILED_ZH, '').replace(SAVED_FAILED_EN, '')) }
   if (status.phase !== 'done') return null
   const rows = sortFindings(findings).map(findingRow)
   return {
     kind: 'done',
     header: headerText(status),
     counts: doneCounts(status, findings),
-    ignored: status.hidden ? `另有 ${status.hidden} 条你之前忽略过` : '',
+    ignored: status.hidden ? pick(M).ignored(status.hidden) : '',
     summary: status.message.trim(),
     rows,
     picked: rows.filter((row) => row.picked).length
@@ -118,4 +146,4 @@ export function reviewBlockView(status: BlockStatus | undefined, findings: reado
 }
 
 /** The label of the send button: "发给 Claude · 2". */
-export const sendLabel = (agent: ReviewAgent, picked: number): string => `发给 ${reviewerLabel(agent)} · ${picked}`
+export const sendLabel = (agent: ReviewAgent, picked: number): string => pick(M).send(reviewerLabel(agent), picked)

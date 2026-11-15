@@ -6,6 +6,8 @@ import { useEffect, useRef } from 'react'
 import { Check, CircleAlert, CircleDashed, Ellipsis } from 'lucide-react'
 import type { ChainMove, ChainState } from '@shared/ship-chain'
 import { SHORTCUTS } from '@shared/shortcuts'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { runChainCommand } from '../../pull-requests/chain-actions'
 import { zoneMenu, type ChainCommand, type ZoneHeadline } from '../../pull-requests/chain-zone'
 import { popupMenu, updateMenu, type MenuEntry } from '../../ui/menu'
@@ -13,12 +15,18 @@ import { formatAccelerator } from '../../ui/menu-model'
 import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
 
+const M = defineMessages({
+  zh: { allActions: '全部操作', headline: (strong: string, rest: string) => `${strong}：${rest}` },
+  en: { allActions: 'All actions', headline: (strong: string, rest: string) => `${strong}: ${rest}` }
+})
+
 const MARK = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 /** The state line (73C1–73D4, 73G1): never color alone — the glyph's shape and the words say it. */
 export function ChainHeadlineRow({ headline, files }: { headline: ZoneHeadline; files: readonly string[] }) {
+  const m = useMessages(M)
   const Glyph = headline.tone === 'ok' ? Check : headline.tone === 'working' ? CircleDashed : CircleAlert
-  const text = headline.rest ? `${headline.strong}：${headline.rest}` : headline.strong
+  const text = headline.rest ? m.headline(headline.strong, headline.rest) : headline.strong
   return (
     <>
       <p className={ci.headline} role="status" data-testid="chain-headline" data-tone={headline.tone} title={text}>
@@ -55,6 +63,7 @@ export function ChainButtons({
   /** No run is open and no fix waits: the buttons act. */
   idle: boolean
 }) {
+  const m = useMessages(M)
   const run = (command: ChainCommand) => void runChainCommand(worktreePath, command, openIn)
   const button = (move: ChainMove, primary: boolean) => (
     <button
@@ -95,7 +104,7 @@ export function ChainButtons({
         type="button"
         ref={more}
         className={styles.moreButton}
-        aria-label="全部操作"
+        aria-label={m.allActions}
         aria-haspopup="menu"
         data-testid="chain-menu"
         onClick={(event) => void openMenu(event.currentTarget)}

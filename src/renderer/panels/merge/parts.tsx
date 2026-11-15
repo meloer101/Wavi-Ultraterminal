@@ -1,10 +1,25 @@
 // Pieces both merge sheets use (PRD F4 · F16 v1.63): a checklist line, the agent's own checks this turn, a checkbox.
 import { Check, CircleAlert, CircleX, Minus } from 'lucide-react'
 import { runNote, type TurnCheckView } from '@shared/turn-checks'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import { CheckMark } from '../../turn-checks/TurnChecksTag'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { turnChecksLine, type CheckLine, type testLine } from './model'
 import styles from './MergeSheet.module.css'
+
+const M = defineMessages({
+  zh: {
+    runs: '跑过的检查',
+    more: (count: number) => `还有 ${count} 条`,
+    rerun: '重新运行'
+  },
+  en: {
+    runs: 'Checks that ran',
+    more: (count: number) => `${count} more`,
+    rerun: 'Run again'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -37,13 +52,14 @@ const MAX_LISTED_RUNS = 6
 
 /** The agent's own checks this turn: the line, then each command with its mark (the failing ones first). */
 export function TurnChecks({ view, kind }: { view: TurnCheckView; kind: Parameters<typeof turnChecksLine>[1] }) {
+  const m = useMessages(M)
   const order = { fail: 0, unknown: 1, pass: 2 } as const
   const runs = [...view.runs].sort((a, b) => order[a.outcome] - order[b.outcome] || a.at - b.at)
   return (
     <>
       <Line line={turnChecksLine(view, kind)} />
       {runs.length > 0 && (
-        <ul className={styles.runs} aria-label="跑过的检查" data-testid="merge-turn-checks">
+        <ul className={styles.runs} aria-label={m.runs} data-testid="merge-turn-checks">
           {runs.slice(0, MAX_LISTED_RUNS).map((run) => {
             const note = runNote(run)
             return (
@@ -54,7 +70,7 @@ export function TurnChecks({ view, kind }: { view: TurnCheckView; kind: Paramete
               </li>
             )
           })}
-          {runs.length > MAX_LISTED_RUNS && <li className={styles.conflictMore}>还有 {runs.length - MAX_LISTED_RUNS} 条</li>}
+          {runs.length > MAX_LISTED_RUNS && <li className={styles.conflictMore}>{m.more(runs.length - MAX_LISTED_RUNS)}</li>}
         </ul>
       )}
     </>
@@ -62,13 +78,14 @@ export function TurnChecks({ view, kind }: { view: TurnCheckView; kind: Paramete
 }
 
 export function TestResult({ line, onRerun }: { line: ReturnType<typeof testLine>; onRerun(): void }) {
+  const m = useMessages(M)
   return (
     <>
       <Line line={line} />
       {line.output && <pre className={styles.output}>{line.output}</pre>}
       {line.rerun && (
         <button type="button" className={styles.rerun} onClick={onRerun}>
-          重新运行
+          {m.rerun}
         </button>
       )}
     </>

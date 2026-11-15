@@ -5,6 +5,8 @@ import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { clipCode, commentLocation, type ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
+import { defineMessages, pick } from '@shared/i18n'
+import { useMessages } from '../../i18n'
 import {
   cancelDraft,
   editComment,
@@ -16,6 +18,39 @@ import {
 } from '../../state/review-comments'
 import { codeBetween, rowAnchor, type ChangeGroup } from './changes-model'
 import styles from './GitView.module.css'
+
+const M = defineMessages({
+  zh: {
+    commentLine: (line: number) => `评论第 ${line} 行`,
+    commentLineTitle: '评论这一行（⇧ 点击扩展到多行）',
+    comment: (where: string) => `评论 ${where}`,
+    edit: '编辑评论',
+    remove: '删除评论',
+    write: '写评论',
+    placeholder: (where: string) => `${where} · 要改什么？`,
+    cancel: '取消',
+    add: '添加评论',
+    save: '保存',
+    lines: (from: number, to: number) => `第 ${from}–${to} 行`,
+    line: (line: number) => `第 ${line} 行`,
+    removed: (lines: string) => `${lines}（删除的行）`
+  },
+  en: {
+    commentLine: (line: number) => `Comment on line ${line}`,
+    commentLineTitle: 'Comment on this line (⇧-click to extend to several lines)',
+    comment: (where: string) => `Comment ${where}`,
+    edit: 'Edit comment',
+    remove: 'Delete comment',
+    write: 'Write a comment',
+    placeholder: (where: string) => `${where} · What should change?`,
+    cancel: 'Cancel',
+    add: 'Add comment',
+    save: 'Save',
+    lines: (from: number, to: number) => `Lines ${from}–${to}`,
+    line: (line: number) => `Line ${line}`,
+    removed: (lines: string) => `${lines} (removed)`
+  }
+})
 
 const ICON = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -33,6 +68,7 @@ export function CommentAddButton({
   row: DiffRow
   rows: () => readonly DiffRow[]
 }) {
+  const m = useMessages(M)
   const anchor = rowAnchor(row)
   if (!anchor) return null
   const onClick = (event: MouseEvent) => {
@@ -41,7 +77,7 @@ export function CommentAddButton({
     startComment(root, { group, path, side: anchor.side, line: anchor.line, endLine: anchor.line, code: codeFor(anchor.line, anchor.line) }, event.shiftKey, codeFor)
   }
   return (
-    <button type="button" className={styles.commentAdd} aria-label={`评论第 ${anchor.line} 行`} title="评论这一行（⇧ 点击扩展到多行）" onClick={onClick}>
+    <button type="button" className={styles.commentAdd} aria-label={m.commentLine(anchor.line)} title={m.commentLineTitle} onClick={onClick}>
       <MessageSquarePlus {...ICON} />
     </button>
   )
@@ -49,6 +85,7 @@ export function CommentAddButton({
 
 /** `split`: on the new (right) half of a 并排 diff, the left half a filler (Figma 17F "Comment row"). */
 export function CommentRow({ root, comment, top, split = false, end = false }: { root: string; comment: ReviewComment; top: number; split?: boolean; end?: boolean }) {
+  const m = useMessages(M)
   return (
     <div
       className={styles.comment}
@@ -57,15 +94,15 @@ export function CommentRow({ root, comment, top, split = false, end = false }: {
       data-split={split || undefined}
       data-end={end || undefined}
       role="note"
-      aria-label={`评论 ${commentLocation(comment)}`}
+      aria-label={m.comment(commentLocation(comment))}
     >
       <div className={styles.commentHead}>
         <span className={styles.commentWhere}>{lineLabel(comment)}</span>
         <span className={styles.spacer} />
-        <button type="button" className={styles.commentIcon} aria-label="编辑评论" onClick={() => editComment(root, comment.id)}>
+        <button type="button" className={styles.commentIcon} aria-label={m.edit} onClick={() => editComment(root, comment.id)}>
           <Pencil {...ICON} />
         </button>
-        <button type="button" className={styles.commentIcon} aria-label="删除评论" onClick={() => removeComment(root, comment.id)}>
+        <button type="button" className={styles.commentIcon} aria-label={m.remove} onClick={() => removeComment(root, comment.id)}>
           <Trash2 {...ICON} />
         </button>
       </div>
@@ -77,6 +114,7 @@ export function CommentRow({ root, comment, top, split = false, end = false }: {
 }
 
 export function CommentEditor({ top, split = false, end = false }: { top: number; split?: boolean; end?: boolean }) {
+  const m = useMessages(M)
   const draft = useReviewComments((s) => s.draft)
   const ref = useRef<HTMLTextAreaElement>(null)
   // The keyboard comes back here when the editor opens and whenever ⇧-click on a ＋ changes its range.
@@ -103,12 +141,12 @@ export function CommentEditor({ top, split = false, end = false }: { top: number
   }
 
   return (
-    <div className={styles.editor} style={{ top }} role="group" aria-label="写评论" data-split={split || undefined} data-end={end || undefined}>
+    <div className={styles.editor} style={{ top }} role="group" aria-label={m.write} data-split={split || undefined} data-end={end || undefined}>
       <textarea
         ref={ref}
         className={styles.editorText}
-        aria-label={`评论 ${lineLabel(draft)}`}
-        placeholder={`${lineLabel(draft)} · 要改什么？`}
+        aria-label={m.comment(lineLabel(draft))}
+        placeholder={m.placeholder(lineLabel(draft))}
         value={draft.text}
         spellCheck={false}
         onChange={(event) => setDraftText(event.currentTarget.value)}
@@ -118,10 +156,10 @@ export function CommentEditor({ top, split = false, end = false }: { top: number
         <span className={styles.commentWhere}>{lineLabel(draft)}</span>
         <span className={styles.spacer} />
         <button type="button" className={styles.ghostButton} onClick={cancelDraft}>
-          取消
+          {m.cancel}
         </button>
         <button type="button" className={styles.commentSave} disabled={draft.id === null && draft.text.trim() === ''} onClick={() => saveDraft()}>
-          {draft.id === null ? '添加评论' : '保存'}
+          {draft.id === null ? m.add : m.save}
           <span className={styles.shortcut}>⌘↵</span>
         </button>
       </div>
@@ -130,6 +168,7 @@ export function CommentEditor({ top, split = false, end = false }: { top: number
 }
 
 function lineLabel(c: Pick<ReviewComment, 'line' | 'endLine' | 'side'>): string {
-  const lines = c.endLine > c.line ? `第 ${c.line}–${c.endLine} 行` : `第 ${c.line} 行`
-  return c.side === 'old' ? `${lines}（删除的行）` : lines
+  const m = pick(M)
+  const lines = c.endLine > c.line ? m.lines(c.line, c.endLine) : m.line(c.line)
+  return c.side === 'old' ? m.removed(lines) : lines
 }
