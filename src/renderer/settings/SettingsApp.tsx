@@ -2,7 +2,9 @@
 import { useRef, type KeyboardEvent } from 'react'
 import { Bot, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTerminal, Workflow, X, type LucideIcon } from 'lucide-react'
 import { create } from 'zustand'
+import { defineMessages } from '@shared/i18n'
 import { IconButton } from '../ui/IconButton'
+import { useMessages } from '../i18n'
 import { AgentsPane } from './AgentsPane'
 import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'
@@ -24,21 +26,35 @@ type PaneId = SettingsPaneId
 export const useSettingsPane = create<{ pane: PaneId }>()(() => ({ pane: 'appearance' }))
 const setPane = (pane: PaneId) => useSettingsPane.setState({ pane })
 
-const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
-  { id: 'appearance', label: '外观', Icon: Palette },
-  { id: 'terminal', label: '终端', Icon: SquareTerminal },
-  { id: 'chat', label: '对话', Icon: MessageSquare },
-  { id: 'agents', label: '智能体', Icon: Bot },
-  { id: 'usage', label: '额度', Icon: Gauge },
-  { id: 'worktree', label: 'Worktree', Icon: GitBranch },
-  { id: 'automation', label: '自动化', Icon: Workflow },
-  { id: 'phone', label: '手机', Icon: Smartphone }
+const M = defineMessages({
+  zh: {
+    settings: '设置',
+    close: '关闭设置（Esc）',
+    nav: { appearance: '外观', terminal: '终端', chat: '对话', agents: '智能体', usage: '额度', worktree: 'Worktree', automation: '自动化', phone: '手机' }
+  },
+  en: {
+    settings: 'Settings',
+    close: 'Close settings (Esc)',
+    nav: { appearance: 'Appearance', terminal: 'Terminal', chat: 'Chat', agents: 'Agents', usage: 'Usage', worktree: 'Worktree', automation: 'Automation', phone: 'Phone' }
+  }
+})
+
+const NAV: ReadonlyArray<{ id: PaneId; Icon: LucideIcon }> = [
+  { id: 'appearance', Icon: Palette },
+  { id: 'terminal', Icon: SquareTerminal },
+  { id: 'chat', Icon: MessageSquare },
+  { id: 'agents', Icon: Bot },
+  { id: 'usage', Icon: Gauge },
+  { id: 'worktree', Icon: GitBranch },
+  { id: 'automation', Icon: Workflow },
+  { id: 'phone', Icon: Smartphone }
 ]
 
 export function SettingsApp({ onClose }: { onClose(): void }) {
   const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch, updateRemote, updateSchedules } = useSettings()
   const pane = useSettingsPane((s) => s.pane)
   const items = useRef(new Map<PaneId, HTMLButtonElement>())
+  const m = useMessages(M)
 
   const onNavKeyDown = (event: KeyboardEvent): void => {
     const delta = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
@@ -53,10 +69,10 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
 
   return (
     <div className={styles.window}>
-      <nav className={styles.nav} aria-label="设置">
-        <h1 className={styles.title}>设置</h1>
+      <nav className={styles.nav} aria-label={m.settings}>
+        <h1 className={styles.title}>{m.settings}</h1>
         <div className={styles.items} role="tablist" aria-orientation="vertical" onKeyDown={onNavKeyDown}>
-          {NAV.map(({ id, label, Icon }) => (
+          {NAV.map(({ id, Icon }) => (
             <button
               key={id}
               ref={(node) => {
@@ -73,14 +89,14 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
               onClick={() => setPane(id)}
             >
               <Icon size={16} strokeWidth={1.75} aria-hidden />
-              <span>{label}</span>
+              <span>{m.nav[id]}</span>
             </button>
           ))}
         </div>
       </nav>
       <main className={styles.content} id="settings-pane" role="tabpanel" aria-labelledby={`tab-${pane}`} data-loaded={loaded}>
         <div className={styles.closeBar}>
-          <IconButton label="关闭设置（Esc）" onClick={onClose}>
+          <IconButton label={m.close} onClick={onClose}>
             <X size={16} strokeWidth={1.75} />
           </IconButton>
         </div>

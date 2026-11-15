@@ -13,39 +13,89 @@ import { useMessages } from '../i18n'
 import styles from './AppearancePane.module.css'
 
 const M = defineMessages({
-  zh: { language: '语言', interfaceLanguage: '界面语言', system: '跟随系统', chinese: '中文', english: 'English' },
-  en: { language: 'Language', interfaceLanguage: 'Interface language', system: 'System', chinese: '中文', english: 'English' }
+  zh: {
+    language: '语言',
+    interfaceLanguage: '界面语言',
+    system: '跟随系统',
+    chinese: '中文',
+    english: 'English',
+    title: '外观',
+    theme: '主题',
+    window: '窗口',
+    material: '材质',
+    backgroundImage: '背景图片',
+    image: '图片',
+    replace: '更换…',
+    chooseImage: '选择图片…',
+    remove: '移除',
+    blur: '模糊',
+    fullscreenBackdrop: '全屏背景',
+    auto: '自动'
+  },
+  en: {
+    language: 'Language',
+    interfaceLanguage: 'Interface language',
+    system: 'System',
+    chinese: '中文',
+    english: 'English',
+    title: 'Appearance',
+    theme: 'Theme',
+    window: 'Window',
+    material: 'Material',
+    backgroundImage: 'Background image',
+    image: 'Image',
+    replace: 'Replace…',
+    chooseImage: 'Choose image…',
+    remove: 'Remove',
+    blur: 'Blur',
+    fullscreenBackdrop: 'Full-screen backdrop',
+    auto: 'Auto'
+  }
 })
 
-const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
-
 /** 全屏背景 (Figma 38): the author's 配图底托, named for what they look like; 自动 is 晴空 in light mode, 夜火 in dark. */
-const BACKDROP_NAMES: Record<(typeof FULLSCREEN_BACKDROPS)[number], string> = {
-  sky: '晴空',
-  meadow: '青原',
-  lake: '湖岸',
-  dune: '沙丘',
-  pine: '松林',
-  dusk: '暮紫',
-  coral: '珊瑚',
-  sunset: '晚霞',
-  ember: '夜火',
-  plum: '霞紫'
-}
-const field = (id: string) => <span className={styles.backdropField} style={{ background: `var(--fsb-${id})` }} />
-const BACKDROP_OPTIONS: ReadonlyArray<{ value: FullscreenBackdrop; label: string; preview: ReactNode }> = [
-  {
-    value: 'auto',
-    label: '自动',
-    preview: (
-      <>
-        {field('sky')}
-        <span className={styles.backdropHalf}>{field('ember')}</span>
-      </>
-    )
+const BACKDROP_NAMES = defineMessages<Record<(typeof FULLSCREEN_BACKDROPS)[number], string>>({
+  zh: {
+    sky: '晴空',
+    meadow: '青原',
+    lake: '湖岸',
+    dune: '沙丘',
+    pine: '松林',
+    dusk: '暮紫',
+    coral: '珊瑚',
+    sunset: '晚霞',
+    ember: '夜火',
+    plum: '霞紫'
   },
-  ...FULLSCREEN_BACKDROPS.map((id) => ({ value: id, label: BACKDROP_NAMES[id], preview: field(id) }))
-]
+  en: {
+    sky: 'Clear sky',
+    meadow: 'Meadow',
+    lake: 'Lakeshore',
+    dune: 'Dunes',
+    pine: 'Pines',
+    dusk: 'Dusk',
+    coral: 'Coral',
+    sunset: 'Sunset',
+    ember: 'Bonfire',
+    plum: 'Afterglow'
+  }
+})
+const field = (id: string) => <span className={styles.backdropField} style={{ background: `var(--fsb-${id})` }} />
+function backdropOptions(auto: string, names: Record<(typeof FULLSCREEN_BACKDROPS)[number], string>): ReadonlyArray<{ value: FullscreenBackdrop; label: string; preview: ReactNode }> {
+  return [
+    {
+      value: 'auto',
+      label: auto,
+      preview: (
+        <>
+          {field('sky')}
+          <span className={styles.backdropHalf}>{field('ember')}</span>
+        </>
+      )
+    },
+    ...FULLSCREEN_BACKDROPS.map((id) => ({ value: id, label: names[id], preview: field(id) }))
+  ]
+}
 
 /**
  * A small window over a desktop field, drawn with the variables the app applies (appearance/map.ts, AppShell): the
@@ -79,6 +129,7 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
   const image = appearance.backgroundImage
   const picker = useRef<HTMLInputElement>(null)
   const m = useMessages(M)
+  const backdropNames = useMessages(BACKDROP_NAMES)
   // Each language's own name, whatever the interface shows (Figma 89).
   const languageOptions: ReadonlyArray<{ value: LanguagePreference; label: string }> = [
     { value: 'system', label: m.system },
@@ -87,7 +138,7 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
   ]
   return (
     <PreviewPage
-      title="外观"
+      title={m.title}
       preview={<WindowPreview />}
       isDefault={isPageDefault(appearance, 'appearance')}
       onReset={() => update(pageDefaults('appearance'))}
@@ -98,24 +149,24 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
         </Row>
       </Section>
 
-      <Section title="主题">
-        <ThemeSwatches label="主题" value={appearance.theme} options={THEME_SWATCHES} onChange={(theme) => update({ theme })} />
+      <Section title={m.theme}>
+        <ThemeSwatches label={m.theme} value={appearance.theme} options={THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))} onChange={(theme) => update({ theme })} />
       </Section>
 
-      <Section title="窗口">
-        <Row label="材质" id="windowMaterial">
-          <Segmented label="材质" value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
+      <Section title={m.window}>
+        <Row label={m.material} id="windowMaterial">
+          <Segmented label={m.material} value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
         </Row>
       </Section>
 
       {/* 背景图片 (Figma 86A / 86B): drawn under the base layer on 玻璃 only; 实色 is opaque. */}
       {!solid && (
-        <Section title="背景图片">
-          <Row label="图片" id="backgroundImage">
+        <Section title={m.backgroundImage}>
+          <Row label={m.image} id="backgroundImage">
             <div className={styles.avatarControl}>
-              {image && <img className={styles.backgroundThumb} src={backgroundImageUrl(image)} alt="背景图片" />}
-              <Button onClick={() => picker.current?.click()}>{image ? '更换…' : '选择图片…'}</Button>
-              {image && <Button onClick={() => update({ backgroundImage: '' })}>移除</Button>}
+              {image && <img className={styles.backgroundThumb} src={backgroundImageUrl(image)} alt={m.backgroundImage} />}
+              <Button onClick={() => picker.current?.click()}>{image ? m.replace : m.chooseImage}</Button>
+              {image && <Button onClick={() => update({ backgroundImage: '' })}>{m.remove}</Button>}
             </div>
             <input
               ref={picker}
@@ -139,9 +190,9 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
             />
           </Row>
           {image && (
-            <Row label="模糊" id="backgroundBlur">
+            <Row label={m.blur} id="backgroundBlur">
               <Slider
-                label="模糊"
+                label={m.blur}
                 value={appearance.backgroundBlur}
                 min={LIMITS.backgroundBlur.min}
                 max={LIMITS.backgroundBlur.max}
@@ -156,11 +207,11 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
 
       {/* 实色 (Figma 57C) draws no field in full screen, and a 背景图片 takes its place (Figma 86B): nothing to choose. */}
       {!solid && !image && (
-        <Section title="全屏背景">
+        <Section title={m.fullscreenBackdrop}>
           <ThemeSwatches
-            label="全屏背景"
+            label={m.fullscreenBackdrop}
             value={appearance.fullscreenBackdrop}
-            options={BACKDROP_OPTIONS}
+            options={backdropOptions(m.auto, backdropNames)}
             onChange={(fullscreenBackdrop) => update({ fullscreenBackdrop })}
           />
         </Section>

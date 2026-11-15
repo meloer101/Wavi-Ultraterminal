@@ -4,9 +4,13 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { create } from 'zustand'
 import type { CliAgent } from '@shared/agents'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { useAgentFocus } from './AgentsPane'
 import { SettingsApp, useSettingsPane, type SettingsPaneId } from './SettingsApp'
 import styles from './SettingsDialog.module.css'
+
+const M = defineMessages({ zh: { settings: '设置' }, en: { settings: 'Settings' } })
 
 const useDialog = create<{ open: boolean }>()(() => ({ open: false }))
 
@@ -42,6 +46,7 @@ export function closeSettings(): void {
 export function SettingsDialog() {
   const open = useDialog((s) => s.open)
   const sheetRef = useRef<HTMLDivElement>(null)
+  const m = useMessages(M)
 
   // ⌘, from the app menu arrives as an IPC message.
   useEffect(() => window.tr.ui.onShowSettings(() => openSettings()), [])
@@ -70,7 +75,7 @@ export function SettingsDialog() {
         className={styles.sheet}
         role="dialog"
         aria-modal="true"
-        aria-label="设置"
+        aria-label={m.settings}
         tabIndex={-1}
         onKeyDown={onKeyDown}
       >

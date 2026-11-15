@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react'
 import type { ITheme } from '@xterm/xterm'
 import type { AppearanceSettings } from '@shared/settings'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../i18n'
 import { needsTransparency } from '../appearance/map'
 import { buildFontStack } from '../terminal/appearance'
 import { XtermSurface } from '../terminal/xterm-surface'
 import { sampleRows, sampleScreen } from './preview-sample'
 import styles from './PreviewTerminal.module.css'
+
+const M = defineMessages({ zh: { label: '终端预览' }, en: { label: 'Terminal preview' } })
 
 type PreviewAppearance = Pick<
   AppearanceSettings,
@@ -35,6 +39,7 @@ function toSurface(a: PreviewAppearance) {
  */
 export function PreviewTerminal({ appearance }: { appearance: PreviewAppearance }) {
   const host = useRef<HTMLDivElement>(null)
+  const m = useMessages(M)
   const surface = useRef<XtermSurface | null>(null)
   const latest = useRef(appearance)
   useEffect(() => {
@@ -100,7 +105,7 @@ export function PreviewTerminal({ appearance }: { appearance: PreviewAppearance 
     <div
       className={styles.preview}
       role="img"
-      aria-label="终端预览"
+      aria-label={m.label}
       data-testid="preview-terminal"
       data-font-stack={buildFontStack({ fontFamily: latinFont, cjkFontFamily: cjkFont })}
       data-font-size={fontSize}
