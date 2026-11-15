@@ -1,14 +1,21 @@
-// 设置 · 外观 (Figma 66A / 66B, 86): what the whole window looks like — theme, material, 背景图片, 全屏背景. The
+// 设置 · 外观 (Figma 66A / 66B, 86, 89): what the whole window looks like — language, theme, material, 背景图片, 全屏背景. The
 // terminal's and the chat's own settings are on 终端 and 对话.
 import { useRef, type ReactNode } from 'react'
 import { backgroundImageUrl } from '@shared/background-image'
+import { defineMessages, type LanguagePreference } from '@shared/i18n'
 import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { GlassBase } from '../ui/GlassBase'
 import { Button, PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
 import { MATERIAL_OPTIONS, THEME_OPTIONS, formatPercent, isPageDefault, pageDefaults } from './appearance-form'
 import { backgroundFromFile } from './background-image'
+import { useMessages } from '../i18n'
 import styles from './AppearancePane.module.css'
+
+const M = defineMessages({
+  zh: { language: '语言', interfaceLanguage: '界面语言', system: '跟随系统', chinese: '中文', english: 'English' },
+  en: { language: 'Language', interfaceLanguage: 'Interface language', system: 'System', chinese: '中文', english: 'English' }
+})
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
 
@@ -71,6 +78,13 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
   const solid = appearance.windowMaterial === 'solid'
   const image = appearance.backgroundImage
   const picker = useRef<HTMLInputElement>(null)
+  const m = useMessages(M)
+  // Each language's own name, whatever the interface shows (Figma 89).
+  const languageOptions: ReadonlyArray<{ value: LanguagePreference; label: string }> = [
+    { value: 'system', label: m.system },
+    { value: 'zh', label: m.chinese },
+    { value: 'en', label: m.english }
+  ]
   return (
     <PreviewPage
       title="外观"
@@ -78,6 +92,12 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
       isDefault={isPageDefault(appearance, 'appearance')}
       onReset={() => update(pageDefaults('appearance'))}
     >
+      <Section title={m.language}>
+        <Row label={m.interfaceLanguage} id="language">
+          <Segmented label={m.interfaceLanguage} value={appearance.language} options={languageOptions} onChange={(language) => update({ language })} />
+        </Row>
+      </Section>
+
       <Section title="主题">
         <ThemeSwatches label="主题" value={appearance.theme} options={THEME_SWATCHES} onChange={(theme) => update({ theme })} />
       </Section>

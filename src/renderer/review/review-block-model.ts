@@ -102,7 +102,8 @@ export function reviewBlockView(status: BlockStatus | undefined, findings: reado
     const segment = status.segment && status.segment.count > 1 ? ` ${status.segment.index + 1}/${status.segment.count}` : ''
     return { kind: 'running', text: `审阅中…${segment}` }
   }
-  if (status.phase === 'failed') return { kind: 'failed', text: status.message.startsWith('审阅失败') ? status.message : `审阅失败：${status.message}` }
+  // The prefix is added here only; a status saved by an older build may still carry it.
+  if (status.phase === 'failed') return { kind: 'failed', text: `审阅失败：${status.message.replace(/^审阅失败[:：]\s*/, '')}` }
   if (status.phase !== 'done') return null
   const rows = sortFindings(findings).map(findingRow)
   return {

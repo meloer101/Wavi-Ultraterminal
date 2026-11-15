@@ -4,6 +4,7 @@ import '@fontsource-variable/jetbrains-mono'
 import './styles/tokens.css'
 import './styles/base.css'
 import { initTheme } from './theme'
+import { initLanguage } from './i18n'
 import { AppShell } from './app-shell/AppShell'
 import { openTerminalMenu } from './attempts/terminal-menu'
 import { installedAgents } from './new-session/sheet-store'
@@ -12,6 +13,7 @@ import { handleTerminalLink, resolveSessionPaths } from './state/link-actions'
 import { setTerminalHandlers } from './terminal/handlers'
 
 initTheme()
+initLanguage()
 setTerminalHandlers({
   link: handleTerminalLink,
   resolvePaths: resolveSessionPaths,

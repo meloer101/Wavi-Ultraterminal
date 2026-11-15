@@ -4,6 +4,7 @@
 import { headlessAgent, type HeadlessAgent } from './agents'
 import { isBackgroundImageName } from './background-image'
 import { normalizeHex } from './color'
+import { isLanguagePreference, type LanguagePreference } from './i18n'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 import { DEFAULT_REMOTE_PORT } from './remote'
 
@@ -69,6 +70,8 @@ export interface ChatAppearance {
 export type WindowMaterial = 'glass' | 'solid'
 
 export interface AppearanceSettings {
+  /** 语言 · 界面语言 (Figma 89): 跟随系统 resolves in main from the system's preferred languages (shared/i18n.ts). */
+  language: LanguagePreference
   theme: ThemePreference
   fullscreenBackdrop: FullscreenBackdrop
   /** Latin monospace family for the terminal. */
@@ -238,6 +241,7 @@ export interface SettingsPatch {
 export const DEFAULT_SETTINGS: AppSettings = {
   version: 1,
   appearance: {
+    language: 'system',
     theme: 'system',
     fullscreenBackdrop: 'auto',
     latinFont: 'JetBrains Mono Variable',
@@ -356,6 +360,7 @@ function appearance(value: unknown): AppearanceSettings {
   const d = DEFAULT_SETTINGS.appearance
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return {
+    language: isLanguagePreference(v.language) ? v.language : d.language,
     theme: v.theme === 'dark' || v.theme === 'light' || v.theme === 'system' ? v.theme : d.theme,
     fullscreenBackdrop:
       v.fullscreenBackdrop === 'auto' || (FULLSCREEN_BACKDROPS as readonly unknown[]).includes(v.fullscreenBackdrop)

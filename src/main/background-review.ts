@@ -332,7 +332,8 @@ async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSe
       'done'
     )
   } catch (error) {
-    finishJob(state, job, { phase: 'failed', message: `审阅失败：${error instanceof Error ? error.message : String(error)}` }, 'failed')
+    // The renderer puts 审阅失败 in front, in its own language (review-block-model.ts).
+    finishJob(state, job, { phase: 'failed', message: error instanceof Error ? error.message : String(error) }, 'failed')
   } finally {
     if (dir) void rm(dir, { recursive: true, force: true }).catch(() => {})
   }
