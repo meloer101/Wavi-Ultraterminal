@@ -5,6 +5,7 @@ import { headlessAgent, type HeadlessAgent } from '@shared/agents'
 import { create } from 'zustand'
 import { formatReviewStats, type ReviewAgent, type ReviewStatus, type ReviewTrigger } from '@shared/background-review'
 import type { AgentEventEnvelope } from '@shared/agent-events'
+import type { CommitRange } from '@shared/ship'
 import { landReviewComments } from '../state/review-comments'
 import { useWorkspace } from '../state/workspace'
 import { promptsOf } from '../attempts/sources'
@@ -61,9 +62,11 @@ function askedFor(root: string, agent: HeadlessAgent): string[] {
   return []
 }
 
-/** `force`: 重审, also when this exact diff was reviewed before. */
-export async function startBackgroundReview(root: string, agent: ReviewAgent, trigger: ReviewTrigger, base?: string, force = false): Promise<ReviewStatus> {
-  const status = await window.tr.review.start(withAsked({ root, agent, trigger, ...(base ? { base } : {}), ...(force ? { force: true } : {}) }, askedFor(root, agent)))
+/** `force`: 重审, also when this exact diff was reviewed before. `range`: only these commits (the push node's review). */
+export async function startBackgroundReview(root: string, agent: ReviewAgent, trigger: ReviewTrigger, base?: string, force = false, range?: CommitRange): Promise<ReviewStatus> {
+  const status = await window.tr.review.start(
+    withAsked({ root, agent, trigger, ...(base ? { base } : {}), ...(force ? { force: true } : {}), ...(range ? { range } : {}) }, askedFor(root, agent))
+  )
   acceptReviewStatus(status)
   return status
 }

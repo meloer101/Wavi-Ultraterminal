@@ -3,17 +3,23 @@
 // the state line, the primary and secondary move, and every chain action in a fixed order with the reason it cannot
 // run now. Pure; Git · 变更, the phone (PRD F22) and ⌘K read it. Rules, first match decides (a–g):
 //   a. a merge / rebase / cherry-pick stopped → hand the conflicts to the agent, or 继续; 中止 beside it
-//   b. the main checkout on its base / a failed preflight (detached HEAD) / no project → only the reason
-//      (while the preflight runs: d and e still apply, else the two exits wait as 正在检查…)
-//   c. an open PR → 拉取 (or hand a diverged branch to the agent) / 提交并推送 / 推送 to it, else 同步 <base> while it
-//      conflicts with the base, else 合并 PR #N… (once the PR's details are read)
+//   b. the main checkout on its base → 提交 while files are ticked, else 推送 of the base while it has commits its
+//      upstream lacks, every other action waits with the reason; a failed preflight (detached HEAD) / no project → only
+//      the reason (while the preflight runs: d and e still apply, else 提交 while files are ticked, else the two exits
+//      wait as 正在检查…)
+//   c. an open PR → 拉取 (or hand a diverged branch to the agent), else 提交 while files are ticked, else 同步 <base>
+//      while it conflicts with the base, else 推送 to it, else 合并 PR #N… (once the PR's details are read)
 //   d. merged (PR merged, or the branch's work is in the base) and clean → 已经全部合并, 归档… (still checking while the
-//      preflight answers an older change list)
+//      preflight answers an older change list); the work in the local base that its upstream lacks (a local 合并) →
+//      推送 of the base first, 归档… only after it; the branch's PR closed without a merge and clean → 归档… too
 //   e. nothing of its own and clean → nothing at all
 //   f. the pushed branch is behind its remote → 拉取 (or hand a diverged branch to the agent); then landing on the base
-//      would conflict → 同步 <base> (提交… first while tracked files are uncommitted)
-//   g. the two exits: 合并到 <base> 并推送 and 创建 PR, the remembered (else suggested) one first; only the first when
-//      the remote is not on GitHub
+//      would conflict → 同步 <base> (提交 first while files are ticked or tracked files are uncommitted)
+//   g. 提交 while files are ticked (the exit beside it once the branch has commits of its own); else the two exits:
+//      合并 (into the local base, never pushed) and 创建 PR, the remembered (else suggested) one first; only the first
+//      when the remote is not on GitHub
+// 提交 is its own move, never part of an exit: the exits ship only what is committed, and files left unticked are
+// never shipped nor in the way.
 import { archiveBlocker } from './archive'
 import { looksLikeReport } from './dispatch'
 import type { GitChanges } from './git-graph/log'
@@ -26,8 +32,8 @@ import type { Session } from './types'
 // ── contract ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Every chain action, in the order `actions` lists them. `pr`: 创建 PR, or 推送到 PR #N while one is open; `main`:
- *  合并到 <base> (并推送) — the ids match ShipExitKind. */
-export const CHAIN_ACTION_IDS = ['commit', 'sync', 'pull', 'push', 'pr', 'main', 'merge-pr', 'archive'] as const
+ *  合并 into the local base — the ids match ShipExitKind; `push-base`: 推送 of the base a local 合并 left ahead. */
+export const CHAIN_ACTION_IDS = ['commit', 'sync', 'pull', 'push', 'pr', 'main', 'push-base', 'merge-pr', 'archive'] as const
 export type ChainActionId = (typeof CHAIN_ACTION_IDS)[number]
 
 /** What `next` / `second` can be: a chain action, or one of the moves only a stuck state offers. `handoff`: put the
@@ -37,8 +43,9 @@ export type ChainMoveId = ChainActionId | 'handoff' | 'continue' | 'abort'
 /** ok: done (merged) · blocked: something stands in the way · working: Wavi is still checking · info: a fact to act on. */
 export type ChainTone = 'ok' | 'blocked' | 'working' | 'info'
 
-/** Which rule decided (a–g above); `checking` while the preflight runs. */
-export type ChainStage = 'operation' | 'stuck' | 'checking' | 'pr' | 'merged' | 'empty' | 'conflicts' | 'exits'
+/** Which rule decided (a–g above); `base`: the main checkout on its base (rule b: 提交, 推送 of the base); `checking` while the
+ *  preflight runs; `unpushed`: merged into the local base, which its upstream lacks (rule d, 推送 of the base). */
+export type ChainStage = 'operation' | 'stuck' | 'base' | 'checking' | 'pr' | 'merged' | 'unpushed' | 'empty' | 'conflicts' | 'exits'
 
 export interface ChainHeadline {
   tone: ChainTone
@@ -99,6 +106,9 @@ export interface ChainInput {
   pr: ChainPr | null
   /** The branch's newest PR was merged on GitHub (and none is open). */
   prMerged: boolean
+  /** The number of the branch's newest PR when it was closed on GitHub without a merge (and none is open), while the
+   *  branch is still at its head; absent otherwise. */
+  prClosed?: number
   /** The worktree is the project's main checkout. */
   isMain: boolean
   projectRoot: string | null
@@ -111,7 +121,7 @@ export interface ChainInput {
   sessions: readonly Pick<Session, 'status'>[]
   /** The conflict radar's files against the base, used while the preflight has no `baseConflicts`; null when unknown. */
   radarConflicts: readonly string[] | null
-  /** Ticked uncommitted files (Git · 变更's checkboxes): what 提交… and an exit's commit step take. Absent: every one. */
+  /** Ticked uncommitted files (Git · 变更's checkboxes): what 提交 takes. Absent: every one. */
   ticked?: number
 }
 
@@ -125,7 +135,8 @@ export interface ChainState {
   second: ChainMove | null
   /** Every chain action, in CHAIN_ACTION_IDS order. */
   actions: ChainAction[]
-  /** Why no action but 归档… can run at all (an operation, the base, no project, checking, a failed preflight); null otherwise. */
+  /** Why no action but 归档… can run at all (an operation, the base — where 提交 still runs —, no project, checking, a
+   *  failed preflight); null otherwise. */
   blocked: string | null
   /** The base the labels name. */
   base: string
@@ -137,15 +148,18 @@ export interface ChainState {
 
 /** Action and move labels. */
 export const CHAIN_LABEL = {
-  commit: '提交…',
+  commit: '提交',
   sync: (base: string) => `同步 ${base}`,
   pull: '拉取',
   push: '推送',
   createPr: '创建 PR',
   pushPr: (n: number) => `推送到 PR #${n}`,
-  commitPushPr: (n: number) => `提交并推送到 PR #${n}`,
-  merge: (base: string) => `合并到 ${base}`,
-  mergePush: (base: string) => `合并到 ${base} 并推送`,
+  /** The exit's button: the local merge (the ⋯ menu and ⌘K name the base, mergeTo). */
+  merge: '合并',
+  mergeTo: (base: string) => `合并到 ${base}`,
+  /** 推送 of the base after a local 合并 (the ⋯ menu and ⌘K name it, pushBaseTo). */
+  pushBase: '推送',
+  pushBaseTo: (base: string) => `推送 ${base}`,
   mergePr: (n: number | null) => (n === null ? '合并 PR…' : `合并 PR #${n}…`),
   archive: '归档…',
   handoff: (agent: string | null) => `交给 ${agent ?? 'agent'}`,
@@ -168,6 +182,12 @@ export const CHAIN_TEXT = {
   /** The state line's remoteAhead when the count is known (Figma 73K6). */
   remoteAheadCount: (n: number) => `远程有本地没有的提交 · ${n} 个`,
   merged: (base: string) => `已经全部合并到 ${base}`,
+  /** The branch's PR was closed on GitHub without a merge. */
+  prClosed: (n: number) => `PR #${n} 已关闭`,
+  /** The local base has commits its upstream lacks (a local 合并 left it ahead). */
+  baseUnpushed: (base: string, n: number) => `${base} 有 ${n} 个提交还没推送`,
+  /** 归档… waits while the merged work is only in the local base. */
+  pushBaseFirst: (base: string) => `先推送 ${base}`,
   baseConflicts: (base: string, files: number) => `和 ${base} 会冲突 · ${files} 个文件`,
   // GitHub's merge state dirty, as the PR line says it (和基线冲突), with the base named as the chain names it.
   prConflicts: (base: string) => `和 ${base} 冲突`,
@@ -223,6 +243,8 @@ export function chainInputFrom(sources: {
   const live = livePr(prStatus)
   const ok = preflight?.ok ? preflight : null
   const openPr = preflight?.ok ? preflight.openPr : null
+  const head = ok?.head ?? prStatus?.local?.head ?? null
+  const done = !live && prStatus?.pr && mergedPrIsThisBranch(prStatus.pr, head, ok?.merged === true) ? prStatus.pr : null
   const pr: ChainPr | null = live
     ? {
         number: live.number,
@@ -249,7 +271,8 @@ export function chainInputFrom(sources: {
       ...(changes.baseRef !== undefined ? { baseRef: changes.baseRef } : {})
     },
     pr,
-    prMerged: !live && prStatus?.pr?.state === 'merged' && mergedPrIsThisBranch(prStatus.pr, ok?.head ?? prStatus.local?.head ?? null, ok?.merged === true),
+    prMerged: done?.state === 'merged',
+    ...(done?.state === 'closed' ? { prClosed: done.number } : {}),
     isMain: sources.isMain,
     projectRoot: sources.projectRoot,
     gh: sources.gh ?? null,
@@ -261,8 +284,9 @@ export function chainInputFrom(sources: {
 }
 
 /**
- * A merged PR is this branch's work only while the branch is still at the PR's head, or while the preflight finds the
- * branch's work in the base: commits made after the merge (the branch reused for new work) are not merged.
+ * A merged (or closed) PR is this branch's work only while the branch is still at the PR's head, or while the preflight
+ * finds the branch's work in the base: commits made after it (the branch reused for new work) are not merged, nor are
+ * they what was closed.
  */
 function mergedPrIsThisBranch(pr: PullRequestInfo, head: string | null, workInBase: boolean): boolean {
   if (workInBase) return true
@@ -303,6 +327,10 @@ export function shipChain(input: ChainInput): ChainState {
   const base = pf?.base ?? baseBranchOf(local) ?? 'main'
   const ahead = pf ? pf.ahead : local.ahead
   const merged = pf?.merged === true
+  /** Local base commits its upstream lacks (0 when not known). */
+  const baseUnpushed = pf?.baseUnpushed ?? 0
+  /** The branch's work landed in the local base (合并), which still has to be pushed: 推送 of the base before 归档…. */
+  const landedUnpushed = merged && !input.prMerged && baseUnpushed > 0
   const uncommitted = local.uncommitted
   /** undefined: not known yet (the preflight runs). */
   const remote = pf ? pf.remote : undefined
@@ -317,14 +345,13 @@ export function shipChain(input: ChainInput): ChainState {
     pf?.upstream && pf.upstream.behind > 0 && pr?.remoteAhead !== true ? CHAIN_TEXT.remoteAheadCount(pf.upstream.behind) : CHAIN_TEXT.remoteAhead
   const gh = input.gh && input.gh !== 'checking' ? input.gh : (pf?.gh ?? input.gh)
   const conflicts = pf?.baseConflicts ?? input.radarConflicts ?? null
-  const nothing = (ahead === 0 || merged) && uncommitted === 0
   const onBase = onOwnBase(isMain, local)
-  /** What an exit's commit step takes: the ticked files (every one when the ticks are not known). */
+  /** What 提交 takes: the ticked files (every one when the ticks are not known). */
   const ticked = Math.min(input.ticked ?? uncommitted, uncommitted)
-  /** Files are uncommitted but none is ticked: an exit commits nothing. */
-  const noneTicked = uncommitted > 0 && ticked === 0
-  /** The branch has commits of its own to ship. */
+  /** The branch has commits of its own to ship: the exits ship nothing else. */
   const ownCommits = ahead > 0 && !merged
+  /** Why an exit with no commits of its own cannot run: 提交 first while files are ticked, else `nothingText`. */
+  const noOwnCommits = (nothingText: string): string | false => !ownCommits && (ticked > 0 ? CHAIN_TEXT.commitFirst : nothingText)
   const prConflicts = pr !== null && (pr.conflicting || (conflicts !== null && conflicts.length > 0))
   const prConflictText = conflicts !== null && conflicts.length > 0 ? CHAIN_TEXT.baseConflicts(base, conflicts.length) : CHAIN_TEXT.prConflicts(base)
 
@@ -337,8 +364,15 @@ export function shipChain(input: ChainInput): ChainState {
     preflight?.ok === false && preflight.message
   )
 
+  // 提交 needs neither a branch of its own nor the preflight's answer: it runs on the base in the main checkout.
+  const commitBlocked = onBase ? first(operation && CHAIN_TEXT.operation(operation.kind), !input.projectRoot && CHAIN_TEXT.noProject) : blocked
+  // 推送 of the base runs there too (path ①), once the preflight answers about the base.
+  const pushBaseBlocked = onBase
+    ? first(operation && CHAIN_TEXT.operation(operation.kind), !input.projectRoot && CHAIN_TEXT.noProject, !preflight && CHAIN_TEXT.checking, preflight?.ok === false && preflight.message)
+    : blocked
+
   const own: Record<ChainActionId, { label: string; blocker: string | null }> = {
-    commit: { label: CHAIN_LABEL.commit, blocker: first(uncommitted === 0 && CHAIN_TEXT.nothingToCommit, noneTicked && CHAIN_TEXT.noTicked) },
+    commit: { label: CHAIN_LABEL.commit, blocker: first(uncommitted === 0 && CHAIN_TEXT.nothingToCommit, ticked === 0 && CHAIN_TEXT.noTicked) },
     sync: {
       label: CHAIN_LABEL.sync(base),
       // GitHub's conflict with a base the last fetch has not seen: 同步 fetches first, so it is not held back by the
@@ -368,8 +402,8 @@ export function shipChain(input: ChainInput): ChainState {
     },
     pr: pr
       ? {
-          label: ticked > 0 ? CHAIN_LABEL.commitPushPr(pr.number) : CHAIN_LABEL.pushPr(pr.number),
-          blocker: first(remoteAhead && CHAIN_TEXT.remoteAhead, ticked === 0 && !unpushed && (noneTicked ? CHAIN_TEXT.noTicked : CHAIN_TEXT.nothingToPush))
+          label: CHAIN_LABEL.pushPr(pr.number),
+          blocker: first(remoteAhead && CHAIN_TEXT.remoteAhead, !unpushed && (ticked > 0 ? CHAIN_TEXT.commitFirst : CHAIN_TEXT.nothingToPush))
         }
       : {
           label: CHAIN_LABEL.createPr,
@@ -378,20 +412,23 @@ export function shipChain(input: ChainInput): ChainState {
             pf?.remoteOnGitHub === false && CHAIN_TEXT.notGitHub,
             gh === 'missing' && CHAIN_TEXT.ghMissing,
             gh === 'signed-out' && CHAIN_TEXT.ghSignedOut,
-            nothing && CHAIN_TEXT.nothingNewer(base),
-            !ownCommits && noneTicked && CHAIN_TEXT.noTicked,
+            noOwnCommits(CHAIN_TEXT.nothingNewer(base)),
             // The PR's push of the branch would be refused.
             (rb?.behind ?? 0) > 0 && CHAIN_TEXT.remoteAhead
           )
         },
     main: {
-      label: remote === null ? CHAIN_LABEL.merge(base) : CHAIN_LABEL.mergePush(base),
+      label: CHAIN_LABEL.merge,
       blocker: first(
         pr !== null && CHAIN_TEXT.hasPr(pr.number),
-        nothing && CHAIN_TEXT.nothingToMerge,
-        !ownCommits && noneTicked && CHAIN_TEXT.noTicked,
+        noOwnCommits(CHAIN_TEXT.nothingToMerge),
         conflicts !== null && conflicts.length > 0 && CHAIN_TEXT.baseConflicts(base, conflicts.length)
       )
+    },
+    'push-base': {
+      label: CHAIN_LABEL.pushBase,
+      // Where the base goes: its own upstream remote (see main's baseRemoteFor), else the branch's.
+      blocker: first((pf?.baseRemote === null || remote === null) && CHAIN_TEXT.noRemotePush, !(baseUnpushed > 0) && CHAIN_TEXT.nothingToPush)
     },
     'merge-pr': {
       label: CHAIN_LABEL.mergePr(pr?.number ?? null),
@@ -405,16 +442,17 @@ export function shipChain(input: ChainInput): ChainState {
         pr !== null && !pr.details && (gh === 'missing' ? CHAIN_TEXT.ghMissingMerge : gh === 'signed-out' ? CHAIN_TEXT.ghSignedOutMerge : (pr.error ?? CHAIN_TEXT.checking))
       )
     },
-    archive: { label: CHAIN_LABEL.archive, blocker: archiveBlocker(input.sessions, isMain) }
+    archive: { label: CHAIN_LABEL.archive, blocker: first(archiveBlocker(input.sessions, isMain), landedUnpushed && CHAIN_TEXT.pushBaseFirst(base)) }
   }
   const actions: ChainAction[] = CHAIN_ACTION_IDS.map((id) => ({
     id,
     label: own[id].label,
-    blocker: id === 'archive' ? own[id].blocker : (blocked ?? own[id].blocker)
+    blocker: id === 'archive' ? own[id].blocker : ((id === 'commit' ? commitBlocked : id === 'push-base' ? pushBaseBlocked : blocked) ?? own[id].blocker)
   }))
   const move = (id: ChainActionId): ChainMove => {
     const found = actions.find((a) => a.id === id)!
-    return { id, label: found.label, blocker: found.blocker }
+    // Every push reads 推送 on the button; the ⋯ menu and ⌘K name the PR (推送到 PR #N).
+    return { id, label: id === 'pr' && pr ? CHAIN_LABEL.push : found.label, blocker: found.blocker }
   }
   const handoff: ChainMove = { id: 'handoff', label: CHAIN_LABEL.handoff(input.agent), blocker: input.agent ? null : CHAIN_TEXT.noAgent }
   const headlineOf = (next: ChainMove | null): ChainHeadline | null =>
@@ -440,16 +478,25 @@ export function shipChain(input: ChainInput): ChainState {
     return state('operation', { tone: 'info', text: CHAIN_TEXT.operation(operation.kind) }, { id: 'continue', label: CHAIN_LABEL.continue, blocker: null }, abort)
   }
 
-  // b. Nowhere to go.
-  if (onBase) return state('stuck', { tone: 'info', text: CHAIN_TEXT.onBase }, null)
+  // b. On the base in the main checkout: 提交 while files are ticked, else 推送 of the base's own commits (path ①).
+  if (onBase) {
+    if (ticked > 0) return state('base', { tone: 'info', text: CHAIN_TEXT.onBase }, move('commit'))
+    const push = move('push-base')
+    if (baseUnpushed > 0 && !push.blocker) return state('base', { tone: 'info', text: CHAIN_TEXT.baseUnpushed(base, baseUnpushed) }, push)
+    return state('base', { tone: 'info', text: CHAIN_TEXT.onBase }, null)
+  }
   if (!input.projectRoot) return state('stuck', { tone: 'blocked', text: CHAIN_TEXT.noProject }, null)
   if (preflight?.ok === false) return state('stuck', { tone: 'blocked', text: preflight.message }, null)
 
   const clean = uncommitted === 0
   const mergedState = (): ChainState => {
     const archive = move('archive')
-    return state('merged', { tone: 'ok', text: CHAIN_TEXT.merged(base) }, archive.blocker ? null : archive)
+    // A PR closed without a merge says so; the work merged by other means (in the base) reads as merged.
+    const text = input.prClosed !== undefined && !merged ? CHAIN_TEXT.prClosed(input.prClosed) : CHAIN_TEXT.merged(base)
+    return state('merged', { tone: input.prClosed !== undefined && !merged ? 'info' : 'ok', text }, archive.blocker ? null : archive)
   }
+  /** The branch's PR is done on GitHub (merged, or closed without a merge): 归档… once the worktree is clean. */
+  const prDone = input.prMerged || input.prClosed !== undefined
   /** The change list and the preflight describe the same worktree state (a preflight asked before a commit does not):
    *  the same HEAD when the change list says which, else the same counts. */
   const agreed = !pf || (local.head ? pf.head === local.head : pf.ahead === local.ahead && pf.uncommitted === uncommitted)
@@ -461,8 +508,12 @@ export function shipChain(input: ChainInput): ChainState {
 
   // While the preflight runs, only what the change list and the PR poll know is decided.
   if (!pf) {
-    if (input.prMerged && clean) return mergedState()
+    if (prDone && clean) return mergedState()
     if (ahead === 0 && clean && !pr) return state('empty', null, null)
+    if (ticked > 0) {
+      const next = move('commit')
+      return state('checking', headlineOf(next), next)
+    }
     return exitOrder(input.remembered ?? 'main')
   }
 
@@ -473,44 +524,62 @@ export function shipChain(input: ChainInput): ChainState {
       const pull = move('pull')
       return state('pr', pull.blocker ? headlineOf(pull) : { tone: 'info', text: remoteAheadText }, pull)
     }
-    // Conflicts with the base, once nothing is left to send: 同步 <base> (提交… first while tracked files are uncommitted).
-    if (prConflicts && ticked === 0 && !unpushed) {
+    // Ticked files are committed first; files left unticked stay out of everything.
+    if (ticked > 0) {
+      const next = move('commit')
+      return state('pr', headlineOf(next), next)
+    }
+    // Conflicts with the base, once nothing is left to send: 同步 <base> (提交 first while tracked files are uncommitted).
+    if (prConflicts && !unpushed) {
       const next = local.trackedUncommitted > 0 ? move('commit') : move('sync')
       return state('conflicts', { tone: 'blocked', text: prConflictText }, next)
     }
-    // Something to send (a ticked file, a commit the PR lacks): 推送到 PR #N; files left unticked stay out of it.
-    const next = ticked > 0 || unpushed ? move('pr') : move('merge-pr')
+    // A commit the PR lacks: 推送到 PR #N.
+    const next = unpushed ? move('pr') : move('merge-pr')
     // A failed poll is said by the PR line (查询失败 and why): the state line does not repeat it.
     const polled = next.id === 'merge-pr' && pr.error !== undefined && next.blocker === pr.error
     return state('pr', polled ? null : headlineOf(next), next)
   }
 
-  // d. Merged (only once the preflight answers the change list as it is now). e. Nothing of its own.
-  if ((input.prMerged || merged) && clean) return agreed ? mergedState() : checking()
+  // d. Merged, or the PR closed (only once the preflight answers the change list as it is now): the work only in the
+  // local base (a local 合并) is pushed first. e. Nothing of its own.
+  if (landedUnpushed && clean) {
+    if (!agreed) return checking()
+    const next = move('push-base')
+    return state('unpushed', next.blocker ? headlineOf(next) : { tone: 'info', text: CHAIN_TEXT.baseUnpushed(base, baseUnpushed) }, next)
+  }
+  if ((prDone || merged) && clean) return agreed ? mergedState() : checking()
   if (ahead === 0 && clean) return state('empty', null, null)
 
   // The branch was pushed and its remote branch has commits it lacks: 拉取 first (创建 PR's push would be refused, and
-  // the remote may already resolve a conflict with the base), or hand a diverged branch to the agent; 合并到 <base>
-  // beside it. As rule c, before the conflicts.
+  // the remote may already resolve a conflict with the base), or hand a diverged branch to the agent; 合并 beside it. As rule c, before the conflicts.
   if (pf.remote !== null && rb && rb.behind > 0) {
     if (diverged) return state('exits', { tone: 'blocked', text: CHAIN_TEXT.diverged }, handoff, move('main'))
     const pull = move('pull')
     return state('exits', pull.blocker ? headlineOf(pull) : { tone: 'info', text: remoteAheadText }, pull, move('main'))
   }
 
-  // f. Landing on the base would conflict. 同步 refuses tracked uncommitted changes: 提交… comes first then.
+  // f. Landing on the base would conflict. 同步 refuses tracked uncommitted changes: 提交 comes first then, as it does
+  // while files are ticked.
   if (conflicts !== null && conflicts.length > 0) {
-    const next = local.trackedUncommitted > 0 ? move('commit') : move('sync')
+    const next = ticked > 0 || local.trackedUncommitted > 0 ? move('commit') : move('sync')
     return state('conflicts', { tone: 'blocked', text: CHAIN_TEXT.baseConflicts(base, conflicts.length) }, next)
   }
 
-  // g. The two exits; without a remote only 合并到 <base>, and with one that is not on GitHub only 合并到 <base> 并推送
+  // g. The two exits; without a remote, or with one that is not on GitHub, only 合并
   // (no PR is possible there: the ⋯ menu's 创建 PR says why, the state line does not repeat it for every repository).
-  if (pf.remote === null || pf.remoteOnGitHub === false) {
+  // Ticked files are committed first, the exit beside 提交 once the branch has commits of its own to ship.
+  const onlyMain = pf.remote === null || pf.remoteOnGitHub === false
+  const firstExit = onlyMain ? 'main' : (input.remembered ?? pf.suggested)
+  if (ticked > 0) {
+    const next = move('commit')
+    return state('exits', headlineOf(next), next, ownCommits ? move(firstExit) : null)
+  }
+  if (onlyMain) {
     const next = move('main')
     return state('exits', headlineOf(next), next)
   }
-  return exitOrder(input.remembered ?? pf.suggested)
+  return exitOrder(firstExit)
 }
 
 // ── what Wavi puts into the agent's input line ──────────────────────────────────────────────────────────────────
@@ -657,7 +726,7 @@ export function rebaseInstruction(input: {
 }
 
 /**
- * 交给 agent when merging the branch into the base would conflict (the merge sheet, 合并到 <base> 并推送): merge the base
+ * 交给 agent when merging the branch into the base would conflict (the merge sheet, 合并): merge the base
  * into the branch in the worktree, resolve, commit the merge, tests, no push. Branch and file names are quoted data.
  */
 export function mergeConflictPrompt(input: { base: string; branch: string; conflicts: readonly ConflictFile[] }): string {
@@ -666,6 +735,23 @@ export function mergeConflictPrompt(input: { base: string; branch: string; confl
   const tail = `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${branchArg(base, '基线分支')}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。${NO_PUSH}`
   if (input.conflicts.length === 0) return marked(`${head}。${tail}`)
   return withFiles(head, '：', input.conflicts, tail, true)
+}
+
+/**
+ * 交给 <agent> when the remote refused 推送 of the base as protected in the main checkout on it (path ①): put these
+ * commits on a new branch, reset the local base to its upstream, push the new branch and open a PR with gh; never push
+ * the base, never force. Branch names are quoted data.
+ */
+export function protectedBasePrompt(input: { base: string; remote: string; commits: number | null }): string {
+  const base = refText(input.base, '基线分支')
+  const remote = shellWord(input.remote) ?? '<远程仓库>'
+  const upstream = shellWord(input.base) === null || shellWord(input.remote) === null ? '<远程的基线分支>' : (shellWord(`refs/remotes/${input.remote}/${input.base}`) ?? '<远程的基线分支>')
+  // `git branch -f` takes the branch's name (a full ref would make a branch of that name).
+  const name = shellWord(input.base) ?? '<基线分支>'
+  const count = input.commits && input.commits > 0 ? ` ${input.commits} 个` : ''
+  return marked(
+    `${base} 受保护，${refText(input.remote, '远程仓库')} 不收直接推送${NAMES_QUOTED(false)}。请在当前目录里把本地 ${base} 上还没推送的${count}提交移到一个新分支（git switch -c <新分支名>），再把本地 ${base} 重置到远程的（git branch -f ${name} ${upstream}），然后把新分支推送到 ${remote}，用 gh pr create --base ${name} 开一个 PR，完成后告诉我。不要推送 ${base}，不要强推。`
+  )
 }
 
 /** What the chain hands to the agent: 同步's conflicts (by the step it would have run) or an operation's. `base` is the

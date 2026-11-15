@@ -180,7 +180,7 @@ export type BaseFixDecision =
   | { kind: 'stop'; reason: string }
 
 /**
- * The same for the base after 合并到 main 并推送: its CI failed. Sends once per commit + failing checks, waits while the
+ * The same for the base after 推送 of the base: its CI failed. Sends once per commit + failing checks, waits while the
  * agent is busy or while the CI still shows the commit before Wavi's last pushed fix, and stops after `max` sends.
  */
 export function baseFixDecision(state: PrAutomation, input: { ci: BaseCi | undefined; agentIdle: boolean; max: number }): BaseFixDecision {

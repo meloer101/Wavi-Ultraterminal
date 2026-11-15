@@ -193,6 +193,14 @@ describe('mergeWorktree', () => {
     expect(existsSync(join(root, 'c.txt'))).toBe(true)
   })
 
+  it('squash: a single commit is titled too, its subject listed under the title', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const result = await mergeWorktree(await request(root, wt, 'squash', { title: '修复导航' }))
+    expect(result.ok).toBe(true)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('修复导航\n\n- add b')
+  })
+
   it('squash: an agent-written message wins over the title and keeps its body', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')

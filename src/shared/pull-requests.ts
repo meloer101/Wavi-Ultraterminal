@@ -153,6 +153,9 @@ export interface PrTarget {
 export interface PrCreateRequest {
   root: string
   worktree: string
+  /** The branch's tip the push node's review read (a full commit id): the push is refused as `stale` when the branch
+   *  is elsewhere. Absent: whatever the branch is at. */
+  expect?: string
   /** The session's title; main falls back to the branch name. */
   title: string
   /** 创建 PR 面板's body (v1.63); without it main writes the commit subjects. */
@@ -207,7 +210,7 @@ export type PrCreateResult =
   | { ok: true; url: string; number: number | null; existed: boolean }
   /** `failure`: what git (the push) or gh (`pr create`) said, classified; absent when Wavi refused before running them.
    *  `step`: which of the two failed (absent when Wavi refused, or from an older main). */
-  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure; step?: 'push' | 'create' }
+  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure; step?: 'push' | 'create'; stale?: true }
 
 /** What 让 agent 修复 needs: the failing checks and the tail of their logs (raw; ciFixPrompt quotes it). */
 export interface CiFailure {
@@ -234,7 +237,7 @@ export interface PullRequestApi {
   /** Commits ticked uncommitted files of the worktree's branch (v1.68). Never on the base branch. */
   commit(request: PrCommitRequest): Promise<PrCommitResult>
   /** Pushes the worktree's branch to the upstream it already has (v1.68: 提交并推送 / 推送 for an open PR). */
-  push(target: PrTarget): Promise<PrWriteResult>
+  push(request: PrPushRequest): Promise<PrWriteResult>
   /** AI 写 (v1.68): a commit message or PR title / body from a headless Claude / Codex run (src/shared/ship-writer.ts). */
   write(request: WriteRequest): Promise<WriteResult>
   /** Stops the worktree's AI 写 run. */
@@ -255,11 +258,19 @@ export interface PrMergeRequest extends PrTarget {
   deleteRemoteBranch: boolean
 }
 
+/** 推送 of the branch (PullRequestApi.push). */
+export interface PrPushRequest extends PrTarget {
+  /** The branch's tip the push node's review read (a full commit id): exactly that commit is pushed, and the push is
+   *  refused as `stale` when the branch is elsewhere. Absent (自动修复): whatever the branch is at. */
+  expect?: string
+}
+
 export type PrWriteResult =
   /** `baseNotCaughtUp`: after a merge, the local base could not be brought up to the merged remote base: why, in words. */
   | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'cancelled' | 'pushed'; message: string; baseNotCaughtUp?: string }
-  /** `failure`: what git (a push) or gh (`pr merge`) said, classified; absent when Wavi refused before running them. */
-  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure }
+  /** `failure`: what git (a push) or gh (`pr merge`) said, classified; absent when Wavi refused before running them.
+   *  `stale`: the branch moved since the review read it (a push with `expect`): nothing was pushed. */
+  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure; stale?: true }
 
 export const PR_IPC = {
   /** invoke → GhState */
@@ -280,7 +291,7 @@ export const PR_IPC = {
   draft: 'pr:draft',
   /** invoke(PrCommitRequest) → PrCommitResult */
   commit: 'pr:commit',
-  /** invoke(PrTarget) → PrWriteResult */
+  /** invoke(PrPushRequest) → PrWriteResult */
   push: 'pr:push',
   /** invoke(WriteRequest) → WriteResult */
   write: 'pr:write',
@@ -538,13 +549,18 @@ export function parsePrTargets(raw: unknown): PrTarget[] | null {
 /** Longest PR body Wavi sends (GitHub takes 65536). */
 export const MAX_PR_BODY = 60_000
 
+/** A full commit id (SHA-1 or SHA-256), nothing git could read as an option or a revision expression. */
+export const isFullSha = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value)
+
 export function parsePrCreateRequest(raw: unknown): PrCreateRequest | null {
   if (!isRecord(raw) || !isPath(raw.root) || !isPath(raw.worktree) || typeof raw.title !== 'string' || raw.title.length > 4096) return null
   if (raw.body !== undefined && (typeof raw.body !== 'string' || raw.body.length > MAX_PR_BODY)) return null
   if (raw.draft !== undefined && typeof raw.draft !== 'boolean') return null
+  if (raw.expect !== undefined && !isFullSha(raw.expect)) return null
   return {
     root: raw.root,
     worktree: raw.worktree,
+    ...(isFullSha(raw.expect) ? { expect: raw.expect } : {}),
     title: raw.title,
     ...(typeof raw.body === 'string' ? { body: raw.body } : {}),
     ...(raw.draft === true ? { draft: true } : {}),

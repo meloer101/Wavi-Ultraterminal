@@ -16,8 +16,9 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
 import { classifyGitFailure, type GitFailure, type GitFailureContext, type GitStep } from '@shared/git-failures'
-import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
+import { mainWorktreeIndex, parseAheadBehind, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
 import { CHAIN_TEXT } from '@shared/ship-chain'
+import { parsePushRequest } from '@shared/ship-requests'
 import {
   cleanFailedLog,
   ghResolvedRemote,
@@ -53,6 +54,7 @@ import {
   type FailingCheck,
   type GhState,
   type GitHubRepo,
+  type PrCommitRequest,
   type PrCommitResult,
   type PrCreateResult,
   type PrDetails,
@@ -67,7 +69,7 @@ import {
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { confirm } from './confirm'
-import { operationOnBranch } from './git/operation'
+import { fastForwardBase, fetchBase, withBase } from './git/base'
 import { baseRemoteFor, remoteFor } from './git/remote'
 import { ENGLISH_LOCALE, git, GIT_TIMEOUT_MS, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pinned, pushEnv, refExists, runProcess, searchPath, type Ran } from './git/run'
 import { isProjectRoot } from './workspace-store'
@@ -430,9 +432,9 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     }
   }
   let local: PrStatus['local']
-  if (pr && (pr.details || pr.state === 'merged')) {
+  if (pr && (pr.details || pr.state === 'merged' || pr.state === 'closed')) {
     const head = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
-    // A merged PR: the local head, so the chain can tell the merged work from commits made after it.
+    // A merged or closed PR: the local head, so the chain can tell the PR's work from commits made after it.
     if (head && pr.details) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
     else if (head) local = { head, remoteAhead: false }
   }
@@ -574,6 +576,9 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
     if (ahead === null) return blocked(`找不到基线分支 ${base}`)
     if (ahead === 0) return blocked(`分支没有比 ${base} 新的提交`)
 
+    // The tip the review read is what goes up, or nothing does.
+    if (request.expect && (await branchTip(cwd, branch)) !== request.expect) return { ...staleBranch(branch), step: 'push' }
+
     const headBranch = info.remoteRef ? info.remoteRef.slice('refs/heads/'.length) : branch
     if (info.remoteRef) {
       const existing = await listPr(where.repo, where.headOwner, headBranch)
@@ -597,7 +602,7 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
       const pushed = await git(cwd, pinned.push('--quiet', '--set-upstream', '--', remote, `refs/heads/${branch}:refs/heads/${branch}`), { timeout: PUSH_TIMEOUT_MS, env })
       if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }), step: 'push' }
     } else if ((await countCommits(cwd, `refs/remotes/${remote}/${headBranch}..refs/heads/${branch}`)) !== 0) {
-      const pushed = await git(cwd, pinned.push('--quiet', '--', remote, `refs/heads/${branch}:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env })
+      const pushed = await git(cwd, pinned.push('--quiet', '--', remote, `${request.expect ?? `refs/heads/${branch}`}:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env })
       if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }), step: 'push' }
     }
 
@@ -693,9 +698,8 @@ async function pushCounts(cwd: string, branch: string, upstream: { remote: strin
   const tracking = `refs/remotes/${upstream.remote}/${upstream.remoteRef.slice('refs/heads/'.length)}`
   if (!(await refExists(cwd, tracking))) return { unpushed: null, remoteAhead: 0 }
   const ran = await git(cwd, ['rev-list', '--left-right', '--count', `${tracking}...refs/heads/${branch}`, '--'])
-  if (ran.code !== 0) return { unpushed: null, remoteAhead: 0 }
-  const [behind = '0', ahead = '0'] = ran.stdout.trim().split(/\s+/)
-  return { unpushed: Number(ahead) || 0, remoteAhead: Number(behind) || 0 }
+  const counts = ran.code === 0 ? parseAheadBehind(ran.stdout) : null
+  return counts ? { unpushed: counts.ahead, remoteAhead: counts.behind } : { unpushed: null, remoteAhead: 0 }
 }
 
 // ── 提交 / 推送 (v1.68) ─────────────────────────────────────────────────────────────────────────────────────────
@@ -703,7 +707,8 @@ async function pushCounts(cwd: string, branch: string, upstream: { remote: strin
 /**
  * Commits the ticked uncommitted files of a session's branch with the user's message: `git add -A` then
  * `git commit --only` on exactly those paths (whatever else the agent staged stays staged), hooks and all, with the
- * login shell's PATH so hooks find their tools. Never on the base branch or a detached HEAD, never with conflicts.
+ * login shell's PATH so hooks find their tools. The base branch too (提交 in the project's main checkout); never a
+ * detached HEAD, never with conflicts.
  */
 export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
   const request = parsePrCommitRequest(raw)
@@ -715,33 +720,41 @@ export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
     const info = await branchInfo(request)
     if (!info) return blockedCommit('不是这个项目的 worktree')
     if (!info.branch) return blockedCommit('处于分离 HEAD：先切到一个分支再提交')
-    if (!info.base || info.base === info.branch) return blockedCommit('这是基线分支本身：在会话的 worktree 里提交')
-    const files = await uncommittedFiles(info.cwd)
-    if (files.some((f) => f.status === 'U')) return blockedCommit('有没解决的冲突：先解决再提交')
-    const known = new Map(files.map((f) => [f.path, f]))
-    const paths = request.paths.filter((path) => known.has(path))
-    if (paths.length === 0) return blockedCommit('勾选的文件已经没有改动了')
-    // A staged rename's source is gone from the index already (nothing to add), but the commit must take its removal.
-    const sources = paths.map((path) => known.get(path)!.oldPath).filter((p): p is string => Boolean(p))
-    const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
-    const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
-    const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
-    const context = { base: info.base, remote: info.remote }
-    if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added), failure: classified('commit', added, context) }
-    const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
-      cwd: info.cwd,
-      env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }),
-      timeout: COMMIT_TIMEOUT_MS,
-      input: [...new Set([...paths, ...sources])].join('\0')
-    })
-    if (committed.code !== 0) {
-      return { ok: false, reason: 'failed', message: '提交没有成功（git hook 或 git 报错）', output: outputTail(committed), failure: classified('commit', committed, context) }
-    }
-    const head = (await gitOut(info.cwd, ['rev-parse', '--short', 'HEAD'])).trim()
-    return { ok: true, commit: head, subject: commitSubject(request.message) }
+    const onBranch = { ...info, branch: info.branch }
+    // A commit on the base moves it: held as 合并 and 推送 of the base hold it.
+    if (info.base === info.branch) return await withBase(request.root, info.branch, blockedCommit, () => commitPaths(request, onBranch))
+    return await commitPaths(request, onBranch)
   } finally {
     creating.delete(request.worktree)
   }
+}
+
+/** commitWorktree's commit, once nothing else holds what it moves. */
+async function commitPaths(request: PrCommitRequest, info: BranchInfo & { branch: string }): Promise<PrCommitResult> {
+  const blockedCommit = (message: string): PrCommitResult => ({ ok: false, reason: 'blocked', message })
+  const files = await uncommittedFiles(info.cwd)
+  if (files.some((f) => f.status === 'U')) return blockedCommit('有没解决的冲突：先解决再提交')
+  const known = new Map(files.map((f) => [f.path, f]))
+  const paths = request.paths.filter((path) => known.has(path))
+  if (paths.length === 0) return blockedCommit('勾选的文件已经没有改动了')
+  // A staged rename's source is gone from the index already (nothing to add), but the commit must take its removal.
+  const sources = paths.map((path) => known.get(path)!.oldPath).filter((p): p is string => Boolean(p))
+  const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
+  const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
+  const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
+  const context = { base: info.base ?? info.branch, remote: info.remote }
+  if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added), failure: classified('commit', added, context) }
+  const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
+    cwd: info.cwd,
+    env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }),
+    timeout: COMMIT_TIMEOUT_MS,
+    input: [...new Set([...paths, ...sources])].join('\0')
+  })
+  if (committed.code !== 0) {
+    return { ok: false, reason: 'failed', message: '提交没有成功（git hook 或 git 报错）', output: outputTail(committed), failure: classified('commit', committed, context) }
+  }
+  const head = (await gitOut(info.cwd, ['rev-parse', '--short', 'HEAD'])).trim()
+  return { ok: true, commit: head, subject: commitSubject(request.message) }
 }
 
 /** What a failed git or gh call printed (both streams: hooks print to either), classified. */
@@ -755,6 +768,16 @@ function outputTail(ran: Ran): string {
   return lines.filter((line) => line.trim()).slice(-40).join('\n').slice(-4000)
 }
 
+const branchTip = async (cwd: string, branch: string): Promise<string> => (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`])).trim()
+
+/** A push whose branch moved since the review read it: nothing was pushed, the push node reviews again. */
+const staleBranch = (branch: string): { ok: false; reason: 'blocked'; message: string; stale: true } => ({
+  ok: false,
+  reason: 'blocked',
+  message: `${branch} 在审阅之后又有了新提交：没有推送`,
+  stale: true
+})
+
 /**
  * Pushes a session's branch — 提交并推送 / 推送 to its open PR, or the chain's 推送. A branch with an upstream goes to
  * it; one never pushed is published to the chain's remote with an upstream (`git push -u <remote> <branch>`: the user
@@ -762,7 +785,7 @@ function outputTail(ran: Ran): string {
  * rejected; pull or rebase first).
  */
 export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
-  const target = parsePrTarget(raw)
+  const target = parsePushRequest(raw)
   const refused = (message: string): PrWriteResult => ({ ok: false, reason: 'blocked', message })
   if (!target || !isProjectRoot(target.root)) return refused('请求无效')
   if (creating.has(target.worktree)) return refused('正在提交或推送')
@@ -773,6 +796,7 @@ export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
     const { cwd, branch, base } = info
     if (!branch) return refused('处于分离 HEAD，没有分支可以推送')
     if (!base || base === branch) return refused('这是基线分支本身：Wavi 不往基线分支推送')
+    if (target.expect && (await branchTip(cwd, branch)) !== target.expect) return staleBranch(branch)
     if (!info.remote || !info.remoteRef) {
       const published = await publishBranch(cwd, branch, base)
       if (published.ok) await refreshAfterCreate(target.worktree)
@@ -784,7 +808,7 @@ export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
     if (counts.remoteAhead > 0) return refused(behind.replace('有本地', `有 ${counts.remoteAhead} 个本地`))
     if (counts.unpushed === 0) return { ok: true, outcome: 'pushed', message: '没有要推送的提交' }
     const env = await pushEnv(cwd)
-    const pushed = await git(cwd, pinned.push('--quiet', '--', info.remote, `refs/heads/${branch}:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env })
+    const pushed = await git(cwd, pinned.push('--quiet', '--', info.remote, `${target.expect ?? `refs/heads/${branch}`}:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env })
     if (pushed.code !== 0) {
       const output = pushed.stderr || pushed.stdout
       const failure = classified('push', pushed, { base, remote: info.remote })
@@ -902,38 +926,21 @@ export type CatchUp = { ok: true; moved: boolean } | { ok: false; message: strin
 
 /**
  * After a merge (and in 同步): fetch the base (unless the caller just fetched `remote`), then fast-forward the local base
- * branch when nothing is in the way — the checkout that has it out when that is clean, else the ref itself. A base with
- * nothing new does not move and is fine; otherwise why it could not move is returned.
+ * branch when nothing is in the way (fastForwardBase). A base with nothing new does not move and is fine; otherwise why
+ * it could not move is returned.
  */
 export async function catchUpBase(cwd: string, remote: string, base: string, options: { fetched?: boolean } = {}): Promise<CatchUp> {
   const tracking = `refs/remotes/${remote}/${base}`
   const name = `${remote}/${base}`
   if (!options.fetched) {
-    const fetched = await git(cwd, pinned.fetch('--quiet', '--', remote, `refs/heads/${base}:${tracking}`), { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(cwd) })
+    const fetched = await fetchBase(cwd, remote, `refs/heads/${base}`, tracking)
     if (fetched.code !== 0) {
       const failure = classified('fetch', fetched, { base, remote })
       return { ok: false, message: `没能获取 ${name}：${failure.message}`, failure }
     }
   }
-  if (!(await refExists(cwd, tracking)) || !(await refExists(cwd, `refs/heads/${base}`))) return { ok: true, moved: false }
-  if ((await countCommits(cwd, `refs/heads/${base}..${tracking}`)) === 0) return { ok: true, moved: false }
-  const diverged: CatchUp = { ok: false, message: `${base} 和 ${name} 各有对方没有的提交，没法快进` }
-  if ((await git(cwd, ['merge-base', '--is-ancestor', `refs/heads/${base}`, tracking])).code !== 0) return diverged
-  const listing = parseWorktreePorcelain(await gitOut(cwd, ['worktree', 'list', '--porcelain']))
-  const busy = await operationOnBranch(listing, base)
-  if (busy) return { ok: false, message: `${base} 有进行中的 ${busy}，没有快进到 ${name}` }
-  const holder = listing.find((e) => e.branch === base)
-  if (holder) {
-    // Checked out: only a clean checkout moves, and only forward.
-    const status = await git(holder.path, ['status', '--porcelain', '--untracked-files=no'])
-    if (status.code !== 0) return { ok: false, message: `没能检查 ${base} 的工作区：${lastLines(status.stderr || status.stdout)}` }
-    if (status.stdout.trim() !== '') return { ok: false, message: `${base} 的工作区有未提交的改动，没有快进到 ${name}` }
-    const ran = await git(holder.path, pinned.merge('--ff-only', '--quiet', tracking))
-    return ran.code === 0 ? { ok: true, moved: true } : { ok: false, message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` }
-  }
-  const old = (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${base}`])).trim()
-  const ran = await git(cwd, ['update-ref', `refs/heads/${base}`, tracking, old])
-  return ran.code === 0 ? { ok: true, moved: true } : { ok: false, message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` }
+  const moved = await fastForwardBase(cwd, base, tracking, name)
+  return moved.ok ? moved : { ok: false, message: moved.message }
 }
 
 /**

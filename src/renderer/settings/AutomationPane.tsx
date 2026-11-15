@@ -37,9 +37,6 @@ export function AutomationPane({
       <div className={styles.form}>
         <h1 className={styles.title}>自动化</h1>
         <Section title="代码审阅">
-          <Row label="合并前审阅">
-            <Toggle label="合并前审阅" checked={review.beforeMerge} onChange={(beforeMerge) => update({ beforeMerge })} />
-          </Row>
           <Row label="推送前审阅">
             <Toggle label="推送前审阅" checked={review.beforePush} onChange={(beforePush) => update({ beforePush })} />
           </Row>

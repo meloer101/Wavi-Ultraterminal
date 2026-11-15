@@ -198,12 +198,13 @@ export function mergeMessage(branch: string, base: string): string {
 }
 
 /**
- * A squash commit's message: one commit keeps its own message; several get the title (or "Squash merge branch 'x'")
- * and a list of their subjects (oldest first).
+ * A squash commit's message: the title (the session's) and a list of the commits' subjects (oldest first), one commit
+ * or several. Without a title one commit keeps its own message and several get "Squash merge branch 'x'" and the list.
  */
 export function squashMessage(branch: string, commits: readonly { subject: string; body: string }[], title?: string): string {
-  if (commits.length === 1) return commits[0]!.body.trim() || commits[0]!.subject
-  const subject = title?.trim() || `Squash merge branch '${branch}'`
+  const titled = title?.trim()
+  if (commits.length === 1 && !titled) return commits[0]!.body.trim() || commits[0]!.subject
+  const subject = titled || `Squash merge branch '${branch}'`
   if (commits.length === 0) return subject
   return `${subject}\n\n${commits.map((c) => `- ${c.subject}`).join('\n')}\n`
 }

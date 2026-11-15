@@ -255,6 +255,27 @@ describe('reviewDiff', () => {
     const diff = await reviewDiff(r.dir, null)
     expect(parseUnifiedDiffFiles(diff!.text).map((f) => f.path).sort()).toEqual(['ascii.ts', '中文.ts', '新文件.ts'].sort())
   })
+  // The push node's review: only the commits the push sends, never what is uncommitted or untracked.
+  it('reads only the committed range from...to when given one', async () => {
+    const r = repo()
+    r.write('a.ts', 'a\n')
+    r.commit('init')
+    const from = r.git('rev-parse', 'HEAD').trim()
+    r.write('pushed.ts', 'p\n')
+    r.commit('the commit the push sends')
+    const to = r.git('rev-parse', 'HEAD').trim()
+    r.write('a.ts', 'edited, not committed\n')
+    r.write('untracked.ts', 'u\n')
+    const diff = await reviewDiff(r.dir, null, { from, to })
+    const files = parseUnifiedDiffFiles(diff!.text)
+    expect(files.map((f) => f.path)).toEqual(['pushed.ts'])
+    expect(diff!.text).toContain('# wavi-group: committed')
+    expect(diff!.text).not.toContain('# wavi-group: uncommitted')
+    // Nothing between the same commit; a range that is not two full commit ids is refused.
+    expect((await reviewDiff(r.dir, null, { from: to, to }))!.text).toBe('')
+    expect(await reviewDiff(r.dir, null, { from: 'HEAD~1', to: 'HEAD' })).toBeNull()
+    expect(await reviewDiff(r.dir, null, { from: `--output=/tmp/x`, to })).toBeNull()
+  })
 })
 
 describe('sshCommandFor', () => {

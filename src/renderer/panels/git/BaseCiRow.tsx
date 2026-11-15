@@ -1,4 +1,4 @@
-// CI on the base after 合并到 main 并推送 pushed it (PRD F16 v1.78, Figma 29E / 29F / 29G in the 29R grammar), at the top
+// CI on the base after 推送 of the base pushed it (PRD F16 v1.78, Figma 29E / 29F / 29G in the 29R grammar), at the top
 // of Git · 变更's ship zone: the headline with the checks mark, 打开 CI at its end, what 自动修复 is doing as a facts
 // line, and the switch (label first). A stopped fix asks on the decision surface (FixStopFooter). Only for a worktree
 // that pushed a base commit.

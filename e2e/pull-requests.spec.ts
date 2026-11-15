@@ -2,10 +2,12 @@
 // shell's PATH. origin's fetch URL says github.com/acme/widget; its push URL is a local bare repository, so pushes are
 // real. The fake agent only logs what it reads: the test plays it by writing the handoff file the prompt names
 // (e2e/ship.ts). Worktrees:
-//   jacob/nav  — never pushed: no tag; exit B (创建 PR) asks the agent for pr.md, pushes and creates #7
-//   jacob/ship — never pushed: exit A (合并到 main 并推送) squashes it into main and pushes; main's CI is watched
+//   jacob/nav  — never pushed: no tag; 创建 PR reviews what it proposes (推送前审阅 on), asks the agent for pr.md,
+//                pushes and creates #7
+//   jacob/ship — never pushed: 合并 squashes it into the local main (nothing pushed), then 推送 sends main to origin
+//                and main's CI is watched; 归档… is next
 //   jacob/ci   — #12 open, `test` failing: ✗, and 让 agent 修复 puts the failure into the agent's input line
-//   jacob/wip  — #13 draft, checks running, uncommitted work: 提交并推送到 PR #13
+//   jacob/wip  — #13 draft, checks running, uncommitted work: 提交 (the agent writes commit.md), then 推送 to #13
 //   jacob/done — #9 merged
 // github.com resolves to this machine, so opening a PR page never leaves it. Screenshots in both themes go to
 // test-results/pull-requests/.
@@ -189,6 +191,8 @@ test.describe('F16 PR / CI status', () => {
     }
     await setTheme('dark')
   }
+  const updateSettings = (patch: unknown) =>
+    page.evaluate((p) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(p), patch)
 
   test.beforeAll(async () => {
     const worktree = (id: string, branch: string) => ({ id, projectId: 'p1', branch, path: repo.paths[branch], isMain: false, baseBranch: 'main' })
@@ -243,10 +247,10 @@ test.describe('F16 PR / CI status', () => {
     await shoot('sidebar')
   })
 
-  test('the footer offers 审阅全部改动 and both exits; the preflight (base not protected) makes 合并到 main 并推送 the primary one', async () => {
+  test('the footer offers 审阅全部改动 and both exits; the preflight (base not protected) makes 合并 the primary one, 创建 PR beside it', async () => {
     await row('s-nav').click()
     await showChanges()
-    const merge = panel().getByRole('button', { name: /^合并到 main 并推送/ })
+    const merge = panel().getByRole('button', { name: /^合并( |$)/ })
     const create = panel().getByRole('button', { name: /^创建 PR/ })
     await expect(panel().getByRole('button', { name: '审阅全部改动' })).toBeVisible(WITHIN)
     await expect(merge).toBeEnabled(WITHIN)
@@ -257,10 +261,20 @@ test.describe('F16 PR / CI status', () => {
     await shoot('footer-exits')
   })
 
-  test('exit B: 创建 PR — the agent writes pr.md, the glance shows it, 推送并创建 PR creates the draft PR and opens it in the built-in browser', async () => {
+  test('创建 PR — review → write → push → create: the review reads what the PR proposes, the agent writes pr.md, 推送并创建 PR creates the draft PR and opens it', async () => {
+    // 推送前审阅 on: every push the chain starts reviews what the remote lacks first; nothing found does not stop it.
+    await updateSettings({ review: { beforePush: true, mode: 'builtin' } })
+    repo.reviewReply({ summary: '没有问题', findings: [] })
     await panel().getByRole('button', { name: /^创建 PR/ }).click()
     const block = panel().getByTestId('ship-block')
     await expect(block).toHaveAttribute('data-stage', 'writing')
+    const steps = block.locator('[data-step]')
+    await expect.poll(() => steps.evaluateAll((els) => els.map((el) => el.getAttribute('data-step'))), WITHIN).toEqual(['review', 'write', 'push', 'create'])
+    await expect(block.locator('[data-step="review"]')).toHaveAttribute('data-state', 'done', WITHIN)
+    await expect(block.locator('[data-step="review"]')).toContainText('审阅 2 个提交')
+    await expect(block.locator('[data-step="review"]')).toContainText('没有发现问题')
+    // Only the branch's own commits, never what main has.
+    expect(repo.reviewPrompt()).toContain('nav.test.ts')
     await expect(block).toContainText('Claude Code 写标题和正文')
     // The agent got the ask in its input line and the path to write to; Wavi does not touch the file itself.
     const file = await promptedPath(repo.agents['jacob/nav']!, 'wt-nav', 'pr')
@@ -298,43 +312,45 @@ test.describe('F16 PR / CI status', () => {
     await showChanges()
     await expect(panel().getByTestId('ship-block')).toHaveCount(0)
     await expect(panel().getByRole('button', { name: '打开 PR #7' })).toBeVisible(WITHIN)
+    await updateSettings({ review: { beforePush: false } })
   })
 
   test('the exit used last is remembered per repository: 创建 PR is now the primary one', async () => {
     await row('s-ship').click()
     await showChanges()
     await expect(panel().getByRole('button', { name: /^创建 PR/ })).toContainText(/[⌘⇧]/, WITHIN)
-    await expect(panel().getByRole('button', { name: /^合并到 main 并推送/ })).not.toContainText(/[⌘⇧]/)
+    await expect(panel().getByRole('button', { name: /^合并( |$)/ })).not.toContainText(/[⌘⇧]/)
   })
 
-  test('exit A: 合并到 main 并推送 — the agent writes commit.md, ⌘↵ squashes it into main and pushes it, and main’s CI is watched', async () => {
+  test('合并 lands the branch in the local main only (nothing written, nothing pushed); 推送 sends main to origin and main’s CI is watched; then 归档…', async () => {
     // main's checks are still running when Wavi first asks.
     repo.gh.setCheckRuns([{ name: 'test', status: 'IN_PROGRESS', conclusion: null, job: 77 }])
     const before = repo.git(repo.project, 'rev-parse', 'main').trim()
-    await panel().getByRole('button', { name: /^合并到 main 并推送/ }).click()
-    const block = panel().getByTestId('ship-block')
-    await expect(block).toHaveAttribute('data-stage', 'writing')
-    await expect(block).toContainText('Claude Code 写提交说明')
-    const file = await promptedPath(repo.agents['jacob/ship']!, 'wt-ship', 'commit')
-    agentWrites(repo.agents['jacob/ship']!, file, 'feat(ship): ship 分支进 main\n\n为了验证 exit A 的整条链路。\n')
-
-    await expect(block).toHaveAttribute('data-stage', 'glance', WITHIN)
-    const message = block.getByRole('textbox', { name: '提交说明' })
-    await expect(message).toHaveValue('feat(ship): ship 分支进 main\n\n为了验证 exit A 的整条链路。')
-    await shoot('ship-glance-main')
-    // Nothing has moved before the user says go.
-    expect(repo.git(repo.project, 'rev-parse', 'main').trim()).toBe(before)
-    await page.keyboard.press('Meta+Enter')
-
-    await expect(block).toHaveCount(0, WITHIN)
-    expect(repo.git(repo.project, 'log', '-1', '--format=%B', 'main').trim()).toBe('feat(ship): ship 分支进 main\n\n为了验证 exit A 的整条链路。')
-    // One squash commit on top of init, carrying both files; origin got it too.
+    const typed = typedBy(repo.agents['jacob/ship']!)
+    await panel().getByRole('button', { name: /^合并( |$)/ }).click()
+    await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/, WITHIN)
+    // No text to write: the agent was not asked.
+    expect(typedBy(repo.agents['jacob/ship']!)).toBe(typed)
+    // One squash commit on top of init, titled after the session, carrying both files; origin does not have it yet.
+    expect(repo.git(repo.project, 'log', '-1', '--format=%B', 'main').trim()).toBe('发到主干\n\n- Add jacob/ship\n- Test ship')
     expect(repo.git(repo.project, 'rev-list', '--count', `${before}..main`).trim()).toBe('1')
     expect(repo.git(repo.project, 'ls-tree', '--name-only', 'main').split('\n')).toEqual(expect.arrayContaining(['ship.ts', 'ship.test.ts']))
+    expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/main').trim()).toBe(before)
+
+    // 推送 of main is the primary now; 归档… waits for it.
+    await expect(panel().getByTestId('chain-headline')).toContainText('main 有 1 个提交还没推送', WITHIN)
+    const push = panel().getByRole('button', { name: /^推送( |$)/ })
+    await expect(push).toContainText(/[⌘⇧]/)
+    await expect(panel().getByRole('button', { name: /^归档…/ })).toHaveCount(0)
+    await shoot('push-primary')
+    await push.click()
+    await expect(panel().getByTestId('pr-status')).toContainText(/已推送 main · [0-9a-f]{7}/, WITHIN)
     expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/main').trim()).toBe(repo.git(repo.project, 'rev-parse', 'main').trim())
     // The branch itself is left alone.
     expect(repo.git(repo.project, 'branch', '--list', 'jacob/ship').trim()).toContain('jacob/ship')
-    await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main 并推送 · [0-9a-f]{7}/)
+    await expect(panel().getByTestId('chain-headline')).toContainText('已经全部合并到 main', WITHIN)
+    await expect(panel().getByRole('button', { name: /^归档…/ })).toContainText(/[⌘⇧]/)
+    await shoot('archive-primary')
   })
 
   test('main’s CI row follows the pushed commit: running, then ✗ failed with the check names', async () => {
@@ -411,17 +427,19 @@ test.describe('F16 PR / CI status', () => {
     await expect(autoFix).toHaveAttribute('aria-checked', 'false')
   })
 
-  test('uncommitted work on a branch with an open PR: 提交并推送到 PR #13 — the agent writes commit.md, Wavi commits and pushes', async () => {
+  test('uncommitted work on a branch with an open PR: 提交 first (the agent writes commit.md), then 推送 sends it to PR #13', async () => {
     const wip = repo.paths['jacob/wip']!
     writeFileSync(join(wip, 'wip.ts'), 'export const wip = 1\n')
     writeFileSync(join(wip, 'notes.md'), '# notes\n')
     await row('s-wip').click()
     await showChanges()
-    const ship = panel().getByRole('button', { name: '提交并推送到 PR #13' })
-    await expect(ship).toBeEnabled(WITHIN)
-    // The PR's own exit: no second exit next to it.
+    const commit = panel().getByRole('button', { name: /^提交( |$)/ })
+    await expect(commit).toBeEnabled(WITHIN)
+    await expect(commit).toContainText(/[⌘⇧]/)
+    // 提交 is its own move: no push beside it while nothing is committed, and no second exit.
+    await expect(panel().getByRole('button', { name: /^推送/ })).toHaveCount(0)
     await expect(panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
-    await ship.click()
+    await commit.click()
     const block = panel().getByTestId('ship-block')
     await expect(block).toContainText('Claude Code 写提交说明')
     const file = await promptedPath(repo.agents['jacob/wip']!, 'wt-wip', 'commit')
@@ -434,13 +452,24 @@ test.describe('F16 PR / CI status', () => {
     await expect(block.getByRole('checkbox', { name: '草稿' })).toHaveCount(0)
     // The message stays editable until the go.
     await block.getByRole('textbox', { name: '提交说明' }).fill('Export wip')
-    await shoot('ship-glance-push')
-    await block.getByRole('button', { name: /^提交并推送/ }).click()
+    await shoot('commit-glance')
+    const pushedBefore = repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim()
+    await block.getByRole('button', { name: /^提交/ }).click()
 
     await expect(block).toHaveCount(0, WITHIN)
     expect(repo.git(wip, 'log', '-1', '--format=%s').trim()).toBe('Export wip')
-    expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim()).toBe(repo.git(wip, 'rev-parse', 'HEAD').trim())
     expect(repo.git(wip, 'status', '--porcelain').trim()).toBe('')
+    // Committed, not pushed.
+    expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim()).toBe(pushedBefore)
+
+    // 推送 (the ⋯ menu names it 推送到 PR #13) is the primary: pull first, then the push.
+    const push = panel().getByRole('button', { name: /^推送( |$)/ })
+    await expect(push).toContainText(/[⌘⇧]/, WITHIN)
+    await panel().getByTestId('chain-menu').click()
+    await expect(page.getByRole('menu').getByRole('menuitem', { name: /^推送到 PR #13/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await push.click()
+    await expect.poll(() => repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim(), WITHIN).toBe(repo.git(wip, 'rev-parse', 'HEAD').trim())
     // GitHub now has the pushed commit as #13's head.
     repo.gh.setPlainDetails(13, repo.git(wip, 'rev-parse', 'HEAD').trim(), { draft: true })
     await expect(panel().getByRole('textbox', { name: '地址' })).toHaveValue(/\/pull\/13$/, WITHIN)
@@ -558,7 +587,7 @@ test.describe('F16 a protected base', () => {
       const panel = page.locator('[data-region="panel"]')
       await panel.getByRole('tab', { name: /^变更/ }).click()
       const create = panel.getByRole('button', { name: /^创建 PR/ })
-      const merge = panel.getByRole('button', { name: /^合并到 main 并推送/ })
+      const merge = panel.getByRole('button', { name: /^合并( |$)/ })
       await expect(create).toBeEnabled(WITHIN)
       await expect(create).toContainText(/[⌘⇧]/)
       await expect(merge).toBeEnabled()
@@ -612,7 +641,7 @@ test.describe('F16 without gh', () => {
       await panel.getByRole('tab', { name: /^变更/ }).click()
       await expect(panel.getByTestId('pr-status')).toHaveText('创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login', WITHIN)
       // No remote and no gh: the only exit is the local merge (the PR exit needs both).
-      await expect(panel.getByRole('button', { name: /^合并到 main( |$)/ })).toBeEnabled(WITHIN)
+      await expect(panel.getByRole('button', { name: /^合并( |$)/ })).toBeEnabled(WITHIN)
       await expect(panel.getByRole('button', { name: '创建 PR' })).toHaveCount(0)
       await expect(page.getByTestId('pr-tag')).toHaveCount(0)
     } finally {

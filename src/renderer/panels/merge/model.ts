@@ -1,5 +1,5 @@
 // What the merge sheet (PRD F4, Figma 05) says about a precheck, its options and a result. Pure.
-import type { GitOperation, MergeBlocker, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import type { GitOperation, MergeBlocker, MergePrecheck } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 import { shortAgentName } from '@shared/agents'
@@ -130,32 +130,6 @@ export function testBlocksMerge(state: MergeTestState | null, hasTest: boolean):
 // How a file conflicts and the hand-off length cap live with the merge chain's hand-offs (src/shared/ship-chain.ts).
 export { conflictReason, MAX_PROMPT_CHARS }
 
-/** Methods the sheet offers, with why one is off. */
-export function methodOptions(check: MergePrecheck): { value: MergeMethod; label: string; disabled: boolean }[] {
-  const dirty = check.uncommitted !== 0
-  return [
-    { value: 'squash', label: 'Squash', disabled: false },
-    { value: 'merge', label: 'Merge', disabled: false },
-    { value: 'rebase', label: 'Rebase', disabled: dirty }
-  ]
-}
-
-export const METHOD_NOTE: Record<MergeMethod, string> = {
-  squash: '分支上的提交压成一个提交',
-  merge: '保留分支上的每个提交，再加一个合并提交',
-  rebase: '把分支接到最新的基线上，历史是一条直线'
-}
-
-const BUSY: ReadonlySet<Session['status']> = new Set(['running', 'needs_you'])
-
-/** Why the worktree cannot be removed after the merge; null when it can. */
-export function removeBlocker(check: MergePrecheck, sessions: readonly Pick<Session, 'status'>[], isMain: boolean): string | null {
-  if (isMain) return '项目主目录不会被删除'
-  if (check.uncommitted !== 0) return '有未提交的改动，合并后保留 worktree'
-  if (sessions.some((s) => BUSY.has(s.status))) return '会话还在运行，合并后保留 worktree'
-  return null
-}
-
 /** The session conflicts are handed to: the active one if it is in the worktree, else its first agent session. */
 export function agentSessionFor<T extends Pick<Session, 'id' | 'kind'>>(sessions: readonly T[], activeId: string | null): T | null {
   const agents = sessions.filter((s) => s.kind !== 'shell')
@@ -184,39 +158,7 @@ export function turnChecksLine(view: TurnCheckView, kind: AgentKind): CheckLine 
   return { tone, text, ...(view.kinds.length > 0 ? { meta: checksText(view) } : {}) }
 }
 
-/** The sheet's push switch: the remote the base is pushed to (the precheck's, which main pushes to). */
-export function pushSwitchLabel(check: Pick<MergePrecheck, 'pushRemote'>): string {
-  return check.pushRemote ? `合并后推送到 ${check.pushRemote}` : '合并后推送'
-}
-
-/** Lines after a merge: the commit, the push (to `remote`, the precheck's pushRemote), the worktree removal. */
-export function resultLines(
-  result: Extract<MergeResult, { ok: true }>,
-  base: string,
-  removal: 'removed' | string | null,
-  remote = 'origin'
-): CheckLine[] {
-  const lines: CheckLine[] = [{ tone: 'ok', text: `已合并到 ${base}`, meta: result.commit.slice(0, 7) }]
-  if (result.push === '') lines.push({ tone: 'ok', text: `已推送到 ${remote}/${base}` })
-  else if (result.push !== null) lines.push({ tone: 'warn', text: `推送失败：${result.push}` })
-  if (removal === 'removed') lines.push({ tone: 'ok', text: '已删除 worktree，分支保留' })
-  else if (removal) lines.push({ tone: 'warn', text: `没能删除 worktree：${removal}` })
-  return lines
-}
-
-/** What a failed merge says (stale ones are checked again instead). */
-export function failureText(result: Extract<MergeResult, { ok: false }>, check: MergePrecheck): string {
-  const rebased = result.rebased ? `（${check.branch} 已经变基到最新的 ${check.base} 上）` : ''
-  switch (result.reason) {
-    case 'conflict':
-      return `合并时遇到冲突，已恢复原样${result.message ? `：${result.message}` : ''}`
-    case 'blocked':
-      return result.blocker ? blockerText(result.blocker, check) : '不能合并'
-    case 'stale':
-      return '分支在检查之后又变了，请重新检查'
-    case 'invalid':
-      return '请求无效'
-    case 'git':
-      return `没能合并${rebased}：${result.message ?? 'git 出错'}`
-  }
+/** Lines after a merge: the squash commit on the local base (合并 is local: 推送 of the base is the chain's next move). */
+export function resultLines(result: { commit: string }, base: string): CheckLine[] {
+  return [{ tone: 'ok', text: `已合并到 ${base}`, meta: result.commit.slice(0, 7) }]
 }

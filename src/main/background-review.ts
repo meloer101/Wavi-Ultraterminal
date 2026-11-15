@@ -45,6 +45,7 @@ import {
   type ReviewTrigger
 } from '@shared/background-review'
 import type { ReviewSettings } from '@shared/settings'
+import { parseCommitRange } from '@shared/ship-requests'
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { headCommit, reviewDiff } from './git-graph'
@@ -59,7 +60,7 @@ const KILL_GRACE_MS = 1000
 const MAX_STDOUT = 16 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 const MAX_ROOT = 4096
-const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
+const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'push', 'turn'])
 
 interface Job {
   hash: string
@@ -160,19 +161,20 @@ function stopChild(child: ChildProcess | null): void {
 export function triggerAllowed(trigger: ReviewTrigger, settings: ReviewSettings): boolean {
   if (trigger === 'manual') return true
   if (settings.mode !== 'builtin') return false
-  if (trigger === 'merge') return settings.beforeMerge
   if (trigger === 'push') return settings.beforePush
   return settings.afterTurnWithCommits
 }
 
 export function parseReviewRequest(raw: unknown): ReviewRequest {
   if (typeof raw !== 'object' || raw === null) throw new Error('invalid review request')
-  const { root, agent, trigger, base, force, asked } = raw as Record<string, unknown>
+  const { root, agent, trigger, base, force, asked, range } = raw as Record<string, unknown>
   if (typeof root !== 'string' || !root.startsWith('/') || root.length > MAX_ROOT || root.includes('\0')) throw new Error('invalid worktree root')
   const reviewer = headlessAgent(agent)
   if (!reviewer) throw new Error('invalid agent')
   if (!TRIGGERS.has(trigger)) throw new Error('invalid trigger')
   if (base !== undefined && (typeof base !== 'string' || base.length > 255)) throw new Error('invalid base')
+  const commits = range === undefined ? undefined : parseCommitRange(range)
+  if (commits === null) throw new Error('invalid range')
   const prompts = parseAsked(asked)
   return {
     root,
@@ -180,7 +182,8 @@ export function parseReviewRequest(raw: unknown): ReviewRequest {
     trigger: trigger as ReviewTrigger,
     ...(typeof base === 'string' ? { base } : {}),
     ...(force === true ? { force: true } : {}),
-    ...(prompts && prompts.length > 0 ? { asked: prompts } : {})
+    ...(prompts && prompts.length > 0 ? { asked: prompts } : {}),
+    ...(commits ? { range: commits } : {})
   }
 }
 
@@ -395,7 +398,7 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   if (!triggerAllowed(request.trigger, settings)) return quick(request, 'skipped', '自动审阅没有打开')
   let diff
   try {
-    diff = await reviewDiff(request.root, request.base)
+    diff = await reviewDiff(request.root, request.base, request.range)
   } catch (error) {
     return quick(request, 'failed', `没能读取改动：${error instanceof Error ? error.message : String(error)}`)
   }
@@ -417,7 +420,9 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   if (!reviewer) return quick(request, 'failed', `找不到 ${request.agent} 命令，没有审阅`, hash)
   const head = await headCommit(diff.cwd)
   const store = resultsFile().get()
-  const previous = forced ? null : latestRecord(store, request.root)
+  // A range (the push node's commits) is always read in full: what an earlier review of the whole change kept is not
+  // about these commits.
+  const previous = forced || request.range ? null : latestRecord(store, request.root)
   const since = await diffSincePrevious(diff.cwd, previous, head, path)
   const plan = planReview({
     full: diff.text,

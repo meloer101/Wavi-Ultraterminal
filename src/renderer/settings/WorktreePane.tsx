@@ -1,5 +1,6 @@
 // Settings · Worktree (Figma 16A): where new port blocks start (already-assigned directories keep their block;
-// applySettingsPatch clamps the number), and whether a merge that kept the worktree archives it (PRD F15).
+// applySettingsPatch clamps the number), and whether a worktree archives itself once its merge chain reaches 归档 (PRD
+// F15; pull-requests/auto-archive.ts).
 import { useRef, useState } from 'react'
 import { PORT_BASE_LIMITS } from '@shared/ports'
 import { Row, Section, Toggle } from './controls'
@@ -42,7 +43,6 @@ export function WorktreePane({
           <Row label="合并后自动归档">
             <Toggle label="合并后自动归档" checked={archiveAfterMerge} onChange={updateArchiveAfterMerge} />
           </Row>
-          <p className={styles.hint}>合并后没有删除的 worktree 会归档：停下会话、运行 archive 脚本、侧栏里收起来。可以在跳转（⌘K）的历史里恢复。</p>
         </Section>
       </div>
     </div>

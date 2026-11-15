@@ -109,6 +109,7 @@ const GIT_ICON: Partial<Record<ChainCommand, ActionIcon>> = {
   push: 'push',
   pr: 'pr',
   main: 'merge',
+  'push-base': 'push',
   'merge-pr': 'merge',
   archive: 'archive',
   review: 'review',
@@ -127,7 +128,7 @@ export function buildGitEntries(input: Pick<PaletteInput, 'git'>): PaletteEntry[
     title: a.label,
     subtitle: a.detail,
     icon: GIT_ICON[a.command] ?? 'panel',
-    ...(a.primary && (a.command === 'main' || a.command === 'pr' || a.command === 'merge-pr') ? { shortcut: SHORTCUTS['merge-worktree'] } : {}),
+    ...(a.primary ? { shortcut: SHORTCUTS['merge-worktree'] } : {}),
     fields: [
       { key: 'title', text: a.label, weight: 3 },
       { key: 'subtitle', text: a.detail, weight: 1.5 },

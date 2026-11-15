@@ -13,7 +13,15 @@ const sessions: Array<Record<string, unknown>> = [{ id: 's1', worktreeId: 'w1', 
 vi.mock('../state/persistence', () => ({ initialWorkspaceFile: () => ({ fixRuns: [saved] }), addSnapshotPart: () => () => {}, requestSave: () => {} }))
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
-    getState: () => ({ sessions, worktrees: [{ id: 'w1', projectId: 'p1', path: '/repo-wt' }], projects: [{ id: 'p1', rootPath: '/repo' }], activeSessionId: 's1' }),
+    getState: () => ({
+      sessions,
+      worktrees: [
+        { id: 'w1', projectId: 'p1', path: '/repo-wt' },
+        { id: 'w0', projectId: 'p1', path: '/repo', isMain: true, branch: 'main' }
+      ],
+      projects: [{ id: 'p1', rootPath: '/repo' }],
+      activeSessionId: 's1'
+    }),
     subscribe: () => () => {}
   }
 }))
@@ -71,5 +79,74 @@ describe('which agent 自动修复 hands the fix to (every agent with hooks)', (
     } finally {
       sessions.splice(0, sessions.length, ...original)
     }
+  })
+})
+
+// 合并 is local only: a fix of the base's CI still lands on the base and is pushed (never reviewed).
+describe('自动修复 of the base', () => {
+  it('merges the fix into the base and pushes it', async () => {
+    const shipToMain = vi.fn(async (_request: unknown) => ({ ok: true, commit: 'f'.repeat(40), pushed: true }))
+    vi.stubGlobal('window', {
+      tr: {
+        ui: { confirm: async () => true, notify: () => {} },
+        ship: { shipToMain },
+        pr: { refresh: () => {} }
+      }
+    })
+    const { pushAnyway } = await import('./auto-fix')
+    const { setBaseAutomation, useBaseCi } = await import('./base-ci')
+    const run = { kind: 'stopped' as const, sessionId: 's1', since: 'abc1234', key: 'k', checks: ['test'], baseFailing: null, decision: { kind: 'stop' as const, reason: 'limit' as const } }
+    const { freshAutomation } = await import('./auto-fix-model')
+    setBaseAutomation('/repo-wt', { ...freshAutomation(0, true), attempts: 1, lastKey: 'k', lastHead: 'abc1234', baseChecked: true, run })
+    await pushAnyway('base', '/repo-wt')
+    expect(shipToMain).toHaveBeenCalledTimes(1)
+    expect(shipToMain.mock.calls[0]![0]).toEqual({ root: '/repo', worktree: '/repo-wt', message: '', paths: null, method: 'squash', push: true })
+    expect(useBaseCi.getState().automation['/repo-wt']).toMatchObject({ run: null, pushed: 1, pushedShas: ['f'.repeat(40)] })
+    setBaseAutomation('/repo-wt', null)
+    vi.unstubAllGlobals()
+  })
+})
+
+// The push node never reviews a fix's push (its brakes ran): no review starts on any of the three ways a fix is pushed.
+describe('自动修复 pushes without the push node\'s review', () => {
+  const stoppedRun = { kind: 'stopped' as const, sessionId: 's0', since: 'abc1234', key: 'k', checks: ['test'], baseFailing: null, decision: { kind: 'stop' as const, reason: 'limit' as const } }
+
+  it('pushes a fix of the base from the main checkout on it as a plain 推送 of the base (no merge, no review)', async () => {
+    sessions.push({ id: 's0', worktreeId: 'w0', kind: 'claude', title: 'fix', status: 'idle', phase: 'ready', startedAt: 1, lastActivityAt: 1 })
+    const pushBase = vi.fn(async (_target: unknown) => ({ ok: true, commit: 'e'.repeat(40), pushed: true }))
+    const shipToMain = vi.fn(async (_request: unknown) => ({ ok: true, commit: 'f'.repeat(40), pushed: true }))
+    const start = vi.fn(async () => ({ phase: 'running' }))
+    vi.stubGlobal('window', {
+      tr: { ui: { confirm: async () => true, notify: () => {} }, ship: { shipToMain, pushBase }, pr: { refresh: () => {} }, review: { start } }
+    })
+    try {
+      const { pushAnyway } = await import('./auto-fix')
+      const { setBaseAutomation, useBaseCi } = await import('./base-ci')
+      const { freshAutomation } = await import('./auto-fix-model')
+      useBaseCi.setState((s) => ({ byWorktree: { ...s.byWorktree, '/repo': { worktree: '/repo', base: 'main', sha: 'd'.repeat(40), checks: { state: 'failing', total: 1, passed: 0, pending: 0, failing: [] }, url: null, checkedAt: 1 } } }))
+      setBaseAutomation('/repo', { ...freshAutomation(0, true), attempts: 1, lastKey: 'k', lastHead: 'abc1234', baseChecked: true, run: stoppedRun })
+      await pushAnyway('base', '/repo')
+      expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo' })
+      expect(shipToMain).not.toHaveBeenCalled()
+      expect(start).not.toHaveBeenCalled()
+      expect(useBaseCi.getState().automation['/repo']).toMatchObject({ run: null, pushed: 1, pushedShas: ['e'.repeat(40)] })
+      setBaseAutomation('/repo', null)
+    } finally {
+      sessions.splice(sessions.findIndex((x) => x.id === 's0'), 1)
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('tells the main checkout on its base from any other worktree', async () => {
+    const { onBaseCheckout } = await import('./auto-fix')
+    const worktrees = [
+      { path: '/repo', isMain: true, branch: 'main' },
+      { path: '/repo-wt', isMain: false, branch: 'main' },
+      { path: '/other', isMain: true, branch: 'feat' }
+    ]
+    expect(onBaseCheckout('/repo', 'main', worktrees)).toBe(true)
+    expect(onBaseCheckout('/repo-wt', 'main', worktrees)).toBe(false)
+    expect(onBaseCheckout('/other', 'main', worktrees)).toBe(false)
+    expect(onBaseCheckout('/repo', null, worktrees)).toBe(false)
   })
 })

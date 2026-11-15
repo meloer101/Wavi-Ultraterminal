@@ -16,8 +16,9 @@ export function hidePaths(text: string, folders: readonly string[]): string {
   return out
 }
 
-/** The runs the phone protocol knows: 合入链路 v2's `commit` / `sync` runs stay off the phone until it learns them. */
-export const shownOnPhone = (kind: ShipKind): kind is RemoteShip['kind'] => kind === 'main' || kind === 'pr' || kind === 'push-pr'
+/** The runs the phone shows (their kind is an opaque string to it): the exits and 推送 of the base; 提交, 同步 and 拉取
+ *  stay off the phone until it learns them. */
+export const shownOnPhone = (kind: ShipKind): kind is RemoteShip['kind'] => kind === 'main' || kind === 'pr' || kind === 'push-pr' || kind === 'push-base'
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
@@ -48,7 +49,8 @@ export function remoteShip(state: ShipState, folders: readonly string[] = []): R
           message: text(error.message, 2000),
           ...(error.output ? { output: hidePaths(error.output, folders).slice(-8000) } : {}),
           conflicts: Boolean(error.conflicts?.length),
-          pushRefused: error.pushRefused === true
+          pushRefused: error.pushRefused === true,
+          ...(error.reviewStop ? { reviewStop: true as const } : {})
         }
       : null
   }

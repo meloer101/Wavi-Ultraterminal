@@ -183,8 +183,7 @@ const api: TrApi = {
     onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener),
     newSessionInfo: (root) => ipcRenderer.invoke(IPC.gitWorktreesNewSessionInfo, root),
     create: (request) => ipcRenderer.invoke(IPC.gitWorktreesCreate, request),
-    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree),
-    merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
+    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree)
   },
   browser: browserApi,
   simulator: {
@@ -260,6 +259,7 @@ const api: TrApi = {
     readHandoff: (request) => ipcRenderer.invoke(SHIP_IPC.readHandoff, request),
     shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
     pushBase: (target) => ipcRenderer.invoke(SHIP_IPC.pushBase, target),
+    prepush: (request) => ipcRenderer.invoke(SHIP_IPC.prepush, request),
     diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
     diffSinceWithCut: (request) => ipcRenderer.invoke(SHIP_IPC.diffSinceWithCut, request),
     discardSince: (request) => ipcRenderer.invoke(SHIP_IPC.discardSince, request),

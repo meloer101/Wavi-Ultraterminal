@@ -11,7 +11,7 @@ interface TrWindow {
       get(): Promise<{
         appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean; fullscreenBackdrop: string }
         ports: { base: number }
-        review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; reviewer: string; model: string; codexModel: string }
+        review: { beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; reviewer: string; model: string; codexModel: string }
       }>
       update(patch: unknown): Promise<unknown>
     }
@@ -143,10 +143,12 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
   const app = await launchApp()
   const settings = await openSettings(app)
   await settings.getByRole('tab', { name: '自动化' }).click()
-  const toggles = ['合并前审阅', '推送前审阅', '每轮结束且有新提交时审阅']
+  const toggles = ['推送前审阅', '每轮结束且有新提交时审阅']
   for (const name of toggles) await expect(settings.getByRole('switch', { name })).toHaveAttribute('aria-checked', 'false')
-  await settings.getByRole('switch', { name: '合并前审阅' }).click()
-  await expect.poll(async () => (await readSettings(settings)).review.beforeMerge).toBe(true)
+  // 合并 is local and reviews nothing: the review runs before a push only.
+  await expect(settings.getByRole('switch', { name: '合并前审阅' })).toHaveCount(0)
+  await settings.getByRole('switch', { name: '推送前审阅' }).click()
+  await expect.poll(async () => (await readSettings(settings)).review.beforePush).toBe(true)
 
   await settings.getByRole('radio', { name: '自定义' }).click()
   const rules = settings.getByRole('textbox', { name: '自定义审阅规则' })

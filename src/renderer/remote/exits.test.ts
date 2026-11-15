@@ -74,13 +74,14 @@ beforeEach(() => {
 const untick = (...paths: string[]): void => useGit.setState({ roots: { [tree.path]: { ...gitOf(tree.path), unticked: new Set(paths) } } })
 
 describe('the phone’s exits', () => {
-  // R16 / R27: the files unticked on the Mac stay out of what the phone commits and pushes.
-  it('commits only the files ticked on the Mac, and starts from the tip the preflight read', async () => {
+  // 提交 is its own action (not on the phone yet): the phone's exit ships the branch's commits and commits nothing,
+  // ticked files included.
+  it('commits nothing, and starts from the tip the preflight read', async () => {
     untick('notes.md', '.env.local')
     expect(await remoteShipAction('s1', { do: 'start', exit: 'main' })).toEqual({ ok: true })
     expect(startShip).toHaveBeenCalledTimes(1)
     const [ctx, kind, , options] = startShip.mock.calls[0]!
-    expect(ctx).toMatchObject({ paths: ['a.ts'] })
+    expect(ctx).toMatchObject({ paths: null })
     expect(kind).toBe('main')
     // L11 / R31 / R60: the tip it starts from and where the base is pushed come from the preflight it just read.
     expect(options).toMatchObject({ head: 'h1h1h1h', baseRemote: 'upstream' })
@@ -93,6 +94,47 @@ describe('the phone’s exits', () => {
     const result = await remoteShipAction('s1', { do: 'start', exit: 'main' })
     expect(result).toMatchObject({ ok: false })
     expect(startShip).not.toHaveBeenCalled()
+  })
+
+  // 提交 is not on the phone yet: the chain's primary is shown blocked with where it runs; the exit beside it still runs.
+  it('shows 提交 as a move for the Mac, and the exit beside it', async () => {
+    const result = await remoteExits('s1')
+    expect(result).toMatchObject({ ok: true, data: { primary: { kind: 'commit', label: '提交', blocker: '在 Mac 上提交' }, secondary: { kind: 'main', blocker: null } } })
+  })
+
+  it('shows the chain\'s state line with a recovery move only the Mac runs', async () => {
+    changes = { ...changes, uncommitted: [] }
+    answer = preflight({ uncommitted: 0, upstream: { ahead: 1, behind: 2 } })
+    const result = await remoteExits('s1')
+    expect(result).toMatchObject({ ok: true, data: { primary: { kind: 'handoff', blocker: '远程分支和本地分叉；在 Mac 上交给 Claude' } } })
+  })
+
+  // 推送 of the base after a local 合并: the phone starts it through the same `start` (its kind is opaque to iOS).
+  it('offers and starts 推送 of the base after a local 合并', async () => {
+    changes = { ...changes, ahead: 0, uncommitted: [] }
+    answer = preflight({ ahead: 0, merged: true, uncommitted: 0, baseUnpushed: 2, upstream: { ahead: 0, behind: 0 } })
+    const result = await remoteExits('s1')
+    expect(result).toMatchObject({ ok: true, data: { primary: { kind: 'push-base', label: '推送', blocker: null }, secondary: null, archive: { blocker: null } } })
+    expect(await remoteShipAction('s1', { do: 'start', exit: 'push-base' })).toEqual({ ok: true })
+    const [ctx, kind, title, options] = startShip.mock.calls[0]!
+    expect([kind, title]).toEqual(['push-base', '推送 main'])
+    expect(ctx).toMatchObject({ paths: null, openPr: null })
+    expect(options).toMatchObject({ head: 'h1h1h1h', baseRemote: 'upstream' })
+  })
+
+  it('refuses 推送 of the base when the base has nothing to push', async () => {
+    expect(await remoteShipAction('s1', { do: 'start', exit: 'push-base' })).toMatchObject({ ok: false })
+    expect(startShip).not.toHaveBeenCalled()
+  })
+
+  // Path ③: a PR closed on GitHub leaves 归档 (its own button), no exit.
+  it('offers no exit, only 归档, once the PR was closed', async () => {
+    changes = { ...changes, uncommitted: [] }
+    answer = preflight({ uncommitted: 0 })
+    const pr = { number: 5, state: 'closed', url: 'https://github.com/o/r/pull/5', title: 't', headOid: 'h1h1h1h' }
+    usePullRequests.setState({ byWorktree: { [tree.path]: { worktree: tree.path, branch: 'feat', pr, checkedAt: 0 } as unknown as PrStatus } })
+    const result = await remoteExits('s1')
+    expect(result).toMatchObject({ ok: true, data: { primary: null, secondary: null, pr: { number: 5, state: 'closed' }, archive: { blocker: null } } })
   })
 
   // R24: with an open PR, an untracked nested repository is nothing to send: the phone opens the PR.

@@ -2,6 +2,7 @@
 // reviewer CLI is invoked, and how its JSON becomes F5 comments. Nothing here starts a process.
 import { headlessAgent, type HeadlessAgent } from './agents'
 import { clipCode, sanitizeReviewComments, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
+import type { CommitRange } from './ship'
 import { isWaviText } from './ship-chain'
 
 /** Claude Code 2.1.303 still sends 2_900_000 characters; ~2_950_000 is a local `Prompt is too long`. */
@@ -778,7 +779,7 @@ export async function driveReview(input: DriveReviewInput): Promise<ReviewDriveR
 }
 
 /** What started a review. Only `manual` runs regardless of 设置 · 自动化 · 代码审阅. */
-export type ReviewTrigger = 'manual' | 'merge' | 'push' | 'turn'
+export type ReviewTrigger = 'manual' | 'push' | 'turn'
 
 export interface ReviewRequest {
   /** The worktree to review (its top level). */
@@ -792,6 +793,9 @@ export interface ReviewRequest {
   force?: boolean
   /** What the user asked of the agent in this worktree's session, oldest first (its hooks' prompts); shown to the reviewer. */
   asked?: string[]
+  /** Only these commits (the push node's review: what a push sends that the remote lacks): committed changes alone,
+   *  nothing uncommitted or untracked, always read in full. Absent: the worktree's whole change. */
+  range?: CommitRange
 }
 
 /** `incremental`: only what changed since the worktree's previous review was read; its other findings were kept. */
@@ -998,7 +1002,7 @@ const MAX_ROOTS = 500
 
 const isRec = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
-const TRIGGER_SET: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
+const TRIGGER_SET: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'push', 'turn'])
 
 function sanitizeCounts(value: unknown): Partial<Record<ReviewSeverity, number>> {
   const counts: Partial<Record<ReviewSeverity, number>> = {}
@@ -1016,11 +1020,13 @@ function sanitizeRecord(value: unknown, root: string): ReviewRecord | null {
   if (typeof hash !== 'string' || !/^[0-9a-f]{8,64}$/.test(hash)) return null
   const agent = headlessAgent(value.agent)
   if (!agent) return null
-  if (!TRIGGER_SET.has(trigger) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
+  // 合并前审阅 is gone: a review it ran before is kept, as one asked for by hand.
+  const known = trigger === 'merge' ? 'manual' : trigger
+  if (!TRIGGER_SET.has(known) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
   return {
     hash,
     agent,
-    trigger: trigger as ReviewTrigger,
+    trigger: known as ReviewTrigger,
     message: typeof message === 'string' ? message.slice(0, 4000) : '',
     startedAt,
     endedAt,

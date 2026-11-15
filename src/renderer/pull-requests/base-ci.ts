@@ -1,4 +1,4 @@
-// CI on the base after 合并到 main 并推送 pushed it (PRD F16 v1.78, Figma 29E / 29F): the latest BaseCi per worktree that
+// CI on the base after 推送 of the base pushed it (PRD F16 v1.78, Figma 29E / 29F): the latest BaseCi per worktree that
 // pushed one, and 自动修复's state for that base push (keyed by worktree path, PrAutomation with number 0). main pushes
 // every change (auto-fix.ts subscribes and asks once per worktree, for a CI that settled before the window loaded).
 import { create } from 'zustand'
@@ -6,13 +6,25 @@ import type { ChecksState } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 import type { PrAutomation } from './auto-fix-model'
 
+/** A 推送 of the base that went through in this window: the commit and when (epoch ms). */
+export interface BasePush {
+  sha: string
+  at: number
+}
+
 interface BaseCiStore {
   byWorktree: Record<string, BaseCi>
   /** 自动修复 for the worktree's base push; only worktrees that pushed one have an entry. */
   automation: Record<string, PrAutomation>
+  /** The last 推送 of the base each worktree made in this window (合并后自动归档 waits for its CI). */
+  pushes: Record<string, BasePush>
 }
 
-export const useBaseCi = create<BaseCiStore>()(() => ({ byWorktree: {}, automation: {} }))
+export const useBaseCi = create<BaseCiStore>()(() => ({ byWorktree: {}, automation: {}, pushes: {} }))
+
+export function noteBasePush(worktree: string, push: BasePush): void {
+  useBaseCi.setState((s) => ({ pushes: { ...s.pushes, [worktree]: push } }))
+}
 
 /** The newer of two answers for one worktree: a late reply about the same commit never overwrites a fresher one. */
 export function newerBaseCi(prev: BaseCi | undefined, next: BaseCi): BaseCi {

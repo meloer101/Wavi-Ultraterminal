@@ -179,9 +179,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const nothing = chain === null || chain.stage === 'empty'
   const runnable = chain?.actions.some((a) => a.blocker === null) ?? false
 
-  // ⇧⌘M (zoneShortcut): the primary exit that can run, 合并 PR #N… through the chain (its reason while it cannot open,
-  // never the local merge sheet past the PR), nothing for the chain's other moves or a blocked exit; the merge sheet for
-  // a merged, empty or stuck worktree.
+  // ⇧⌘M (zoneShortcut): the chain's primary when it can run, 合并 PR #N… through the chain (its reason while it cannot
+  // open, never the local merge sheet past the PR), nothing for another blocked primary; the merge sheet for a worktree
+  // with no primary or a stuck one.
   const shortcut = zoneShortcut(chain, idle)
   const shortcutExit = shortcut === null ? null : shortcut === 'nothing' ? () => undefined : () => void runChainCommand(worktree.path, shortcut, sessionId)
 
@@ -248,9 +248,11 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
               ) : chain?.second?.id === 'abort' ? (
                 <ChainAbort chain={chain} worktreePath={worktree.path} idle={idle} />
               ) : (
-                // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action.
+                // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action. Once the
+                // branch's work is in the base (merged, or only waiting for 推送 of the base) it has nothing of its own to read.
                 reviewer &&
                 chain?.stage !== 'merged' &&
+                chain?.stage !== 'unpushed' &&
                 (!reviewShown || settings.review.mode === 'agent-command') && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
               )}
               <span className={styles.spacer} />

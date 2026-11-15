@@ -2,7 +2,8 @@
 // (◌ working · ✓ done · ○ pending · ✗ failed), and — once the agent has written the text — a last look at it in
 // editable fields. It takes the place of the facts and the footer in Git · 变更. ⌘↵ goes ahead, Esc cancels. A failed
 // step says what git said in plain words (合入链路 v2, Figma 73E), and the footer offers the one way on: 同步 / 拉取 /
-// 提交… (the chain's own action), 改为创建 PR, 交给 <agent> (into its input line, never sent), 重试, or only 取消.
+// 提交… (the chain's own action), 改为创建 PR, 交给 <agent> (into its input line, never sent), 重试, or only 取消. A
+// pre-push review that found a P0 / P1 stopped the push: 让 <agent> 修 (the findings into its input line) or 照样推送.
 import { ArrowDown, ArrowUp, Check, CircleAlert, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
@@ -13,7 +14,9 @@ import {
   cancelShip,
   editShip,
   handConflictsToAgent,
+  handFindingsToAgent,
   hasHandoffText,
+  pushPastReview,
   retryShip,
   shipCanRetry,
   shipFinished,
@@ -43,6 +46,7 @@ const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
   main: GitMerge,
   pr: GitPullRequest,
   'push-pr': GitPullRequest,
+  'push-base': ArrowUp,
   push: ArrowUp,
   commit: GitCommitHorizontal,
   sync: RefreshCw,
@@ -63,7 +67,9 @@ function chainLabel(id: ChainActionId, base: string): string {
     case 'pr':
       return CHAIN_LABEL.createPr
     case 'main':
-      return CHAIN_LABEL.mergePush(base)
+      return CHAIN_LABEL.mergeTo(base)
+    case 'push-base':
+      return CHAIN_LABEL.pushBaseTo(base)
     case 'merge-pr':
       return CHAIN_LABEL.mergePr(null)
     case 'archive':
@@ -197,7 +203,22 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
         {state.error ? (
           <>
             {/* A failed commit's own way on sits beside 重试, which is then the primary (⌘↵). */}
-            {way?.kind === 'create-pr' ? (
+            {way?.kind === 'review' ? (
+              <>
+                <button type="button" className={styles.ghost} onClick={() => pushPastReview(worktree)}>
+                  照样推送
+                </button>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={!hasSession}
+                  title={hasSession ? undefined : CHAIN_TEXT.noAgent}
+                  onClick={() => void handFindingsToAgent(worktree)}
+                >
+                  {`让 ${handoffAgent ?? 'agent'} 修`}
+                </button>
+              </>
+            ) : way?.kind === 'create-pr' ? (
               <button type="button" className={canRetry ? styles.ghost : styles.primary} onClick={() => switchToPr(worktree)}>
                 改为创建 PR
               </button>

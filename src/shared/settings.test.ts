@@ -88,7 +88,6 @@ describe('applySettingsPatch', () => {
 
   it('keeps code review off unless a real switch is set (PRD F13)', () => {
     expect(DEFAULT_SETTINGS.review).toEqual({
-      beforeMerge: false,
       beforePush: false,
       afterTurnWithCommits: false,
       mode: 'builtin',
@@ -98,8 +97,8 @@ describe('applySettingsPatch', () => {
       model: '',
       codexModel: ''
     })
-    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { beforeMerge: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
-    expect(next.review.beforeMerge).toBe(true)
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { afterTurnWithCommits: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
+    expect(next.review.afterTurnWithCommits).toBe(true)
     expect(next.review.beforePush).toBe(false)
     expect(next.review.mode).toBe('agent-command')
     expect(next.review.model).toBe('haiku')
@@ -107,6 +106,16 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { model: 'not a model', mode: 'nope' } }).review.model).toBe('')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { mode: 'nope' } }).review.mode).toBe('builtin')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
+  })
+
+  it('drops 合并前审阅: a stored one on turns 推送前审阅 on, and it is gone once written back', () => {
+    const migrated = sanitizeSettings({ review: { beforeMerge: true, beforePush: false } }).review
+    expect(migrated.beforePush).toBe(true)
+    expect('beforeMerge' in migrated).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: false } }).review.beforePush).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: true } }).review.beforePush).toBe(true)
+    // Turned off afterwards: stays off (the old key is not written back).
+    expect(applySettingsPatch(sanitizeSettings({ review: { beforeMerge: true } }), { review: { beforePush: false } }).review.beforePush).toBe(false)
   })
 
   it('picks the other CLI as reviewer only when asked, and moves an old OpenAI model to Codex (PRD F13 v1.63)', () => {

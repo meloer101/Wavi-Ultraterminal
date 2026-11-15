@@ -133,10 +133,15 @@ export interface RemoteProject {
   name: string
 }
 
+/** The chain's moves the phone shows but cannot run (提交, the recovery moves, 交给 agent): always with a blocker that
+ *  says where they run. The phone treats `kind` as an opaque string. */
+export type RemoteMacMove = 'commit' | 'sync' | 'pull' | 'push' | 'handoff' | 'continue' | 'abort'
+
 /** An exit of Git · 变更 as the phone shows it (Figma 45I; PRD F16): the window works out which apply and what blocks them. */
 export interface RemoteExit {
-  /** `open-pr`: the branch's PR is open and there is nothing to send; the phone opens `url`. */
-  kind: 'main' | 'pr' | 'push-pr' | 'open-pr'
+  /** `open-pr`: the branch's PR is open and there is nothing to send; the phone opens `url`. `push-base`: 推送 of the
+   *  base a local 合并 left ahead. A RemoteMacMove: the chain's primary, which only the Mac runs. */
+  kind: 'main' | 'pr' | 'push-pr' | 'open-pr' | 'push-base' | RemoteMacMove
   label: string
   /** Why it cannot run now (UI copy), or null. */
   blocker: string | null
@@ -162,7 +167,7 @@ export type RemoteShipField = 'commit' | 'title' | 'body' | 'draft'
 
 /** An exit in progress (Figma 45J), from the window's Ship block state (PRD F16 v1.78). */
 export interface RemoteShip {
-  kind: 'main' | 'pr' | 'push-pr'
+  kind: 'main' | 'pr' | 'push-pr' | 'push-base'
   title: string
   /** Who writes the text (Claude / Codex / …). */
   agent: string
@@ -174,12 +179,13 @@ export interface RemoteShip {
   fields: RemoteShipField[]
   submitLabel: string
   submitBlocker: string | null
-  error: { step: string; message: string; output?: string; conflicts: boolean; pushRefused: boolean } | null
+  /** `reviewStop`: the pre-push review found a P0 / P1 and nothing was pushed (让 <agent> 修 / 照样推送 are on the Mac). */
+  error: { step: string; message: string; output?: string; conflicts: boolean; pushRefused: boolean; reviewStop?: true } | null
 }
 
 /** What the phone may do to an exit (the Ship block's buttons). */
 export type RemoteShipAction =
-  | { do: 'start'; exit: 'main' | 'pr' | 'push-pr' }
+  | { do: 'start'; exit: 'main' | 'pr' | 'push-pr' | 'push-base' }
   | { do: 'edit'; texts: Partial<RemoteShip['texts']> }
   | { do: 'submit' | 'retry' | 'cancel' | 'conflicts' | 'switch-pr' }
 
@@ -309,7 +315,7 @@ function shipAction(raw: unknown): RemoteShipAction | null {
   if (!a) return null
   switch (a.do) {
     case 'start':
-      return a.exit === 'main' || a.exit === 'pr' || a.exit === 'push-pr' ? { do: 'start', exit: a.exit } : null
+      return a.exit === 'main' || a.exit === 'pr' || a.exit === 'push-pr' || a.exit === 'push-base' ? { do: 'start', exit: a.exit } : null
     case 'edit': {
       const t = record(a.texts)
       if (!t) return null
@@ -495,7 +501,7 @@ const SHIP_FIELDS: ReadonlySet<unknown> = new Set<RemoteShipField>(['commit', 't
 function windowShip(raw: unknown): RemoteShip | null {
   const v = record(raw)
   const t = record(v?.texts)
-  if (!v || !t || (v.kind !== 'main' && v.kind !== 'pr' && v.kind !== 'push-pr') || (v.stage !== 'writing' && v.stage !== 'glance' && v.stage !== 'running')) return null
+  if (!v || !t || (v.kind !== 'main' && v.kind !== 'pr' && v.kind !== 'push-pr' && v.kind !== 'push-base') || (v.stage !== 'writing' && v.stage !== 'glance' && v.stage !== 'running')) return null
   const title = cleanText(v.title, 300)
   const agent = cleanText(v.agent, 100)
   const submitLabel = cleanText(v.submitLabel, 100)
@@ -520,7 +526,7 @@ function windowShip(raw: unknown): RemoteShip | null {
     const message = cleanText(e?.message, 2000)
     const output = e?.output === undefined ? undefined : cleanText(e.output, 8000)
     if (!e || typeof e.step !== 'string' || message === null || output === null) return null
-    error = { step: e.step.slice(0, 20), message, ...(output ? { output } : {}), conflicts: e.conflicts === true, pushRefused: e.pushRefused === true }
+    error = { step: e.step.slice(0, 20), message, ...(output ? { output } : {}), conflicts: e.conflicts === true, pushRefused: e.pushRefused === true, ...(e.reviewStop === true ? { reviewStop: true as const } : {}) }
   }
   return { kind: v.kind, title, agent, stage: v.stage, steps, texts: { commit, title: shipTitle, body, draft: t.draft }, fields: v.fields as RemoteShipField[], submitLabel, submitBlocker, error }
 }

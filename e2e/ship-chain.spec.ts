@@ -1,18 +1,23 @@
-// 合入链路 v2 (PRD v1.170, Figma section 73) end to end: the merge chain in Git · 变更 on real repositories with a local
-// bare remote, the fake hook agent (e2e/fake-hook-claude.ts; the test plays it by writing the handoff file, e2e/ship.ts)
-// and a fake gh (e2e/fake-gh.ts). Two launches:
+// 合入链路 v2 (PRD v1.170, Figma section 73) and its three-node exit zone (提交 → 合并 / 创建 PR → 推送 → 归档, one
+// primary at a time, PRD v1.191, Figma 87⁗) end to end: the merge chain in Git · 变更 on real repositories with a local
+// bare remote, the fake hook agent (e2e/fake-hook-claude.ts; the test plays it by writing the handoff file, e2e/ship.ts,
+// and it answers Wavi's `claude -p` review) and a fake gh (e2e/fake-gh.ts). Two launches:
 //   gh signed out — origin's fetch URL says github.com (never fetched), its push URL is a bare repository:
-//     jacob/tidy — one commit, two uncommitted files: 创建 PR blocked before anything is written, exit A still runs
-//   gh ready — project `demo` (origin is a bare repository, not GitHub: only 合并到 main 并推送, no state line about it)
+//     jacob/tidy — one commit, two uncommitted files: 创建 PR blocked before anything is written; 提交, then 合并 lands
+//                  it in the local main (main has no upstream: nothing to push, 归档… next)
+//   gh ready — project `demo` (origin is a bare repository, not GitHub: only 合并, no state line about it)
 //   and project `widget` (origin on github.com):
-//     jacob/pick     three uncommitted files: ⌘K's Git group, 提交… commits only the ticked ones
+//     jacob/pick     three uncommitted files: ⌘K's Git group, 提交 commits only the ticked ones
 //     jacob/sync     never pushed, main moved past it without conflicts: ⋯ → 同步 main rebases it; ⋯ → 推送 publishes it
 //     jacob/conflict never pushed, edits README.md as main did: 和 main 会冲突, 同步 main → 交给 Claude (no Enter)
 //     jacob/rebase   a rebase left stopped on README.md: 中止 restores the branch
 //     jacob/resume   a rebase whose conflict was resolved and staged outside the app: 继续 finishes it
 //     jacob/abort    the same, then 中止: it asks first; 取消 keeps the resolution, 中止 restores the branch
-//     jacob/push     pushed, a local commit, the remote branch moved meanwhile: 推送 is refused, 拉取 is offered
+//     jacob/push     pushed, a local commit, the remote branch moved meanwhile: 推送's pull first fails as diverged,
+//                    nothing is pushed, 交给 Claude
 //     jacob/done     fast-forwarded into main: 已经全部合并到 main, 归档… opens the sheet
+//     jacob/land     one commit: 合并 → 推送 (pulls origin/main first; the pre-push review stops on a P1, 照样推送) → 归档…
+//     demo's main checkout (path ①): 提交 there, then 推送 of main (the review's P1 goes to Claude first)
 //     widget jacob/pr  PR #12 open; gh's PR list starts failing: `#12 ? 查询失败` in the sidebar and the PR line
 // Every case sets up the state it needs (ticks, the open session), so one runs alone (`-g`) as well as in order.
 // Screenshots of the right sidebar in both themes go to SHIP_CHAIN_SHOTS (default test-results/ship-chain/).
@@ -160,26 +165,40 @@ test.describe('合入链路 v2 · gh signed out', () => {
     await app?.close().catch(() => {})
   })
 
-  test('(b) the state line says gh is signed out; 创建 PR is blocked before anything is written; 合并到 main 并推送 still runs', async () => {
+  test('(b) gh signed out: the PR line says so and 创建 PR is blocked; ticked files are committed first (提交), then 合并 lands the branch in the local main', async () => {
     await kit.open('s-tidy')
-    await expect(kit.headline()).toContainText('gh 还没有登录', WITHIN)
-    await expect(kit.headline()).toContainText('在终端运行 gh auth login 后可以创建 PR')
-    const createPr = kit.panel().getByRole('button', { name: /^创建 PR/ })
-    await expect(createPr).toBeDisabled()
+    // 合并 sits beside 提交, so the chain's state line has nothing to say; the PR line says why no PR can be made.
+    await expect(kit.panel().getByTestId('pr-status')).toContainText('gh 还没有登录：在终端运行 gh auth login 后可以创建 PR', WITHIN)
+    await kit.panel().getByTestId('chain-menu').click()
+    await expect(kit.menuItem(/^创建 PR/)).toHaveAttribute('aria-disabled', 'true')
+    await page.keyboard.press('Escape')
+    // Two files ticked: 提交 is the primary, 合并 beside it (the branch has a commit of its own).
+    const commit = kit.panel().getByRole('button', { name: /^提交( |$)/ })
+    await expect(commit).toContainText(/[⌘⇧]/)
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).toBeEnabled()
     await kit.shoot('b')
     // Nothing went to the agent for a PR.
     expect(typedBy(agent)).not.toContain('pr.md')
 
-    await kit.panel().getByRole('button', { name: /^合并到 main 并推送/ }).click()
+    await commit.click()
     const file = await promptedPath(agent, 'wt-tidy', 'commit')
     agentWrites(agent, file, 'chore: tidy up\n')
     await expect(kit.ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
     await expect(kit.ship().locator('[data-step="commit"]')).toHaveText(/提交/)
     await page.keyboard.press('Meta+Enter')
     await expect(kit.ship()).toHaveCount(0, WITHIN)
-    expect(gitIn(project, 'log', '-1', '--format=%s', 'main').trim()).toBe('chore: tidy up')
-    // Pushed to the bare repository (the push URL), not to github.com.
-    expect(gitIn(bare, 'log', '-1', '--format=%s', 'main').trim()).toBe('chore: tidy up')
+    expect(gitIn(tidy, 'log', '-1', '--format=%s').trim()).toBe('chore: tidy up')
+
+    const pushed = gitIn(bare, 'rev-parse', 'refs/heads/main').trim()
+    const merge = kit.panel().getByRole('button', { name: /^合并( |$)/ })
+    await expect(merge).toContainText(/[⌘⇧]/, WITHIN)
+    await merge.click()
+    await expect(kit.panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/, WITHIN)
+    expect(gitIn(project, 'log', '-1', '--format=%B', 'main').trim()).toBe('整理\n\n- Add tidy\n- chore: tidy up')
+    // 合并 is local: nothing went to the push URL. main has no upstream, so nothing waits to be pushed: 归档… is next.
+    expect(gitIn(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(pushed)
+    await expect(kit.headline()).toContainText('已经全部合并到 main', WITHIN)
+    await expect(kit.panel().getByRole('button', { name: /^归档…/ })).toBeVisible()
   })
 })
 
@@ -194,7 +213,7 @@ test.describe('合入链路 v2 · gh ready', () => {
   gitIn(project, 'push', '-q', '-u', 'origin', 'main')
 
   const wt = (name: string) => join(fake.root, `wt-${name}`)
-  const names = ['pick', 'sync', 'conflict', 'rebase', 'resume', 'abort', 'push', 'done']
+  const names = ['pick', 'sync', 'conflict', 'rebase', 'resume', 'abort', 'push', 'done', 'land']
   for (const name of names) addWorktree(project, wt(name), `jacob/${name}`)
   commitIn(wt('pick'), 'pick.ts', 'export {}\n', 'Add pick')
   for (const name of ['a', 'b', 'c']) writeFileSync(join(wt('pick'), `${name}.ts`), `export const ${name} = 1\n`)
@@ -204,6 +223,7 @@ test.describe('合入链路 v2 · gh ready', () => {
   commitIn(wt('resume'), 'README.md', '# demo\nfrom the resume branch\n', 'Resume branch edits README')
   commitIn(wt('abort'), 'README.md', '# demo\nfrom the abort branch\n', 'Abort branch edits README')
   commitIn(wt('done'), 'done.ts', 'export const done = 1\n', 'Add done')
+  commitIn(wt('land'), 'land.ts', "export const land = 'here'\n", 'Add land')
   // jacob/done lands on main by fast-forward; then main moves on.
   gitIn(project, 'merge', '-q', '--ff-only', 'jacob/done')
   commitIn(project, 'main.ts', 'export const main = 1\n', 'Main adds main.ts')
@@ -259,18 +279,23 @@ test.describe('合入链路 v2 · gh ready', () => {
   const agents: Record<string, FakeAgentFolder> = {}
   for (const name of names) agents[name] = fake.folder(`wt-${name}`)
   agents.pr = fake.folder('wt-pr')
+  // The main checkout's own session (path ①).
+  agents.main = fake.folder('demo')
 
   let app: ElectronApplication
   let page: Page
   const kit = pageKit(() => page)
   const dialogs = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: Dialogs }).__trDialogs.requests)
+  const updateSettings = (patch: unknown) =>
+    page.evaluate((p) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(p), patch)
   const answerDialogs = (answer: boolean) =>
     app.evaluate((_electron, value) => {
       ;(globalThis as unknown as { __trDialogs: Dialogs }).__trDialogs.answer = value
     }, answer)
-  /** B1: the zone offers only 合并到 main 并推送, says nothing about GitHub; ⋯'s 创建 PR is disabled with the reason. */
+  /** B1: the zone offers only 合并 (into the local main), says nothing about GitHub; ⋯'s 创建 PR is disabled with the
+   *  reason. */
   const notOnGitHub = async () => {
-    await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled(WITHIN)
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).toBeEnabled(WITHIN)
     await expect(kit.panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
     await expect(kit.headline()).toHaveCount(0)
     await kit.panel().getByTestId('chain-menu').click()
@@ -306,7 +331,9 @@ test.describe('合入链路 v2 · gh ready', () => {
           session('push', '推送被拒', 6),
           session('done', '已合并', 7),
           session('pr', '有 PR', 8),
-          session('abort', '解决后中止', 9)
+          session('abort', '解决后中止', 9),
+          session('land', '落地', 10),
+          { id: 's-main', worktreeId: 'w-main', kind: 'claude', title: '主目录', startedAt: 11, lastActivityAt: 11 }
         ],
         activeSessionId: 's-pick',
         sidebarCollapsed: false,
@@ -325,16 +352,20 @@ test.describe('合入链路 v2 · gh ready', () => {
     await app?.close().catch(() => {})
   })
 
-  test('(a) an unticked file stays out: 提交… commits only the ticked ones', async () => {
+  test('(a) an unticked file stays out: 提交, the primary, commits only the ticked ones; 合并 is next', async () => {
     await kit.open('s-pick')
     await kit.tickOnly(['a.ts', 'b.ts'])
     await expect(kit.panel().getByRole('checkbox', { name: '提交 c.ts' })).toHaveAttribute('aria-checked', 'false')
     await expect(kit.tickAll()).toHaveAttribute('aria-checked', 'mixed')
     await expect(kit.panel()).toContainText('3 个文件 · 勾选 2 个')
-    // The preflight is in: a remote that is not on GitHub offers only 合并到 main 并推送, with no state line about it.
+    // The preflight is in: a remote that is not on GitHub offers only 合并, with no state line about it.
     await notOnGitHub()
-    await kit.panel().getByTestId('chain-menu').click()
-    await kit.menuItem(/^提交…/).click()
+    // Ticked files: 提交 is the primary (⇧⌘M), 合并 beside it.
+    const commit = kit.panel().getByRole('button', { name: /^提交( |$)/ })
+    await expect(commit).toContainText(/[⌘⇧]/)
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).not.toContainText(/[⌘⇧]/)
+    await kit.shoot('a-zone')
+    await commit.click()
     await expect(kit.ship()).toContainText('提交 2 个文件')
     const file = await promptedPath(agents.pick!, 'wt-pick', 'commit')
     agentWrites(agents.pick!, file, 'feat: a and b\n')
@@ -369,9 +400,11 @@ test.describe('合入链路 v2 · gh ready', () => {
     expect(committed[0]).toBe('feat: a and b')
     expect(committed.slice(1).filter(Boolean).sort()).toEqual(['a.ts', 'b.ts'])
     expect(gitIn(wt('pick'), 'status', '--porcelain')).toContain('c.ts')
+    // c.ts stays unticked and out of the way: 合并 is the primary now.
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).toContainText(/[⌘⇧]/, WITHIN)
   })
 
-  test('(g) ⌘K lists the active worktree’s Git group; 提交… starts the run in Git · 变更', async () => {
+  test('(g) ⌘K lists the active worktree’s Git group; 提交 starts the run in Git · 变更', async () => {
     await kit.open('s-pick')
     // Only c.ts ticked, whatever ran before.
     await kit.tickOnly(['c.ts'])
@@ -379,7 +412,7 @@ test.describe('合入链路 v2 · gh ready', () => {
     await page.keyboard.press('Meta+k')
     const palette = page.getByTestId('command-palette')
     await expect(palette).toContainText('Git · jacob/pick', WITHIN)
-    const commit = palette.getByRole('option', { name: /^提交…/ })
+    const commit = palette.getByRole('option', { name: /^提交/ })
     await expect(commit).toContainText('1 个文件')
     // Only what can run: 拉取 (never pushed) is not offered.
     await expect(palette.getByRole('option', { name: /^拉取/ })).toHaveCount(0)
@@ -397,9 +430,9 @@ test.describe('合入链路 v2 · gh ready', () => {
     await kit.panel().getByTestId('chain-menu').click()
     const sync = kit.menuItem(/^同步 main/)
     await expect(sync).not.toHaveAttribute('aria-disabled', 'true', WITHIN)
-    // The menu as Figma 73B draws it: blocked items say why.
-    await expect(kit.menuItem(/^拉取/)).toHaveAttribute('aria-disabled', 'true')
-    await expect(kit.menuItem(/^拉取/)).toContainText('分支还没有推送过')
+    // The recovery moves are listed only while they can run: 拉取 (never pushed) is not there; blocked items say why.
+    await expect(kit.menuItem(/^拉取/)).toHaveCount(0)
+    await expect(kit.menuItem(/^创建 PR/)).toContainText('远程不在 GitHub 上')
     await kit.shoot('c-menu')
     await sync.click()
     await expect.poll(() => {
@@ -421,7 +454,9 @@ test.describe('合入链路 v2 · gh ready', () => {
     await kit.open('s-sync')
     await notOnGitHub()
     await kit.panel().getByTestId('chain-menu').click()
-    await kit.menuItem(/^推送/).click()
+    // 推送 the branch, not 推送 main (nothing to push there).
+    await expect(kit.menuItem(/^推送 main/)).toHaveAttribute('aria-disabled', 'true')
+    await kit.menuItem(/^推送$/).click()
     await expect.poll(() => {
       try {
         return gitIn(bare, 'rev-parse', 'refs/heads/jacob/sync').trim()
@@ -472,8 +507,10 @@ test.describe('合入链路 v2 · gh ready', () => {
     await kit.open('s-resume')
     await expect(kit.headline()).toContainText('rebase 进行中 · 冲突都解决了', WITHIN)
     await expect(kit.headline()).toHaveAttribute('data-tone', 'ok')
-    const cont = kit.panel().getByRole('button', { name: '继续', exact: true })
+    // 继续 is the primary: it carries ⇧⌘M.
+    const cont = kit.panel().getByRole('button', { name: /^继续( |$)/ })
     await expect(cont).toBeEnabled()
+    await expect(cont).toContainText(/[⌘⇧]/)
     await expect(kit.panel().getByRole('button', { name: '中止', exact: true })).toBeEnabled()
     await kit.shoot('k')
     await cont.click()
@@ -483,7 +520,7 @@ test.describe('合入链路 v2 · gh ready', () => {
     expect(gitIn(wt('resume'), 'show', 'HEAD:README.md')).toBe('# demo\nfrom main\nfrom the resume branch\n')
     // Rebased onto main and clean: the exits are back, with nothing to say on the state line.
     await expect(kit.headline()).toHaveCount(0, WITHIN)
-    await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled()
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).toBeEnabled()
   })
 
   // Review finding 36: 中止 that would throw away resolved conflicts asks first.
@@ -514,19 +551,33 @@ test.describe('合入链路 v2 · gh ready', () => {
     }
   })
 
-  test('(f) a push refused by a remote that moved: the step says so and offers 拉取', async () => {
+  test('(f) 推送 pulls first: a remote branch that moved meanwhile while the branch has its own commit cannot be fast-forwarded — nothing is pushed, 交给 Claude', async () => {
     commitIn(other, 'elsewhere.ts', 'export {}\n', 'Pushed from elsewhere')
     gitIn(other, 'push', '-q', 'origin', 'jacob/push')
+    const remoteTip = gitIn(other, 'rev-parse', 'HEAD').trim()
+    const localTip = gitIn(wt('push'), 'rev-parse', 'HEAD').trim()
     await kit.open('s-push')
     await notOnGitHub()
     await kit.panel().getByTestId('chain-menu').click()
-    await kit.menuItem(/^推送/).click()
-    const alert = kit.ship().getByRole('alert')
-    await expect(alert).toContainText('远程有本地没有的提交', WITHIN)
-    await expect(kit.ship().locator('[data-step="push"]')).toHaveAttribute('data-state', 'failed')
-    await expect(kit.ship().getByRole('button', { name: '拉取' })).toBeVisible()
+    await kit.menuItem(/^推送$/).click()
+    // The pull first fails as diverged (a pushed branch is never rebased); the push never starts.
+    const pull = kit.ship().locator('[data-step="sync"]')
+    await expect(pull).toHaveAttribute('data-state', 'failed', WITHIN)
+    await expect(pull).toContainText('拉取 origin/jacob/push')
+    await expect(kit.ship().getByRole('alert')).toContainText('远程分支和本地分叉')
+    await expect(kit.ship().locator('[data-step="push"]')).toHaveAttribute('data-state', 'pending')
+    const handOff = kit.ship().getByRole('button', { name: '交给 Claude' })
+    await expect(handOff).toBeVisible()
     await kit.shoot('f')
-    await kit.ship().getByRole('button', { name: '取消' }).click()
+    expect(gitIn(bare, 'rev-parse', 'refs/heads/jacob/push').trim()).toBe(remoteTip)
+    expect(gitIn(wt('push'), 'rev-parse', 'HEAD').trim()).toBe(localTip)
+    await expect.poll(() => agents.push!.pid(), WITHIN).not.toBeNull()
+    await handOff.click()
+    await expect(kit.ship()).toHaveCount(0, WITHIN)
+    // In the input line, not sent.
+    await expect.poll(() => typedBy(agents.push!), WITHIN).toContain('不要推送。')
+    await page.waitForTimeout(500)
+    expect(typedBy(agents.push!)).not.toMatch(/<ENTER>\s*$/)
   })
 
   test('(i) a branch merged into main: 已经全部合并到 main, 归档… opens the sheet and archives nothing by itself', async () => {
@@ -539,6 +590,124 @@ test.describe('合入链路 v2 · gh ready', () => {
     expect(existsSync(wt('done'))).toBe(true)
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('archive-sheet')).toHaveCount(0)
+  })
+
+  test('(m) 合并 → 推送 → 归档: 合并 lands jacob/land in the local main; 推送 pulls origin/main first, the pre-push review stops on a P1, 照样推送 sends it; then 归档…', async () => {
+    await kit.open('s-land')
+    await expect.poll(() => agents.land!.pid(), WITHIN).not.toBeNull()
+    const merge = kit.panel().getByRole('button', { name: /^合并( |$)/ })
+    await expect(merge).toBeEnabled(WITHIN)
+    await expect(merge).toContainText(/[⌘⇧]/)
+    await kit.shoot('m-merge')
+    const pushed = gitIn(bare, 'rev-parse', 'refs/heads/main').trim()
+    await merge.click()
+    await expect(kit.panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/, WITHIN)
+    expect(gitIn(project, 'log', '-1', '--format=%B', 'main').trim()).toBe('落地\n\n- Add land')
+    expect(gitIn(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(pushed)
+
+    // Only in the local main: 推送 is the primary, 归档… waits for it.
+    await expect(kit.headline()).toContainText('main 有 1 个提交还没推送', WITHIN)
+    const push = kit.panel().getByRole('button', { name: /^推送( |$)/ })
+    await expect(push).toContainText(/[⌘⇧]/)
+    await expect(kit.panel().getByRole('button', { name: /^归档…/ })).toHaveCount(0)
+    await kit.shoot('m-push')
+
+    // Meanwhile origin/main moves (another clone pushes): 推送 brings that in first.
+    const elsewhere = join(fake.root, 'other-main')
+    gitIn(fake.root, 'clone', '-q', '-b', 'main', bare, elsewhere)
+    commitIn(elsewhere, 'elsewhere.ts', 'export {}\n', 'Main moves elsewhere')
+    gitIn(elsewhere, 'push', '-q', 'origin', 'main')
+    const moved = gitIn(elsewhere, 'rev-parse', 'HEAD').trim()
+    // 推送前审阅 on; the reviewer finds a P1 in what the push would send.
+    const finding = { path: 'land.ts', startLine: 1, endLine: 1, side: 'new', group: 'committed', confidence: 0.9 }
+    fake.reviewReply({ summary: '一处', findings: [{ ...finding, severity: 'P1', title: 'land 写死了', explanation: '应该从配置读' }] })
+    await updateSettings({ review: { beforePush: true, mode: 'builtin' } })
+    try {
+      await push.click()
+      const review = kit.ship().locator('[data-step="review"]')
+      await expect(review).toHaveAttribute('data-state', 'failed', WITHIN)
+      await expect(review).toContainText('Claude 审阅 1 个提交')
+      await expect(review).toContainText('没有推送')
+      await expect(kit.ship().locator('[data-step="sync"]')).toHaveAttribute('data-state', 'done')
+      await expect(kit.ship().locator('[data-step="sync"]')).toContainText('拉取 origin/main')
+      await expect(kit.ship().locator('[data-step="push"]')).toHaveAttribute('data-state', 'pending')
+      await expect(kit.ship().getByRole('button', { name: '照样推送' })).toBeVisible()
+      await expect(kit.ship().getByRole('button', { name: '让 Claude 修' })).toBeVisible()
+      await kit.shoot('m-review-stop')
+      // Pulled first: the local main is on top of what origin got meanwhile; nothing was pushed. The review read only
+      // what the push would send.
+      expect(gitIn(project, 'log', '-2', '--format=%s', 'main').trim().split('\n')).toEqual(['落地', 'Main moves elsewhere'])
+      expect(gitIn(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(moved)
+      expect(fake.reviewPrompt()).toContain('land.ts')
+      expect(fake.reviewPrompt()).not.toContain('elsewhere.ts')
+
+      // 照样推送: past the review, straight to the push.
+      await kit.ship().getByRole('button', { name: '照样推送' }).click()
+      await expect(kit.panel().getByTestId('pr-status')).toContainText(/已推送 main · [0-9a-f]{7}/, WITHIN)
+      expect(gitIn(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(gitIn(project, 'rev-parse', 'main').trim())
+    } finally {
+      await updateSettings({ review: { beforePush: false } })
+    }
+    // Pushed: 归档… is the primary, and it only opens its sheet.
+    await expect(kit.headline()).toContainText('已经全部合并到 main', WITHIN)
+    const archive = kit.panel().getByRole('button', { name: /^归档…/ })
+    await expect(archive).toContainText(/[⌘⇧]/)
+    await kit.shoot('m-archive')
+    await page.keyboard.press('Meta+Shift+KeyM')
+    await expect(page.getByTestId('archive-sheet')).toBeVisible(WITHIN)
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('archive-sheet')).toHaveCount(0)
+    expect(existsSync(wt('land'))).toBe(true)
+  })
+
+  test('(n) path ①: the main checkout on its base commits there (提交) and pushes main to origin (推送); a P1 the review stops on goes to Claude (让 Claude 修)', async () => {
+    writeFileSync(join(project, 'notes.md'), '# notes\n')
+    await kit.open('s-main')
+    await expect.poll(() => agents.main!.pid(), WITHIN).not.toBeNull()
+    await expect(kit.headline()).toContainText('项目主目录检出的是基线分支', WITHIN)
+    const commit = kit.panel().getByRole('button', { name: /^提交( |$)/ })
+    await expect(commit).toContainText(/[⌘⇧]/, WITHIN)
+    // No branch of its own: nothing to merge or propose.
+    await expect(kit.panel().getByRole('button', { name: /^合并( |$)/ })).toHaveCount(0)
+    await expect(kit.panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
+    await kit.shoot('n-commit')
+    await commit.click()
+    const file = await promptedPath(agents.main!, null, 'commit')
+    agentWrites(agents.main!, file, 'docs: notes\n')
+    await expect(kit.ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
+    await page.keyboard.press('Meta+Enter')
+    await expect(kit.ship()).toHaveCount(0, WITHIN)
+    expect(gitIn(project, 'log', '-1', '--format=%s', 'main').trim()).toBe('docs: notes')
+
+    await expect(kit.headline()).toContainText('main 有 1 个提交还没推送', WITHIN)
+    const push = kit.panel().getByRole('button', { name: /^推送( |$)/ })
+    await expect(push).toContainText(/[⌘⇧]/)
+    await kit.shoot('n-push')
+    const pushed = gitIn(bare, 'rev-parse', 'refs/heads/main').trim()
+    fake.reviewReply({
+      summary: '一处',
+      findings: [{ path: 'notes.md', startLine: 1, endLine: 1, side: 'new', group: 'committed', confidence: 0.9, severity: 'P1', title: '标题太空', explanation: '写清楚记什么' }]
+    })
+    await updateSettings({ review: { beforePush: true, mode: 'builtin' } })
+    try {
+      await push.click()
+      await expect(kit.ship().locator('[data-step="review"]')).toHaveAttribute('data-state', 'failed', WITHIN)
+      // 让 Claude 修: the P1 goes into the agent's input line (not sent), nothing is pushed, the block closes.
+      await kit.ship().getByRole('button', { name: '让 Claude 修' }).click()
+      await expect(kit.ship()).toHaveCount(0, WITHIN)
+      await expect.poll(() => typedBy(agents.main!), WITHIN).toContain('notes.md:1')
+      await page.waitForTimeout(500)
+      expect(typedBy(agents.main!)).not.toMatch(/<ENTER>\s*$/)
+      expect(gitIn(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(pushed)
+      // 推送 again: the finding already handed over does not stop the same commits a second time.
+      await kit.open('s-main')
+      await kit.panel().getByRole('button', { name: /^推送( |$)/ }).click()
+    } finally {
+      await updateSettings({ review: { beforePush: false } })
+    }
+    await expect.poll(() => gitIn(bare, 'rev-parse', 'refs/heads/main').trim(), WITHIN).toBe(gitIn(project, 'rev-parse', 'main').trim())
+    await expect(kit.panel().getByTestId('pr-status')).toContainText(/已推送 main · [0-9a-f]{7}/, WITHIN)
+    await expect(kit.panel().getByRole('button', { name: /^推送( |$)/ })).toHaveCount(0, WITHIN)
   })
 
   test('(h) a failing PR poll reads `#12 ? 查询失败` in the sidebar and in the PR line', async () => {

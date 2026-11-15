@@ -1,15 +1,14 @@
 // 合并到 GitHub PR (PRD F16 v1.63, Figma 22C 364:14009 / 22D 369:14631): the PR's checklist as main last read it —
 // checks, whether the PR is the code here, conflicts, approvals and threads (those only inform), Wavi's review and the
-// agent's own checks — then the methods the repository allows, removing the remote branch and archiving. 合并 is pinned
-// to the head main checked; while checks run it becomes 检查通过后合并 (GitHub auto-merge; refused when the repository has it off).
+// agent's own checks — then the methods the repository allows and removing the remote branch. 合并 is pinned to the head
+// main checked; while checks run it becomes 检查通过后合并 (GitHub auto-merge; refused when the repository has it off).
+// Archiving after the merge is 合并后自动归档's (pull-requests/auto-archive.ts), not this sheet's.
 import { headlessAgent } from '@shared/agents'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import { severityCounts } from '@shared/background-review'
 import type { MergeMethod, PrStatus } from '@shared/pull-requests'
-import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
-import { loadSavedReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
-import { useSettings } from '../../settings/useSettings'
+import { loadSavedReview, reviewLine, useBackgroundReview } from '../../review/background'
 import { useReviewComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
 import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
@@ -39,9 +38,6 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   const details = pr.details!
   const [method, setMethod] = useState<MergeMethod>(view?.defaultMethod ?? 'squash')
   const [deleteRemote, setDeleteRemote] = useState(false)
-  const { settings, loaded } = useSettings()
-  const [archiveAfter, setArchiveAfter] = useState<boolean | null>(null)
-  const archive = archiveAfter ?? settings.archive.afterMerge
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' })
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -50,11 +46,6 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
   const checksView = useTurnCheckView(agent?.id)
   useEffect(() => loadSavedReview(target.worktreePath), [target.worktreePath])
-  // 合并前审阅 also before a PR merge (main skips a diff it already reviewed).
-  const autoReview = loaded && settings.review.mode === 'builtin' && settings.review.beforeMerge
-  useEffect(() => {
-    if (autoReview && reviewAgent) void startBackgroundReview(target.worktreePath, reviewAgent, 'merge').catch(() => {})
-  }, [autoReview, reviewAgent, target.worktreePath])
   useEffect(() => sheetRef.current?.focus(), [])
 
   if (!view) return null
@@ -82,19 +73,6 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
     const lines: CheckLine[] = [{ tone: result.outcome === 'merged' ? 'ok' : 'working', text: result.message }]
     // The local base could not be brought up to the merged remote base (合入链路 v2): said with the result.
     if (result.baseNotCaughtUp) lines.push({ tone: 'warn', text: result.baseNotCaughtUp })
-    if (archive && !target.isMain && ids[0]) {
-      if (result.outcome === 'merged') {
-        const archiveTarget = archiveTargetFor(ids[0])
-        const archived = archiveTarget
-          ? await archiveWorktree(archiveTarget, { ignoreScriptFailure: true }).catch((error: unknown) => ({
-              ok: false as const,
-              message: error instanceof Error ? error.message : String(error)
-            }))
-          : null
-        if (archived?.ok) lines.push({ tone: 'ok', text: '已归档 worktree，可以在跳转（⌘K）的历史里恢复' })
-        else if (archived) lines.push({ tone: 'warn', text: `没有归档：${archived.message}` })
-      } else lines.push({ tone: 'warn', text: '还没合并，所以没有归档：合并后在 Worktree 视图里归档' })
-    }
     setPhase({ kind: 'done', lines })
   }
 
@@ -175,7 +153,6 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
                   label="合并后删除远程分支（本地分支保留）"
                   note={details.repo.deleteBranchOnMerge ? '仓库设置了合并后自动删除' : view.waitForChecks ? '检查通过后合并时由仓库设置决定' : null}
                 />
-                <Checkbox checked={archive} disabled={target.isMain || busy} onChange={setArchiveAfter} label="合并后归档 worktree" note={null} />
               </div>
             </div>
           </div>
