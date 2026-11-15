@@ -121,6 +121,11 @@
   background: var(--border-subtle);
 }
 
+/* Two rules only: the top of the scale and the baseline, no midline. */
+.grid {
+  top: 0;
+}
+
 .baseline {
   bottom: 0;
   background: var(--border-default);
