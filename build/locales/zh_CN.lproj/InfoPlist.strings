@@ -1,0 +1,4 @@
+/* 终端里运行的程序请求的权限（electron-builder.yml extendInfo）。 */
+"NSAppleEventsUsageDescription" = "在 Wavi 中运行的程序请求控制其他应用。";
+"NSMicrophoneUsageDescription" = "在 Wavi 中运行的程序请求使用麦克风。";
+"NSCameraUsageDescription" = "在 Wavi 中运行的程序请求使用摄像头。";
