@@ -85,7 +85,7 @@ const M = defineMessages({
     narrow: (width: number) => `Side by side needs a right panel at least ${width} wide`,
     diffLayout: 'Diff layout',
     unified: 'Unified',
-    split: 'Side by side'
+    split: 'Split'
   }
 })
 
