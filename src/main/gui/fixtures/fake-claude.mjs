@@ -219,6 +219,8 @@ function control(message) {
     out({ type: 'system', subtype: 'task_notification', task_id: workflow.task, status: 'stopped', session_id: SESSION })
     workflow = null
   }
+  // rewind_files as 2.1.325 answers it (measured): a dry run lists the files, the real one only says it could.
+  else if (r.subtype === 'rewind_files') reply(r.dry_run ? { canRewind: true, filesChanged: ['/tmp/fake/a.txt'], insertions: 1, deletions: 1 } : { canRewind: true, skippedLinks: 0 })
   else if (r.subtype === 'set_model') {
     model = r.model
     reply({})

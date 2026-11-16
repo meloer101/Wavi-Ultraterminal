@@ -8,7 +8,7 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowDown, Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
@@ -66,6 +66,7 @@ const M = defineMessages({
   zh: {
     pictures: '图片',
     edit: '编辑',
+    rewind: '回退',
     editMessage: '编辑消息',
     cancel: '取消',
     send: '发送',
@@ -82,6 +83,7 @@ const M = defineMessages({
   en: {
     pictures: 'Pictures',
     edit: 'Edit',
+    rewind: 'Rewind',
     editMessage: 'Edit message',
     cancel: 'Cancel',
     send: 'Send',
@@ -143,6 +145,8 @@ interface FeedProps {
   canEdit: boolean
   /** Asks again from `messageId` with `text`; the reason when it did not. */
   onEdit(messageId: string, text: string): Promise<string | null>
+  /** Figma 90G: back to before an earlier message (the menu hangs from `anchor`). */
+  onRewind?(messageId: string, text: string, anchor: HTMLElement): Promise<void>
   /** Claude's workflow runs (PRD F25): drawn as a card at their Workflow call. */
   workflows?: readonly WorkflowRun[]
   /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
@@ -178,7 +182,7 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, onRewind, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
   const slot = useMemo<WorkflowSlot>(
     () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
     [workflows, workflowAsk, onStopWorkflow]
@@ -265,6 +269,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
               onStartEdit={startEdit}
               onCancel={cancelEdit}
               onSave={onEdit}
+              {...(onRewind ? { onRewind } : {})}
             />
           ) : (
             <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
@@ -414,6 +419,7 @@ interface UserMessageProps {
   onStartEdit(id: string): void
   onCancel(): void
   onSave(id: string, text: string): Promise<string | null>
+  onRewind?(id: string, text: string, anchor: HTMLElement): Promise<void>
 }
 
 /**
@@ -421,7 +427,7 @@ interface UserMessageProps {
  * copy · edit under it on hover; 54C: editing, a text box in its place. 71A: the pictures sent with it over the bubble
  * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
-const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
+const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave, onRewind }: UserMessageProps) {
   const m = useMessages(M)
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
@@ -452,6 +458,18 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
               {editable && (
                 <button type="button" className={styles.actionIcon} aria-label={m.edit} title={m.edit} onClick={() => onStartEdit(item.id)}>
                   <Pencil {...ICON} />
+                </button>
+              )}
+              {editable && onRewind && (
+                <button
+                  type="button"
+                  className={styles.actionIcon}
+                  aria-label={m.rewind}
+                  title={m.rewind}
+                  data-testid="gui-rewind"
+                  onClick={(event) => void onRewind(item.id, item.text, event.currentTarget)}
+                >
+                  <Undo2 {...ICON} />
                 </button>
               )}
             </div>

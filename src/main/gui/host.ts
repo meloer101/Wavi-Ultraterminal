@@ -8,7 +8,7 @@ import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, guiCanRewindFiles, type GuiAnswer, type GuiRewindInfo, type GuiRewindScope, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem, KeepImage } from '@shared/transcript-chat'
 import type { WorkflowRun } from '@shared/workflow-run'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
@@ -31,6 +31,7 @@ const M = defineMessages({
     sendFailed: '没能发给智能体',
     noSession: '会话不存在',
     cantEdit: '这个会话不能改之前的消息',
+    cantRewind: '这个会话不能回退',
     stopFirst: '先停止这一轮再改',
     noMessage: '找不到这条消息',
     notInTranscript: '对话记录里找不到这条消息'
@@ -42,6 +43,7 @@ const M = defineMessages({
     sendFailed: "Couldn't send it to the agent",
     noSession: "The session doesn't exist",
     cantEdit: "Earlier messages can't be edited in this session",
+    cantRewind: "This session can't go back",
     stopFirst: 'Stop this turn before editing',
     noMessage: "Can't find this message",
     notInTranscript: "Can't find this message in the transcript"
@@ -517,6 +519,11 @@ class GuiSession<O extends GuiOwner> {
     return !this.exited && ((await this.driver.stopTask?.(taskId)) ?? false)
   }
 
+  rewindFiles(messageId: string, dryRun: boolean): Promise<{ ok: true; files: number } | { ok: false; reason: string }> {
+    if (this.exited || !this.driver.rewindFiles) return Promise.resolve({ ok: false, reason: pick(M).cantRewind })
+    return this.driver.rewindFiles(messageId, dryRun).catch((error: unknown) => ({ ok: false as const, reason: String(error) }))
+  }
+
   setConfig(optionId: string, value: string): Promise<boolean> {
     return this.exited ? Promise.resolve(false) : this.driver.setConfig(optionId, value).catch(() => false)
   }
@@ -645,7 +652,44 @@ export class GuiHost<O extends GuiOwner> {
    * conversation before it (Claude `--resume-session-at`; a new conversation for the first message) and `text` goes as
    * its first message. Files the agent changed stay as they are.
    */
-  async edit(sessionId: string, messageId: string, text: string): Promise<GuiOpenResult> {
+  edit(sessionId: string, messageId: string, text: string): Promise<GuiOpenResult> {
+    return this.restartBefore(sessionId, messageId, text)
+  }
+
+  /**
+   * Figma 90G: what 回退 to before the prompt `messageId` can do — the conversation (an agent that can edit) and how
+   * many files the code would get back (a dry run of the agent's file checkpoint).
+   */
+  async rewindInfo(sessionId: string, messageId: string): Promise<GuiRewindInfo> {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.exited) return { conversation: false, files: null }
+    const known = session.state.items.some((item) => item.kind === 'user' && item.id === messageId)
+    const conversation = known && guiCanEdit(session.launch.agent)
+    if (!known || !guiCanRewindFiles(session.launch.agent)) return { conversation, files: null }
+    const dry = await session.rewindFiles(messageId, true)
+    return { conversation, files: dry.ok ? dry.files : null }
+  }
+
+  /**
+   * Figma 90G: back to before the prompt `messageId`. The code first (the agent puts back the files it changed since),
+   * then the conversation, restarted as an edit is but with nothing sent; the renderer puts the prompt back in the
+   * composer. Not while a turn runs or something waits on the user.
+   */
+  async rewind(sessionId: string, messageId: string, scope: GuiRewindScope): Promise<GuiOpenResult> {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.exited) return { ok: false, reason: pick(M).cantRewind }
+    const { state } = session
+    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return { ok: false, reason: pick(M).stopFirst }
+    if (scope !== 'conversation') {
+      const done = await session.rewindFiles(messageId, false)
+      if (!done.ok) return { ok: false, reason: done.reason }
+    }
+    if (scope === 'code') return { ok: true, state: session.state }
+    return this.restartBefore(sessionId, messageId)
+  }
+
+  /** Restarts the agent on the conversation before the prompt `messageId`, sending `text` first when there is one. */
+  private async restartBefore(sessionId: string, messageId: string, text?: string): Promise<GuiOpenResult> {
     const session = this.sessions.get(sessionId)
     if (!session || session.exited || !guiCanEdit(session.launch.agent)) return { ok: false, reason: pick(M).cantEdit }
     const { state, launch } = session
@@ -657,7 +701,9 @@ export class GuiHost<O extends GuiOwner> {
     const at = agentSessionId ? await this.deps.resumePoint(launch.agent, launch.cwd, agentSessionId, messageId).catch(() => undefined) : null
     if (at === undefined) return { ok: false, reason: pick(M).notInTranscript }
     if (this.sessions.get(sessionId) !== session || session.state.busy) return { ok: false, reason: pick(M).stopFirst }
-    const next: GuiLaunch = { ...launch, ...currentModel(state), initialPrompt: text }
+    const next: GuiLaunch = { ...launch, ...currentModel(state) }
+    delete next.initialPrompt
+    if (text !== undefined) next.initialPrompt = text
     delete next.resumeAgentSessionId
     delete next.resumeAt
     if (at && agentSessionId) Object.assign(next, { resumeAgentSessionId: agentSessionId, resumeAt: at })

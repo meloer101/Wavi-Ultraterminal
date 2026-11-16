@@ -80,6 +80,11 @@ export interface GuiDriver {
   setConfig(id: string, value: string): Promise<boolean>
   /** Stops one of the agent's background tasks (Claude `stop_task`: a workflow run's 停止, PRD F25). */
   stopTask?(taskId: string): Promise<boolean>
+  /**
+   * Puts back the files as they were before the user's message `messageId` (Claude `rewind_files`); `dryRun` only
+   * counts them. Not ok with the agent's reason when it cannot.
+   */
+  rewindFiles?(messageId: string, dryRun: boolean): Promise<{ ok: true; files: number } | { ok: false; reason: string }>
   /** The process is gone: requests still waiting fail. */
   closed(): void
 }

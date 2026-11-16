@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
-import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_IPC, isGuiRewindScope, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiRewindInfo, type GuiSendResult } from '@shared/gui-chat'
 import { GUI_TASK_ID } from '@shared/workflow-run'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
@@ -251,6 +251,20 @@ export function registerGuiHandlers(): void {
     const text = parseGuiText(rawText)
     if (!id || !messageId || text === null || !text.trim()) return Promise.resolve({ ok: false, reason: pick(M).badMessage })
     return host.edit(id, messageId, text)
+  })
+
+  ipcMain.handle(GUI_IPC.rewindInfo, (event, rawId: unknown, rawMessage: unknown): Promise<GuiRewindInfo> => {
+    const id = owned(event.sender, rawId)
+    const messageId = parseGuiValue(rawMessage)
+    if (!id || !messageId) return Promise.resolve({ conversation: false, files: null })
+    return host.rewindInfo(id, messageId)
+  })
+
+  ipcMain.handle(GUI_IPC.rewind, (event, rawId: unknown, rawMessage: unknown, rawScope: unknown): Promise<GuiOpenResult> => {
+    const id = owned(event.sender, rawId)
+    const messageId = parseGuiValue(rawMessage)
+    if (!id || !messageId || !isGuiRewindScope(rawScope)) return Promise.resolve({ ok: false, reason: pick(M).badMessage })
+    return host.rewind(id, messageId, rawScope)
   })
 
   ipcMain.handle(GUI_IPC.stop, async (event, rawId: unknown): Promise<void> => {
