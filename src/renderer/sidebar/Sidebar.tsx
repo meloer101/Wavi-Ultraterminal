@@ -210,7 +210,14 @@ export function Sidebar() {
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   // Rows picked with ⇧ / ⌘ click (issue #6), closed together after one confirmation. A closed or folded row drops out.
   const [picks, setPicks] = useState<{ ids: readonly SessionId[]; anchor: SessionId | null }>({ ids: [], anchor: null })
-  const picked = useMemo(() => picks.ids.filter((id) => ids.includes(id)), [picks.ids, ids])
+  const picked = useMemo(() => {
+    const listed = new Set(ids)
+    return picks.ids.filter((id) => listed.has(id))
+  }, [picks.ids, ids])
+  const pickedSet = useMemo(() => new Set(picked), [picked])
+  // Folding a group or closing a row takes it out of the pick for good, so unfolding does not bring it back
+  // (adjusted while rendering, React's pattern for state that follows other state).
+  if (picked.length !== picks.ids.length) setPicks((p) => ({ ...p, ids: picked }))
   // Read by the row handlers, which stay the same functions so the memoized rows do not redraw on every store change.
   const latest = useRef({ ids, activeSessionId, picked })
   useLayoutEffect(() => {
@@ -245,10 +252,15 @@ export function Sidebar() {
 
   const onListKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
-      if (picked.length > 0 && (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Delete')) {
+      // Esc drops any pick; ⌫ / ⌦ close a pick of two or more, as the right-click menu does (PRD v1.197 ③).
+      if (picked.length > 0 && e.key === 'Escape') {
         e.preventDefault()
-        if (e.key === 'Escape') setPicks((p) => ({ ...p, ids: [] }))
-        else void closePicked(picked)
+        setPicks((p) => ({ ...p, ids: [] }))
+        return
+      }
+      if (picked.length > 1 && (e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault()
+        void closePicked(picked)
         return
       }
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
@@ -326,7 +338,7 @@ export function Sidebar() {
                   row={row}
                   selected={!overview && row.session.id === activeSessionId}
                   shown={!overview && !inPanes.includes(row.session.id) && shown.split('\n').includes(row.session.id)}
-                  picked={picked.includes(row.session.id)}
+                  picked={pickedSet.has(row.session.id)}
                   onPick={onPick}
                   onPress={onRowPress}
                   tabStop={row.session.id === tabStopId}

@@ -62,6 +62,12 @@ describe('labels and confirmations', () => {
     expect(batchConfirmation(batchPlan('stop', [c('a')]))).toBeNull()
   })
 
+  it('says so when closing also deletes read-only snapshot worktrees (the sidebar’s close, PRD F21)', () => {
+    expect(batchConfirmation(batchPlan('close', picked), '', 2)?.detail).toBe(
+      '其中 1 个正在运行或等你处理，关闭会中断它们。\n其中 2 个是只读快照，快照的 worktree 会一起删掉；其余的 worktree 和分支都留着。\n关闭：登录页、修测试、终端、旧会话'
+    )
+  })
+
   it('reports what did not go through', () => {
     expect(batchResultText('send', 3, [])).toBe('已发送给 3 个')
     expect(batchResultText('send', 1, [{ title: '修测试', message: '终端里有选择框' }])).toBe('已发送给 1 个，1 个没发出去：修测试（终端里有选择框）')

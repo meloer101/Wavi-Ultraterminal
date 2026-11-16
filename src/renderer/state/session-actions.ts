@@ -6,7 +6,7 @@ import {
   removeProjectConfirmation,
   removeProjectMenuLabel
 } from '@shared/lifecycle'
-import { batchConfirmation, batchPlan } from '@shared/batch-actions'
+import { batchConfirmation, batchFailureNotice, batchPlan } from '@shared/batch-actions'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
 import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
@@ -147,11 +147,26 @@ export async function closeSessionsInteractive(ids: readonly SessionId[]): Promi
   const candidates = ids
     .flatMap((id) => sessions.filter((s) => s.id === id))
     .map(({ id, kind, title, status, phase }) => ({ id, kind, title, status, ...(phase ? { phase } : {}) }))
-  const prompt = batchConfirmation(batchPlan('close', candidates))
+  // A snapshot worktree all of whose sessions are being closed goes with them (closeSessionNow); the sheet says so.
+  const closing = new Set(candidates.map((c) => c.id))
+  const snapshotTrees = new Set(sessions.filter((s) => closing.has(s.id) && s.dispatchBase === 'snapshot').map((s) => s.worktreeId))
+  const dropped = [...snapshotTrees].filter((wt) => sessions.every((s) => s.worktreeId !== wt || closing.has(s.id))).length
+  const prompt = batchConfirmation(batchPlan('close', candidates), '', dropped)
   if (!prompt || !(await window.tr.ui.confirm(prompt))) return false
-  // One at a time: the last session of a snapshot worktree takes the worktree with it (closeSessionNow).
-  for (const { id } of candidates) await closeSessionNow(id)
-  return true
+  // One at a time: the last session of a snapshot worktree takes the worktree with it. One that fails does not stop
+  // the rest; the failures are named at the end.
+  const failures: Array<{ title: string; message: string }> = []
+  let done = 0
+  for (const { id, title } of candidates) {
+    try {
+      await closeSessionNow(id)
+      done++
+    } catch (error) {
+      failures.push({ title, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  if (failures.length > 0) await window.tr.ui.confirm(batchFailureNotice('close', done, failures))
+  return failures.length === 0
 }
 
 /** Right-click on one of several sessions picked in the sidebar. */
