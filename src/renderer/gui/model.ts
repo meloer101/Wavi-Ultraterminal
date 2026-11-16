@@ -897,24 +897,35 @@ export function appendToDraft(draft: string, text: string): string {
 }
 
 /**
- * The pickers in the composer (Figma 65): model, reasoning effort, 模式 (权限 and 计划 in one list), 快速 (a switch),
- * then every other option (the agent's own mode, …), each its own button.
+ * The pickers in the composer (Figma 65 / 78): model, reasoning effort, 模式 (权限 and 计划 in one list, with 快速 and
+ * Ultracode as switches under it), then every other option (the agent's own mode, …), each its own button.
  */
 export interface PickerButton {
   key: string
   label: string
   options: GuiConfigOption[]
-  /** 快速 (Figma 65), Ultracode (Figma 74A): a switch, pressed while on, not a menu. */
+  /** 快速 / Ultracode on their own (an agent without a 模式 button): a switch, pressed while on, not a menu. */
   toggle?: { on: boolean }
   /** 模式 (Figma 65): 询问 / 接受编辑 / 自动 / 计划 as one list; `current` is 'plan' while planning. */
   mode?: { current: ModeChoice; choices: { value: ModeChoice; label: string }[] }
+  /** Figma 78: 快速, then Ultracode, as switch rows under the 模式 list — only the ones the agent offers. */
+  switches?: PickerSwitch[]
   /** Why the option, though chosen, is not taking effect (the button's tooltip). */
+  hint?: string
+}
+
+/** 快速 or Ultracode under the 模式 list (Figma 78A): on while `option.current` is 'on'. */
+export interface PickerSwitch {
+  option: GuiConfigOption
+  on: boolean
+  /** Why it is on but not taking effect (the row's tooltip). */
   hint?: string
 }
 
 export type ModeChoice = GuiPermission | 'plan'
 
 const currentLabel = (option: GuiConfigOption): string => option.values.find((v) => v.value === option.current)?.label ?? option.current
+const isSwitch = (option: GuiConfigOption): boolean => option.category === 'fast' || option.category === 'ultracode'
 
 export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[] {
   const pickers = composerPickers(config)
@@ -925,8 +936,11 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   const plan = pickers.find((o) => o.category === 'plan')
   const buttons: PickerButton[] = []
   for (const option of [model, effort]) if (option) buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
+  // 快速 before Ultracode (Figma 78A): composerPickers already puts them in that order.
+  const switches = pickers.filter(isSwitch)
   const levels = (permission?.values ?? []).filter((v): v is { value: GuiPermission; label: string } => isGuiPermission(v.value))
-  if (levels.length + (plan ? 1 : 0) > 1) {
+  const hasMode = levels.length + (plan ? 1 : 0) > 1
+  if (hasMode) {
     const planning = plan?.current === 'on'
     const current: ModeChoice = planning ? 'plan' : isGuiPermission(permission?.current) ? permission.current : (levels[0]?.value ?? 'ask')
     const choices = [...levels, ...(plan ? [{ value: 'plan' as const, label: plan.label }] : [])]
@@ -934,13 +948,15 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
       key: [permission, plan].flatMap((o) => (o ? [o.id] : [])).join('+'),
       label: choices.find((c) => c.value === current)?.label ?? current,
       options: [permission, plan].filter((o): o is GuiConfigOption => !!o),
-      mode: { current, choices }
+      mode: { current, choices },
+      ...(switches.length > 0 ? { switches: switches.map((o) => ({ option: o, on: o.current === 'on', ...(o.hint ? { hint: o.hint } : {}) })) } : {})
     })
   }
   for (const option of pickers) {
     if (option === model || option === effort || option.category === 'permission' || option === plan) continue
-    if (option.category === 'fast' || option.category === 'ultracode') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' }, ...(option.hint ? { hint: option.hint } : {}) })
-    else buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
+    if (isSwitch(option)) {
+      if (!hasMode) buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' }, ...(option.hint ? { hint: option.hint } : {}) })
+    } else buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
   }
   return buttons
 }

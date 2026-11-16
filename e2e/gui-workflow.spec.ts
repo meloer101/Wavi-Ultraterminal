@@ -67,12 +67,19 @@ test.describe('F25 ultracode in a GUI session (Claude)', () => {
     await app?.close().catch(() => {})
   })
 
-  test('Ultracode is a named switch the user turns on, never remembered as a pick (Figma 74A)', async () => {
-    const ultracode = composer().getByRole('button', { name: 'Ultracode' })
-    await expect(ultracode).toHaveAttribute('aria-pressed', 'false', WITHIN)
+  test('Ultracode is a switch under 模式 the user turns on, never remembered as a pick (Figma 74A / 78A)', async () => {
+    const mode = composer().locator('[data-picker="permission+plan"]')
+    await mode.click({ timeout: WITHIN.timeout })
+    const ultracode = page.getByRole('dialog', { name: '模式' }).getByRole('switch', { name: 'Ultracode' })
+    await expect(ultracode).toHaveAttribute('aria-checked', 'false', WITHIN)
     await ultracode.click()
     // Read back from Claude's get_settings after the set.
-    await expect(ultracode).toHaveAttribute('aria-pressed', 'true', WITHIN)
+    await expect(ultracode).toHaveAttribute('aria-checked', 'true', WITHIN)
+    await shoot('mode-menu')
+    await page.keyboard.press('Escape')
+    // 78B: the workflow mark after the 模式's name while it is on.
+    await expect(mode.locator('[data-switch="ultracode"]')).toHaveCount(1)
+    await shoot('mode-button')
     await page.waitForTimeout(500)
     const saved = JSON.parse(readFileSync(join(profile, 'workspace.json'), 'utf8')) as { guiPicks?: Record<string, Record<string, unknown>> }
     expect(saved.guiPicks?.claude?.ultracode).toBeUndefined()

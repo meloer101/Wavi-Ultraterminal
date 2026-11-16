@@ -16,6 +16,7 @@ import { installedAgents } from '../new-session/sheet-store'
 import { openSettings } from '../settings/SettingsDialog'
 import { useWorkspace } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
+import { Toggle } from '../ui/Toggle'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { ContextButton } from './ContextButton'
 import {
@@ -238,7 +239,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
               >
-                <Workflow {...SMALL} />
+                {switchMark('ultracode', button.toggle.on)}
                 <span>{button.label}</span>
               </button>
             ) : button.toggle ? (
@@ -254,8 +255,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
               >
-                {/* Filled while on (the author, 2026-11-08: from outline to solid). */}
-                <Zap {...SMALL} fill={button.toggle.on ? 'currentColor' : 'none'} />
+                {switchMark('fast', button.toggle.on)}
               </button>
             ) : (
               <button
@@ -272,6 +272,14 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
               >
                 {buttonMark(button, agent)}
                 <span>{button.label}</span>
+                {/* Figma 78B: 快速 (solid ⚡), then Ultracode (workflow), after the 模式 while they are on. */}
+                {button.switches?.map((s) =>
+                  s.on ? (
+                    <span key={s.option.id} className={styles.pickerOn} data-switch={s.option.category} role="img" aria-label={s.option.label}>
+                      {switchMark(s.option.category, true)}
+                    </span>
+                  ) : null
+                )}
                 <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
               </button>
             )
@@ -326,6 +334,11 @@ function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
     return <Mark {...SMALL} />
   }
   return null
+}
+
+/** 快速's ⚡ (solid while on, the author 2026-11-08) and Ultracode's workflow mark (Figma 74A / 78). */
+function switchMark(category: GuiConfigOption['category'], on: boolean): ReactNode {
+  return category === 'ultracode' ? <Workflow {...SMALL} /> : <Zap {...SMALL} fill={on ? 'currentColor' : 'none'} />
 }
 
 /**
@@ -483,6 +496,19 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
             />
           )
         })}
+        {/* Figma 78A: 快速 and Ultracode under a hairline, each with its switch; a switch leaves the menu open. */}
+        {button.switches && button.switches.length > 0 && <div className={styles.menuDivider} role="separator" />}
+        {button.switches?.map((s) => {
+          const title = s.option.category === 'ultracode' ? (s.on ? m.ultracodeOn : m.ultracodeOff) : s.hint
+          return (
+            <label key={s.option.id} className={styles.pickerRow} title={title} data-hint={s.hint ? true : undefined}>
+              {switchMark(s.option.category, s.on)}
+              <span className={styles.pickerLabel}>{s.option.label}</span>
+              {/* The switch carries the tooltip too, so it is there when the keyboard lands on it. */}
+              <Toggle checked={s.on} label={s.option.label} title={title} onChange={(on) => onPick(s.option.id, on ? 'on' : 'off')} />
+            </label>
+          )
+        })}
       </div>
     )
   } else if (option) {
@@ -520,7 +546,7 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
       style={place ?? { visibility: 'hidden' }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
+          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"], [role="switch"]') ?? [])]
           const at = rows.indexOf(e.currentTarget.ownerDocument.activeElement as HTMLElement)
           rows[stepIndex(at, e.key === 'ArrowDown' ? 1 : -1, rows.length)]?.focus()
           e.preventDefault()

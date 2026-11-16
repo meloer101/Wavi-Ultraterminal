@@ -579,7 +579,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch (Figma 65E / 65F)', async () => {
+  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch under it (Figma 65E / 78A)', async () => {
     const mode = composer().locator('[data-picker="permission+plan"]')
     await expect(mode).toHaveText('询问', WITHIN)
     await mode.click()
@@ -596,14 +596,23 @@ test.describe('F23 GUI session (Claude)', () => {
     await mode.click()
     await page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio', { name: '接受编辑' }).click()
     await expect(mode).toHaveText('接受编辑')
-    // 快速: Opus says it can answer faster.
-    const fast = composer().getByRole('button', { name: '快速' })
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'none')
+    // 快速 (Figma 78A): Opus says it can answer faster — a switch under the 模式 list; it leaves the menu open.
+    await expect(composer().getByRole('button', { name: '快速' })).toHaveCount(0)
+    const onMark = mode.locator('[data-switch="fast"]')
+    await expect(onMark).toHaveCount(0)
+    await mode.click()
+    const switches = page.getByRole('dialog', { name: '模式' })
+    await expect(switches.getByRole('separator')).toHaveCount(1)
+    const fast = switches.getByRole('switch', { name: '快速' })
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'true')
-    // On, the mark is filled (the author, 2026-11-08).
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'currentColor')
+    await expect(fast).toHaveAttribute('aria-checked', 'true')
+    await expect(switches).toBeVisible()
+    await page.screenshot({ path: join(SHOTS, 'fast-on-menu-light.png') })
+    await page.keyboard.press('Escape')
+    // 78B: on, a solid ⚡ after the 模式's name (the author, 2026-11-08: from outline to solid).
+    await expect(mode).toHaveText('接受编辑')
+    await expect(onMark.locator('svg')).toHaveAttribute('fill', 'currentColor')
     await page.screenshot({ path: join(SHOTS, 'fast-on-light.png') })
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     // Saved with the session, and on the agent for its next session.
@@ -612,8 +621,11 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect.poll(() => saved().sessions.find((x) => x.id === 's1')?.guiPermission, WITHIN).toBe('accept-edits')
     expect(saved().sessions.find((x) => x.id === 's1')?.guiPlan).toBeFalsy()
     await expect.poll(() => saved().guiPicks?.claude, WITHIN).toMatchObject({ permission: 'accept-edits', fast: true })
+    await mode.click()
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(onMark).toHaveCount(0)
   })
 
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {

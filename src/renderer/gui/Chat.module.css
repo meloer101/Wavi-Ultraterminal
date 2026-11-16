@@ -1511,6 +1511,15 @@
   color: var(--text-primary);
 }
 
+/* Figma 78B: 快速 / Ultracode marks after the 模式 while on, in the text colour. */
+.pickerOn {
+  display: inline-flex;
+}
+
+.picker .pickerOn svg {
+  color: var(--text-primary);
+}
+
 /* 快速 (Figma 65): the mark only; pressed while on, like a pressed format button. */
 .pickerIcon {
   display: inline-grid;
