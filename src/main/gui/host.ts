@@ -32,6 +32,7 @@ const M = defineMessages({
     noSession: '会话不存在',
     cantEdit: '这个会话不能改之前的消息',
     cantRewind: '这个会话不能回退',
+    codeRewound: (why: string) => `代码已回退，对话没有：${why}`,
     stopFirst: '先停止这一轮再改',
     noMessage: '找不到这条消息',
     notInTranscript: '对话记录里找不到这条消息'
@@ -44,6 +45,7 @@ const M = defineMessages({
     noSession: "The session doesn't exist",
     cantEdit: "Earlier messages can't be edited in this session",
     cantRewind: "This session can't go back",
+    codeRewound: (why: string) => `The code went back, the conversation did not: ${why}`,
     stopFirst: 'Stop this turn before editing',
     noMessage: "Can't find this message",
     notInTranscript: "Can't find this message in the transcript"
@@ -682,12 +684,31 @@ export class GuiHost<O extends GuiOwner> {
     if (!session || session.exited) return { ok: false, reason: pick(M).cantRewind }
     const { state } = session
     if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return { ok: false, reason: pick(M).stopFirst }
+    // Both: the conversation side is checked first, so files are never put back for a conversation that cannot follow.
+    if (scope === 'both') {
+      const blocked = await this.restartBlocked(sessionId, messageId)
+      if (blocked) return { ok: false, reason: blocked }
+    }
     if (scope !== 'conversation') {
       const done = await session.rewindFiles(messageId, false)
       if (!done.ok) return { ok: false, reason: done.reason }
     }
     if (scope === 'code') return { ok: true, state: session.state }
-    return this.restartBefore(sessionId, messageId)
+    const restarted = await this.restartBefore(sessionId, messageId)
+    // The code went back already: say so with why the conversation did not.
+    return restarted.ok || scope === 'conversation' ? restarted : { ok: false, reason: pick(M).codeRewound(restarted.reason) }
+  }
+
+  /** Why the conversation cannot restart before `messageId` now (restartBefore's checks); null when it can. */
+  private async restartBlocked(sessionId: string, messageId: string): Promise<string | null> {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.exited || !guiCanEdit(session.launch.agent)) return pick(M).cantEdit
+    const { state, launch } = session
+    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return pick(M).stopFirst
+    if (!session.owner || !state.items.some((item) => item.kind === 'user' && item.id === messageId)) return pick(M).noMessage
+    const agentSessionId = session.agentSessionId
+    const at = agentSessionId ? await this.deps.resumePoint(launch.agent, launch.cwd, agentSessionId, messageId).catch(() => undefined) : null
+    return at === undefined ? pick(M).notInTranscript : null
   }
 
   /** Figma 90G′: the conversation's edited messages with their earlier versions; [] while there is no transcript yet. */

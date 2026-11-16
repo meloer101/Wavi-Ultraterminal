@@ -7,7 +7,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { agentName, type CliAgent } from '@shared/agents'
-import { emptyGuiState, guiCanEdit, type GuiAnswer, type GuiBranch, type GuiRewindScope } from '@shared/gui-chat'
+import { emptyGuiState, guiCanEdit, type GuiAnswer, type GuiBranch, type GuiRewindInfo, type GuiRewindScope } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
@@ -45,7 +45,8 @@ const M = defineMessages({
     rewindBoth: '回退对话和代码',
     rewindConversation: '只回退对话',
     rewindCode: '只回退代码',
-    files: (n: number) => `${n} 个文件`
+    files: (n: number) => `${n} 个文件`,
+    nothingToRewind: '这条消息之后没有可以回退的'
   },
   en: {
     stopFailed: (name: string) => `Couldn’t stop workflow “${name}”`,
@@ -58,7 +59,8 @@ const M = defineMessages({
     rewindBoth: 'Rewind conversation and code',
     rewindConversation: 'Rewind conversation only',
     rewindCode: 'Rewind code only',
-    files: (n: number) => (n === 1 ? '1 file' : `${n} files`)
+    files: (n: number) => (n === 1 ? '1 file' : `${n} files`),
+    nothingToRewind: 'Nothing to rewind after this message'
   }
 })
 
@@ -175,6 +177,30 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
   )
   const interrupt = useCallback(() => void window.tr.gui.interrupt(sessionId).catch(() => {}), [sessionId])
 
+  // Figma 90G′: edited messages' earlier versions, read from the transcript (main parses it whole): once when the chat
+  // opens; after an edit or a rewind here, again at the end of every turn (the new version is written as it runs).
+  const [branches, setBranches] = useState<GuiBranch[]>([])
+  const [watchBranches, setWatchBranches] = useState(false)
+  const branchesRead = useRef(false)
+  const markBranchesStale = useCallback(() => setWatchBranches(true), [])
+  const hasMessages = userCount(state.items) > 0
+  // A turn can start and end within one batch of events (busy never seen true): what it added tells it ended.
+  const itemCount = watchBranches ? state.items.length : 0
+  useEffect(() => {
+    if (state.busy || !guiCanEdit(agent) || !hasMessages || (branchesRead.current && !watchBranches)) return
+    let live = true
+    window.tr.gui.branches(sessionId).then(
+      (found) => {
+        branchesRead.current = true
+        if (live) setBranches(found)
+      },
+      () => {}
+    )
+    return () => {
+      live = false
+    }
+  }, [sessionId, agent, state.busy, hasMessages, watchBranches, itemCount])
+
   // Figma 54C: ask again from an earlier message. The agent restarts on the conversation before it; the new text shows
   // at once, like a sent message, until the agent's own copy comes.
   const edit = useCallback(
@@ -187,40 +213,33 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
       }
       setGuiState(sessionId, result.state)
       setPending({ id: `pending-${Date.now()}`, text, users: userCount(result.state.items), at: Date.now() })
+      markBranchesStale()
       return null
     },
-    [sessionId]
+    [sessionId, markBranchesStale]
   )
-  // Figma 90G′: edited messages' earlier versions, asked again whenever a turn ends or a message is added.
-  const [branches, setBranches] = useState<GuiBranch[]>([])
-  const sent = userCount(state.items)
-  useEffect(() => {
-    if (state.busy || !guiCanEdit(agent) || sent === 0) return
-    let live = true
-    window.tr.gui.branches(sessionId).then(
-      (found) => {
-        if (live) setBranches(found)
-      },
-      () => {}
-    )
-    return () => {
-      live = false
-    }
-  }, [sessionId, agent, state.busy, sent])
-
   // Figma 90G: back to before an earlier message — what the agent can take back (the code only when that message
   // changed files), chosen from a menu; with one thing to take back, no menu. The message goes back into the composer.
   const rewind = useCallback(
     async (messageId: string, text: string, anchor: HTMLElement): Promise<void> => {
       setSendError(null)
-      const info = await window.tr.gui.rewindInfo(sessionId, messageId).catch(() => ({ conversation: false, files: null }))
+      let info: GuiRewindInfo
+      try {
+        info = await window.tr.gui.rewindInfo(sessionId, messageId)
+      } catch (error) {
+        setSendError(error instanceof Error ? error.message : String(error))
+        return
+      }
       const files = info.files ?? 0
       const choices: { id: GuiRewindScope; label: string; detail?: string }[] = [
         ...(info.conversation && files > 0 ? [{ id: 'both' as const, label: m.rewindBoth, detail: m.files(files) }] : []),
         ...(info.conversation ? [{ id: 'conversation' as const, label: m.rewindConversation }] : []),
         ...(files > 0 ? [{ id: 'code' as const, label: m.rewindCode, detail: m.files(files) }] : [])
       ]
-      if (choices.length === 0) return
+      if (choices.length === 0) {
+        setSendError(m.nothingToRewind)
+        return
+      }
       const scope =
         choices.length === 1
           ? choices[0]!.id
@@ -236,9 +255,12 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
       }
       setGuiState(sessionId, result.state)
       // As Claude Code does: the message is back in the composer, to send again or change.
-      if (scope !== 'code') insertIntoDraft(sessionId, text)
+      if (scope !== 'code') {
+        insertIntoDraft(sessionId, text)
+        markBranchesStale()
+      }
     },
-    [sessionId, m]
+    [sessionId, m, markBranchesStale]
   )
   const setConfig = useCallback(
     (optionId: string, value: string) => {

@@ -257,6 +257,14 @@ describe('GuiHost · Claude stream-json', () => {
     expect(texts(stateOf(h, 'c12'))).toEqual(['user:first', 'text:Hello: first'])
     expect(prepared.at(-1)).toMatchObject({ resumeAgentSessionId: 'fake-claude-session', resumeAt: 'reply-1' })
     expect(prepared.at(-1)?.initialPrompt).toBeUndefined()
+    // Both, when the conversation cannot go back: refused before any file is put back.
+    const h2 = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve(undefined) })
+    await h2.host.open(launchOf('claude', 'c13'), h2.owner)
+    await ready(h2, 'c13')
+    await h2.host.send('c13', { text: 'only', attachments: [] })
+    await until(() => !stateOf(h2, 'c13').busy && texts(stateOf(h2, 'c13')).includes('text:Hello: only'))
+    const only = stateOf(h2, 'c13').items.find((i) => i.kind === 'user')!
+    expect(await h2.host.rewind('c13', only.id, 'both')).toEqual({ ok: false, reason: '对话记录里找不到这条消息' })
   }, 30_000)
 
   it('refuses an edit while a turn runs, of a message it does not have, or one the transcript lacks', async () => {

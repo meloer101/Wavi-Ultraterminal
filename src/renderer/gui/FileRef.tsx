@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type M
 import { ExternalLink, FileText } from 'lucide-react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
+import { MAX_LINK_PATHS } from '@shared/worktree-files'
 import { openFile, openFileLinkMenu, worktreeOf, type FileLink } from '../state/link-actions'
 import { useMessages } from '../ui/i18n'
 import { CopyButton } from './CopyButton'
@@ -26,10 +27,13 @@ export const RefSession = createContext<SessionId | null>(null)
 
 // --- which paths are files: one batched resolveLinks round trip per worktree and tick ------------------------------
 
-/** resolveLinks takes at most this many paths a call. */
-const BATCH = 64
+const BATCH = MAX_LINK_PATHS
 /** A path that was not a file may be one soon (the agent writes it next): asked again after this long. */
 const MISS_TTL_MS = 5_000
+/** A file may be renamed or deleted: a found path is asked again after this long. */
+const HIT_TTL_MS = 60_000
+/** Paths remembered at most; past it the cache starts over. */
+const MAX_CACHED = 2_000
 
 const resolved = new Map<string, Promise<string | null>>()
 const pending = new Map<string, { path: string; settle(value: string | null): void }[]>()
@@ -54,6 +58,7 @@ function resolvePath(root: string, path: string): Promise<string | null> {
   const key = `${root}\0${path}`
   let found = resolved.get(key)
   if (!found) {
+    if (resolved.size >= MAX_CACHED) resolved.clear()
     found = new Promise<string | null>((settle) => {
       const asks = pending.get(root) ?? []
       asks.push({ path, settle })
@@ -64,8 +69,11 @@ function resolvePath(root: string, path: string): Promise<string | null> {
       }
     })
     resolved.set(key, found)
+    const settled = found
     void found.then((value) => {
-      if (value === null) setTimeout(() => resolved.delete(key), MISS_TTL_MS)
+      setTimeout(() => {
+        if (resolved.get(key) === settled) resolved.delete(key)
+      }, value === null ? MISS_TTL_MS : HIT_TTL_MS)
     })
   }
   return found
@@ -124,20 +132,34 @@ export function FileRef({ target, children }: { target: FileRefTarget; children:
 /** Lines shown around the referenced one (Figma 90A: three before, three after); the first seven without a line. */
 const AROUND = 3
 
+/** A file read for the card, kept a moment: resting on the same link again does not read it again. */
+const READ_TTL_MS = 10_000
+const reads = new Map<string, { at: number; text: Promise<string> }>()
+
+function readForCard(root: string, path: string): Promise<string> {
+  const key = `${root}\0${path}`
+  const now = Date.now()
+  for (const [k, r] of reads) if (now - r.at > READ_TTL_MS) reads.delete(k)
+  let read = reads.get(key)
+  if (!read) {
+    const text = window.tr.worktree.readFile(root, path).then(
+      (preview) => (preview.kind === 'text' ? preview.text : ''),
+      () => ''
+    )
+    reads.set(key, (read = { at: now, text }))
+  }
+  return read.text
+}
+
 /** Figma 90A: path:line · open in the default editor · copy the path; the lines around it, that one marked. */
 function FileCard({ file, column }: { file: FileLink; column: number | null }) {
   const m = useMessages(M)
   const [text, setText] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    window.tr.worktree.readFile(file.root, file.path).then(
-      (preview) => {
-        if (live) setText(preview.kind === 'text' ? preview.text : '')
-      },
-      () => {
-        if (live) setText('')
-      }
-    )
+    void readForCard(file.root, file.path).then((value) => {
+      if (live) setText(value)
+    })
     return () => {
       live = false
     }

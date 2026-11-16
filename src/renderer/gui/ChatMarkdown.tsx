@@ -69,7 +69,9 @@ function CodeBlock({ node }: { node: unknown }) {
 
 export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, className }: { sessionId: SessionId; text: string; className?: string }) {
   const m = useMessages(M)
-  const components: Components = {
+  // One set per session and language: new component types on every render (each streamed delta) would remount the
+  // tree, re-highlighting code blocks and dropping file links' state and open cards.
+  const components = useMemo<Components>(() => ({
     a: ({ href, children }) => {
       // Figma 90A: a link to a file of the session (Codex and Claude in an IDE write them so).
       const file = href ? hrefRef(href) : null
@@ -94,7 +96,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, classN
         <CopyButton text={() => hastText(node).replace(/\n$/, '')} label={m.copyCode} className={styles.cornerCopy} />
       </div>
     )
-  }
+  }), [sessionId, m.copyCode])
   return (
     <RefSession.Provider value={sessionId}>
       <div className={[styles.markdown, className].filter(Boolean).join(' ')}>

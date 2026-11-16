@@ -173,3 +173,6 @@ export function indexStatus(snapshot: GitStatusSnapshot | null): StatusIndex {
     count: Object.keys(changes).length
   }
 }
+
+/** Paths resolveLinks checks in one call (the terminal's and the chat's links ask in batches of this). */
+export const MAX_LINK_PATHS = 64
