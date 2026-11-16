@@ -19,6 +19,10 @@ interface Props {
   selected: boolean
   /** Shown in another pane of the main area's split (PRD F20): a hairline outline, lighter than `selected`. */
   shown?: boolean
+  /** Picked with ⇧ / ⌘ click for closing several at once. */
+  picked?: boolean
+  /** ⇧ click picks a range, ⌘ click toggles this row; neither enters the session. */
+  onPick?(id: string, how: 'range' | 'toggle'): void
   /** A press that may become a drag into the terminal area (PRD F20). */
   onPress?(e: PointerEvent<HTMLElement>, id: string): void
   /** Roving tabindex: exactly one row in the list is reachable with Tab. */
@@ -32,7 +36,7 @@ interface Props {
  * The glyph hangs in a 16px column so every line starts on the nav labels' text line. A line with nothing to say is not
  * drawn (no activity yet, no branch outside git), and the agent mark always closes the last line.
  */
-export const SessionRow = memo(function SessionRow({ row, selected, shown = false, onPress, tabStop, onSelect, onContextMenu }: Props) {
+export const SessionRow = memo(function SessionRow({ row, selected, shown = false, picked = false, onPick, onPress, tabStop, onSelect, onContextMenu }: Props) {
   // Memo'd: the time label, glyph and todo line inside follow the interface language.
   useLang()
   const { session, secondary, attention, branch } = row
@@ -59,6 +63,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
       className={styles.row}
       data-selected={selected}
       data-shown={shown}
+      data-picked={picked}
       data-attention={attention}
       data-depth={row.depth}
       data-tree={row.tree}
@@ -66,7 +71,10 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
       data-session-id={session.id}
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
-      onClick={() => onSelect(session.id)}
+      onClick={(e) => {
+        if (onPick && (e.shiftKey || e.metaKey)) onPick(session.id, e.shiftKey ? 'range' : 'toggle')
+        else onSelect(session.id)
+      }}
       onPointerDown={onPress && ((e) => onPress(e, session.id))}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
@@ -78,7 +86,8 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
         onContextMenu &&
         ((e) => {
           e.preventDefault()
-          onSelect(session.id)
+          // A picked row keeps the picks: its menu acts on all of them.
+          if (!picked) onSelect(session.id)
           onContextMenu(session.id, pointerAnchor(e))
         })
       }
@@ -119,6 +128,8 @@ function sameProps(a: Props, b: Props): boolean {
     sameRow(a.row, b.row) &&
     a.selected === b.selected &&
     a.shown === b.shown &&
+    a.picked === b.picked &&
+    a.onPick === b.onPick &&
     a.onPress === b.onPress &&
     a.tabStop === b.tabStop &&
     a.onSelect === b.onSelect &&

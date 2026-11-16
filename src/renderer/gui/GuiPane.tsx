@@ -39,21 +39,26 @@ export const GuiPane = memo(function GuiPane({ sessionId, cwd, agent, active, re
   return <GuiCard sessionId={sessionId} cwd={cwd} agent={agent} active={active} rect={rect} />
 }, sameProps)
 
-/** The chat's card at `rect` (nothing when it is not shown here). */
-export function GuiCard({ sessionId, cwd, agent, active, rect }: { sessionId: SessionId; cwd: string; agent: AgentKind; active: boolean; rect: Rect | undefined }) {
+/**
+ * The chat's card at `rect` (nothing when it is not shown here). `bare`: drawn in a box someone else frames (看板's
+ * overlay, PRD F9): it fills that box, with no corners, shadow or edge of its own.
+ */
+export function GuiCard({ sessionId, cwd, agent, active, rect, bare = false }: { sessionId: SessionId; cwd: string; agent: AgentKind; active: boolean; rect: Rect | undefined; bare?: boolean }) {
+  const shown = bare || rect !== undefined
   return (
     <div
       className={styles.pane}
       data-active={active}
-      data-glass-card=""
-      data-shown={rect !== undefined}
+      data-glass-card={bare ? undefined : ''}
+      data-bare={bare || undefined}
+      data-shown={shown}
       data-session-id={sessionId}
       data-pane-box
       style={place(rect)}
       // The keyboard went into this pane: its session becomes the active one (PRD F20).
       onFocus={() => useWorkspace.getState().focusPane(sessionId)}
     >
-      {rect && <ChatPane sessionId={sessionId} agent={agent} cwd={cwd} active={active} />}
+      {shown && <ChatPane sessionId={sessionId} agent={agent} cwd={cwd} active={active} />}
     </div>
   )
 }

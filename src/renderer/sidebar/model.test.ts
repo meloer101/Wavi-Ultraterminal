@@ -6,6 +6,7 @@ import {
   nestedTitle,
   nextAttentionSessionId,
   pendingItems,
+  pickSessions,
   teamItems,
   sameRow,
   sameSubagent,
@@ -471,5 +472,36 @@ describe('workflow runs under their session (PRD F25, Figma 74D)', () => {
   it('keeps an ended run only while the turn is unread', () => {
     expect(workflowItems([run('completed')], { unread: true, folded: new Set() })[0]).toMatchObject({ glyph: 'done_unread', right: '3 / 3' })
     expect(workflowItems([run('completed')], { unread: false, folded: new Set() })).toEqual([])
+  })
+})
+
+describe('pickSessions (issue #6)', () => {
+  const ordered = ['a', 'b', 'c', 'd', 'e']
+  const pick = (picked: string[], anchor: string | null, active: string | null, id: string, how: 'range' | 'toggle') =>
+    pickSessions({ ordered, picked, anchor, active, id, how })
+
+  it('⇧ picks from the row clicked last to the clicked one, both ends included, in drawn order', () => {
+    expect(pick([], 'b', 'b', 'd', 'range')).toEqual(['b', 'c', 'd'])
+    expect(pick([], 'd', 'd', 'a', 'range')).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('⇧ starts at the active session until a row was clicked', () => {
+    expect(pick([], null, 'c', 'e', 'range')).toEqual(['c', 'd', 'e'])
+    expect(pick([], null, null, 'c', 'range')).toEqual(['c'])
+  })
+
+  it('⇧ adds to what is already picked', () => {
+    expect(pick(['a'], 'c', 'a', 'e', 'range')).toEqual(['a', 'c', 'd', 'e'])
+  })
+
+  it('⌘ toggles one row; the active row counts as picked when picking starts', () => {
+    expect(pick([], 'b', 'b', 'd', 'toggle')).toEqual(['b', 'd'])
+    expect(pick(['b', 'd'], 'd', 'b', 'b', 'toggle')).toEqual(['d'])
+    expect(pick([], 'b', 'b', 'b', 'toggle')).toEqual(['b'])
+  })
+
+  it('rows no longer drawn (closed, folded) drop out, and a hidden anchor falls back to the active row', () => {
+    expect(pick(['x', 'b'], 'x', 'b', 'c', 'toggle')).toEqual(['b', 'c'])
+    expect(pick([], 'x', 'a', 'c', 'range')).toEqual(['a', 'b', 'c'])
   })
 })
