@@ -2,6 +2,7 @@
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { GuiPicks } from '@shared/gui-chat'
+import { defineMessages, localized } from '@shared/i18n'
 import type { WorktreeArchive } from '@shared/archive'
 import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
@@ -22,20 +23,25 @@ export interface WorkspaceData {
 
 export const EMPTY_WORKSPACE: WorkspaceData = { projects: [], worktrees: [], sessions: [], activeSessionId: null }
 
-export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = {
-  ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>),
-  shell: '终端'
+const AGENT_TITLES = Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>
+
+const M_TITLE = defineMessages<Record<AgentKind, string>>({ zh: { ...AGENT_TITLES, shell: '终端' }, en: { ...AGENT_TITLES, shell: 'Terminal' } })
+
+/** A new session's title, in the interface language. */
+export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = localized(M_TITLE)
+
+/** Whether a title is still the session's default, in either language (a saved file may hold the other one). */
+export function isDefaultSessionTitle(kind: AgentKind, title: string): boolean {
+  return title === M_TITLE.zh[kind] || title === M_TITLE.en[kind]
 }
 
 /** The right panel's views as the panel and the session header name them. */
-export const PANEL_VIEW_LABEL: Record<PersistedRightPanel, string> = {
-  browser: '浏览器',
-  git: 'Git',
-  worktree: 'Worktree',
-  files: '文件',
-  terminal: '终端',
-  simulator: 'iOS 模拟器'
-}
+export const PANEL_VIEW_LABEL: Record<PersistedRightPanel, string> = localized(
+  defineMessages({
+    zh: { browser: '浏览器', git: 'Git', worktree: 'Worktree', files: '文件', terminal: '终端', simulator: 'iOS 模拟器' },
+    en: { browser: 'Browser', git: 'Git', worktree: 'Worktree', files: 'Files', terminal: 'Terminal', simulator: 'iOS Simulator' }
+  })
+)
 
 export type MakeId = (prefix: string) => string
 
@@ -167,7 +173,7 @@ export function retargetSession(data: WorkspaceData, sessionId: SessionId, chang
     ...(sameAgent && guiPlan !== undefined ? { guiPlan } : {}),
     kind,
     worktreeId: change.worktreeId ?? session.worktreeId,
-    title: session.title === DEFAULT_SESSION_TITLE[session.kind] ? DEFAULT_SESSION_TITLE[kind] : session.title
+    title: isDefaultSessionTitle(session.kind, session.title) ? DEFAULT_SESSION_TITLE[kind] : session.title
   }
   return { ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) }
 }
@@ -352,7 +358,7 @@ export function serializeWorkspace(
       ...(baseBranch ? { baseBranch } : {}),
       ...(archived ? { archived } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, ui, guiPermission, guiPlan, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel, scheduledBy }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, ui, guiPermission, guiPlan, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel, scheduledBy, github }) => ({
       id,
       worktreeId,
       kind,
@@ -370,7 +376,8 @@ export function serializeWorkspace(
       ...(dispatchedBy
         ? { dispatchedBy, ...(dispatchTask ? { dispatchTask } : {}), ...(dispatchBase ? { dispatchBase } : {}), ...(dispatchModel ? { dispatchModel } : {}) }
         : {}),
-      ...(scheduledBy ? { scheduledBy } : {})
+      ...(scheduledBy ? { scheduledBy } : {}),
+      ...(github ? { github } : {})
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
@@ -422,7 +429,8 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       ...(s.ui ? { ui: s.ui } : {}),
       ...(s.guiPermission ? { guiPermission: s.guiPermission } : {}),
       ...(s.guiPlan ? { guiPlan: s.guiPlan } : {}),
-      title: s.title,
+      // A default title shows in the interface language, whichever one it was saved in.
+      title: s.titleSource === undefined && isDefaultSessionTitle(s.kind, s.title) ? DEFAULT_SESSION_TITLE[s.kind] : s.title,
       ...(s.titleSource ? { titleSource: s.titleSource } : {}),
       status: 'idle',
       startedAt: s.startedAt,
@@ -440,6 +448,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
           }
         : {}),
       ...(s.scheduledBy ? { scheduledBy: s.scheduledBy } : {}),
+      ...(s.github ? { github: s.github } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId,
@@ -491,7 +500,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
       s.finishedAt !== before.finishedAt ||
       s.dispatchedBy !== before.dispatchedBy ||
       s.dispatchModel !== before.dispatchModel ||
-      s.scheduledBy !== before.scheduledBy
+      s.scheduledBy !== before.scheduledBy ||
+      s.github !== before.github
     )
   })
 }
@@ -510,7 +520,7 @@ const TITLE_MAX_CHARS = 40
  * prompt has nothing usable.
  */
 export function titleFromFirstPrompt(session: Pick<Session, 'kind' | 'title' | 'titleSource'>, prompt: string): string | null {
-  if (session.titleSource !== undefined || session.title !== DEFAULT_SESSION_TITLE[session.kind]) return null
+  if (session.titleSource !== undefined || !isDefaultSessionTitle(session.kind, session.title)) return null
   const line = prompt
     .split('\n')
     .map((l) => l.trim())

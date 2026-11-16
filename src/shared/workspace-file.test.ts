@@ -179,6 +179,23 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.sessions.map((s) => s.agentSessionId)).toEqual([undefined, undefined, '0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000', undefined])
   })
 
+  it('keeps the GitHub item an agent session was started on (看板 · GitHub), dropping malformed ones', () => {
+    const link = { repo: 'github.com/acme/web', kind: 'issue', number: 139 }
+    const file = sanitizeWorkspaceFile(
+      {
+        ...valid,
+        sessions: [
+          { id: 'a', worktreeId: 'w1', kind: 'claude', title: '#139', github: link },
+          { id: 'b', worktreeId: 'w1', kind: 'shell', title: 't', github: link },
+          { id: 'c', worktreeId: 'w1', kind: 'codex', title: 't', github: { ...link, number: '139' } }
+        ],
+        drafts: {}
+      },
+      0
+    ) as WorkspaceFile
+    expect(file.sessions.map((s) => s.github)).toEqual([link, undefined, undefined])
+  })
+
   it("keeps the Run button's terminal marker on shell sessions only (PRD F4)", () => {
     const file = sanitizeWorkspaceFile(
       {

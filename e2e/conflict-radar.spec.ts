@@ -1,6 +1,6 @@
 // Conflict radar on a real repository with three worktrees and a fake `claude` in each: jacob/a and jacob/b edit the
-// same README line (they conflict with each other), jacob/c edits another file. The overview list and the overlay's
-// title bar say "和 jacob/b 会冲突"; after a squash merge of jacob/a into main (by hand, in the main checkout) jacob/b
+// same README line (they conflict with each other), jacob/c edits another file. 看板's overlay
+// title bar says "和 jacob/b 会冲突"; after a squash merge of jacob/a into main (by hand, in the main checkout) jacob/b
 // would conflict with main and jacob/c is behind it; 让 agent rebase in the Worktree view puts the rebase note into
 // jacob/b's agent input line without pressing Enter. Screenshots in both themes go to test-results/conflict-radar/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
@@ -50,7 +50,12 @@ test.describe('conflict radar', () => {
   let page: Page
 
   const overview = () => page.locator('[data-region="overview"]')
-  const radarCell = (id: string) => overview().locator(`[data-session-id="${id}"] [data-testid="overview-radar"]`)
+  /** The mark in a session's overlay title bar on 看板 · 进度. */
+  const barTag = (id: string) => page.locator(`[data-pane-id="${id}"] header [data-testid="radar-tag"]`)
+  const closeBar = async (id: string) => {
+    await page.locator(`[data-pane-id="${id}"]`).getByRole('button', { name: '关闭' }).click()
+    await expect(page.locator('[data-region="overview-overlay"]')).toBeHidden()
+  }
   const panel = () => page.locator('[data-region="panel"]')
   const setTheme = async (theme: 'dark' | 'light') => {
     await page.evaluate(
@@ -101,37 +106,41 @@ test.describe('conflict radar', () => {
     await app?.close().catch(() => {})
   })
 
-  test('the overview marks the two worktrees that conflict with each other, and not the clean one', async () => {
+  // 看板 · 进度's cards carry no mark since the list went (v1.184): each session's overlay bar says it.
+  test('the board overlay says it in the title bar, for the two that conflict and not the clean one', async () => {
     await page.keyboard.press('Meta+Shift+A')
-    await expect(radarCell('s-a')).toHaveText('和 jacob/b 会冲突', WITHIN)
-    await expect(radarCell('s-b')).toHaveText('和 jacob/a 会冲突')
-    await expect(radarCell('s-c')).toHaveText('')
-    // The files are in the tooltip (and the accessible name), not only color: the tag has an icon and text.
-    await expect(radarCell('s-a').getByTestId('radar-tag')).toHaveAttribute('title', '和 jacob/b 会冲突：README.md')
-    await expect(radarCell('s-a').getByTestId('radar-tag')).toHaveAttribute('data-tone', 'conflict')
-    await shoot('overview')
-  })
-
-  test('the board overlay says it in the title bar', async () => {
-    await overview().getByRole('radio', { name: '看板' }).click()
     await overview().locator('[data-session-id="s-a"]').click()
-    const bar = page.locator('[data-pane-id="s-a"] header')
-    await expect(bar.getByTestId('radar-tag')).toHaveText('和 jacob/b 会冲突', WITHIN)
+    await expect(barTag('s-a')).toHaveText('和 jacob/b 会冲突', WITHIN)
+    // The files are in the tooltip (and the accessible name), not only color: the tag has an icon and text.
+    await expect(barTag('s-a')).toHaveAttribute('title', '和 jacob/b 会冲突：README.md')
+    await expect(barTag('s-a')).toHaveAttribute('data-tone', 'conflict')
     await shoot('overlay')
-    await page.keyboard.press('Escape')
-    await expect(page.locator('[data-pane-id="s-a"]')).toHaveCount(0)
-    await overview().getByRole('radio', { name: '列表' }).click()
+    await closeBar('s-a')
+    await overview().locator('[data-session-id="s-b"]').click()
+    await expect(barTag('s-b')).toHaveText('和 jacob/a 会冲突', WITHIN)
+    await closeBar('s-b')
+    await overview().locator('[data-session-id="s-c"]').click()
+    await expect(page.locator('[data-pane-id="s-c"] header')).toBeVisible()
+    await expect(barTag('s-c')).toHaveCount(0)
+    await closeBar('s-c')
   })
 
   test('after jacob/a lands on main: jacob/b would conflict with main, jacob/c is behind, jacob/a drops out', async () => {
     repo.git(repo.project, 'merge', '--squash', '-q', 'jacob/a')
     repo.git(repo.project, 'commit', '-q', '-m', 'Squash jacob/a')
-    await expect(radarCell('s-b')).toHaveText('和 main 会冲突', WITHIN)
-    await expect(radarCell('s-c')).toHaveText('main 已前进 · 落后 1', WITHIN)
-    await expect(radarCell('s-a')).toHaveText('')
-    await expect(radarCell('s-c').getByTestId('radar-tag')).toHaveAttribute('data-tone', 'behind')
+    await overview().locator('[data-session-id="s-b"]').click()
+    await expect(barTag('s-b')).toHaveText('和 main 会冲突', WITHIN)
+    await closeBar('s-b')
+    await overview().locator('[data-session-id="s-c"]').click()
+    await expect(barTag('s-c')).toHaveText('main 已前进 · 落后 1', WITHIN)
+    await expect(barTag('s-c')).toHaveAttribute('data-tone', 'behind')
     await shoot('after-merge')
-    await page.keyboard.press('Escape')
+    await closeBar('s-c')
+    await overview().locator('[data-session-id="s-a"]').click()
+    await expect(page.locator('[data-pane-id="s-a"] header')).toBeVisible()
+    await expect(barTag('s-a')).toHaveCount(0)
+    await closeBar('s-a')
+    await page.keyboard.press('Meta+Shift+A')
     await expect(overview()).toHaveCount(0)
   })
 
@@ -139,13 +148,15 @@ test.describe('conflict radar', () => {
     await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: 'Worktree' }).click()
     await expect(panel().getByRole('heading', { name: 'Worktree' })).toBeVisible()
     const rowB = panel().locator(`li[data-path$="/wt-b"]`)
-    await expect(rowB.getByTestId('radar-tag')).toHaveText('和 main 会冲突', WITHIN)
-    await expect(panel().locator(`li[data-path$="/wt-c"]`).getByTestId('radar-tag')).toHaveText('main 已前进 · 落后 1')
+    // The row's last column says only 冲突 / 落后 (Figma 85B″); who and which files are in the hover.
+    await expect(rowB.getByTestId('radar-tag')).toHaveText('冲突', WITHIN)
+    await expect(rowB.getByTestId('radar-tag')).toHaveAttribute('title', /README\.md/)
+    await expect(panel().locator(`li[data-path$="/wt-c"]`).getByTestId('radar-tag')).toHaveText('落后')
     // The active session's row starts expanded, and clicking an expanded row collapses it: expand only when needed.
     const rowButton = rowB.getByRole('button').first()
     if ((await rowButton.getAttribute('aria-expanded')) !== 'true') await rowButton.click()
     await expect(rowButton).toHaveAttribute('aria-expanded', 'true')
-    await expect(rowB.getByTestId('radar-detail').first()).toHaveText(/冲突main · README\.md/)
+    await expect(rowB.getByTestId('radar-detail').first()).toHaveText(/和 main 冲突README\.md/)
     await shoot('worktree-view')
 
     const rebase = rowB.getByRole('button', { name: '让 agent rebase' })

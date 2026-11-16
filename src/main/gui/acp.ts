@@ -17,6 +17,17 @@ import {
   type GuiPrompt
 } from '@shared/gui-chat'
 import { CHAT_LIMITS, fileDiffs, keptImages, lineDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff, type KeepImage } from '@shared/transcript-chat'
+import { defineMessages, localized, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { interrupted: '已中断', model: '模型', mode: '模式' },
+  en: { interrupted: 'Interrupted', model: 'Model', mode: 'Mode' }
+})
+
+const M_OPTIONS = defineMessages<Record<GuiPermissionOption['kind'], string>>({
+  zh: { reject_once: '拒绝', reject_always: '总是拒绝', allow_always: '总是允许', allow_once: '允许' },
+  en: { reject_once: 'Deny', reject_always: 'Always deny', allow_always: 'Always allow', allow_once: 'Allow' }
+})
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -189,7 +200,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now, k
     promptDone(stopReason, failure) {
       replayed = null
       const events = flush()
-      if (stopReason === 'cancelled') events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: '已中断' }))
+      if (stopReason === 'cancelled') events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: pick(M).interrupted }))
       else if (failure) events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: clip(failure, 300) }))
       for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
       waiting.clear()
@@ -220,7 +231,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now, k
 }
 
 const OPTION_ORDER: GuiPermissionOption['kind'][] = ['reject_once', 'reject_always', 'allow_always', 'allow_once']
-const OPTION_LABELS: Record<GuiPermissionOption['kind'], string> = { reject_once: '拒绝', reject_always: '总是拒绝', allow_always: '总是允许', allow_once: '允许' }
+const OPTION_LABELS = localized(M_OPTIONS)
 
 export function acpPermissionPrompt(id: string, params: Rec): GuiPrompt {
   const toolCall = isRec(params.toolCall) ? params.toolCall : {}
@@ -284,14 +295,14 @@ export function acpConfig(session: Rec): GuiConfigOption[] {
       const value = str(m.modelId)
       return value ? [{ value, label: str(m.name) ?? value }] : []
     })
-    config.push({ id: 'model', category: 'model', label: '模型', current: str(session.models.currentModelId) ?? values[0]?.value ?? '', values })
+    config.push({ id: 'model', category: 'model', label: pick(M).model, current: str(session.models.currentModelId) ?? values[0]?.value ?? '', values })
   }
   if (isRec(session.modes)) {
     const values = (Array.isArray(session.modes.availableModes) ? session.modes.availableModes : []).filter(isRec).flatMap((m) => {
       const value = str(m.id)
       return value ? [{ value, label: str(m.name) ?? value }] : []
     })
-    config.push({ id: 'mode', category: 'mode', label: '模式', current: str(session.modes.currentModeId) ?? values[0]?.value ?? '', values })
+    config.push({ id: 'mode', category: 'mode', label: pick(M).mode, current: str(session.modes.currentModeId) ?? values[0]?.value ?? '', values })
   }
   return config
 }

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { PR_IPC } from '@shared/pull-requests'
+import { GITHUB_BOARD_IPC } from '@shared/github-board'
 import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
@@ -11,6 +12,7 @@ import { GUI_IPC, type GuiEvent } from '@shared/gui-chat'
 import { SIM_PORT_MESSAGE, SIMULATOR_IPC } from '@shared/simulator'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
+import { isLang, type Lang } from '@shared/i18n'
 import { isMenuCommand } from '@shared/shortcuts'
 import { isSecondaryKey } from '@shared/window-layout'
 import type { SessionId } from '@shared/types'
@@ -48,6 +50,12 @@ ipcRenderer.on(IPC.ptyData, (_event, message: { sessionId: SessionId; data: stri
 ipcRenderer.on(IPC.ptyExit, (_event, message: { sessionId: SessionId; exit: PtyExit }) => {
   exitListeners.emit(message.sessionId, message.exit)
 })
+
+/** The language main resolved for this window, read once before the page renders. */
+function initialLanguage(): Lang {
+  const lang: unknown = ipcRenderer.sendSync(IPC.appLanguage)
+  return isLang(lang) ? lang : 'zh'
+}
 
 function listen<T>(channel: string, listener: (payload: T) => void): () => void {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => listener(payload)
@@ -131,11 +139,14 @@ const api: TrApi = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
     importTheme: () => ipcRenderer.invoke(IPC.settingsImportTheme),
+    setBackgroundImage: (jpeg) => ipcRenderer.invoke(IPC.settingsSetBackgroundImage, jpeg),
     onChange: (listener) => listen(IPC.settingsChanged, listener),
     onSaveError: (listener) => listen(IPC.settingsSaveFailed, listener)
   },
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
+    language: initialLanguage(),
+    onLanguage: (listener) => listen(IPC.appLanguageChanged, (lang: unknown) => { if (isLang(lang)) listener(lang) }),
     checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
     reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
     keepTimers: (on) => ipcRenderer.send(IPC.appKeepTimers, on),
@@ -181,8 +192,7 @@ const api: TrApi = {
     onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener),
     newSessionInfo: (root) => ipcRenderer.invoke(IPC.gitWorktreesNewSessionInfo, root),
     create: (request) => ipcRenderer.invoke(IPC.gitWorktreesCreate, request),
-    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree),
-    merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
+    mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree)
   },
   browser: browserApi,
   simulator: {
@@ -247,12 +257,18 @@ const api: TrApi = {
     merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
     cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target)
   },
+  githubBoard: {
+    list: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.list, request),
+    detail: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.detail, request),
+    prStart: (request) => ipcRenderer.invoke(GITHUB_BOARD_IPC.prStart, request)
+  },
   ship: {
     preflight: (target) => ipcRenderer.invoke(SHIP_IPC.preflight, target),
     handoff: (request) => ipcRenderer.invoke(SHIP_IPC.handoff, request),
     readHandoff: (request) => ipcRenderer.invoke(SHIP_IPC.readHandoff, request),
     shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
     pushBase: (target) => ipcRenderer.invoke(SHIP_IPC.pushBase, target),
+    prepush: (request) => ipcRenderer.invoke(SHIP_IPC.prepush, request),
     diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
     diffSinceWithCut: (request) => ipcRenderer.invoke(SHIP_IPC.diffSinceWithCut, request),
     discardSince: (request) => ipcRenderer.invoke(SHIP_IPC.discardSince, request),

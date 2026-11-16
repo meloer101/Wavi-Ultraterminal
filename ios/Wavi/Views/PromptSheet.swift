@@ -17,7 +17,7 @@ struct PromptBar: View {
         Button { hidden = nil } label: {
           HStack(spacing: 8) {
             StatusGlyph(status: .needsYou)
-            Text(prompt.kind == "permission" ? "等你确认：\(prompt.summary ?? "")" : "等你回答：\(prompt.questions?.first?.question ?? "")")
+            Text(prompt.kind == "permission" ? String(localized: "等你确认：\(prompt.summary ?? "")") : String(localized: "等你回答：\(prompt.questions?.first?.question ?? "")"))
               .font(.ui(.subheadline, medium: true)).foregroundStyle(Color.statusAttention).lineLimit(1)
             Spacer(minLength: 0)
             Icon("chevron-right", size: 14).rotationEffect(.degrees(-90)).foregroundStyle(Color.textSecondary)
@@ -92,7 +92,7 @@ private struct Head: View {
     HStack(spacing: 8) {
       StatusGlyph(status: .needsYou)
       TimelineView(.periodic(from: .now, by: 1)) { context in
-        Text([label, since.map { "已等 \(shortAge(context.date.timeIntervalSince1970 * 1000 - $0))" }].compactMap { $0 }.joined(separator: " · "))
+        Text([label, since.map { String(localized: "已等 \(shortAge(context.date.timeIntervalSince1970 * 1000 - $0))") }].compactMap { $0 }.joined(separator: " · "))
           .font(.ui(.footnote, medium: true)).monospacedDigit().foregroundStyle(Color.statusAttention)
       }
     }
@@ -127,7 +127,7 @@ private struct PermissionAsk: View {
     let input = prompt.input ?? [:]
     FittedSheet {
       VStack(alignment: .leading, spacing: 12) {
-        Head(label: "等你确认", since: prompt.createdAt)
+        Head(label: String(localized: "等你确认"), since: prompt.createdAt)
         Text(permissionTitle(prompt.tool ?? "")).font(.ui(.title2)).foregroundStyle(Color.textPrimary)
         Text(permissionSubject(input, summary: prompt.summary ?? "")).font(.mono()).foregroundStyle(Color.textPrimary).lineLimit(8)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,17 +141,17 @@ private struct PermissionAsk: View {
         if let error { Notice(tone: .danger, message: error) }
         // Side by side, 允许 on the right (46″); one above the other, 允许 first, once the text is too big for two.
         if typeSize.isAccessibilitySize {
-          answerButton("允许", "allow-once", primary: true)
-          answerButton("拒绝", "deny")
+          answerButton(String(localized: "允许"), "allow-once", primary: true)
+          answerButton(String(localized: "拒绝"), "deny")
         } else {
           HStack(spacing: 8) {
-            answerButton("拒绝", "deny")
-            answerButton("允许", "allow-once", primary: true)
+            answerButton(String(localized: "拒绝"), "deny")
+            answerButton(String(localized: "允许"), "allow-once", primary: true)
           }
         }
         if prompt.canAllowAlways == true { answerButton(allowAlwaysLabel(prompt.allowAlways?.rules), "allow-always") }
       } else {
-        TerminalOnly(text: "这个确认只能在 Mac 的终端里回答", close: close)
+        TerminalOnly(text: String(localized: "这个确认只能在 Mac 的终端里回答"), close: close)
       }
     }
   }
@@ -163,7 +163,7 @@ private struct PermissionAsk: View {
       Task {
         let result = await model.answer(prompt, .permission(prompt: prompt.id, decision: decision))
         busy = nil
-        if let failure = result.error { error = "没有送到 Mac：\(failure)" } else { close() }
+        if let failure = result.error { error = String(localized: "没有送到 Mac：\(failure)") } else { close() }
       }
     } label: {
       busyLabel(label, busy: busy == decision, primary: primary)
@@ -187,7 +187,7 @@ private struct QuestionAsk: View {
     let questions = prompt.questions ?? []
     FittedSheet {
       VStack(alignment: .leading, spacing: 16) {
-        Head(label: "等你回答", since: prompt.createdAt)
+        Head(label: String(localized: "等你回答"), since: prompt.createdAt)
         ForEach(Array(questions.enumerated()), id: \.offset) { index, q in
           VStack(alignment: .leading, spacing: 16) {
             Text(q.question).font(.ui(.title2)).foregroundStyle(Color.textPrimary)
@@ -205,15 +205,15 @@ private struct QuestionAsk: View {
             let answers = Dictionary(questions.enumerated().map { ($0.element.question, answer($0.offset) ?? "") }, uniquingKeysWith: { a, _ in a })
             let result = await model.answer(prompt, .answer(prompt: prompt.id, answers: answers))
             busy = false
-            if let failure = result.error { error = "没有送到 Mac：\(failure)" } else { close() }
+            if let failure = result.error { error = String(localized: "没有送到 Mac：\(failure)") } else { close() }
           }
         } label: {
-          busyLabel("提交", busy: busy, primary: true)
+          busyLabel(String(localized: "提交"), busy: busy, primary: true)
         }
         .buttonStyle(.wavi(primary: true))
         .disabled(busy || !questions.indices.allSatisfy { answer($0) != nil })
       } else {
-        TerminalOnly(text: "这个问题只能在 Mac 的终端里回答", close: close)
+        TerminalOnly(text: String(localized: "这个问题只能在 Mac 的终端里回答"), close: close)
       }
     }
   }
@@ -241,7 +241,7 @@ private struct QuestionAsk: View {
         HStack(alignment: .top, spacing: 12) {
           Radio(on: on, multi: q.multiSelect)
           VStack(alignment: .leading, spacing: 2) {
-            Text(label == Self.otherKey ? "其他" : label).font(.ui(.callout)).foregroundStyle(Color.textPrimary)
+            Text(label == Self.otherKey ? String(localized: "其他") : label).font(.ui(.callout)).foregroundStyle(Color.textPrimary)
             if let description { Text(description).font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
           }
           Spacer(minLength: 0)

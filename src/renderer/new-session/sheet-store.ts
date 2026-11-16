@@ -2,21 +2,41 @@
 // the installed agents its quicker sibling, 在此新建会话, lists at once.
 import { create } from 'zustand'
 import type { AgentAvailability } from '@shared/ipc'
-import type { ProjectId } from '@shared/types'
+import type { GitHubLink, ProjectId } from '@shared/types'
 
-export const useNewSessionSheet = create<{ open: boolean; projectId: ProjectId | null; generation: number }>()(() => ({
+/**
+ * 看板 · GitHub's 交给 agent (PRD F9 v1.184, Figma 77E): the item the new session works on. The project is fixed,
+ * a 任务 row holds the first message (editable), and 创建 also sends it.
+ */
+export interface SheetTask {
+  link: GitHubLink
+  /** `#139 结算页在 Safari 17 上白屏`: the session's title and the sheet's subtitle. */
+  title: string
+  prompt: string
+  /** The new branch: a same-repository PR's own head branch, else null for one made from the item (itemBranch). */
+  branch: string | null
+  /** What the item's branch is named after when `branch` is null. */
+  branchFrom: { kind: GitHubLink['kind']; number: number; title: string }
+  /** The base to merge into (a PR's base branch); null = the project's default. */
+  base: string | null
+  /** A PR's head, where the worktree starts (WorktreeCreateRequest.startAt). */
+  startAt?: string
+}
+
+export const useNewSessionSheet = create<{ open: boolean; projectId: ProjectId | null; generation: number; task: SheetTask | null }>()(() => ({
   open: false,
   projectId: null,
-  generation: 0
+  generation: 0,
+  task: null
 }))
 
 let restoreFocus: HTMLElement | null = null
 
-export function openNewSessionSheet(projectId: ProjectId | null): void {
+export function openNewSessionSheet(projectId: ProjectId | null, task: SheetTask | null = null): void {
   if (useNewSessionSheet.getState().open) return
   const active = document.activeElement
   restoreFocus = active instanceof HTMLElement && active !== document.body ? active : null
-  useNewSessionSheet.setState((s) => ({ open: true, projectId, generation: s.generation + 1 }))
+  useNewSessionSheet.setState((s) => ({ open: true, projectId, task, generation: s.generation + 1 }))
 }
 
 /** `refocus`: give the keyboard back to what had it (cancel); after 创建 the new session's terminal takes it instead. */

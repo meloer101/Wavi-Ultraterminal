@@ -1,0 +1,238 @@
+---
+/* The site as a magazine (Figma W9): twelve spreads on wide screens, twenty single pages on phones.
+   Each <section data-spread> is one spread; its .page children are the phone pages, except where data-merge
+   keeps the spread as one phone page. scripts/book.ts turns them; without it they simply stack and scroll. */
+import en68a from '../assets/magazine/en-68a.webp'
+import en75a from '../assets/magazine/en-75a.webp'
+import en75b from '../assets/magazine/en-75b.webp'
+import en75c from '../assets/magazine/en-75c.webp'
+import en77a from '../assets/magazine/en-77a.webp'
+import en77b from '../assets/magazine/en-77b.webp'
+import braid from '../assets/magazine/still-braid.webp'
+import mirror from '../assets/magazine/still-mirror.webp'
+import rail from '../assets/magazine/still-rail.webp'
+import seam from '../assets/magazine/still-seam.webp'
+import stitch from '../assets/magazine/still-stitch.webp'
+import windows from '../assets/magazine/still-windows.webp'
+import zh68a from '../assets/magazine/zh-68a.webp'
+import zh75a from '../assets/magazine/zh-75a.webp'
+import zh75b from '../assets/magazine/zh-75b.webp'
+import zh75c from '../assets/magazine/zh-75c.webp'
+import zh77a from '../assets/magazine/zh-77a.webp'
+import zh77b from '../assets/magazine/zh-77b.webp'
+import { copy, otherPath, roman, type Lang } from '../i18n'
+import { gh, withBase } from '../site'
+import Ctas from './Ctas.astro'
+import Items from './Items.astro'
+import Look from './Look.astro'
+import Still from './Still.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+/** Look 01 … 06 in index order. */
+const shots = lang === 'en' ? [en75b, en75a, en77a, en68a, en75c, en77b] : [zh75b, zh75a, zh77a, zh68a, zh75c, zh77b]
+/** Where each look is printed: its page number and the spread it sits on. */
+const lookAt: [number, string][] = [[1, 'cover'], [4, 'look-02'], [8, 'look-03'], [11, 'ensemble'], [14, 'windows'], [18, 'look-06']]
+const two = (n: number): string => String(n).padStart(2, '0')
+const download = gh('/releases/latest')
+const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: t.index.look })
+---
+
+<main id="main" class="book" data-book>
+  <div class="board" data-board>
+    <header class="bar">
+      <a class="bar-mark" href="#cover" aria-label={t.bar.home}>WAVI</a>
+      <nav aria-label={t.bar.label}>
+        <a class="bar-section" href="#status">{t.bar.status}</a>
+        <a class="bar-section" href="#merge">{t.bar.merge}</a>
+        <a class="bar-section" href="#wardrobe">{t.bar.wardrobe}</a>
+        <a class="bar-section" href="#ship">{t.bar.ship}</a>
+        <a href={download} rel="noopener">{t.bar.download}</a>
+        <a href={withBase(otherPath(lang))} hreflang={lang === 'en' ? 'zh-CN' : 'en'} aria-label={t.bar.otherLabel}>{t.bar.other}</a>
+      </nav>
+    </header>
+
+    <section class="spread duo cover" id="cover" data-spread data-merge>
+      <div class="page l">
+        <p class="kicker">{t.cover.kicker}</p>
+        <h1 class="title">{t.cover.title[0]}<br />{t.cover.title[1]}</h1>
+        <p class="sub">{t.cover.sub}</p>
+        <Ctas download={t.cover.download} github={t.cover.github} />
+        <p class="folio folio-l">{t.issue}</p>
+      </div>
+      <div class="page r">
+        <Look {...look(0)} size="half" eager />
+        <p class="folio folio-r">01</p>
+      </div>
+    </section>
+
+    <section class="spread duo index" id="index" data-spread>
+      <div class="page l">
+        <h2 class="label">{t.index.label}</h2>
+        <ol class="toc">
+          {t.looks.map((l, i) => (
+            <li>
+              <a href={`#${lookAt[i][1]}`}>
+                <span class="toc-look">{t.index.look} {two(i + 1)}</span>
+                <span class="toc-name">{l.name}</span>
+                <span class="toc-page">{two(lookAt[i][0])}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+        <p class="folio folio-l">02</p>
+      </div>
+      <div class="page r">
+        <h2 class="label">{t.collection.label}</h2>
+        <Items items={t.collection.items} />
+        <p class="folio folio-r">03</p>
+      </div>
+    </section>
+
+    <section class="spread full plate" id="look-02" data-spread>
+      <div class="page full" data-center>
+        <Look {...look(1)} size="full" />
+        <p class="folio folio-r">04 — 05</p>
+      </div>
+    </section>
+
+    <section class="spread duo status" id="status" data-spread>
+      <div class="page l inset" data-center>
+        <Still src={windows} caption={t.status.still} size="tall" />
+        <p class="folio folio-l">06</p>
+      </div>
+      <div class="page r">
+        <p class="label">{t.status.label}</p>
+        <h2 class="display">{t.status.title[0]}</h2>
+        <p class="body body-lead">{t.status.body}</p>
+        <p class="folio folio-r">07</p>
+      </div>
+    </section>
+
+    <section class="spread full plate" id="look-03" data-spread>
+      <div class="page full" data-center>
+        <Look {...look(2)} size="full" />
+        <p class="folio folio-r">08 — 09</p>
+      </div>
+    </section>
+
+    <section class="spread duo ensemble" id="ensemble" data-spread>
+      <div class="page l">
+        <p class="label">{t.ensemble.label}</p>
+        <h2 class="display">{t.ensemble.title[0]}<br />{t.ensemble.title[1]}</h2>
+        <Items items={t.ensemble.items} />
+        <p class="folio folio-l">10</p>
+      </div>
+      <div class="page r wide" data-center>
+        <Look {...look(3)} size="half" />
+        <Still src={seam} size="square" class="still-end" />
+        <p class="folio folio-r">11</p>
+      </div>
+    </section>
+
+    <section class="spread duo merge" id="merge" data-spread>
+      <div class="page l">
+        <p class="label">{t.merge.label}</p>
+        <h2 class="display">{t.merge.title[0]}<br />{t.merge.title[1]}</h2>
+        <ol class="steps">
+          {t.merge.steps.map(([title, keys, body], i) => (
+            <li>
+              <span class="step-n">{roman(i).toLowerCase()}.</span>
+              <h3 class="step-title">{title}</h3>
+              {keys && <kbd class="step-keys">{keys}</kbd>}
+              <p class="body">{body}</p>
+            </li>
+          ))}
+        </ol>
+        <p class="folio folio-l">12</p>
+      </div>
+      <div class="page r inset" data-center>
+        <Still src={braid} caption={t.merge.still} size="tall" />
+        <p class="folio folio-r">13</p>
+      </div>
+    </section>
+
+    <section class="spread duo windows" id="windows" data-spread>
+      <div class="page l wide" data-center>
+        <Look {...look(4)} size="half" />
+        <div class="still-row">
+          <Still src={mirror} size="square" />
+          <p class="still-cap">{t.windows.still}</p>
+        </div>
+        <p class="folio folio-l">14</p>
+      </div>
+      <div class="page r">
+        <p class="label">{t.windows.label}</p>
+        <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
+        <Items items={t.windows.items} />
+        <p class="folio folio-r">15</p>
+      </div>
+    </section>
+
+    <section class="spread duo wardrobe" id="wardrobe" data-spread>
+      <div class="page l">
+        <p class="label">{t.wardrobe.label}</p>
+        <h2 class="display">{t.wardrobe.title[0]}<br />{t.wardrobe.title[1]}</h2>
+        <Items items={t.wardrobe.items} />
+        <p class="folio folio-l">16</p>
+      </div>
+      <div class="page r inset" data-center>
+        <Still src={rail} caption={t.wardrobe.still} size="tall" />
+        <p class="folio folio-r">17</p>
+      </div>
+    </section>
+
+    <section class="spread full plate" id="look-06" data-spread>
+      <div class="page full" data-center>
+        <Look {...look(5)} size="full" />
+        <p class="folio folio-r">18 — 19</p>
+      </div>
+    </section>
+
+    <section class="spread duo ship" id="ship" data-spread>
+      <div class="page l inset" data-center>
+        <Still src={stitch} caption={t.ship.still} size="tall" />
+        <p class="folio folio-l">20</p>
+      </div>
+      <div class="page r">
+        <p class="label">{t.ship.label}</p>
+        <h2 class="display">{t.ship.title[0]}<br />{t.ship.title[1]}</h2>
+        <Items items={t.ship.items} />
+        <p class="folio folio-r">21</p>
+      </div>
+    </section>
+
+    <section class="spread full finale" id="finale" data-spread>
+      <div class="page full six">
+        <h2 class="label">{t.six.label}</h2>
+        <ol class="pieces">
+          {t.six.items.map(([title, body], i) => (
+            <li>
+              <span class="num">({roman(i).toLowerCase()})</span>
+              <h3 class="piece-title">{title}</h3>
+              <p class="body">{body}</p>
+            </li>
+          ))}
+        </ol>
+        <p class="folio folio-l">22</p>
+      </div>
+      <div class="page full back" data-center>
+        <p class="wordmark" aria-hidden="true">WAVI</p>
+        <Ctas download={t.cover.download} github={t.cover.github} class="ctas-end" />
+        <p class="colophon">{t.colophon}</p>
+        <p class="folio folio-r">23</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<dialog class="zoom" data-zoom>
+  <form method="dialog"><button class="zoom-close">{t.zoom.close}</button></form>
+</dialog>
+
+<script>
+  import '../scripts/book'
+</script>

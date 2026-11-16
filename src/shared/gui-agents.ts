@@ -5,6 +5,9 @@
 
 import type { CliAgent } from './agents'
 import type { GuiPermission, GuiProtocol } from './gui-chat'
+import { defineMessages, localized, pick } from './i18n'
+
+const M = defineMessages({ zh: { cliOnly: '这个智能体只能用 CLI' }, en: { cliOnly: 'This agent only works as a CLI' } })
 
 /**
  * An ACP agent whose own permission mode is a launch argument (Figma 56): the arguments before its ACP ones for 询问
@@ -28,10 +31,18 @@ export type GuiDriver =
   | { protocol: 'acp'; adapter: { binary: string; args: readonly string[]; install: string } }
 
 /** Why an agent has no GUI, shown on hover over the disabled GUI segment (Figma 49″B). */
-export const NO_GUI_REASON: Partial<Record<CliAgent, string>> = {
-  crush: 'Crush 没有 ACP，只能用 CLI',
-  antigravity: 'Antigravity 的 ACP 服务要另外下载，Wavi 还不支持'
-}
+export const NO_GUI_REASON: Partial<Record<CliAgent, string>> = localized(
+  defineMessages<Partial<Record<CliAgent, string>>>({
+    zh: {
+      crush: 'Crush 没有 ACP，只能用 CLI',
+      antigravity: 'Antigravity 的 ACP 服务要另外下载，Wavi 还不支持'
+    },
+    en: {
+      crush: 'Crush has no ACP, so it only works as a CLI',
+      antigravity: "Antigravity's ACP server is a separate download that Wavi does not support yet"
+    }
+  })
+)
 
 export const AGENT_GUI: Readonly<Record<CliAgent, GuiDriver | null>> = {
   claude: { protocol: 'claude-stream' },
@@ -97,7 +108,7 @@ export type GuiAvailability = { kind: 'available' } | { kind: 'needs-adapter'; b
 
 export function guiAvailability(agent: CliAgent, installed: (binary: string) => boolean): GuiAvailability {
   const driver = AGENT_GUI[agent]
-  if (!driver) return { kind: 'cli-only', reason: NO_GUI_REASON[agent] ?? '这个智能体只能用 CLI' }
+  if (!driver) return { kind: 'cli-only', reason: NO_GUI_REASON[agent] ?? pick(M).cliOnly }
   if (driver.protocol === 'acp' && 'adapter' in driver && !installed(driver.adapter.binary)) {
     return { kind: 'needs-adapter', binary: driver.adapter.binary, install: driver.adapter.install }
   }

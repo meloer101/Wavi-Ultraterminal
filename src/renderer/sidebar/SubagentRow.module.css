@@ -75,9 +75,12 @@
 }
 
 .row::before {
-  top: calc(var(--space-6) + 9px);
+  top: calc(var(--space-6) + 9px - var(--radius-tree));
   width: calc(var(--space-6) + 1px);
-  border-top: 1px solid var(--border-default);
+  height: calc(var(--radius-tree) + 1px);
+  border-bottom: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+  border-bottom-left-radius: var(--radius-tree);
 }
 
 .row[data-tree='child']::after {
@@ -87,7 +90,7 @@
 }
 
 .row[data-tree='last']::before {
-  border-top: 0;
+  border: 0;
 }
 
 .row[data-tree='last']::after {
@@ -96,7 +99,26 @@
   height: calc(var(--space-6) + 9px + 1px);
   border-bottom: 1px solid var(--border-default);
   border-left: 1px solid var(--border-default);
-  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-tree);
+}
+
+/* Figma 83B: a `wavi run` waiting for 开始 — a dashed ring for a glyph, a dashed line into it, its name a step back. */
+/* Only the sides each part draws: a style on an unset side would show it at the default (medium) width. */
+.row[data-kind='pending']::before,
+.row[data-kind='pending'][data-tree='last']::after {
+  border-bottom-style: dashed;
+  border-left-style: dashed;
+}
+
+.row[data-kind='pending'][data-tree='child']::after {
+  border-left-style: dashed;
+}
+
+.pendingGlyph {
+  width: 12px;
+  height: 12px;
+  border: 1px dashed var(--text-tertiary);
+  border-radius: 50%;
 }
 
 /* Depth 2 under a dispatched session that is not its dispatcher's last: the dispatcher's line runs on past this row. */
@@ -119,5 +141,44 @@
 }
 
 .row[data-kind='phase']::before {
-  border-top: 0;
+  border: 0;
+}
+
+/*
+ * Figma 82′F: Claude's agent team under its lead — peers, so no line ties them to it. 队伍 · N 人 is a quiet head; each
+ * teammate has a second line (what it is doing, or what it waits on you for).
+ */
+.row[data-kind='team']::before,
+.row[data-kind='team']::after,
+.row[data-kind='teammate']::before,
+.row[data-kind='teammate']::after {
+  content: none;
+}
+
+.row[data-kind='team'] {
+  padding-left: calc(var(--row-text-inset) - var(--space-16) - var(--space-8));
+}
+
+.row[data-kind='team'] .title {
+  color: var(--text-tertiary);
+}
+
+.row[data-kind='teammate'] {
+  gap: var(--space-2);
+}
+
+.row[data-kind='teammate'] .title {
+  color: var(--text-primary);
+}
+
+.detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.row[data-kind='teammate'][data-attention='true'] .detail {
+  color: var(--status-attention);
 }

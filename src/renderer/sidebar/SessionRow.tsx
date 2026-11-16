@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, type PointerEvent } from 'react'
 import { agentName } from '@shared/agents'
+import { useLang } from '../ui/i18n'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
 import { useBrowser } from '../panels/browser/store'
@@ -32,6 +33,8 @@ interface Props {
  * drawn (no activity yet, no branch outside git), and the agent mark always closes the last line.
  */
 export const SessionRow = memo(function SessionRow({ row, selected, shown = false, onPress, tabStop, onSelect, onContextMenu }: Props) {
+  // Memo'd: the time label, glyph and todo line inside follow the interface language.
+  useLang()
   const { session, secondary, attention, branch } = row
   const ref = useRef<HTMLDivElement>(null)
   const status = glyphStatus(session)

@@ -197,15 +197,25 @@ export function mergeMessage(branch: string, base: string): string {
   return base === 'main' || base === 'master' ? `Merge branch '${branch}'` : `Merge branch '${branch}' into ${base}`
 }
 
+/** A GitHub closing keyword and the issue it names ("Closes #12", "fixes: acme/web#3", "Resolves https://…/issues/4"),
+ *  anywhere in a line. */
+const CLOSING_REFERENCE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+(?:(?:[\w.-]+\/[\w.-]+)?#\d+|https?:\/\/\S+\/issues\/\d+)/i
+
 /**
- * A squash commit's message: one commit keeps its own message; several get the title (or "Squash merge branch 'x'")
- * and a list of their subjects (oldest first).
+ * A squash commit's message: the title (the session's) and a list of the commits' subjects (oldest first), one commit
+ * or several. Without a title one commit keeps its own message and several get "Squash merge branch 'x'" and the list.
+ * The lines of the commits' bodies that close an issue ("Closes #12") follow the list, once each: GitHub closes the
+ * issue when they reach the default branch, as it would have from the commits themselves (PRD F16 v1.192).
  */
 export function squashMessage(branch: string, commits: readonly { subject: string; body: string }[], title?: string): string {
-  if (commits.length === 1) return commits[0]!.body.trim() || commits[0]!.subject
-  const subject = title?.trim() || `Squash merge branch '${branch}'`
+  const titled = title?.trim()
+  if (commits.length === 1 && !titled) return commits[0]!.body.trim() || commits[0]!.subject
+  const subject = titled || `Squash merge branch '${branch}'`
   if (commits.length === 0) return subject
-  return `${subject}\n\n${commits.map((c) => `- ${c.subject}`).join('\n')}\n`
+  // `body` is the whole message: its first line is the subject, which the list already carries.
+  const closing = [...new Set(commits.flatMap((c) => c.body.split('\n').slice(1).map((l) => l.trim()).filter((l) => CLOSING_REFERENCE.test(l))))]
+  const list = commits.map((c) => `- ${c.subject}`).join('\n')
+  return `${subject}\n\n${list}\n${closing.length > 0 ? `\n${closing.join('\n')}\n` : ''}`
 }
 
 /** Which operation a git dir shows in progress, from the names of the files and folders in it. */

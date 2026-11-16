@@ -4,6 +4,30 @@
 
 import { effortLabel, fastOption, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
 import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, inlineOfDataUrl, keptImages, rel, todosArg, todosOf, type ChatItem, type FileDiff, type InlineImage, type KeepImage } from '@shared/transcript-chat'
+import { defineMessages, localized, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    andMore: (path: string, count: number) => `${path} 等 ${count} 个文件`,
+    compacted: '对话已压缩',
+    interrupted: '已中断',
+    codexError: 'Codex 出错',
+    runCommand: '运行命令',
+    editFiles: '修改文件',
+    model: '模型',
+    effort: '推理强度'
+  },
+  en: {
+    andMore: (path: string, count: number) => `${path} and ${count - 1} more ${count - 1 === 1 ? 'file' : 'files'}`,
+    compacted: 'Conversation compacted',
+    interrupted: 'Interrupted',
+    codexError: 'Codex hit an error',
+    runCommand: 'Run a command',
+    editFiles: 'Edit files',
+    model: 'Model',
+    effort: 'Effort'
+  }
+})
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -166,7 +190,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now,
         const diff = files[0]
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : status === 'declined' || status === 'failed' ? 'error' : 'ok'
-        const arg = diff ? (files.length > 1 ? `${diff.path} 等 ${files.length} 个文件` : diff.path) : ''
+        const arg = diff ? (files.length > 1 ? pick(M).andMore(diff.path, files.length) : diff.path) : ''
         return [put(id, { kind: 'tool', id, at, name: 'Edit', arg, state, ...(diff && done ? { diff } : {}), ...(files.length > 1 && done ? { files } : {}) })]
       }
       case 'mcpToolCall':
@@ -190,7 +214,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now,
       case 'webSearch':
         return [put(id, { kind: 'tool', id, at, name: 'WebSearch', arg: clip(str(item.query) ?? '', CHAT_LIMITS.arg), state: done ? 'ok' : 'running' })]
       case 'contextCompaction':
-        return done ? [put(id, { kind: 'system', id, at, text: '对话已压缩' })] : []
+        return done ? [put(id, { kind: 'system', id, at, text: pick(M).compacted })] : []
       default:
         return []
     }
@@ -205,8 +229,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now,
         case 'turn/completed': {
           const turn = isRec(params.turn) ? params.turn : {}
           const events: GuiEvent[] = [...endLive()]
-          if (turn.status === 'interrupted') events.push(system('已中断'))
-          if (turn.status === 'failed') events.push(...errorLine((isRec(turn.error) ? str(turn.error.message) : undefined) ?? 'Codex 出错'))
+          if (turn.status === 'interrupted') events.push(system(pick(M).interrupted))
+          if (turn.status === 'failed') events.push(...errorLine((isRec(turn.error) ? str(turn.error.message) : undefined) ?? pick(M).codexError))
           shownError = null
           for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
           waiting.clear()
@@ -243,7 +267,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now,
           const error = isRec(params.error) ? params.error : {}
           // Retries report here too ("Reconnecting… 1/5"); only a final error is the conversation's.
           if (params.willRetry === true) return []
-          return errorLine(str(error.message) ?? 'Codex 出错')
+          return errorLine(str(error.message) ?? pick(M).codexError)
         }
         default:
           return []
@@ -263,11 +287,20 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now,
   }
 }
 
-const DECISIONS: Record<string, GuiPermissionOption> = {
-  decline: { id: 'decline', label: '拒绝', kind: 'reject_once' },
-  acceptForSession: { id: 'acceptForSession', label: '总是允许', kind: 'allow_always' },
-  accept: { id: 'accept', label: '允许', kind: 'allow_once' }
-}
+const DECISIONS = localized(
+  defineMessages<Record<string, GuiPermissionOption>>({
+    zh: {
+      decline: { id: 'decline', label: '拒绝', kind: 'reject_once' },
+      acceptForSession: { id: 'acceptForSession', label: '总是允许', kind: 'allow_always' },
+      accept: { id: 'accept', label: '允许', kind: 'allow_once' }
+    },
+    en: {
+      decline: { id: 'decline', label: 'Deny', kind: 'reject_once' },
+      acceptForSession: { id: 'acceptForSession', label: 'Always allow', kind: 'allow_always' },
+      accept: { id: 'accept', label: 'Allow', kind: 'allow_once' }
+    }
+  })
+)
 
 /** A server request as a prompt; `files`: the change a file approval is about (its item's files). */
 export function promptOfCodex(id: string, method: string, params: Rec, files: readonly FileDiff[] = []): GuiPrompt | null {
@@ -275,12 +308,12 @@ export function promptOfCodex(id: string, method: string, params: Rec, files: re
     const offered = (Array.isArray(params.availableDecisions) ? params.availableDecisions : []).filter((d): d is string => typeof d === 'string')
     const keys = (offered.length > 0 ? offered : ['decline', 'accept']).filter((d) => d in DECISIONS)
     const options = ['decline', 'acceptForSession', 'accept'].filter((k) => keys.includes(k)).map((k) => DECISIONS[k]!)
-    return { kind: 'permission', id, tool: 'Bash', detail: str(params.command) ?? str(params.reason) ?? '运行命令', options }
+    return { kind: 'permission', id, tool: 'Bash', detail: str(params.command) ?? str(params.reason) ?? pick(M).runCommand, options }
   }
   if (method === 'item/fileChange/requestApproval' || method === 'applyPatchApproval') {
     const diff = files[0]
     // No reason given: the file, as Claude's Edit names it (the card then shows it once, on the diff's header).
-    const detail = str(params.reason) ?? diff?.path ?? '修改文件'
+    const detail = str(params.reason) ?? diff?.path ?? pick(M).editFiles
     return { kind: 'permission', id, tool: 'Edit', detail, options: [DECISIONS.decline!, DECISIONS.accept!], ...(diff ? { diff } : {}), ...(files.length > 1 ? { files: [...files] } : {}) }
   }
   if (method === 'item/tool/requestUserInput') {
@@ -320,7 +353,7 @@ export function codexConfig(models: unknown[], current: { model?: string; effort
     return value ? [{ value, label: str(m.displayName) ?? value }] : []
   })
   const model = current.model && values.some((v) => v.value === current.model) ? current.model : (str(list.find((m) => m.isDefault === true)?.id) ?? values[0]?.value ?? '')
-  const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: '模型', current: model, values }]
+  const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: pick(M).model, current: model, values }]
   const chosen = list.find((m) => m.id === model)
   const efforts = (Array.isArray(chosen?.supportedReasoningEfforts) ? chosen.supportedReasoningEfforts : []).filter(isRec).flatMap((e) => (str(e.reasoningEffort) ? [str(e.reasoningEffort)!] : []))
   if (efforts.length > 0) {
@@ -328,7 +361,7 @@ export function codexConfig(models: unknown[], current: { model?: string; effort
     config.push({
       id: 'effort',
       category: 'thought_level',
-      label: '推理强度',
+      label: pick(M).effort,
       current: current.effort && efforts.includes(current.effort) ? current.effort : fallback,
       values: efforts.map((e) => ({ value: e, label: effortLabel(e) }))
     })

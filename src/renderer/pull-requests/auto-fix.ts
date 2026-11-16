@@ -1,15 +1,17 @@
 // 自动修复 and 通过后合并 (PRD F16 v1.63 · L3, v1.78), the bridge. Both are off until the user turns them on (per PR in
 // Git · 变更, or for new PRs in 设置 · 自动化 · PR): they spend the user's quota and act on GitHub as the user.
 //
-// 自动修复 watches two places: a PR's required checks and allowed review threads, and the base's CI after 合并到 main
-// 并推送 pushed it. It waits for the worktree's agent to be idle, hands it the failure through the ship handoff
+// 自动修复 watches two places: a PR's required checks and allowed review threads, and the base's CI after 推送 of the
+// base pushed it. It waits for the worktree's agent to be idle, hands it the failure through the ship handoff
 // (`window.tr.ship.handoff`, fix.md) and presses Enter. The agent fixes and COMMITS but never pushes: at its next Stop
 // Wavi looks at the fix's diff against the brakes (src/shared/auto-fix-brakes.ts) and pushes it — `pr.push` for a PR,
-// `ship.shipToMain` for the base — or stops with a row that asks the user (Figma 29G). auto-fix-model.ts decides when to
+// `ship.shipToMain` with `push` for the base (`ship.pushBase` from the main checkout on it) — or stops with a row that
+// asks the user (Figma 29G). A fix's push is never reviewed (PushOrigin 'auto-fix'): the brakes ran. auto-fix-model.ts decides when to
 // send and what the rows say. 通过后合并 is GitHub auto-merge; a new allowed thread or a P0 / P1
 // review turns it off again, since GitHub would merge past them.
 import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
-import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
+import { prThreadsPrompt, threadRepliesPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
+import { defineMessages, pick } from '@shared/i18n'
 import { DEFAULT_SETTINGS, type PrSettings } from '@shared/settings'
 import { handoffPrompt, isWaviPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
 import type { Session, Worktree } from '@shared/types'
@@ -39,8 +41,56 @@ import { prWatchTargets, setAutomation, setPrNotice, usePullRequests } from './s
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { hasHooks, shortAgentName } from '@shared/agents'
 
-/** Every 自动修复 prompt starts with this, so its own UserPromptSubmit is not taken for the user taking over. */
-export const AUTO_FIX_MARK = '（Wavi 自动修复'
+const M = defineMessages({
+  zh: {
+    /** Every 自动修复 prompt starts with this (ship-handoff.ts WAVI_PROMPT_MARK), so its own UserPromptSubmit is not
+     *  taken for the user taking over. */
+    mark: (attempt: number) => `（Wavi 自动修复 第 ${attempt} 次）`,
+    about: (place: string, why: string) => `${place}：${why}`,
+    noPrState: '没能读到 PR 的状态',
+    noHandoffFile: (message: string) => `自动修复已停：没能准备交接文件（${message}）`,
+    noHead: '自动修复已停：没能读到当前提交',
+    commitAndWrite: (path: string) => `修好后提交（不要推送），并把改了什么写到 ${path}。`,
+    repliesMark: '（Wavi 自动修复 · 回复评论）',
+    noReplies: (agent: string, why: string) => `没能请 ${agent} 回复评论：${why}`,
+    noPushedCommit: '没能读到推送的提交',
+    sendFailed: (why: string) => `自动修复已停：没能发送（${why}）`,
+    noDiff: '自动修复已停：没能读到这次修复的改动',
+    pushFailed: '没能推送',
+    stoppedPush: (failed: string) => `自动修复已停：没能推送（${failed}）`,
+    busy: (agent: string) => `${agent} 还在忙`,
+    pushAnyway: '仍然推送这次修复？',
+    pushAnywayButton: '仍然推送',
+    cancel: '取消',
+    discardFailed: (message: string) => `没能丢弃：${message}`,
+    youStopped: '自动修复已停：你停下了它',
+    severeCancelled: '审阅有 P0 / P1，已取消检查通过后合并',
+    threadsCancelled: '有没解决的评论，已取消检查通过后合并'
+  },
+  en: {
+    mark: (attempt: number) => `(Wavi auto-fix · attempt ${attempt})`,
+    about: (place: string, why: string) => `${place}: ${why}`,
+    noPrState: 'Couldn’t read the PR’s state',
+    noHandoffFile: (message: string) => `Auto-fix stopped: couldn’t prepare the hand-off file (${message})`,
+    noHead: 'Auto-fix stopped: couldn’t read the current commit',
+    commitAndWrite: (path: string) => `Once fixed, commit (don’t push) and write what you changed to ${path}.`,
+    repliesMark: '(Wavi auto-fix · replies)',
+    noReplies: (agent: string, why: string) => `Couldn’t ask ${agent} to reply to the comments: ${why}`,
+    noPushedCommit: 'couldn’t read the pushed commit',
+    sendFailed: (why: string) => `Auto-fix stopped: couldn’t send (${why})`,
+    noDiff: 'Auto-fix stopped: couldn’t read this fix’s changes',
+    pushFailed: 'Couldn’t push',
+    stoppedPush: (failed: string) => `Auto-fix stopped: couldn’t push (${failed})`,
+    busy: (agent: string) => `${agent} is still busy`,
+    pushAnyway: 'Push this fix anyway?',
+    pushAnywayButton: 'Push anyway',
+    cancel: 'Cancel',
+    discardFailed: (message: string) => `Couldn’t discard: ${message}`,
+    youStopped: 'Auto-fix stopped: you stopped it',
+    severeCancelled: 'Review found P0 / P1: merge when checks pass was cancelled',
+    threadsCancelled: 'Unresolved comments: merge when checks pass was cancelled'
+  }
+})
 
 let settings: PrSettings = DEFAULT_SETTINGS.pr
 const sending = new Set<string>()
@@ -55,7 +105,7 @@ const LOG_RETRY_MS = 15_000
 const initialized = new Map<string, number>()
 /** Worktree → the base commit whose CI the base automation last looked at. */
 const baseSeen = new Map<string, string>()
-/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 合并到 main 并推送. */
+/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 推送 of the base. */
 const restoredBase = new Set<string>()
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -127,7 +177,7 @@ function stopWith(c: FixCtx, why: string): void {
   const state = read(c.scope, c.worktree)
   if (!state) return
   write(c.scope, c.worktree, { ...state, run: null, stopped: why })
-  notify(c.session, `${placeOf(c)}：${why}`)
+  notify(c.session, pick(M).about(placeOf(c), why))
 }
 
 /** The worktree branch's HEAD, from the git graph's log (the page carries HEAD of `root`). */
@@ -142,7 +192,7 @@ async function headOf(worktreePath: string): Promise<string | null> {
 export async function setMergeWhenGreen(worktreePath: string, on: boolean): Promise<string | null> {
   const root = projectRootOf(worktreePath)
   const details = usePullRequests.getState().byWorktree[worktreePath]?.pr?.details
-  if (!root || !details) return '没能读到 PR 的状态'
+  if (!root || !details) return pick(M).noPrState
   const result = on
     ? await window.tr.pr.merge({ root, worktree: worktreePath, method: details.repo.defaultMethod, when: 'when-ready', deleteRemoteBranch: false })
     : await window.tr.pr.cancelMerge({ root, worktree: worktreePath })
@@ -249,15 +299,15 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
       if (!state?.autoFix || state.run) return
       if (before.kind === 'ask') {
         write(c.scope, c.worktree, { ...state, run: { kind: 'stopped', sessionId: c.session.id, since: null, key, checks: failure.checks, baseFailing, decision: before } })
-        notify(c.session, `${placeOf(c)}：${brakeLabel(before)}`)
+        notify(c.session, pick(M).about(placeOf(c), brakeLabel(before)))
         return
       }
     }
 
     const slot = await window.tr.ship.handoff({ ...target, kind: 'fix' })
-    if (!slot.ok) return stopWith(c, `自动修复已停：没能准备交接文件（${slot.message}）`)
+    if (!slot.ok) return stopWith(c, pick(M).noHandoffFile(slot.message))
     const since = retry?.since ?? (await headOf(c.worktree))
-    if (!since) return stopWith(c, '自动修复已停：没能读到当前提交')
+    if (!since) return stopWith(c, pick(M).noHead)
 
     state = read(c.scope, c.worktree)
     if (!state || (retry ? state.run?.kind !== 'stopped' : !state.autoFix || state.run)) return
@@ -272,10 +322,10 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
       ...(failure ? { failure } : {}),
       ...(retry ? { previousStop: retry.previousStop } : {})
     }
-    const parts = [`${AUTO_FIX_MARK} 第 ${state.attempts + 1} 次）`]
+    const parts = [pick(M).mark(state.attempts + 1)]
     parts.push(handoffPrompt(context))
-    if (send.threads.length > 0) parts.push(prThreadsPrompt(pr?.number ?? null, send.threads))
-    if (!failure) parts.push(`修好后提交（不要推送），并把改了什么写到 ${slot.path}。`)
+    if (send.threads.length > 0) parts.push(prThreadsPrompt(pr?.number ?? null, send.threads, { kind: 'commit' }))
+    if (!failure) parts.push(pick(M).commitAndWrite(slot.path))
 
     const run: FixRun = { kind: 'fixing', sessionId: c.session.id, since, key, checks: failure?.checks ?? [], baseFailing, sentAt: Date.now() }
     const sentState = retry ? { ...state, attempts: state.attempts + 1 } : afterSend(state, { kind: 'send', ...send })
@@ -284,7 +334,7 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
       await submitPrompt(c.session.id, parts.join('\n\n'))
     } catch (error) {
       const why = errorText(error)
-      stopWith(c, `自动修复已停：没能发送（${why}）`)
+      stopWith(c, pick(M).sendFailed(why))
     }
   } finally {
     sending.delete(id)
@@ -313,7 +363,7 @@ async function handleStop(c: FixCtx): Promise<void> {
       }
     )
     if (!diffRead.ok) {
-      if (read(c.scope, c.worktree)?.run === run) stopWith(c, '自动修复已停：没能读到这次修复的改动')
+      if (read(c.scope, c.worktree)?.run === run) stopWith(c, pick(M).noDiff)
       return
     }
     const diff = diffRead.text
@@ -349,13 +399,20 @@ async function handleStop(c: FixCtx): Promise<void> {
       note,
       run: { kind: 'stopped', sessionId: run.sessionId, since: run.since, key: run.key, checks: run.checks, baseFailing: run.baseFailing, decision }
     })
-    notify(c.session, `${placeOf(c)}：${brakeLabel(decision, state.pushed)}`)
+    notify(c.session, pick(M).about(placeOf(c), brakeLabel(decision, state.pushed)))
   } finally {
     handling.delete(id)
   }
 }
 
-/** Pushes the fix the agent committed: the PR's branch, or the worktree merged into the base and the base pushed. */
+/** The worktree is the main checkout with the base out (path ①): a fix of the base's CI is committed on the base. */
+export function onBaseCheckout(worktreePath: string, base: string | null, worktrees: readonly Pick<Worktree, 'path' | 'isMain' | 'branch' | 'archived'>[]): boolean {
+  const worktree = worktrees.find((w) => w.path === worktreePath && !w.archived)
+  return Boolean(worktree?.isMain && base && worktree.branch === base)
+}
+
+/** Pushes the fix the agent committed: the PR's branch, or the worktree merged into the base and the base pushed (from
+ *  the main checkout on its base, the base alone). Never through the push node's review. */
 async function pushFix(c: FixCtx, run: FixRun): Promise<void> {
   if (run.kind === 'pushing' || (run.kind === 'stopped' && run.since === null)) return
   const before = read(c.scope, c.worktree)
@@ -369,21 +426,48 @@ async function pushFix(c: FixCtx, run: FixRun): Promise<void> {
     if (c.scope === 'pr') {
       const result = await window.tr.pr.push(target)
       if (!result.ok) failed = result.message
-    } else {
-      const result = await window.tr.ship.shipToMain({ ...target, message: '', paths: null, method: 'squash' })
+    } else if (onBaseCheckout(c.worktree, useBaseCi.getState().byWorktree[c.worktree]?.base ?? null, useWorkspace.getState().worktrees)) {
+      // The fix is a commit on the base itself: a plain 推送 of the base (it pulls first), nothing to merge.
+      const result = await window.tr.ship.pushBase(target)
       if (!result.ok) failed = result.message
-      else if (!result.pushed) failed = result.pushError ?? '没能推送'
+      else if (!result.pushed) failed = result.pushError ?? pick(M).pushFailed
+      else sha = result.commit
+    } else {
+      // 合并 is local only; a fix of the base's CI is merged and pushed in one call (no review: the fix's brakes ran).
+      const result = await window.tr.ship.shipToMain({ ...target, message: '', paths: null, method: 'squash', push: true })
+      if (!result.ok) failed = result.message
+      else if (!result.pushed) failed = result.pushError ?? pick(M).pushFailed
       else sha = result.commit
     }
   } catch (error) {
     failed = errorText(error)
   }
-  if (failed) return stopWith(c, `自动修复已停：没能推送（${failed}）`)
+  if (failed) return stopWith(c, pick(M).stoppedPush(failed))
   const latest = read(c.scope, c.worktree)
   if (!latest) return
   const from = c.scope === 'pr' ? (usePullRequests.getState().byWorktree[c.worktree]?.pr?.details?.headOid ?? null) : (useBaseCi.getState().byWorktree[c.worktree]?.sha ?? null)
   write(c.scope, c.worktree, afterPushed(latest, run, from, sha))
-  if (c.scope === 'pr') window.tr.pr.refresh(c.worktree)
+  if (c.scope === 'pr') {
+    window.tr.pr.refresh(c.worktree)
+    await askForReplies(c, latest.lastThreads, sha)
+  }
+}
+
+/** The pushed fix answered review threads: now that its commit is on GitHub, the agent replies on them and resolves
+ *  the ones it changed (PRD F16 v1.192). Wavi pushes 自动修复's fixes itself (the brakes run first), so the replies
+ *  are a turn of their own. */
+async function askForReplies(c: FixCtx, threadIds: readonly string[], sha: string | undefined): Promise<void> {
+  if (threadIds.length === 0) return
+  const name = agentName(c.session)
+  const commit = sha ?? (await headOf(c.worktree))
+  if (!commit) return setPrNotice(c.worktree, { tone: 'error', text: pick(M).noReplies(name, pick(M).noPushedCommit) })
+  const number = usePullRequests.getState().byWorktree[c.worktree]?.pr?.number ?? null
+  try {
+    // Opens with Wavi's prompt mark like every fix it sends: the user's own prompt resets the brakes (takenOver), this must not.
+    await submitPrompt(c.session.id, `${pick(M).repliesMark}\n\n${threadRepliesPrompt(number, commit, threadIds, name)}`)
+  } catch (error) {
+    setPrNotice(c.worktree, { tone: 'error', text: pick(M).noReplies(name, errorText(error)) })
+  }
 }
 
 // ── the stopped row's buttons (Figma 29G) ───────────────────────────────────────────────────────────────────────
@@ -399,8 +483,8 @@ export async function pushAnyway(scope: FixScope, worktreePath: string): Promise
   const c = ctxFor(scope, worktreePath)
   if (!run || !c || run.since === null) return
   // Still working (a fix that came back after a reload may be): what it pushes would be half done.
-  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: `${agentName(c.session)} 还在忙` })
-  const confirmed = await window.tr.ui.confirm({ message: '仍然推送这次修复？', detail: brakeLabel(run.decision, read(scope, worktreePath)?.pushed), confirmLabel: '仍然推送', cancelLabel: '取消' })
+  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: pick(M).busy(agentName(c.session)) })
+  const confirmed = await window.tr.ui.confirm({ message: pick(M).pushAnyway, detail: brakeLabel(run.decision, read(scope, worktreePath)?.pushed), confirmLabel: pick(M).pushAnywayButton, cancelLabel: pick(M).cancel })
   if (confirmed && read(scope, worktreePath)?.run === run) await pushFix(c, run)
 }
 
@@ -409,10 +493,10 @@ export async function discardFix(scope: FixScope, worktreePath: string): Promise
   const run = stoppedRunOf(scope, worktreePath)
   const c = ctxFor(scope, worktreePath)
   if (!run || !c || run.since === null) return
-  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: `${agentName(c.session)} 还在忙` })
+  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: pick(M).busy(agentName(c.session)) })
   const result = await window.tr.ship.discardSince({ ...targetOf(c), since: run.since }).catch((error: unknown) => ({ ok: false as const, message: errorText(error) }))
   const state = read(scope, worktreePath)
-  if (!result.ok) return setPrNotice(worktreePath, { tone: 'error', text: `没能丢弃：${result.message}` })
+  if (!result.ok) return setPrNotice(worktreePath, { tone: 'error', text: pick(M).discardFailed(result.message) })
   if (state && state.run === run) write(scope, worktreePath, { ...state, run: null })
 }
 
@@ -422,7 +506,7 @@ export async function retryFix(scope: FixScope, worktreePath: string): Promise<v
   const state = read(scope, worktreePath)
   const c = ctxFor(scope, worktreePath)
   if (!run || !state || !c || run.since === null) return
-  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: `${agentName(c.session)} 还在忙` })
+  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: pick(M).busy(agentName(c.session)) })
   const pr = usePullRequests.getState().byWorktree[worktreePath]?.pr
   const threads = scope === 'pr' && pr ? allowedThreads(pr, settings.bots) : []
   const send: Send = { key: state.lastKey ?? run.key, head: state.lastHead ?? run.since, failing: run.checks, threads }
@@ -449,8 +533,8 @@ export function stopFix(scope: FixScope, worktreePath: string): void {
   const state = read(scope, worktreePath)
   const run = state?.run
   if (!state || run?.kind !== 'fixing') return
-  write(scope, worktreePath, { ...state, run: null, stopped: '自动修复已停：你停下了它' })
-  void interruptAgent(run.sessionId).catch((error: unknown) => console.warn('[auto-fix] 停下 could not interrupt the agent', error))
+  write(scope, worktreePath, { ...state, run: null, stopped: pick(M).youStopped })
+  void interruptAgent(run.sessionId).catch((error: unknown) => console.warn('[auto-fix] stop could not interrupt the agent', error))
 }
 
 // ── the loop ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -475,7 +559,7 @@ function stepPr(worktreePath: string, status: PrStatus): void {
     const severe = review?.phase === 'done' ? (review.counts?.P0 ?? 0) + (review.counts?.P1 ?? 0) : 0
     if (allowedThreads(pr, settings.bots).length > 0 || severe > 0) {
       void setMergeWhenGreen(worktreePath, false).then((failure) => {
-        if (!failure) setPrNotice(worktreePath, { tone: 'muted', text: severe > 0 ? '审阅有 P0 / P1，已取消检查通过后合并' : '有没解决的评论，已取消检查通过后合并' })
+        if (!failure) setPrNotice(worktreePath, { tone: 'muted', text: severe > 0 ? pick(M).severeCancelled : pick(M).threadsCancelled })
       })
     }
   }
@@ -485,7 +569,7 @@ function stepPr(worktreePath: string, status: PrStatus): void {
   const decision = autoFixDecision(state, { pr, agentIdle: agentIdle(session), max: settings.maxAutoFixes, bots: settings.bots })
   if (decision.kind === 'stop') {
     setAutomation(worktreePath, { ...state, stopped: decision.reason })
-    notify(c.session, `PR #${pr.number}：${decision.reason}`)
+    notify(c.session, pick(M).about(`PR #${pr.number}`, decision.reason))
   } else if (decision.kind === 'send') void sendFix(c, decision)
 }
 
@@ -493,7 +577,7 @@ function stepBase(worktreePath: string): void {
   const ci = useBaseCi.getState().byWorktree[worktreePath]
   if (!ci) return
   let state = useBaseCi.getState().automation[worktreePath]
-  // A commit Wavi did not push for a fix is a new 合并到 main 并推送: counting starts again.
+  // A commit Wavi did not push for a fix is a new 推送 of the base: counting starts again.
   if (baseSeen.get(worktreePath) !== ci.sha) {
     baseSeen.set(worktreePath, ci.sha)
     // A run taken up from the saved workspace keeps what it came back with.
@@ -509,7 +593,7 @@ function stepBase(worktreePath: string): void {
   const decision = baseFixDecision(state, { ci, agentIdle: agentIdle(session), max: settings.maxAutoFixes })
   if (decision.kind === 'stop') {
     setBaseAutomation(worktreePath, { ...state, stopped: decision.reason })
-    notify(c.session, `${ci.base}：${decision.reason}`)
+    notify(c.session, pick(M).about(ci.base, decision.reason))
   } else if (decision.kind === 'send') void sendFix(c, decision)
 }
 
@@ -582,7 +666,7 @@ function stopStalledFixes(now: number): void {
       if (!next) continue
       write(scope, worktree, next)
       const c = ctxFor(scope, worktree)
-      if (c && next.run?.kind === 'stopped') notify(c.session, `${placeOf(c)}：${brakeLabel(next.run.decision, next.pushed)}`)
+      if (c && next.run?.kind === 'stopped') notify(c.session, pick(M).about(placeOf(c), brakeLabel(next.run.decision, next.pushed)))
     }
   }
 }

@@ -1,11 +1,13 @@
 // Font catalog helpers for the settings window: turn the raw list of installed faces into the
 // menus (Latin monospace and CJK-capable for the terminal; Latin proportional for 对话, PRD v1.127). Pure; the DOM-dependent bits live in local-fonts.ts.
+import { defineMessages, pick } from '@shared/i18n'
 
 /** Always offered, even when the Local Font Access API is denied or the family is not installed. */
 export const BUNDLED_LATIN_FONT = 'JetBrains Mono Variable'
 export const DEFAULT_CJK_FONT = 'PingFang SC'
 
 export const LATIN_SAMPLE = 'AaBb 0O1l'
+// eslint-disable-next-line no-restricted-syntax -- CJK font sample: shows the Chinese font in both languages
 export const CJK_SAMPLE = '中文字体'
 
 export interface FontCatalog {
@@ -19,6 +21,7 @@ const MONO_NAME =
   /mono|code|consol|courier|menlo|monaco|hack|fira|iosevka|cascadia|inconsolata|cousine|terminal|typewriter|meslo|nerd|berkeley|input|maple|commit|fantasque|victor|hasklig|anonymous|ibm 3270|\bpt mono\b|\bgeist\b/i
 
 const CJK_NAME =
+  // eslint-disable-next-line no-restricted-syntax -- matches CJK font family names, not UI text
   /pingfang|hiragino|noto (sans|serif) (cjk|sc|tc|hk|jp|kr)|source han|思源|cjk|\b(sc|tc|hc|hk|jp|kr)\b|heiti|songti|kaiti|fangsong|yuanti|wenquanyi|microsoft ya ?hei|simsun|simhei|stheiti|stsong|stkaiti|stfangsong|lantinghei|libian|hannotate|hanzipen|weibei|xingkai|yapi|baoli|lisong|apple (sd )?gothic|nanum|malgun|meiryo|yu (gothic|mincho)|pmingliu|mingliu|dfkai|lihei|[黑宋楷圆體体]/i
 
 /** Name-based guess: does this family look like a monospace face? */
@@ -65,28 +68,43 @@ export function classifyFonts(families: readonly string[], isMonospace?: (family
   }
 }
 
-export type CjkGroup = '简体中文' | '繁体中文' | '日文' | '韩文' | '其他'
+const M_GROUP = defineMessages({
+  zh: { simplified: '简体中文', traditional: '繁体中文', japanese: '日文', korean: '韩文', other: '其他' },
+  en: { simplified: 'Simplified Chinese', traditional: 'Traditional Chinese', japanese: 'Japanese', korean: 'Korean', other: 'Other' }
+})
 
-export const CJK_GROUP_ORDER: readonly CjkGroup[] = ['简体中文', '繁体中文', '日文', '韩文', '其他']
+type CjkGroupKey = keyof (typeof M_GROUP)['zh']
+/** A group's name in the current language. */
+export type CjkGroup = string
 
+export const CJK_GROUP_ORDER: readonly CjkGroupKey[] = ['simplified', 'traditional', 'japanese', 'korean', 'other']
+
+// eslint-disable-next-line no-restricted-syntax -- matches CJK font family names, not UI text
 const TRADITIONAL = /\b(tc|hk|hc)\b|繁|[體]|pmingliu|mingliu|dfkai|lihei|lisong|apple lisung/i
+// eslint-disable-next-line no-restricted-syntax -- matches CJK font family names, not UI text
 const SIMPLIFIED = /\b(sc|gb)\b|简|[体]|pingfang|heiti|songti|kaiti|fangsong|yuanti|st(heiti|song|kaiti|fangsong|xihei)|microsoft ya ?hei|simsun|simhei|wenquanyi|lantinghei|思源/i
+// eslint-disable-next-line no-restricted-syntax -- matches CJK font family names, not UI text
 const JAPANESE = /\bjp\b|hiragino (sans|mincho|kaku|maru)|osaka|meiryo|yu (gothic|mincho)|ms (p?gothic|p?mincho)|ヒラギノ|游/i
 const KOREAN = /\bkr\b|apple ?(sd )?gothic|applemyungjo|nanum|malgun|batang|gulim|dotum|한/i
 
 /** Which language a CJK family is drawn for, by name: the Chinese font menu is grouped by this (B15). */
+function cjkGroupKey(family: string): CjkGroupKey {
+  if (TRADITIONAL.test(family)) return 'traditional'
+  if (SIMPLIFIED.test(family)) return 'simplified'
+  if (JAPANESE.test(family)) return 'japanese'
+  if (KOREAN.test(family)) return 'korean'
+  return 'other'
+}
+
 export function cjkGroup(family: string): CjkGroup {
-  if (TRADITIONAL.test(family)) return '繁体中文'
-  if (SIMPLIFIED.test(family)) return '简体中文'
-  if (JAPANESE.test(family)) return '日文'
-  if (KOREAN.test(family)) return '韩文'
-  return '其他'
+  return pick(M_GROUP)[cjkGroupKey(family)]
 }
 
 /** The families in CJK_GROUP_ORDER, keeping their order (pinned default first) within each group. */
 export function groupCjkFamilies(families: readonly string[]): { family: string; group: CjkGroup }[] {
-  const tagged = families.map((family) => ({ family, group: cjkGroup(family) }))
-  return CJK_GROUP_ORDER.flatMap((group) => tagged.filter((entry) => entry.group === group))
+  const names = pick(M_GROUP)
+  const tagged = families.map((family) => ({ family, key: cjkGroupKey(family) }))
+  return CJK_GROUP_ORDER.flatMap((key) => tagged.filter((entry) => entry.key === key).map(({ family }) => ({ family, group: names[key] })))
 }
 
 function pinFirst(list: readonly string[], pinned: string): string[] {

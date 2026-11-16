@@ -14,7 +14,7 @@ describe('sanitizeSettings', () => {
     })
     expect(s.appearance.fontSize).toBe(28)
     expect(s.appearance.lineHeight).toBe(1)
-    expect(s.appearance.terminalOpacity).toBe(0.5)
+    expect(s.appearance.terminalOpacity).toBe(0.2)
     expect(s.appearance.theme).toBe('system')
     expect(s.appearance.latinFont).toBe('Menlo')
     expect(s.appearance.ligatures).toBe(false)
@@ -33,6 +33,35 @@ describe('全屏背景 (PRD v1.97)', () => {
     expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 'ember' } }).appearance.fullscreenBackdrop).toBe('ember')
     expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 'neon' } }).appearance.fullscreenBackdrop).toBe('auto')
     expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 3 } }).appearance.fullscreenBackdrop).toBe('auto')
+  })
+})
+
+describe('背景图片 (PRD v1.189)', () => {
+  const name = `${'0f'.repeat(32)}.jpg`
+
+  it('has no picture and no blur by default', () => {
+    expect(DEFAULT_SETTINGS.appearance.backgroundImage).toBe('')
+    expect(DEFAULT_SETTINGS.appearance.backgroundBlur).toBe(0)
+  })
+
+  it('keeps a stored picture’s name and drops anything else, so a path never reaches the protocol', () => {
+    expect(sanitizeSettings({ appearance: { backgroundImage: name } }).appearance.backgroundImage).toBe(name)
+    expect(sanitizeSettings({ appearance: { backgroundImage: '/Users/me/wall.jpg' } }).appearance.backgroundImage).toBe('')
+    expect(sanitizeSettings({ appearance: { backgroundImage: '../settings.json' } }).appearance.backgroundImage).toBe('')
+  })
+
+  it('clamps the blur to 0–100 % in whole percent', () => {
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 0.404 } }).appearance.backgroundBlur).toBe(0.4)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 2 } }).appearance.backgroundBlur).toBe(1)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: -1 } }).appearance.backgroundBlur).toBe(0)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 'x' } }).appearance.backgroundBlur).toBe(0)
+  })
+
+  it('移除 is a patch to the empty name', () => {
+    const withPicture = sanitizeSettings({ appearance: { backgroundImage: name, backgroundBlur: 0.4 } })
+    const removed = applySettingsPatch(withPicture, { appearance: { backgroundImage: '' } })
+    expect(removed.appearance.backgroundImage).toBe('')
+    expect(removed.appearance.backgroundBlur).toBe(0.4)
   })
 })
 
@@ -59,7 +88,6 @@ describe('applySettingsPatch', () => {
 
   it('keeps code review off unless a real switch is set (PRD F13)', () => {
     expect(DEFAULT_SETTINGS.review).toEqual({
-      beforeMerge: false,
       beforePush: false,
       afterTurnWithCommits: false,
       mode: 'builtin',
@@ -69,8 +97,8 @@ describe('applySettingsPatch', () => {
       model: '',
       codexModel: ''
     })
-    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { beforeMerge: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
-    expect(next.review.beforeMerge).toBe(true)
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { afterTurnWithCommits: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
+    expect(next.review.afterTurnWithCommits).toBe(true)
     expect(next.review.beforePush).toBe(false)
     expect(next.review.mode).toBe('agent-command')
     expect(next.review.model).toBe('haiku')
@@ -78,6 +106,16 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { model: 'not a model', mode: 'nope' } }).review.model).toBe('')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { mode: 'nope' } }).review.mode).toBe('builtin')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
+  })
+
+  it('drops 合并前审阅: a stored one on turns 推送前审阅 on, and it is gone once written back', () => {
+    const migrated = sanitizeSettings({ review: { beforeMerge: true, beforePush: false } }).review
+    expect(migrated.beforePush).toBe(true)
+    expect('beforeMerge' in migrated).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: false } }).review.beforePush).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: true } }).review.beforePush).toBe(true)
+    // Turned off afterwards: stays off (the old key is not written back).
+    expect(applySettingsPatch(sanitizeSettings({ review: { beforeMerge: true } }), { review: { beforePush: false } }).review.beforePush).toBe(false)
   })
 
   it('picks the other CLI as reviewer only when asked, and moves an old OpenAI model to Codex (PRD F13 v1.63)', () => {
@@ -159,21 +197,18 @@ describe('设置 · 手机 (PRD F22)', () => {
 })
 
 describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 51)', () => {
-  it('starts as GUI sessions look today: narrow column, system UI font, 14 px, opaque, no avatar; glass with a 30% tint (v1.174)', () => {
-    expect(DEFAULT_SETTINGS.appearance.chat).toEqual({ width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' })
+  it('starts with narrow column, system UI font, 14 px, no avatar; glass; both cards at 85% (PRD v1.179)', () => {
+    expect(DEFAULT_SETTINGS.appearance.chat).toEqual({ width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 0.85, avatar: '' })
+    expect(DEFAULT_SETTINGS.appearance.terminalOpacity).toBe(0.85)
     expect(DEFAULT_SETTINGS.appearance.windowMaterial).toBe('glass')
-    expect(DEFAULT_SETTINGS.appearance.shellOpacity).toBe(0.3)
   })
 
   it('clamps and rejects field by field', () => {
-    const { chat, windowMaterial, shellOpacity } = sanitizeSettings({
-      appearance: { chat: { width: 'huge', latinFont: '  Inter ', fontWeight: 900, fontSize: 40, opacity: 0.1, avatar: 'javascript:alert(1)' }, windowMaterial: 'stone', shellOpacity: 2 }
+    const { chat, windowMaterial } = sanitizeSettings({
+      appearance: { chat: { width: 'huge', latinFont: '  Inter ', fontWeight: 900, fontSize: 40, opacity: 0.1, avatar: 'javascript:alert(1)' }, windowMaterial: 'stone' }
     }).appearance
-    expect(chat).toEqual({ width: 'narrow', latinFont: 'Inter', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 18, opacity: 0.5, avatar: '' })
+    expect(chat).toEqual({ width: 'narrow', latinFont: 'Inter', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 18, opacity: 0.2, avatar: '' })
     expect(windowMaterial).toBe('glass')
-    expect(shellOpacity).toBe(1)
-    expect(sanitizeSettings({ appearance: { shellOpacity: -1 } }).appearance.shellOpacity).toBe(0)
-    expect(sanitizeSettings({ appearance: { shellOpacity: 'a lot' } }).appearance.shellOpacity).toBe(0.3)
   })
 
   it('takes a picture only as an image data URL under the cap', () => {
@@ -183,34 +218,17 @@ describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 
     expect(sanitizeSettings({ appearance: { chat: { avatar: `data:image/png;base64,${'A'.repeat(400_001)}` } } }).appearance.chat.avatar).toBe('')
   })
 
-  it('keeps 实色 (PRD v1.139, Figma 57) and the glass opacity beside it', () => {
-    const { windowMaterial, shellOpacity } = sanitizeSettings({ appearance: { windowMaterial: 'solid', shellOpacity: 0.45 } }).appearance
-    expect(windowMaterial).toBe('solid')
-    expect(shellOpacity).toBe(0.45)
-  })
-
-  it('merges a patch of one chat field or the glass opacity into the rest', () => {
-    const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { chat: { width: 'wide' }, shellOpacity: 0.8 } })
+  it('merges a patch of one chat field into the rest', () => {
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { chat: { width: 'wide' } } })
     expect(next.appearance.chat).toEqual({ ...DEFAULT_SETTINGS.appearance.chat, width: 'wide' })
-    expect(next.appearance.shellOpacity).toBe(0.8)
     expect(next.appearance.windowMaterial).toBe('glass')
   })
 
-  it('reads settings from before v1.174: 液态玻璃 and 磨砂玻璃 become 玻璃 and keep the opacity of the one that was chosen', () => {
-    const read = (windowMaterial: string, shellOpacity: object) => sanitizeSettings({ appearance: { windowMaterial, shellOpacity } }).appearance
-    expect(read('frosted', { liquid: 0, frosted: 0.6 })).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.6 })
-    expect(read('liquid', { liquid: 0.2, frosted: 0.6 })).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.2 })
-    // An untinted 液态玻璃 stays untinted: 0 is a value, not a missing one.
-    expect(read('liquid', { liquid: 0, frosted: 0.6 })).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0 })
-    // 实色 had no glass chosen: the liquid value, the old default look, carries over.
-    expect(read('solid', { liquid: 0.1, frosted: 0.6 })).toMatchObject({ windowMaterial: 'solid', shellOpacity: 0.1 })
-  })
-
-  it('falls back field by field when an old record is incomplete or out of range', () => {
-    // The chosen material's key is missing: the new default, not the other material's value.
-    expect(sanitizeSettings({ appearance: { windowMaterial: 'frosted', shellOpacity: { liquid: 0.2 } } }).appearance.shellOpacity).toBe(0.3)
-    // No windowMaterial at all: it was 液态玻璃, the old default.
-    expect(sanitizeSettings({ appearance: { shellOpacity: { liquid: 0.2, frosted: 0.6 } } }).appearance).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.2 })
-    expect(sanitizeSettings({ appearance: { windowMaterial: 'liquid', shellOpacity: { liquid: 5, frosted: 0.6 } } }).appearance.shellOpacity).toBe(1)
+  it('reads older settings: 液态玻璃 and 磨砂玻璃 become 玻璃, 实色 stays, and the dropped 窗口底层不透明度 is not kept (PRD v1.179)', () => {
+    const read = (windowMaterial: string, shellOpacity: unknown) => sanitizeSettings({ appearance: { windowMaterial, shellOpacity } }).appearance
+    expect(read('frosted', { liquid: 0, frosted: 0.6 }).windowMaterial).toBe('glass')
+    expect(read('liquid', 0.2).windowMaterial).toBe('glass')
+    expect(read('solid', 0.45).windowMaterial).toBe('solid')
+    expect('shellOpacity' in read('glass', 0.3)).toBe(false)
   })
 })

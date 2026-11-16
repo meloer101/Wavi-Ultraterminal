@@ -13,9 +13,10 @@ export const typedBy = (agent: FakeAgentFolder): string => {
   return agent.typed().split(`${esc}[200~`).join('').split(`${esc}[201~`).join('')
 }
 
-/** The path the last prompt for `<git dir>/worktrees/<name>/wavi/<kind>.md` names; waits until the prompt arrived. */
-export async function promptedPath(agent: FakeAgentFolder, name: string, kind: 'commit' | 'pr', timeout = 30_000): Promise<string> {
-  const re = new RegExp(`/\\S+/worktrees/${name}/wavi/${kind}\\.md`, 'g')
+/** The path the last prompt for `<git dir>/worktrees/<name>/wavi/<kind>.md` names (`name` null: the main checkout's
+ *  `<git dir>/wavi/<kind>.md`); waits until the prompt arrived. */
+export async function promptedPath(agent: FakeAgentFolder, name: string | null, kind: 'commit' | 'pr', timeout = 30_000): Promise<string> {
+  const re = new RegExp(`/\\S+/${name === null ? '\\.git' : `worktrees/${name}`}/wavi/${kind}\\.md`, 'g')
   let found = ''
   await expect
     .poll(

@@ -85,14 +85,22 @@
   object-fit: cover;
 }
 
+/* 终端 / 对话's previews sit on the desktop field (as 外观's small window), so the card's opacity shows while it is
+   dragged: on the sheet's own opaque colour a translucent card of that colour looks unchanged. */
+.previewField {
+  padding: var(--space-24);
+  border-radius: var(--radius-window);
+  background: var(--fs-field, var(--fsb-sky));
+}
+
 .chatPreview {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
   padding: var(--space-20);
   border-radius: var(--radius-window);
-  /* bg/section, as Figma 51D: the sheet is bg/app, the chat's own card colour would not show on it. */
-  background: var(--bg-section);
+  /* The chat card's colour at its opacity (appearance/map.ts), as GUI sessions draw it. */
+  background: var(--tr-chat-bg, var(--bg-app));
   font: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
   color: var(--text-primary);
 }
@@ -145,6 +153,17 @@
   color: inherit;
 }
 
+/* 背景图片 (Figma 86B): a 48 × 28 thumbnail before 更换… / 移除, the same line as 我的头像's. */
+.backgroundThumb {
+  width: 48px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  /* An outline draws over the picture; an inset shadow would sit under it. */
+  outline: 1px solid var(--border-subtle);
+  outline-offset: -1px;
+}
+
 /* 我的头像 (Figma 66D): the picture and its buttons on one line, 28 high. */
 .avatarControl {
   display: flex;
@@ -153,8 +172,9 @@
 }
 
 /*
- * 外观's preview (Figma 66A): a small window over the desktop field. The sidebar column is the shell over a blurred
- * base layer (--glass-shell, as the real window); the cards are the terminal and the chat at their own opacities.
+ * 外观's preview (Figma 66A): a small window over the desktop field, on a blurred base layer as the real window. The cards
+ * are the terminal and the chat at their own opacities, on the base layer (ui/GlassBase: the shown session's tint, cut out
+ * at the cards, PRD v1.183).
  */
 .windowPreview {
   position: relative;
@@ -171,7 +191,6 @@
   gap: var(--space-4);
   padding: var(--space-4);
   border-radius: var(--radius-window) var(--radius-window) 0 0;
-  background: var(--glass-shell);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
 }
 
@@ -180,12 +199,32 @@
   backdrop-filter: blur(2px);
 }
 
+/* 背景图片 (Figma 86B): the small window has the user's picture under its base layer, as the real one; the blur is scaled
+   down with the window. */
+:global(:root[data-bg-image='on']) .miniWindow {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+:global(:root[data-bg-image='on']) .miniWindow::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(-0.5 * var(--tr-bg-blur, 0px));
+  pointer-events: none;
+  background: var(--tr-bg-image) center / cover no-repeat;
+  filter: blur(calc(0.25 * var(--tr-bg-blur, 0px)));
+}
+
 :global(:root[data-material='solid']) .miniWindow {
+  background: var(--glass-shell-color);
   backdrop-filter: none;
 }
 
 .miniSidebar,
 .miniCard {
+  /* Over the base layer (an absolute sibling). */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -194,6 +233,7 @@
 
 .miniSidebar {
   flex: 0 0 26%;
+  border-radius: var(--radius-sm);
 }
 
 .miniCard {

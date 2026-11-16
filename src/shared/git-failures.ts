@@ -2,8 +2,72 @@
 // kinds the user can act on, with the chain action that gets them unstuck. Pure; ship / PR results carry the answer.
 // Wavi runs git without a terminal, so a login or key passphrase prompt cannot appear: those kinds point at the terminal
 // and Wavi does not try to recover them itself.
+import { defineMessages, pick } from './i18n'
 import { isSignedOut, stripControl } from './pull-requests'
 import { CHAIN_TEXT, type ChainActionId } from './ship-chain'
+
+const M = defineMessages({
+  zh: {
+    stepWord: {
+      commit: '提交',
+      push: '推送',
+      pull: '拉取',
+      merge: '合并',
+      rebase: 'rebase',
+      'pr-create': '创建 PR',
+      'pr-merge': '合并 PR',
+      fetch: '获取远程',
+      'pr-status': '读取 PR 状态'
+    } satisfies Record<GitStep, string> as Record<GitStep, string>,
+    ghSignedOut: 'gh 还没有登录：在终端运行 gh auth login',
+    fetchAuth: '拉取需要登录：在终端里运行一次 git fetch',
+    pushAuth: '推送需要登录：在终端里运行一次 git push',
+    prePushHook: 'pre-push hook 没通过',
+    hookFailed: (hook: string) => `${hook} hook 没通过`,
+    identity: 'git 还不知道提交者是谁：在终端里设置 user.name 和 user.email',
+    signing: '提交签名需要口令',
+    conflicts: (base: string) => `和 ${base} 有冲突`,
+    pushProtection: (ref: string) => `${ref} 被推送保护拒绝：提交里有密钥`,
+    signatureRule: (ref: string) => `${ref} 被仓库规则拒绝：提交需要验证过的签名`,
+    ruleRefused: (ref: string) => `${ref} 被仓库规则拒绝`,
+    protectedBase: (base: string) => `${base} 受保护`,
+    preReceive: '远程的 pre-receive hook 拒绝了推送',
+    noGitHub: '连不上 GitHub：检查网络后重试',
+    noRemoteHost: '连不上远程仓库：检查网络后重试',
+    failedWith: (word: string, line: string) => `${word}失败：${line}`,
+    failed: (word: string) => `${word}失败`
+  },
+  en: {
+    stepWord: {
+      commit: 'Commit',
+      push: 'Push',
+      pull: 'Pull',
+      merge: 'Merge',
+      rebase: 'Rebase',
+      'pr-create': 'Create PR',
+      'pr-merge': 'Merge PR',
+      fetch: 'Fetch',
+      'pr-status': 'Reading PR status'
+    },
+    ghSignedOut: 'gh is not signed in: run gh auth login in a terminal',
+    fetchAuth: 'Pull needs a login: run git fetch once in a terminal',
+    pushAuth: 'Push needs a login: run git push once in a terminal',
+    prePushHook: 'pre-push hook failed',
+    hookFailed: (hook: string) => `${hook} hook failed`,
+    identity: "git doesn't know who the committer is: set user.name and user.email in a terminal",
+    signing: 'Signing the commit needs a passphrase',
+    conflicts: (base: string) => `Conflicts with ${base}`,
+    pushProtection: (ref: string) => `${ref} refused by push protection: the commits contain a secret`,
+    signatureRule: (ref: string) => `${ref} refused by a repository rule: commits need verified signatures`,
+    ruleRefused: (ref: string) => `${ref} refused by a repository rule`,
+    protectedBase: (base: string) => `${base} is protected`,
+    preReceive: "The remote's pre-receive hook refused the push",
+    noGitHub: "Can't reach GitHub: check the network and retry",
+    noRemoteHost: "Can't reach the remote: check the network and retry",
+    failedWith: (word: string, line: string) => `${word}failed: ${line}`,
+    failed: (word: string) => `${word}failed`
+  }
+})
 
 /** The step that failed. `pr-create` / `pr-merge` / `pr-status` are gh calls (`gh pr create` pushes the branch too;
  *  `pr-status` is the PR poll's `gh pr list`). */
@@ -82,18 +146,6 @@ export function failureTail(output: string, lines = FAILURE_TAIL_LINES): string 
   return cleanLines(output).slice(-lines).join('\n')
 }
 
-const STEP_WORD: Record<GitStep, string> = {
-  commit: '提交',
-  push: '推送',
-  pull: '拉取',
-  merge: '合并',
-  rebase: 'rebase',
-  'pr-create': '创建 PR',
-  'pr-merge': '合并 PR',
-  fetch: '获取远程',
-  'pr-status': '读取 PR 状态'
-}
-
 const COMMIT_STEPS: ReadonlySet<GitStep> = new Set(['commit', 'merge', 'rebase'])
 const GH_STEPS: ReadonlySet<GitStep> = new Set(['pr-create', 'pr-merge', 'pr-status'])
 const FETCH_STEPS: ReadonlySet<GitStep> = new Set(['pull', 'fetch'])
@@ -144,9 +196,9 @@ function summaryLine(tail: string): string {
 
 function authMessage(step: GitStep, output: string): string {
   if (GH_STEPS.has(step) && isSignedOut(output) && !AUTH.test(output)) {
-    return step === 'pr-create' ? CHAIN_TEXT.ghSignedOut : 'gh 还没有登录：在终端运行 gh auth login'
+    return step === 'pr-create' ? CHAIN_TEXT.ghSignedOut : pick(M).ghSignedOut
   }
-  return FETCH_STEPS.has(step) ? '拉取需要登录：在终端里运行一次 git fetch' : '推送需要登录：在终端里运行一次 git push'
+  return FETCH_STEPS.has(step) ? pick(M).fetchAuth : pick(M).pushAuth
 }
 
 /** What went wrong, from `output` (all main kept of the failed step: its stdout and the last 8 KiB of its stderr, in any order; not a few last lines). */
@@ -156,6 +208,7 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   // Read whole: a long hook or server message (GitHub's list of secrets) pushes the telling line out of the tail shown.
   const text = lines.join('\n')
   const fail = (kind: GitFailureKind, message: string, next: GitFailureNext): GitFailure => ({ kind, message, next, tail })
+  const m = pick(M)
 
   if (GH_STEPS.has(step)) {
     // gh's not-GitHub message ends with "gh auth login": read it before the login rules do.
@@ -167,41 +220,41 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   // runs whichever hook it was installed for: on a push that is pre-push.
   const frameworkHook = step === 'push' || step === 'pr-create' ? 'pre-push' : 'pre-commit'
   const hook = HUSKY.exec(text)?.[1] ?? NAMED_HOOK.exec(text)?.[1] ?? (PRE_COMMIT_FRAMEWORK.test(text) ? frameworkHook : null)
-  if (hook === 'pre-push') return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
-  if (hook && new RegExp(`^(?:${COMMIT_HOOKS})$`).test(hook)) return fail('commit-hook', `${hook} hook 没通过`, 'handoff')
+  if (hook === 'pre-push') return fail('pre-push-hook', m.prePushHook, 'handoff')
+  if (hook && new RegExp(`^(?:${COMMIT_HOOKS})$`).test(hook)) return fail('commit-hook', m.hookFailed(hook), 'handoff')
 
-  if (COMMIT_STEPS.has(step) && IDENTITY.test(text)) return fail('identity', 'git 还不知道提交者是谁：在终端里设置 user.name 和 user.email', null)
+  if (COMMIT_STEPS.has(step) && IDENTITY.test(text)) return fail('identity', m.identity, null)
 
   // The same key words mean a commit that could not be signed, or a push whose SSH key wants its passphrase.
-  if (COMMIT_STEPS.has(step) && SIGNING.test(text)) return fail('signing', '提交签名需要口令', null)
+  if (COMMIT_STEPS.has(step) && SIGNING.test(text)) return fail('signing', m.signing, null)
 
   // A commit, merge or rebase never reaches a remote: what a hook printed about networks, logins or remotes is the
   // hook's own business.
   if (COMMIT_STEPS.has(step)) {
     if (DIRTY.test(text)) return fail('dirty', CHAIN_TEXT.commitFirst, 'commit')
-    if (CONFLICTS.test(text)) return fail('conflicts', `和 ${context.base} 有冲突`, 'handoff')
+    if (CONFLICTS.test(text)) return fail('conflicts', m.conflicts(context.base), 'handoff')
     return unknown(step, tail, step === 'commit' ? 'handoff' : null, fail)
   }
 
   // A pre-push hook that printed no name: git refused before any ref was sent, so nothing was rejected. Read before the
   // remote classes, since the hook's own output (tests against a database, a login) can say anything.
   if ((step === 'push' || step === 'pr-create') && PUSH_FAILED.test(text) && !REMOTE_REJECTION.test(text) && !TRANSPORT.test(text)) {
-    return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
+    return fail('pre-push-hook', m.prePushHook, 'handoff')
   }
 
   // Refused for what the commits hold: a PR pushes the same commits, so 改为创建 PR does not help on any ref.
   const ruleRef = (): string => PROTECTED_REF.exec(text)?.[1] ?? REMOTE_REJECTED_REF.exec(text)?.[1] ?? context.base
-  if (PUSH_PROTECTION.test(text)) return fail('protected-branch', `${ruleRef()} 被推送保护拒绝：提交里有密钥`, null)
+  if (PUSH_PROTECTION.test(text)) return fail('protected-branch', m.pushProtection(ruleRef()), null)
   if (SIGNATURE_RULE.test(text) && (PROTECTED.test(text) || REMOTE_REJECTION.test(text))) {
-    return fail('protected-branch', `${ruleRef()} 被仓库规则拒绝：提交需要验证过的签名`, null)
+    return fail('protected-branch', m.signatureRule(ruleRef()), null)
   }
 
   if (PROTECTED.test(text)) {
     // 改为创建 PR only answers a refused push of the base: a rule on the session's own branch (a secret, unsigned
     // commits) refuses the PR's push of the same commits too, and a PR GitHub will not merge is already the way round.
     const ref = PROTECTED_REF.exec(text)?.[1] ?? REMOTE_REJECTED_REF.exec(text)?.[1] ?? null
-    if (ref !== null && ref !== context.base) return fail('protected-branch', `${ref} 被仓库规则拒绝`, null)
-    return fail('protected-branch', `${context.base} 受保护`, step === 'push' && ref === context.base ? 'create-pr' : null)
+    if (ref !== null && ref !== context.base) return fail('protected-branch', m.ruleRefused(ref), null)
+    return fail('protected-branch', m.protectedBase(context.base), step === 'push' && ref === context.base ? 'create-pr' : null)
   }
   if (NON_FF.test(text)) {
     // The base itself refused (exit A's push): 同步 brings the base into the branch, 拉取 moves the branch; neither
@@ -210,14 +263,14 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
     return fail('non-fast-forward', CHAIN_TEXT.remoteAhead, ref === context.base ? null : 'pull')
   }
   if (DIVERGED.test(text)) return fail('diverged', CHAIN_TEXT.diverged, 'handoff')
-  if (PRE_RECEIVE.test(text)) return fail('pre-receive-hook', '远程的 pre-receive hook 拒绝了推送', 'handoff')
+  if (PRE_RECEIVE.test(text)) return fail('pre-receive-hook', m.preReceive, 'handoff')
 
   if (AUTH.test(text) || (GH_STEPS.has(step) && isSignedOut(text))) return fail('auth', authMessage(step, text), null)
   if (NO_REMOTE.test(text)) return fail('no-remote', FETCH_STEPS.has(step) ? CHAIN_TEXT.noRemotePull : CHAIN_TEXT.noRemotePush, null)
-  if (NETWORK.test(text)) return fail('network', GH_STEPS.has(step) && !PUSH_FAILED.test(text) ? '连不上 GitHub：检查网络后重试' : '连不上远程仓库：检查网络后重试', null)
+  if (NETWORK.test(text)) return fail('network', GH_STEPS.has(step) && !PUSH_FAILED.test(text) ? m.noGitHub : m.noRemoteHost, null)
 
   if (DIRTY.test(text)) return fail('dirty', CHAIN_TEXT.commitFirst, 'commit')
-  if (CONFLICTS.test(text)) return fail('conflicts', `和 ${context.base} 有冲突`, 'handoff')
+  if (CONFLICTS.test(text)) return fail('conflicts', m.conflicts(context.base), 'handoff')
 
   return unknown(step, tail, null, fail)
 }
@@ -228,6 +281,8 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
  */
 function unknown(step: GitStep, tail: string, next: GitFailureNext, fail: (kind: GitFailureKind, message: string, next: GitFailureNext) => GitFailure): GitFailure {
   const line = summaryLine(tail)
-  const word = /[A-Za-z0-9]$/.test(STEP_WORD[step]) ? `${STEP_WORD[step]} ` : STEP_WORD[step]
-  return fail('unknown', line ? `${word}失败：${line}` : `${word}失败`, next)
+  const m = pick(M)
+  const stepWord = m.stepWord[step]
+  const word = /[A-Za-z0-9]$/.test(stepWord) ? `${stepWord} ` : stepWord
+  return fail('unknown', line ? m.failedWith(word, line) : m.failed(word), next)
 }

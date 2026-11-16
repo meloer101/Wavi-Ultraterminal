@@ -2,6 +2,7 @@
 // v1.144, §6.16). Every step reads the screen before the next key; anything unexpected backs out with Esc. Only while
 // the agent is idle at its input line: mid-turn its pickers swallow keys and a second question could take them.
 import { maySendNow } from '@shared/dispatch'
+import { defineMessages, pick } from '@shared/i18n'
 import { remoteFail, type RemoteResult } from '@shared/remote'
 import { SLASH_KEY_GAP_MS, SUBMIT_KEY, sendRefusal } from '@shared/send-protocol'
 import type { SettingKind } from '@shared/session-settings'
@@ -23,6 +24,45 @@ import { useSessionMeta } from '../session-meta/store'
 import { getSendIo, readViewport } from '../terminal/registry'
 import { typingIn } from '../terminal/typing'
 
+const M = defineMessages({
+  zh: {
+    afterTurn: '这一轮结束后可以改',
+    notReady: 'agent 还没准备好',
+    unsentText: '终端里有没发出的文字',
+    typingOnMac: 'Mac 上正在输入',
+    noModel: '没有这个模型',
+    modelPickerClosed: '模型选择没有打开',
+    modelNotListed: 'Claude 没有列出这个模型',
+    modelNotSelected: '没有选中这个模型',
+    modelNotChanged: '模型没有换成',
+    noEffort: '没有这个思考程度',
+    effortPickerClosed: '思考程度没有打开',
+    effortUnread: '没有读到现在的思考程度',
+    effortNotChanged: '思考程度没有换成',
+    noPermission: '没有这个权限',
+    permissionUnread: '没有读到现在的权限',
+    permissionMissing: 'Claude 的权限里没有这一项'
+  },
+  en: {
+    afterTurn: 'Can change after this turn',
+    notReady: 'The agent isn’t ready yet',
+    unsentText: 'There’s unsent text in the terminal',
+    typingOnMac: 'Someone is typing on the Mac',
+    noModel: 'No such model',
+    modelPickerClosed: 'The model picker didn’t open',
+    modelNotListed: 'Claude doesn’t list this model',
+    modelNotSelected: 'Couldn’t select this model',
+    modelNotChanged: 'The model didn’t change',
+    noEffort: 'No such effort',
+    effortPickerClosed: 'The effort picker didn’t open',
+    effortUnread: 'Couldn’t read the current effort',
+    effortNotChanged: 'The effort didn’t change',
+    noPermission: 'No such permission',
+    permissionUnread: 'Couldn’t read the current permission',
+    permissionMissing: 'Claude’s permissions don’t include this one'
+  }
+})
+
 /** What Claude prints once a pick is kept to the session (2.1.319: "… for this session only", "(this session only)"). */
 const SESSION_ONLY = /this session only/
 
@@ -39,11 +79,11 @@ async function screenWhere(sessionId: string, test: (screen: string) => boolean,
 
 /** Why the terminal cannot take keys now, or null. */
 export function claudeBusy(session: Session): string | null {
-  if (session.status === 'running' || session.status === 'needs_you') return '这一轮结束后可以改'
-  if (session.phase !== 'ready') return 'agent 还没准备好'
-  if (typingIn(session.id).draft) return '终端里有没发出的文字'
+  if (session.status === 'running' || session.status === 'needs_you') return pick(M).afterTurn
+  if (session.phase !== 'ready') return pick(M).notReady
+  if (typingIn(session.id).draft) return pick(M).unsentText
   // Someone is typing at the Mac: a key of theirs inside a picker could save a default.
-  if (!maySendNow({ status: session.status, ...typingIn(session.id), now: Date.now() })) return 'Mac 上正在输入'
+  if (!maySendNow({ status: session.status, ...typingIn(session.id), now: Date.now() })) return pick(M).typingOnMac
   return sendRefusal(session.kind, readViewport(session.id))
 }
 
@@ -63,12 +103,12 @@ async function change(session: Session, kind: SettingKind, value: string): Promi
   const remember = (settings: { model?: string; effort?: string; permission?: string }) => useSessionMeta.getState().setSettings(session.id, settings)
 
   if (kind === 'model') {
-    if (!(CLAUDE_MODELS as readonly string[]).includes(value)) return remoteFail('没有这个模型')
+    if (!(CLAUDE_MODELS as readonly string[]).includes(value)) return remoteFail(pick(M).noModel)
     io.write(KEY.modelPicker)
     const picker = await screenWhere(session.id, (s) => modelPickerRows(s) !== null)
-    if (!picker) return backOut('模型选择没有打开')
+    if (!picker) return backOut(pick(M).modelPickerClosed)
     const moves = modelPickerMoves(picker, value)
-    if (moves === null) return backOut('Claude 没有列出这个模型')
+    if (moves === null) return backOut(pick(M).modelNotListed)
     io.write(moves)
     // The cursor must be on the model before `s`: `s` keeps the pick to this session; Enter or a number would save it
     // as the default.
@@ -76,40 +116,40 @@ async function change(session: Session, kind: SettingKind, value: string): Promi
       const rows = modelPickerRows(s)
       return rows !== null && rows.names[rows.cursor] === value
     })
-    if (!onTarget) return backOut('没有选中这个模型')
+    if (!onTarget) return backOut(pick(M).modelNotSelected)
     io.write(KEY.sessionOnly)
     const after = await screenWhere(session.id, (s) => isSwitchModelPrompt(s) || SESSION_ONLY.test(s))
     if (after && isSwitchModelPrompt(after)) io.write('1')
-    if (!(await screenWhere(session.id, (s) => SESSION_ONLY.test(s) && !isSwitchModelPrompt(s)))) return backOut('模型没有换成')
+    if (!(await screenWhere(session.id, (s) => SESSION_ONLY.test(s) && !isSwitchModelPrompt(s)))) return backOut(pick(M).modelNotChanged)
     remember({ model: value })
     return { ok: true }
   }
 
   if (kind === 'effort') {
-    if (!(CLAUDE_EFFORTS as readonly string[]).includes(value)) return remoteFail('没有这个思考程度')
+    if (!(CLAUDE_EFFORTS as readonly string[]).includes(value)) return remoteFail(pick(M).noEffort)
     io.write('/')
     await sleep(SLASH_KEY_GAP_MS)
     io.write('effort')
     await sleep(SLASH_KEY_GAP_MS)
     io.write(SUBMIT_KEY)
     const picker = await screenWhere(session.id, (s) => effortOnPicker(s) !== null)
-    if (!picker) return backOut('思考程度没有打开')
+    if (!picker) return backOut(pick(M).effortPickerClosed)
     const moves = effortPickerMoves(picker, value)
-    if (moves === null) return backOut('没有读到现在的思考程度')
+    if (moves === null) return backOut(pick(M).effortUnread)
     io.write(moves)
     await sleep(200)
-    if (effortOnPicker(readViewport(session.id)) !== value) return backOut('思考程度没有换成')
+    if (effortOnPicker(readViewport(session.id)) !== value) return backOut(pick(M).effortNotChanged)
     io.write(KEY.sessionOnly)
-    if (!(await screenWhere(session.id, (s) => effortOnPicker(s) === null && SESSION_ONLY.test(s)))) return backOut('思考程度没有换成')
+    if (!(await screenWhere(session.id, (s) => effortOnPicker(s) === null && SESSION_ONLY.test(s)))) return backOut(pick(M).effortNotChanged)
     remember({ effort: value })
     return { ok: true }
   }
 
   // Permission: shift+tab steps through the cycle; the footer says where it is after each step.
-  if (!(CLAUDE_PERMISSIONS as readonly string[]).includes(value)) return remoteFail('没有这个权限')
+  if (!(CLAUDE_PERMISSIONS as readonly string[]).includes(value)) return remoteFail(pick(M).noPermission)
   for (let step = 0; step <= CLAUDE_PERMISSIONS.length; step++) {
     const now = claudePermissionOnScreen(readViewport(session.id))
-    if (now === null) return remoteFail('没有读到现在的权限')
+    if (now === null) return remoteFail(pick(M).permissionUnread)
     if (now === value) {
       remember({ permission: value })
       return { ok: true }
@@ -120,5 +160,5 @@ async function change(session: Session, kind: SettingKind, value: string): Promi
   }
   const now = claudePermissionOnScreen(readViewport(session.id))
   if (now) remember({ permission: now })
-  return remoteFail('Claude 的权限里没有这一项')
+  return remoteFail(pick(M).permissionMissing)
 }

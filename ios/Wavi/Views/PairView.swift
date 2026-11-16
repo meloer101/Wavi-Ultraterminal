@@ -40,7 +40,7 @@ struct PairView: View {
       .frame(maxWidth: .infinity)
       Group {
         if busy && !typing {
-          Notice(tone: .info, message: pairingWith.map { "正在和 \($0) 配对" } ?? "正在配对")
+          Notice(tone: .info, message: pairingWith.map { String(localized: "正在和 \($0) 配对") } ?? String(localized: "正在配对"))
         } else if let error, !typing {
           Notice(tone: .danger, message: error)
         } else {
@@ -63,15 +63,15 @@ struct PairView: View {
     .sheet(isPresented: $typing) { typed }
     // Another link opened: ask about that one.
     .onChange(of: offer?.code) { asked = false }
-    .alert(offer.map { "和「\($0.name)」配对？" } ?? "", isPresented: Binding(get: { offer != nil && !asked }, set: { if !$0 && !asked { offer = nil } }), presenting: offer) { offer in
+    .alert(offer.map { String(localized: "和「\($0.name)」配对？") } ?? "", isPresented: Binding(get: { offer != nil && !asked }, set: { if !$0 && !asked { offer = nil } }), presenting: offer) { offer in
       Button("取消", role: .cancel) { self.offer = nil; if replacing != nil { dismiss() } }
       Button("配对") {
         asked = true
         run { try await Link.pair(offer: offer, phoneName: AppModel.phoneName) }
       }
     } message: { offer in
-      let hosts = offer.urls.map { $0.replacing(/^wss?:\/\//, with: "") }.joined(separator: "、")
-      Text(replacing.map { "\(hosts)\n会替换现在配对的「\($0)」" } ?? hosts)
+      let hosts = offer.urls.map { $0.replacing(/^wss?:\/\//, with: "") }.joined(separator: String(localized: "、", comment: "Between the addresses of a Mac"))
+      Text(replacing.map { String(localized: "\(hosts)\n会替换现在配对的「\($0)」") } ?? hosts)
     }
   }
 
@@ -80,10 +80,10 @@ struct PairView: View {
     let bare = code.uppercased().filter { $0.isLetter || $0.isNumber }
     return VStack(alignment: .leading, spacing: 16) {
       Text("输入配对码").font(.ui(.title2)).foregroundStyle(Color.textPrimary)
-      field("Mac 的地址") {
+      field(String(localized: "Mac 的地址")) {
         TextField("100.101.1.2", text: $address).font(.mono()).keyboardType(.URL)
       }
-      field("配对码") {
+      field(String(localized: "配对码")) {
         TextField("4KX-92Q", text: $code).font(.mono(.title2)).textInputAutocapitalization(.characters)
           .onChange(of: code) { _, now in
             let letters = now.uppercased().filter { $0.isLetter || $0.isNumber }
@@ -121,7 +121,7 @@ struct PairView: View {
     guard !busy, handled != text else { return }
     handled = text
     guard let offer = Link.parseOffer(text) else {
-      error = "这不是 Wavi 的配对二维码"
+      error = String(localized: "这不是 Wavi 的配对二维码")
       return
     }
     pairingWith = offer.name
@@ -140,7 +140,7 @@ struct PairView: View {
         offer = nil
         if replacing != nil { dismiss() }
       } catch {
-        self.error = (error as? PairError)?.message ?? "配对没有成功"
+        self.error = (error as? PairError)?.message ?? String(localized: "配对没有成功")
         handled = nil
         pairingWith = nil
       }
@@ -195,7 +195,7 @@ struct QRScanner: UIViewControllerRepresentable {
       AVCaptureDevice.requestAccess(for: .video) { granted in
         DispatchQueue.main.async {
           if granted { self.setUp() } else {
-            self.say("在设置里允许 Wavi 使用相机，或者输入配对码")
+            self.say(String(localized: "在设置里允许 Wavi 使用相机，或者输入配对码"))
             self.onBlocked?(true)
           }
         }
@@ -215,7 +215,7 @@ struct QRScanner: UIViewControllerRepresentable {
 
     private func setUp() {
       guard let camera = AVCaptureDevice.default(for: .video), let input = try? AVCaptureDeviceInput(device: camera), session.canAddInput(input) else {
-        say("这台设备没有相机，输入配对码")
+        say(String(localized: "这台设备没有相机，输入配对码"))
         onBlocked?(false)
         return
       }

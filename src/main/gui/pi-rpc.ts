@@ -8,6 +8,38 @@
 import { effortLabel, permissionOption, type GuiAnswer, type GuiCommand, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
 import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, keptImages, lineDiff, rel, toolArg, type ChatItem, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { clip, isRec, str, tail, type Rec } from './driver'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    model: '模型',
+    effort: '推理强度',
+    off: '关',
+    yes: '是',
+    no: '否',
+    deny: '拒绝',
+    alwaysAllow: '总是允许',
+    allow: '允许',
+    interrupted: '已中断',
+    piError: 'Pi 出错了',
+    retrying: (attempt: string, why: string) => `重试中（第 ${attempt} 次）：${why}`,
+    waiting: 'Pi 在等你回答'
+  },
+  en: {
+    model: 'Model',
+    effort: 'Effort',
+    off: 'Off',
+    yes: 'Yes',
+    no: 'No',
+    deny: 'Deny',
+    alwaysAllow: 'Always allow',
+    allow: 'Allow',
+    interrupted: 'Interrupted',
+    piError: 'Pi hit an error',
+    retrying: (attempt: string, why: string) => `Retrying (attempt ${attempt}): ${why}`,
+    waiting: 'Pi is waiting for your answer'
+  }
+})
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -66,15 +98,15 @@ export function piConfig(models: readonly unknown[], picks: PiPicks, levels?: re
   })
   const config: GuiConfigOption[] = []
   const model = picks.model && values.some((v) => v.value === picks.model) ? picks.model : values[0]?.value
-  if (model) config.push({ id: 'model', category: 'model', label: '模型', current: model, values })
+  if (model) config.push({ id: 'model', category: 'model', label: pick(M).model, current: model, values })
   const offered = levels ?? piThinkingLevels(list.find((m) => piModelValue(m) === model))
   if (offered.length > 0) {
     config.push({
       id: 'effort',
       category: 'thought_level',
-      label: '推理强度',
+      label: pick(M).effort,
       current: picks.effort && offered.includes(picks.effort) ? picks.effort : offered.includes('high') ? 'high' : offered[0]!,
-      values: offered.map((l) => ({ value: l, label: effortLabel(l, l === 'off' ? '关' : undefined) }))
+      values: offered.map((l) => ({ value: l, label: effortLabel(l, l === 'off' ? pick(M).off : undefined) }))
     })
   }
   config.push(permissionOption(PI_LEVELS, picks.permission))
@@ -157,14 +189,12 @@ export function waviConfirm(request: Rec): { tool: string; input: unknown } | nu
 
 /** Methods that wait for an `extension_ui_response` (rpc-mode.ts); notify / setStatus / setWidget / setTitle do not. */
 const DIALOGS: ReadonlySet<string> = new Set(['confirm', 'select', 'input', 'editor'])
-const YES = '是'
-const NO = '否'
 const OPTION_MAX = 300
 
-const PERMISSION_OPTIONS: GuiPermissionOption[] = [
-  { id: 'reject', label: '拒绝', kind: 'reject_once' },
-  { id: 'always', label: '总是允许', kind: 'allow_always' },
-  { id: 'allow', label: '允许', kind: 'allow_once' }
+const permissionOptions = (): GuiPermissionOption[] => [
+  { id: 'reject', label: pick(M).deny, kind: 'reject_once' },
+  { id: 'always', label: pick(M).alwaysAllow, kind: 'allow_always' },
+  { id: 'allow', label: pick(M).allow, kind: 'allow_once' }
 ]
 
 /** The same call again (T3 Code's sessionApprovals key): 总是允许 lets it through for the rest of the session. */
@@ -190,7 +220,7 @@ export function piAnswerResponse(pending: PiPending, answer: GuiAnswer): Rec | u
   if (answer.kind !== 'question') return undefined
   const value = pending.question !== undefined ? answer.answers[pending.question] : undefined
   if (value === undefined) return { cancelled: true }
-  if (pending.method === 'confirm') return { confirmed: value === YES }
+  if (pending.method === 'confirm') return { confirmed: value === M.zh.yes || value === M.en.yes }
   // The option whose clipped label was picked, as the extension wrote it; free text as typed.
   return { value: pending.options?.find((o) => clip(o, OPTION_MAX) === value) ?? value }
 }
@@ -272,8 +302,8 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now, ke
     }
     if (role === 'assistant') {
       const events = flush()
-      if (m.stopReason === 'aborted') events.push(system('已中断'))
-      else if (m.stopReason === 'error') events.push(system(str(m.errorMessage) ?? 'Pi 出错了'))
+      if (m.stopReason === 'aborted') events.push(system(pick(M).interrupted))
+      else if (m.stopReason === 'error') events.push(system(str(m.errorMessage) ?? pick(M).piError))
       return events
     }
     if (role === 'custom' && m.display !== false) {
@@ -315,7 +345,7 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now, ke
           return [put(known.item.id, known.item)]
         }
         case 'auto_retry_start':
-          return [system(`重试中（第 ${typeof e.attempt === 'number' ? e.attempt : '?'} 次）：${str(e.errorMessage) ?? ''}`)]
+          return [system(pick(M).retrying(typeof e.attempt === 'number' ? String(e.attempt) : '?', str(e.errorMessage) ?? ''))]
         case 'agent_end': {
           if (e.willRetry === true) return []
           const events = flush()
@@ -339,12 +369,12 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now, ke
         const name = piToolName(call.tool)
         const diff = diffOfArgs(call.tool, call.input, cwd)
         const command = call.tool === 'bash' && isRec(call.input) ? str(call.input.command) : undefined
-        prompt = { kind: 'permission', id, tool: name, detail: clip(command ?? toolArg(name, call.input, cwd), CHAT_LIMITS.input), options: PERMISSION_OPTIONS, ...(diff ? { diff } : {}) }
+        prompt = { kind: 'permission', id, tool: name, detail: clip(command ?? toolArg(name, call.input, cwd), CHAT_LIMITS.input), options: permissionOptions(), ...(diff ? { diff } : {}) }
         waiting.set(id, { id, method, call })
       } else {
         const title = str(r.title) ?? ''
-        const question = clip([title, method === 'confirm' ? (str(r.message) ?? '') : ''].filter(Boolean).join('\n\n') || 'Pi 在等你回答', 2_000)
-        const options = method === 'confirm' ? [YES, NO] : method === 'select' && Array.isArray(r.options) ? r.options.filter((o): o is string => typeof o === 'string') : []
+        const question = clip([title, method === 'confirm' ? (str(r.message) ?? '') : ''].filter(Boolean).join('\n\n') || pick(M).waiting, 2_000)
+        const options = method === 'confirm' ? [pick(M).yes, pick(M).no] : method === 'select' && Array.isArray(r.options) ? r.options.filter((o): o is string => typeof o === 'string') : []
         prompt = { kind: 'question', id, questions: [{ question, options: options.map((label) => ({ label: clip(label, OPTION_MAX) })), multiSelect: false }] }
         waiting.set(id, { id, method, question, ...(method === 'select' ? { options } : {}) })
       }
@@ -424,8 +454,8 @@ export function piHistoryItems(messages: readonly Rec[], cwd: string, keep?: Kee
           items.push({ ...toolItem(str(block.id)!, at, str(block.name)!, block.arguments, cwd), state: 'ok' })
         }
       }
-      if (m.stopReason === 'aborted') items.push({ kind: 'system', id: `s${seq++}`, at, text: '已中断' })
-      else if (m.stopReason === 'error') items.push({ kind: 'system', id: `s${seq++}`, at, text: clip(str(m.errorMessage) ?? 'Pi 出错了', 300) })
+      if (m.stopReason === 'aborted') items.push({ kind: 'system', id: `s${seq++}`, at, text: pick(M).interrupted })
+      else if (m.stopReason === 'error') items.push({ kind: 'system', id: `s${seq++}`, at, text: clip(str(m.errorMessage) ?? pick(M).piError, 300) })
     } else if (m.role === 'toolResult') {
       const call = calls.get(str(m.toolCallId) ?? '')
       const item = call ? items[call.index] : undefined

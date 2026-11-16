@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, nothingToMerge, pushSwitchLabel, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
+import * as model from './model'
+import { agentSessionFor, checkLines, conflictPrompt, MAX_PROMPT_CHARS, nothingToMerge, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
 import { turnCheckView } from '@shared/turn-checks'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
@@ -82,19 +83,6 @@ describe('checkLines', () => {
 })
 
 describe('options', () => {
-  it('rebase is off with uncommitted changes', () => {
-    expect(methodOptions(check()).find((o) => o.value === 'rebase')?.disabled).toBe(false)
-    expect(methodOptions(check({ uncommitted: 1 })).find((o) => o.value === 'rebase')?.disabled).toBe(true)
-    expect(methodOptions(check({ uncommitted: null })).find((o) => o.value === 'rebase')?.disabled).toBe(true)
-  })
-
-  it('keeps the worktree when it has work or a running session', () => {
-    expect(removeBlocker(check(), [{ status: 'done_unread' }], false)).toBeNull()
-    expect(removeBlocker(check(), [], true)).toMatch('主目录')
-    expect(removeBlocker(check({ uncommitted: 1 }), [], false)).toMatch('未提交')
-    expect(removeBlocker(check(), [{ status: 'running' }], false)).toMatch('运行')
-  })
-
   it('hands conflicts to the active agent session, else the first one', () => {
     const sessions = [
       { id: 's', kind: 'shell' as const },
@@ -137,25 +125,11 @@ describe('texts', () => {
     expect(prompt).toContain('file-0.tsx')
   })
 
-  it('result lines: commit, push, removal', () => {
-    expect(resultLines({ ok: true, commit: 'abcdef1234', push: '' }, 'main', 'removed').map((l) => l.text)).toEqual([
-      '已合并到 main',
-      '已推送到 origin/main',
-      '已删除 worktree，分支保留'
-    ])
-    expect(resultLines({ ok: true, commit: 'abcdef1234', push: 'rejected' }, 'main', null)[1]).toEqual({ tone: 'warn', text: '推送失败：rejected' })
-  })
-
-  // Review finding 39: the switch and the result line name the remote the base is pushed to, not a literal origin.
-  it('the push switch and the result line name the precheck’s remote', () => {
-    expect(pushSwitchLabel(check({ pushRemote: 'fork' }))).toBe('合并后推送到 fork')
-    // R70: with no remote the switch does not promise one (the note under it says there is none).
-    expect(pushSwitchLabel(check({ pushRemote: null, hasOrigin: false }))).toBe('合并后推送')
-    expect(resultLines({ ok: true, commit: 'abcdef1234', push: '' }, 'main', null, 'github')[1]).toEqual({ tone: 'ok', text: '已推送到 github/main' })
-  })
-
-  it('failure text says when a rebase already happened', () => {
-    expect(failureText({ ok: false, reason: 'git', message: 'boom', rebased: true }, check())).toBe('没能合并（jacob/nav 已经变基到最新的 main 上）：boom')
+  // 合并 is local only: the sheet merges and says so; no push, no worktree removal, no switches for them.
+  it('result lines: the merge alone, no push or removal', () => {
+    expect(resultLines({ commit: 'abcdef1234' }, 'main')).toEqual([{ tone: 'ok', text: '已合并到 main', meta: 'abcdef1' }])
+    expect(model).not.toHaveProperty('pushSwitchLabel')
+    expect(model).not.toHaveProperty('removeBlocker')
   })
 })
 

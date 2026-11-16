@@ -7,6 +7,8 @@ import { Copy } from 'lucide-react'
 import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
 import { SHORTCUTS } from '@shared/shortcuts'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { openProjectInteractive, openProjectPath } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
@@ -19,15 +21,47 @@ import { entranceTracks, type EntranceStart } from './mark-entrance'
 import { MARK_SEGMENTS, MARK_VIEW_BOX } from './mark-segments'
 import styles from './EmptyMain.module.css'
 
-/** Picked once per launch, so the line does not change every time the page reappears. */
-const QUOTE = pickQuote()
+/** Picked once per launch, so the line does not change every time the page reappears (in either language). */
+const QUOTE_DRAW = Math.random()
 
-const HINTS = [
-  [SHORTCUTS['command-palette'], '跳转到'],
-  [SHORTCUTS['toggle-overview'], '总览'],
-  [SHORTCUTS['next-attention'], '下一个等你处理'],
-  [SHORTCUTS['open-project'], '打开项目']
-] as const
+const M = defineMessages({
+  zh: {
+    jumpTo: '跳转到',
+    board: '看板',
+    nextAttention: '下一个等你处理',
+    openProjectHint: '打开项目',
+    installAgent: '安装 agent',
+    noAgent: '还没有装任何 agent，选一个装上：',
+    chooseAgent: '选择 agent',
+    copyInstall: (name: string) => `复制 ${name} 安装命令`,
+    dropLine: '松开就打开这个文件夹',
+    shortcuts: '快捷键',
+    openProject: '打开项目…',
+    dropHint: '或把文件夹拖进窗口'
+  },
+  en: {
+    jumpTo: 'Jump to',
+    board: 'Board',
+    nextAttention: 'Next that needs you',
+    openProjectHint: 'Open project',
+    installAgent: 'Install an agent',
+    noAgent: 'No agent installed yet. Pick one to install:',
+    chooseAgent: 'Choose an agent',
+    copyInstall: (name: string) => `Copy the ${name} install command`,
+    dropLine: 'Release to open this folder',
+    shortcuts: 'Shortcuts',
+    openProject: 'Open project…',
+    dropHint: 'or drag a folder into the window'
+  }
+})
+
+const hints = (m: (typeof M)['zh']) =>
+  [
+    [SHORTCUTS['command-palette'], m.jumpTo],
+    [SHORTCUTS['toggle-overview'], m.board],
+    [SHORTCUTS['next-attention'], m.nextAttention],
+    [SHORTCUTS['open-project'], m.openProjectHint]
+  ] as const
 
 function useAgentAvailability(): AgentAvailability | null {
   const [agents, setAgents] = useState<AgentAvailability | null>(null)
@@ -165,15 +199,16 @@ function droppedFolder(e: DragEvent): string | null {
 }
 
 function InstallAgent() {
+  const m = useMessages(M)
   const [selected, setSelected] = useState(INSTALLABLE_AGENTS[0]!)
   return (
-    <section className={styles.install} aria-label="安装 agent" data-testid="install-agent" data-entrance-rest>
+    <section className={styles.install} aria-label={m.installAgent} data-testid="install-agent" data-entrance-rest>
       <p className={styles.installMessage}>
         <StatusGlyph status="needs_you" />
-        还没有装任何 agent，选一个装上：
+        {m.noAgent}
       </p>
       <Segmented
-        label="选择 agent"
+        label={m.chooseAgent}
         variant="plain"
         className={styles.picker}
         value={selected.id}
@@ -182,7 +217,7 @@ function InstallAgent() {
       />
       <div className={styles.command}>
         <code>{selected.command}</code>
-        <IconButton label={`复制 ${selected.name} 安装命令`} onClick={() => void navigator.clipboard.writeText(selected.command).catch(() => {})}>
+        <IconButton label={m.copyInstall(selected.name)} onClick={() => void navigator.clipboard.writeText(selected.command).catch(() => {})}>
           <Copy size={16} strokeWidth={1.75} />
         </IconButton>
       </div>
@@ -191,6 +226,8 @@ function InstallAgent() {
 }
 
 export function EmptyMain() {
+  const m = useMessages(M)
+  const quote = pickQuote(() => QUOTE_DRAW)
   const hasProjects = useWorkspace((s) => s.projects.length > 0)
   const agents = useAgentAvailability()
   const name = useUserName()
@@ -222,6 +259,7 @@ export function EmptyMain() {
       ref={cardRef}
       className={styles.empty}
       data-testid="empty-main"
+      data-glass-card=""
       data-dragging={dragging}
       onDragOver={onDragOver}
       onDragLeave={() => setDragging(false)}
@@ -238,18 +276,18 @@ export function EmptyMain() {
         </h2>
         <p className={styles.quote} data-entrance-rest>
           {dragging ? (
-            <span className={styles.dropLine}>松开就打开这个文件夹</span>
+            <span className={styles.dropLine}>{m.dropLine}</span>
           ) : (
             <>
-              {QUOTE.text}
-              {QUOTE.by && <span className={styles.by}>— {QUOTE.by}</span>}
+              {quote.text}
+              {quote.by && <span className={styles.by}>— {quote.by}</span>}
             </>
           )}
         </p>
 
         {hasProjects ? (
-          <ul className={styles.hints} aria-label="快捷键" data-entrance-rest>
-            {HINTS.map(([accelerator, label]) => (
+          <ul className={styles.hints} aria-label={m.shortcuts} data-entrance-rest>
+            {hints(m).map(([accelerator, label]) => (
               <li key={label}>
                 <kbd className={styles.key}>{formatAccelerator(accelerator)}</kbd>
                 {label}
@@ -259,9 +297,10 @@ export function EmptyMain() {
         ) : (
           <div className={styles.next} data-entrance-rest>
             <button type="button" className={styles.open} onClick={() => void openProjectInteractive(kind)}>
-              打开项目…<kbd className={styles.kbd}>{formatAccelerator(SHORTCUTS['open-project'])}</kbd>
+              {m.openProject}
+              <kbd className={styles.kbd}>{formatAccelerator(SHORTCUTS['open-project'])}</kbd>
             </button>
-            <span className={styles.dropHint}>或把文件夹拖进窗口</span>
+            <span className={styles.dropHint}>{m.dropHint}</span>
           </div>
         )}
 

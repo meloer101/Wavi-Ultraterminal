@@ -1,11 +1,33 @@
 // What the 文件 view can do with an entry (PRD F17): the right-click menu (Figma 13D) and its shortcuts.
 import { AtSign, Code, Copy, File, FolderOpen } from 'lucide-react'
 import type { SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../../ui/menu'
 import { FILE_SHORTCUTS, isFileAction, type FileAction } from './keys'
 import { setNotice, showPreview } from './store'
+
+const M = defineMessages({
+  zh: {
+    insertFailed: (reason: string) => `没有插入路径：${reason}`,
+    notInserted: '没有放进终端',
+    preview: '预览',
+    openInEditor: '用默认编辑器打开',
+    reveal: '在 Finder 中显示',
+    insert: '插入路径到终端',
+    copy: '复制相对路径'
+  },
+  en: {
+    insertFailed: (reason: string) => `Path not inserted: ${reason}`,
+    notInserted: "Couldn't put it into the terminal",
+    preview: 'Preview',
+    openInEditor: 'Open in default editor',
+    reveal: 'Show in Finder',
+    insert: 'Insert path into terminal',
+    copy: 'Copy relative path'
+  }
+})
 
 export interface FileTarget {
   root: string
@@ -27,7 +49,7 @@ export function openInEditor(target: FileTarget): void {
 export function insertPath(target: FileTarget): void {
   setNotice(target.root, null)
   void insertIntoTerminal(target.sessionId, `@${target.path}${target.dir ? '/' : ''} `)
-    .catch((error: unknown) => setNotice(target.root, `没有插入路径：${error instanceof Error ? error.message : '没有放进终端'}`))
+    .catch((error: unknown) => setNotice(target.root, pick(M).insertFailed(error instanceof Error ? error.message : pick(M).notInserted)))
     .finally(() => useWorkspace.getState().requestTerminalFocus())
 }
 
@@ -52,14 +74,15 @@ export function runFileAction(action: FileAction, target: FileTarget): void {
 }
 
 export function fileMenuEntries(target: Pick<FileTarget, 'dir'>, { withPreview = true } = {}): MenuEntry[] {
+  const m = pick(M)
   return [
     ...(withPreview
-      ? [{ type: 'item' as const, id: 'preview', label: '预览', icon: File, accelerator: FILE_SHORTCUTS.preview, enabled: !target.dir }]
+      ? [{ type: 'item' as const, id: 'preview', label: m.preview, icon: File, accelerator: FILE_SHORTCUTS.preview, enabled: !target.dir }]
       : []),
-    { type: 'item', id: 'open', label: '用默认编辑器打开', icon: Code, accelerator: FILE_SHORTCUTS.open },
-    { type: 'item', id: 'reveal', label: '在 Finder 中显示', icon: FolderOpen, accelerator: FILE_SHORTCUTS.reveal },
-    { type: 'item', id: 'insert', label: '插入路径到终端', icon: AtSign, accelerator: FILE_SHORTCUTS.insert },
-    { type: 'item', id: 'copy', label: '复制相对路径', icon: Copy, accelerator: FILE_SHORTCUTS.copy }
+    { type: 'item', id: 'open', label: m.openInEditor, icon: Code, accelerator: FILE_SHORTCUTS.open },
+    { type: 'item', id: 'reveal', label: m.reveal, icon: FolderOpen, accelerator: FILE_SHORTCUTS.reveal },
+    { type: 'item', id: 'insert', label: m.insert, icon: AtSign, accelerator: FILE_SHORTCUTS.insert },
+    { type: 'item', id: 'copy', label: m.copy, icon: Copy, accelerator: FILE_SHORTCUTS.copy }
   ]
 }
 

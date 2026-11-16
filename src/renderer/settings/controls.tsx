@@ -3,7 +3,28 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { normalizeHex } from '@shared/color'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './controls.module.css'
+
+const M = defineMessages({
+  zh: {
+    reset: '恢复默认',
+    preview: '预览',
+    searchOrType: '搜索或输入名称',
+    noMatches: '没有匹配项',
+    useTyped: (typed: string) => `使用 “${typed}”`,
+    picker: (label: string) => `${label}（取色器）`
+  },
+  en: {
+    reset: 'Restore defaults',
+    preview: 'Preview',
+    searchOrType: 'Search or type a name',
+    noMatches: 'No matches',
+    useTyped: (typed: string) => `Use “${typed}”`,
+    picker: (label: string) => `${label} (color picker)`
+  }
+})
 
 const COMMIT_DELAY_MS = 50
 
@@ -74,6 +95,7 @@ export function PreviewPage({
   isDefault: boolean
   onReset: () => void
 }) {
+  const m = useMessages(M)
   return (
     <div className={styles.page}>
       <div className={styles.form}>
@@ -81,12 +103,12 @@ export function PreviewPage({
         {children}
         <div className={styles.footer}>
           <Button disabled={isDefault} onClick={onReset}>
-            恢复默认
+            {m.reset}
           </Button>
         </div>
       </div>
       <div className={styles.previewColumn}>
-        <h2 className={styles.previewTitle}>预览</h2>
+        <h2 className={styles.previewTitle}>{m.preview}</h2>
         {preview}
         {caption !== undefined && (
           <p className={styles.caption} data-testid="preview-caption">
@@ -237,8 +259,8 @@ export function Select({
   onChange,
   label,
   allowCustom = false,
-  placeholder = '搜索或输入名称',
-  emptyText = '没有匹配项',
+  placeholder: placeholderProp,
+  emptyText: emptyTextProp,
   displayLabel
 }: {
   value: string
@@ -252,6 +274,9 @@ export function Select({
   /** Style/label for the closed button when `value` is not an option. */
   displayLabel?: SelectOption
 }) {
+  const m = useMessages(M)
+  const placeholder = placeholderProp ?? m.searchOrType
+  const emptyText = emptyTextProp ?? m.noMatches
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -417,7 +442,7 @@ export function Select({
           </div>
           {canUseTyped && (
             <button type="button" className={styles.menuCustom} onClick={() => choose(typed)}>
-              使用 “{typed}”
+              {m.useTyped(typed)}
             </button>
           )}
         </div>
@@ -433,6 +458,7 @@ export function Select({
  * that is not a color is dropped when the field loses focus. Disabled it still shows the color in effect.
  */
 export function HexField({ value, onCommit, label, disabled = false }: { value: string; onCommit: (value: string) => void; label: string; disabled?: boolean }) {
+  const m = useMessages(M)
   const { shown, push } = useDraft(value, onCommit)
   const [typed, setTyped] = useState<string | null>(null)
   const finish = (): void => {
@@ -448,7 +474,7 @@ export function HexField({ value, onCommit, label, disabled = false }: { value: 
           className={styles.hexPicker}
           value={shown}
           disabled={disabled}
-          aria-label={`${label}（取色器）`}
+          aria-label={m.picker(label)}
           onChange={(event) => push(event.currentTarget.value)}
         />
       </label>

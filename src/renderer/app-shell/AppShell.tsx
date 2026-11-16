@@ -11,9 +11,7 @@ import { useWorkspace, type PanelView } from '../state/workspace'
 import { useIsKeyWindow, usePaneView } from '../state/window-scope'
 import { startSecondaryWindows } from './secondary-windows'
 import { startActivityReporting } from '../state/activity'
-import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
-import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
-import { SetupStrip } from '../scripts/SetupStrip'
+import { startHostRestartTracking } from '../lifecycle/host-restart'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
@@ -23,16 +21,12 @@ import { SettingsDialog } from '../settings/SettingsDialog'
 import { SchedulesDialog } from '../schedules/SchedulesDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
+import { startAutoArchive } from '../pull-requests/auto-archive'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startShipRuns } from '../pull-requests/ship-runner'
 import { startDispatchBridge } from '../dispatch/bridge'
 import { startRemoteBridge } from '../remote/bridge'
 import { startScheduleRunner } from '../schedules/runner'
-import { DispatchStrip } from '../dispatch/DispatchStrip'
-import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
-import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
-import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
-import { PlanStrip } from '../attempts/PlanStrip'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { startTaskSources } from '../attempts/sources'
 import { ArchiveSheet } from '../archive/ArchiveSheet'
@@ -42,11 +36,13 @@ import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
 import { claimBoot } from './boot'
 import './menu-commands'
-import { panelMode, panelWidthFor, sidebarWidthFor } from './layout'
+import { GLASS_WATCH, panelMode, panelWidthFor, sidebarWidthFor } from './layout'
 import { drawerIsWide, useDrawer } from './drawer-motion'
 import { SidebarDrawer } from './SidebarDrawer'
+import { GlassBase } from '../ui/GlassBase'
 import { useMainFullScreen } from './full-screen'
 import styles from './AppShell.module.css'
+import { useLang } from '../ui/i18n'
 
 const subscribeResize = (onChange: () => void) => {
   window.addEventListener('resize', onChange)
@@ -57,8 +53,9 @@ const windowWidth = () => window.innerWidth
 /**
  * Window layout (Figma Screens 01–08, glass shell Figma 28):
  *   sidebar (264 by default, user-sized) │ main: header 36 / terminal — or the overview │ right panel (F17, 480 by default, user-sized)
- * The whole window is fixed glass — native vibrancy under a per-theme tint (--glass-shell) — and only content sits in
- * opaque cards on it: each pane's terminal, the right panel's body, the overview. Headers and the sidebar are on the
+ * The whole window is glass under one base layer — one step more opaque than the cards and cut out where they are
+ * (ui/GlassBase, PRD v1.183, Figma 84A) — and content sits in cards on it: each pane's terminal, the right panel's
+ * body, the overview. Headers and the sidebar are on the
  * glass. The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The
  * terminal area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).
  * Each region is owned by one feature directory; this file only arranges them.
@@ -66,12 +63,19 @@ const windowWidth = () => window.innerWidth
  * when not even its minimum width fits (B13, layout.ts). The sidebar and the panel open and close as drawers (drawer-motion).
  */
 export function AppShell() {
+  // A language change re-renders the whole window from here (memo'd components subscribe themselves).
+  useLang()
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const fullScreen = useMainFullScreen()
   const overview = useWorkspace((s) => s.mainView === 'overview')
   // The main window's own panes (F20 · 多窗口: the keyboard may be in another window).
   const mainActive = usePaneView().activeSessionId
   const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === mainActive))
+  // Which card opacity the sidebar and the right panel follow (PRD v1.179): the shown GUI session's chat, else (a CLI
+  // session, the welcome page, the overview — which keeps the last session active) the terminal's.
+  const sessionUi = useWorkspace((s) =>
+    s.mainView !== 'overview' && s.sessions.find((x) => x.id === mainActive)?.ui === 'gui' ? 'gui' : 'cli'
+  )
   const isKey = useIsKeyWindow()
   // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)
@@ -99,6 +103,7 @@ export function AppShell() {
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
+  useEffect(() => startAutoArchive(), [])
   useEffect(() => startShipRuns(), [])
   useEffect(() => startDispatchBridge(), [])
   useEffect(() => startRemoteBridge(), [])
@@ -107,6 +112,8 @@ export function AppShell() {
   useEffect(() => startConflictRadarBridge(), [])
   useEffect(() => startBranchSync(), [])
   useEffect(() => startPortAutoOpen(), [])
+  // A pty-host crash marks the sessions it took down; their panes offer the recovery (lifecycle/EngineRestartedCard).
+  useEffect(() => startHostRestartTracking(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
   useEffect(() => {
@@ -119,7 +126,8 @@ export function AppShell() {
   }, [sessionPortKey])
 
   return (
-    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen}>
+    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen} data-session-ui={sessionUi}>
+      <GlassBase watch={GLASS_WATCH} />
       <SidebarDrawer collapsed={sidebarCollapsed} width={sidebarWidth} resizable />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
@@ -130,16 +138,6 @@ export function AppShell() {
             <SplitArea />
             {!hasSession && <EmptyMain />}
           </section>
-          <div className={styles.sessionOnly} data-hidden={overview}>
-            <EngineRestartedCard />
-            <SessionErrorBar />
-            <SetupStrip />
-            <DispatchStrip />
-            <ScheduleConfirmStrip />
-            <HeldReportsStrip />
-            <HeldAttemptReportStrip />
-            <PlanStrip />
-          </div>
         </main>
         {panel.shown && (
           <aside

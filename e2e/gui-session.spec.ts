@@ -80,6 +80,45 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
     expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
     await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
+    // PRD v1.179 / v1.183: beside a GUI session the base layer (the sidebar, the gaps and margins round the cards) is the
+    // chat card's opacity + 10%; the overview (which keeps this session active) takes the terminal's.
+    const setLook = (p: unknown) => page.evaluate((x) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(x), p)
+    const baseAlpha = () =>
+      page.locator('[data-glass-base]').first().evaluate((el) => {
+        const m = /\/\s*([\d.]+)\)$/.exec(getComputedStyle(el).backgroundColor)
+        return m ? Number(m[1]) : 1
+      })
+    // Figma 84A: the base layer is cut out where each shown card is, so the card sits on the bare glass. Returns the
+    // number of holes (data-holes) and how far the first one's start (the end of its top-left arc: left + radius, top)
+    // is from the chat card's, in the base layer's coordinates.
+    const baseHoles = () =>
+      page.evaluate((selector) => {
+        const base = document.querySelector<HTMLElement>('[data-glass-base]')!
+        const cardEl = document.querySelector<HTMLElement>(selector)!
+        const card = cardEl.getBoundingClientRect()
+        const origin = base.getBoundingClientRect()
+        // The first subpath after the outer box's close.
+        const start = /Z\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/i.exec(getComputedStyle(base).clipPath)
+        const radius = parseFloat(getComputedStyle(cardEl).borderTopLeftRadius)
+        return {
+          holes: Number(base.dataset.holes),
+          dx: start ? Number(start[1]) - radius - (card.left - origin.left) : NaN,
+          dy: start ? Number(start[2]) - (card.top - origin.top) : NaN
+        }
+      }, '[data-glass-card][data-session-id="s1"]')
+    await setLook({ appearance: { terminalOpacity: 0.5, chat: { opacity: 0.3 } } })
+    await expect.poll(baseAlpha).toBeCloseTo(0.4)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(1)
+    const hole = await baseHoles()
+    expect(Math.abs(hole.dx)).toBeLessThan(1)
+    expect(Math.abs(hole.dy)).toBeLessThan(1)
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
+    await expect.poll(baseAlpha).toBeCloseTo(0.6)
+    await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
+    await expect(chat()).toBeVisible(WITHIN)
+    await expect.poll(baseAlpha).toBeCloseTo(0.4)
+    await page.screenshot({ path: join(SHOTS, 'base-layer-dark.png') })
+    await setLook({ appearance: { terminalOpacity: 0.85, chat: { opacity: 0.85 } } })
     // Figma 65B: nothing said yet — the model button lists the agents first, the current one's models beside them.
     await composer().locator('[data-picker="model"]').click()
     await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Claude Code' })).toBeVisible(WITHIN)
@@ -101,6 +140,27 @@ test.describe('F23 GUI session (Claude)', () => {
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[]; entrypoint: string | null }
     expect(launched.entrypoint).toBe('wavi')
     expect(launched.args).toEqual(expect.arrayContaining(['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--permission-prompt-tool', 'stdio']))
+    // The right panel is a second card on the same base layer: a second hole, where its card is once it has opened.
+    const panelCard = page.locator('[data-region="panel"]').getByTestId('right-panel')
+    await page.keyboard.press('Meta+Shift+KeyB')
+    await expect(panelCard).toBeVisible(WITHIN)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(2)
+    // Read once the panel has finished opening: mid-motion its card is cut out only as far as the drawer shows it.
+    const panelHole = () => page.evaluate(() => {
+      const base = document.querySelector<HTMLElement>('[data-glass-base]')!
+      const cardEl = document.querySelector<HTMLElement>('[data-region="panel"] [data-testid="right-panel"]')!
+      const card = cardEl.getBoundingClientRect()
+      const radius = parseFloat(getComputedStyle(cardEl).borderTopLeftRadius)
+      const origin = base.getBoundingClientRect()
+      // Each hole's start (left + radius, top), in DOM order: the chat card, then the panel's.
+      const starts = [...getComputedStyle(base).clipPath.matchAll(/Z\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/gi)].map((m) => [Number(m[1]), Number(m[2])])
+      return { x: starts[1]![0]! - radius - (card.left - origin.left), y: starts[1]![1]! - (card.top - origin.top) }
+    })
+    await expect.poll(async () => Math.abs((await panelHole()).x), WITHIN).toBeLessThan(1)
+    expect(Math.abs((await panelHole()).y)).toBeLessThan(1)
+    await page.keyboard.press('Meta+Shift+KeyB')
+    await expect(panelCard).toHaveCount(0, WITHIN)
+    await expect.poll(async () => (await baseHoles()).holes).toBe(1)
   })
 
   /** How far below the top of the feed a sent message's bubble sits. */
@@ -519,7 +579,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch (Figma 65E / 65F)', async () => {
+  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch under it (Figma 65E / 78A)', async () => {
     const mode = composer().locator('[data-picker="permission+plan"]')
     await expect(mode).toHaveText('询问', WITHIN)
     await mode.click()
@@ -536,14 +596,23 @@ test.describe('F23 GUI session (Claude)', () => {
     await mode.click()
     await page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio', { name: '接受编辑' }).click()
     await expect(mode).toHaveText('接受编辑')
-    // 快速: Opus says it can answer faster.
-    const fast = composer().getByRole('button', { name: '快速' })
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'none')
+    // 快速 (Figma 78A): Opus says it can answer faster — a switch under the 模式 list; it leaves the menu open.
+    await expect(composer().getByRole('button', { name: '快速' })).toHaveCount(0)
+    const onMark = mode.locator('[data-switch="fast"]')
+    await expect(onMark).toHaveCount(0)
+    await mode.click()
+    const switches = page.getByRole('dialog', { name: '模式' })
+    await expect(switches.getByRole('separator')).toHaveCount(1)
+    const fast = switches.getByRole('switch', { name: '快速' })
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'true')
-    // On, the mark is filled (the author, 2026-11-08).
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'currentColor')
+    await expect(fast).toHaveAttribute('aria-checked', 'true')
+    await expect(switches).toBeVisible()
+    await page.screenshot({ path: join(SHOTS, 'fast-on-menu-light.png') })
+    await page.keyboard.press('Escape')
+    // 78B: on, a solid ⚡ after the 模式's name (the author, 2026-11-08: from outline to solid).
+    await expect(mode).toHaveText('接受编辑')
+    await expect(onMark.locator('svg')).toHaveAttribute('fill', 'currentColor')
     await page.screenshot({ path: join(SHOTS, 'fast-on-light.png') })
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     // Saved with the session, and on the agent for its next session.
@@ -552,8 +621,11 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect.poll(() => saved().sessions.find((x) => x.id === 's1')?.guiPermission, WITHIN).toBe('accept-edits')
     expect(saved().sessions.find((x) => x.id === 's1')?.guiPlan).toBeFalsy()
     await expect.poll(() => saved().guiPicks?.claude, WITHIN).toMatchObject({ permission: 'accept-edits', fast: true })
+    await mode.click()
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(onMark).toHaveCount(0)
   })
 
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {
@@ -676,8 +748,9 @@ test.describe('F23 GUI session (Claude)', () => {
     const bubble = feed().locator('[data-item]').last()
     await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
     expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
-    // The column is the composer's (960 for 中) with 40 each side for the pictures (Figma 59J).
-    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1040px')
+    // The column is the composer's (960 for 中) with room each side for a picture and its gap: at 16 / 25 the picture is
+    // a one-line bubble's height, 8 + 25 + 8 = 41, and 41 + 12 = 53 each side.
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1066px')
     // The agent's words start at the composer's left edge, its mark 12 outside; the bubble ends at its right edge, the
     // picture 8 outside.
     await feed().evaluate((el) => el.scrollTo(0, 0))
@@ -692,6 +765,12 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.round(mark!.x + mark!.width + 12)).toBe(Math.round(boxEdge!.x))
     expect(Math.round(sent!.x + sent!.width)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
     expect(Math.round(picture!.x - 8)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
+    // Both pictures are as tall as a one-line bubble; the user's shares its bubble's top, the agent's middle is its
+    // first line's.
+    expect(Math.round(picture!.height)).toBe(41)
+    expect(Math.round(mark!.height)).toBe(41)
+    expect(Math.round(picture!.y)).toBe(Math.round(sent!.y))
+    expect(Math.round(mark!.y + mark!.height / 2)).toBe(Math.round(words!.y + words!.height / 2))
     expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })
@@ -738,12 +817,11 @@ test.describe('F23 GUI session (Claude)', () => {
     }
   })
 
-  test('the overview shows the chat, not an empty terminal: the board overlay and the list tray (PRD F9)', async () => {
+  test('看板 shows a GUI session’s chat in its overlay, not an empty terminal (PRD F9 / F23)', async () => {
     const overview = page.locator('[data-region="overview"]')
     const overlay = page.locator('[data-region="overview-overlay"]')
     await page.keyboard.press('Meta+Shift+A')
     await expect(overview).toBeVisible()
-    await overview.getByRole('radio', { name: '看板' }).click()
     await overview.locator('[data-session-id="s1"]').click()
     const shown = overlay.getByTestId('gui-chat')
     await expect(shown).toBeVisible(WITHIN)
@@ -763,11 +841,6 @@ test.describe('F23 GUI session (Claude)', () => {
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     await overlay.getByRole('button', { name: '关闭' }).click()
     await expect(overlay).toBeHidden()
-
-    await overview.getByRole('radio', { name: '列表' }).click()
-    await overview.locator('[data-session-id="s1"]').click()
-    await expect(overview.getByTestId('gui-chat').locator('[data-region="gui-feed"]').getByText('Hello: 看板里发的')).toBeVisible(WITHIN)
-    await page.screenshot({ path: join(SHOTS, 'list-tray-dark.png') })
     await page.keyboard.press('Meta+Shift+A')
     await expect(overview).toBeHidden()
     await expect(chat()).toBeVisible()

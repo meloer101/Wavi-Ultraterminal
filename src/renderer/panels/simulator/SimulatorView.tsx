@@ -4,12 +4,49 @@
 import { ChevronDown, Circle, CircleAlert, RotateCw, Smartphone } from 'lucide-react'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { findDevice, initialDevice, type SimRuntimeGroup, type SimulatorScreen as Screen } from '@shared/simulator'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { IconButton } from '../../ui/IconButton'
 import { popupMenu, type MenuEntry } from '../../ui/menu'
 import { ClosePanelButton } from '../PaneHeader'
 import { SimulatorScreen } from './SimulatorScreen'
 import panel from '../RightPanel.module.css'
 import styles from './SimulatorView.module.css'
+
+const M = defineMessages({
+  zh: {
+    title: 'iOS 模拟器',
+    chooseDevice: '选择设备',
+    home: '主屏幕',
+    rotate: '旋转',
+    inputBlocked: 'Device Hub 占用了点按和键盘',
+    repairInput: '修复输入',
+    needsXcode: '需要 Xcode',
+    openAppStore: '在 App Store 中打开',
+    screen: (name: string) => `${name} 屏幕`,
+    reconnect: '重新连接',
+    booting: '正在启动',
+    noSimulators: '没有可用的 iOS 模拟器',
+    open: '打开',
+    boot: '启动'
+  },
+  en: {
+    title: 'iOS Simulator',
+    chooseDevice: 'Choose device',
+    home: 'Home',
+    rotate: 'Rotate',
+    inputBlocked: 'Device Hub is holding taps and the keyboard',
+    repairInput: 'Fix input',
+    needsXcode: 'Xcode required',
+    openAppStore: 'Open in App Store',
+    screen: (name: string) => `${name} screen`,
+    reconnect: 'Reconnect',
+    booting: 'Booting',
+    noSimulators: 'No iOS simulators available',
+    open: 'Open',
+    boot: 'Boot'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -26,6 +63,7 @@ function useVisible(): boolean {
 }
 
 export function SimulatorView() {
+  const m = useMessages(M)
   const [listing, setListing] = useState<Listing>({ kind: 'loading' })
   const [chosen, setChosen] = useState<string | null>(null)
   /** Bumped by 重新连接: shows the device again. */
@@ -106,7 +144,7 @@ export function SimulatorView() {
   return (
     <>
       <div className={panel.header}>
-        <h2 className={panel.title}>iOS 模拟器</h2>
+        <h2 className={panel.title}>{m.title}</h2>
         <span className={styles.context}>
           {listing.kind === 'devices' && (
             <button
@@ -117,7 +155,7 @@ export function SimulatorView() {
               onClick={(e) => void openPicker(e)}
               data-testid="simulator-picker"
             >
-              <span className={styles.pickerLabel}>{device ? `${device.name} · ${device.runtime}` : '选择设备'}</span>
+              <span className={styles.pickerLabel}>{device ? `${device.name} · ${device.runtime}` : m.chooseDevice}</span>
               <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
             </button>
           )}
@@ -125,10 +163,10 @@ export function SimulatorView() {
         <span className={panel.actions}>
           {device && (
             <>
-              <IconButton label="主屏幕" disabled={!live} onClick={() => window.tr.simulator.home()}>
+              <IconButton label={m.home} disabled={!live} onClick={() => window.tr.simulator.home()}>
                 <Circle {...ICON} />
               </IconButton>
-              <IconButton label="旋转" disabled={!live} onClick={() => window.tr.simulator.rotate()}>
+              <IconButton label={m.rotate} disabled={!live} onClick={() => window.tr.simulator.rotate()}>
                 <RotateCw {...ICON} />
               </IconButton>
             </>
@@ -139,17 +177,17 @@ export function SimulatorView() {
       {current?.inputBlocked && (
         <div className={styles.notice} role="alert">
           <CircleAlert {...ICON} aria-hidden />
-          <span className={styles.noticeText}>Device Hub 占用了点按和键盘</span>
+          <span className={styles.noticeText}>{m.inputBlocked}</span>
           <button type="button" className={styles.secondary} disabled={repairing} onClick={() => void repair()}>
-            修复输入
+            {m.repairInput}
           </button>
         </div>
       )}
       {listing.kind === 'no-xcode' ? (
         <div className={styles.center} data-testid="simulator-no-xcode">
-          <p className={styles.centerTitle}>需要 Xcode</p>
+          <p className={styles.centerTitle}>{m.needsXcode}</p>
           <button type="button" className={styles.secondary} onClick={() => window.tr.simulator.openXcodeInAppStore()}>
-            在 App Store 中打开
+            {m.openAppStore}
           </button>
         </div>
       ) : listing.kind === 'loading' ? null : !device ? (
@@ -159,17 +197,17 @@ export function SimulatorView() {
           key={device.udid}
           orientation={current?.orientation ?? 'portrait'}
           live={live}
-          label={`${device.name} 屏幕`}
+          label={m.screen(device.name)}
           placeholder={
             current?.phase === 'failed' ? (
               <>
                 <span>{current.error}</span>
                 <button type="button" className={styles.secondary} onClick={() => setAttempt((n) => n + 1)}>
-                  重新连接
+                  {m.reconnect}
                 </button>
               </>
             ) : current?.phase === 'booting' ? (
-              '正在启动'
+              m.booting
             ) : null
           }
         />
@@ -180,7 +218,8 @@ export function SimulatorView() {
 
 /** 选择设备 (Figma 76D): simulators grouped by runtime, 28-high rows, 启动 on hover. */
 function DeviceList({ runtimes, onChoose }: { runtimes: SimRuntimeGroup[]; onChoose: (udid: string) => void }) {
-  if (runtimes.length === 0) return <p className={styles.empty}>没有可用的 iOS 模拟器</p>
+  const m = useMessages(M)
+  if (runtimes.length === 0) return <p className={styles.empty}>{m.noSimulators}</p>
   return (
     <div className={styles.list} data-testid="simulator-devices">
       {runtimes.map((group) => (
@@ -198,7 +237,7 @@ function DeviceList({ runtimes, onChoose }: { runtimes: SimRuntimeGroup[]; onCho
                   onChoose(d.udid)
                 }}
               >
-                {d.state === 'booted' ? '打开' : '启动'}
+                {d.state === 'booted' ? m.open : m.boot}
               </button>
             </div>
           ))}

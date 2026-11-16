@@ -28,9 +28,9 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+KeyW', accelerator: 'CmdOrCtrl+W', item: ['文件', '关闭会话'] },
   { key: 'Meta+KeyF', accelerator: 'CmdOrCtrl+F', item: ['编辑', '在终端中查找…'] },
   { key: 'Meta+KeyK', accelerator: 'CmdOrCtrl+K', item: ['会话', '跳转到…'] },
-  { key: 'Meta+Shift+KeyA', accelerator: 'CmdOrCtrl+Shift+A', item: ['会话', '总览'] },
+  { key: 'Meta+Shift+KeyA', accelerator: 'CmdOrCtrl+Shift+A', item: ['会话', '看板'] },
   { key: 'Meta+KeyJ', accelerator: 'CmdOrCtrl+J', item: ['会话', '下一个需要你的会话'] },
-  { key: 'Meta+Shift+KeyM', accelerator: 'Shift+CmdOrCtrl+M', item: ['会话', '合并到基线…'] },
+  { key: 'Meta+Shift+KeyM', accelerator: 'Shift+CmdOrCtrl+M', item: ['会话', 'Git 下一步'] },
   { key: 'Meta+Shift+KeyN', accelerator: 'Shift+CmdOrCtrl+N', item: ['会话', '同任务多解…'] },
   { key: 'Meta+KeyB', accelerator: 'CmdOrCtrl+B', item: ['显示', '显示 / 隐藏侧栏'] },
   { key: 'Meta+Shift+KeyB', accelerator: 'Shift+CmdOrCtrl+B', item: ['显示', '显示 / 隐藏右侧栏'] },
@@ -252,7 +252,7 @@ test.describe('with the keyboard in the terminal', () => {
     await expect(page.locator('[data-region="split"] [data-pane-id]')).toHaveCount(1)
   })
 
-  test('⇧⌘M opens the merge sheet once', async () => {
+  test('⇧⌘M (Git 下一步) runs the next step once: with no chain move to run, it opens the merge sheet', async () => {
     expect(await press('Meta+Shift+KeyM')).toBe('page')
     await expect(page.getByTestId('merge-sheet')).toBeVisible()
     await page.keyboard.press('Escape')

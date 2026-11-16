@@ -3,16 +3,43 @@ import type { SubagentInfo } from '@shared/agent-events'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
 import type { SidebarGroupBy } from '@shared/workspace-file'
+import { defineMessages, pick } from '@shared/i18n'
+import type { PendingStart } from '@shared/dispatch'
+import { memberLine, TEAM_GLYPH, type TeamState } from '@shared/agent-team'
 import { phaseLine } from '../lifecycle/present'
 import { currentPhase, isLiveRun, phaseViews, runOutcome, type WorkflowPhaseView, type WorkflowRun } from '@shared/workflow-run'
 
+const M = defineMessages({
+  zh: {
+    doneReply: (reply: string) => `已完成 · ${reply}`,
+    doneUnread: '已完成 · 未读',
+    snapshot: '快照',
+    scheduled: (branch: string) => `定时 · ${branch}`,
+    team: (n: number) => `队伍 · ${n} 人`,
+    pending: '待开始'
+  },
+  en: {
+    doneReply: (reply: string) => `Done · ${reply}`,
+    doneUnread: 'Done · unread',
+    snapshot: 'Snapshot',
+    scheduled: (branch: string) => `Scheduled · ${branch}`,
+    team: (n: number) => (n === 1 ? 'Team · 1 member' : `Team · ${n} members`),
+    pending: 'Waiting to start'
+  }
+})
+
 /**
- * A line hung under a session: a subagent (Figma 44B), or a Claude workflow run and its phases (Figma 74D, PRD F25).
- * `glyph` and `right` are the run's and phases' own; a subagent's glyph comes from its asks.
+ * A line hung under a session: a subagent (Figma 44B), a Claude workflow run and its phases (Figma 74D, PRD F25), or a
+ * session it asked to start that waits for 开始 (Figma 83B). `glyph` and `right` are the run's and phases' own; a
+ * subagent's glyph comes from its asks; a waiting one has a dashed ring instead.
  */
 export interface SideItem extends SubagentInfo {
-  kind?: 'workflow' | 'phase'
+  kind?: 'workflow' | 'phase' | 'pending' | 'team' | 'teammate'
   glyph?: SessionStatus
+  /** A teammate's second line (Figma 82′F): what it is doing or waits on you for. */
+  detail?: string
+  /** A teammate waiting on the user's answer (its ask is answered in the lead's terminal). */
+  attention?: boolean
   /** Right-hand figure: a run's or phase's done / all. */
   right?: string
 }
@@ -66,9 +93,13 @@ export interface SubagentRowModel {
   tree: 'child' | 'last'
   /** Depth 2: its session is not the last of its dispatcher's line, so that line runs on past this row. */
   pass: boolean
-  /** A workflow run's row, or one of its phases (Figma 74D); absent for a subagent. */
-  kind?: 'workflow' | 'phase'
+  /**
+   * A workflow run's row, one of its phases (Figma 74D), a session waiting for 开始 (Figma 83B), or the session's agent
+   * team — its 队伍 · N 人 line and a row per teammate (Figma 82′F); absent for a subagent.
+   */
+  kind?: 'workflow' | 'phase' | 'pending' | 'team' | 'teammate'
   glyph?: SessionStatus
+  detail?: string
   right?: string
 }
 
@@ -103,7 +134,7 @@ export interface SidebarInput {
 
 /** What a finished turn left: "已完成 · <reply>" while unread, the reply once seen. */
 function afterTurn(session: Session): string | undefined {
-  if (session.status === 'done_unread') return session.lastReply ? `已完成 · ${session.lastReply}` : '已完成 · 未读'
+  if (session.status === 'done_unread') return session.lastReply ? pick(M).doneReply(session.lastReply) : pick(M).doneUnread
   if (session.status === 'idle') return session.lastReply
   return undefined
 }
@@ -122,7 +153,7 @@ function toRow(session: Session, worktree: Worktree | undefined, { depth, parent
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
     // A snapshot has no branch (detached): its line says so instead.
-    branch: session.dispatchBase === 'snapshot' ? '快照' : session.scheduledBy ? `定时 · ${worktree?.branch ?? ''}` : (worktree?.branch ?? ''),
+    branch: session.dispatchBase === 'snapshot' ? pick(M).snapshot : session.scheduledBy ? pick(M).scheduled(worktree?.branch ?? '') : (worktree?.branch ?? ''),
     depth,
     model: session.dispatchModel ?? '',
     tree,
@@ -142,7 +173,8 @@ export const sameSubagent = (a: SubagentRowModel, b: SubagentRowModel): boolean 
   a.pass === b.pass &&
   a.kind === b.kind &&
   a.glyph === b.glyph &&
-  a.right === b.right
+  a.right === b.right &&
+  a.detail === b.detail
 
 /**
  * Whether two models draw the same row (its `after` rows are drawn by SubagentRow, which compares them itself). buildSidebarGroups makes new ones on every store change (an agent's hook event
@@ -181,13 +213,14 @@ function subagentRows(session: Session, items: readonly SideItem[], depth: 1 | 2
     id: item.id,
     title: item.title,
     model: item.model ?? '',
-    attention: !item.kind && (session.askingAgents?.includes(item.id) ?? false),
+    attention: item.attention ?? (!item.kind && (session.askingAgents?.includes(item.id) ?? false)),
     depth,
     tree: i === items.length - 1 ? 'last' : 'child',
     pass: depth === 2 && pass,
     ...(item.kind ? { kind: item.kind } : {}),
     ...(item.glyph ? { glyph: item.glyph } : {}),
-    ...(item.right !== undefined ? { right: item.right } : {})
+    ...(item.right !== undefined ? { right: item.right } : {}),
+    ...(item.detail !== undefined ? { detail: item.detail } : {})
   }))
 }
 
@@ -231,12 +264,46 @@ export function workflowItems(runs: readonly WorkflowRun[], { unread, folded }: 
 }
 
 /**
+ * Figma 82′F: Claude's agent team under its lead — a 队伍 · N 人 line, then a row per teammate (name · model / what it
+ * is doing). Peers, so no tree line ties them; the lead's own lane is the session row itself.
+ */
+export function teamItems(team: TeamState | undefined): SideItem[] {
+  const mates = team?.members.filter((m) => m.agentId) ?? []
+  if (mates.length === 0) return []
+  return [
+    { id: 'team', title: pick(M).team(mates.length), kind: 'team' },
+    ...mates.map((m): SideItem => ({
+      id: `teammate:${m.agentId}`,
+      title: m.name,
+      kind: 'teammate',
+      glyph: TEAM_GLYPH[m.state],
+      ...(m.model ? { right: m.model } : {}),
+      detail: memberLine(m),
+      attention: m.state === 'asking'
+    }))
+  ]
+}
+
+/**
+ * Figma 83B: each `wavi run` waiting for 开始, as a line under the session that asked (after the sessions it already
+ * started), in the order they were asked. They go when the user answers: 开始 makes them real child rows, 拒绝 drops them.
+ */
+export function pendingItems(confirms: ReadonlyArray<Pick<PendingStart, 'childId' | 'parentId' | 'plan'>>): Record<SessionId, SideItem[]> {
+  const out: Record<SessionId, SideItem[]> = {}
+  for (const c of confirms) (out[c.parentId] ??= []).push({ id: `pending:${c.childId}`, title: c.plan.item.title, kind: 'pending', right: pick(M).pending })
+  return out
+}
+
+/**
  * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
  * earlier children, and a grandchild follows its own dispatcher the same way, one more step in. A child whose
  * dispatcher is not listed here stays where it is, at the top level. Subagents (Figma 44B) hang under their session
  * after the sessions it dispatched: a child's after its grandchildren, a top-level session's after everything below it.
  */
-export function withChildrenNested(sessions: readonly Session[], subagentsOf: SubagentsOf = NO_SUBAGENTS): NestedRow[] {
+export function withChildrenNested(sessions: readonly Session[], allOf: SubagentsOf = NO_SUBAGENTS): NestedRow[] {
+  // A team's rows (Figma 82′F) hang under their lead without a tree line: they go after its tree, outside of it.
+  const subagentsOf: SubagentsOf = (id) => allOf(id).filter((item) => !isPeer(item))
+  const peersOf: SubagentsOf = (id) => allOf(id).filter(isPeer)
   const listed = new Set(sessions.map((s) => s.id))
   const nested = (s: Session): boolean => s.dispatchedBy !== undefined && listed.has(s.dispatchedBy)
   const childrenOf = (id: SessionId): Session[] => sessions.filter((child) => child.dispatchedBy === id && nested(child))
@@ -261,12 +328,17 @@ export function withChildrenNested(sessions: readonly Session[], subagentsOf: Su
         out.push(row)
         last = row
       })
-      if (subs.length > 0) last.after = subs
+      const peers = subagentRows(child, peersOf(child.id), 2, more)
+      if (subs.length + peers.length > 0) last.after = [...subs, ...peers]
     })
     if (own.length > 0) last.after = [...(last.after ?? []), ...subagentRows(session, own, 1, false)]
+    const peers = peersOf(session.id)
+    if (peers.length > 0) last.after = [...(last.after ?? []), ...subagentRows(session, peers, 1, false)]
   }
   return out
 }
+
+const isPeer = (item: SideItem): boolean => item.kind === 'team' || item.kind === 'teammate'
 
 /** The listed sessions of a project, in store order. Archived worktrees (PRD F15) are folded away until ⌘K 历史 brings them back. */
 function sessionsOf(project: Project, sessions: readonly Session[], worktreeById: ReadonlyMap<string, Worktree>): Session[] {

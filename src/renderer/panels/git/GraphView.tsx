@@ -4,6 +4,8 @@ import { Check, GitBranch, Globe } from 'lucide-react'
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type MouseEvent } from 'react'
 import type { GraphRow } from '@shared/git-graph/lanes'
 import type { GitCommit } from '@shared/git-graph/log'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { subscribeClock } from '../../sidebar/clock'
 import { useWorkspace } from '../../state/workspace'
 import { pointerAnchor, popupMenu } from '../../ui/menu'
@@ -27,6 +29,39 @@ import { loadMore, type RootGit } from './store'
 import { useViewport } from './virtual'
 import styles from './GitView.module.css'
 
+const M = defineMessages({
+  zh: {
+    reading: '正在读取提交…',
+    historyError: (error: string) => `无法读取 git 历史：${error}`,
+    notRepo: '不是 git 仓库',
+    noCommits: '还没有提交',
+    commits: '提交',
+    loadingMore: '正在读取更多提交…',
+    switchToSession: (name: string) => `切换到会话 · ${name}`,
+    copySha: '复制 SHA',
+    copySubject: '复制提交说明',
+    head: '当前 worktree 的 HEAD',
+    switchTo: (name: string) => `切换到 ${name} 的会话`,
+    localBranch: '本地分支',
+    remoteBranch: '远程分支'
+  },
+  en: {
+    reading: 'Reading commits…',
+    historyError: (error: string) => `Can't read the git history: ${error}`,
+    notRepo: 'Not a git repository',
+    noCommits: 'No commits yet',
+    commits: 'Commits',
+    loadingMore: 'Reading more commits…',
+    switchToSession: (name: string) => `Switch to session · ${name}`,
+    copySha: 'Copy SHA',
+    copySubject: 'Copy commit message',
+    head: "HEAD of the current worktree",
+    switchTo: (name: string) => `Switch to ${name}'s session`,
+    localBranch: 'Local branch',
+    remoteBranch: 'Remote branch'
+  }
+})
+
 /** Rows rendered above and below the visible window. */
 const OVERSCAN = 12
 /** Ask for the next page this many rows before the end. */
@@ -36,6 +71,7 @@ const PREFETCH_ROWS = 60
 const currentMinute = () => Math.floor(Date.now() / 60_000)
 
 export function GraphView({ root, git, sessions }: { root: string; git: RootGit; sessions: SessionsByPath }) {
+  const m = useMessages(M)
   const graph = git.graph
   const scroller = useRef<HTMLDivElement>(null)
   const ready = graph !== undefined && graph !== null
@@ -79,9 +115,9 @@ export function GraphView({ root, git, sessions }: { root: string; git: RootGit;
     if (graph?.hasMore && last >= count - PREFETCH_ROWS) void loadMore(root)
   }, [graph, last, count, root])
 
-  if (graph === undefined) return <p className={styles.empty}>正在读取提交…</p>
-  if (graph === null) return <p className={styles.empty}>{git.graphError ? `无法读取 git 历史：${git.graphError}` : '不是 git 仓库'}</p>
-  if (count === 0) return <p className={styles.empty}>还没有提交</p>
+  if (graph === undefined) return <p className={styles.empty}>{m.reading}</p>
+  if (graph === null) return <p className={styles.empty}>{git.graphError ? m.historyError(git.graphError) : m.notRepo}</p>
+  if (count === 0) return <p className={styles.empty}>{m.noCommits}</p>
 
   const rows = []
   for (let i = first; i < last; i++) {
@@ -105,11 +141,11 @@ export function GraphView({ root, git, sessions }: { root: string; git: RootGit;
   }
 
   return (
-    <div ref={scroller} className={styles.graph} role="list" aria-label="提交">
+    <div ref={scroller} className={styles.graph} role="list" aria-label={m.commits}>
       <div className={styles.graphCanvas} style={{ height: count * ROW_HEIGHT }}>
         {rows}
       </div>
-      {git.loadingMore && <p className={styles.loadingMore}>正在读取更多提交…</p>}
+      {git.loadingMore && <p className={styles.loadingMore}>{m.loadingMore}</p>}
     </div>
   )
 }
@@ -126,6 +162,7 @@ interface RowProps {
 }
 
 const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age, graphWidth, textLeft }: RowProps) {
+  const m = useMessages(M)
   const setActiveSession = useWorkspace((s) => s.setActiveSession)
   const color = laneColor(row.color)
   const sessionPill = pills?.find((p) => p.kind === 'worktree' && p.sessionId)
@@ -134,9 +171,9 @@ const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age
     e.preventDefault()
     void popupMenu(
       [
-        ...(sessionPill ? [{ type: 'item' as const, id: 'session', label: `切换到会话 · ${sessionPill.name}` }] : []),
-        { type: 'item', id: 'sha', label: '复制 SHA' },
-        { type: 'item', id: 'subject', label: '复制提交说明' }
+        ...(sessionPill ? [{ type: 'item' as const, id: 'session', label: m.switchToSession(sessionPill.name) }] : []),
+        { type: 'item', id: 'sha', label: m.copySha },
+        { type: 'item', id: 'subject', label: m.copySubject }
       ],
       pointerAnchor(e)
     ).then((choice) => {
@@ -158,7 +195,7 @@ const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age
     >
       <Lanes row={row} head={head} width={graphWidth} />
       <div className={styles.commitText} style={{ left: textLeft }}>
-        {head && <Check size={16} strokeWidth={1.75} className={styles.headCheck} aria-label="当前 worktree 的 HEAD" />}
+        {head && <Check size={16} strokeWidth={1.75} className={styles.headCheck} aria-label={m.head} />}
         {pills && <Pills pills={pills} color={color} onOpen={setActiveSession} />}
         <span className={styles.subject} data-head={head || undefined}>
           {commit.subject}
@@ -228,6 +265,7 @@ function Pills({ pills, color, onOpen }: { pills: GraphPill[]; color: string; on
 
 /** Figma GraphRef (153:210): stroke and icon take the commit's lane colour. */
 function RefPill({ pill, color, onOpen }: { pill: GraphPill; color: string; onOpen(sessionId: string): void }) {
+  const m = useMessages(M)
   const style = { '--pill-color': color } as CSSProperties
   if (pill.kind === 'worktree' && pill.sessionId && pill.status) {
     const sessionId = pill.sessionId
@@ -237,7 +275,7 @@ function RefPill({ pill, color, onOpen }: { pill: GraphPill; color: string; onOp
         className={styles.pill}
         data-kind="worktree"
         style={style}
-        title={`切换到 ${pill.name} 的会话`}
+        title={m.switchTo(pill.name)}
         onClick={() => onOpen(sessionId)}
       >
         <StatusGlyph status={pill.status} />
@@ -247,8 +285,8 @@ function RefPill({ pill, color, onOpen }: { pill: GraphPill; color: string; onOp
   }
   return (
     <span className={styles.pill} data-kind={pill.kind} style={style} title={pill.name}>
-      {pill.kind === 'local' && <GitBranch size={14} strokeWidth={1.75} className={styles.pillIcon} aria-label="本地分支" />}
-      {pill.kind === 'remote' && <Globe size={14} strokeWidth={1.75} className={styles.pillIcon} aria-label="远程分支" />}
+      {pill.kind === 'local' && <GitBranch size={14} strokeWidth={1.75} className={styles.pillIcon} aria-label={m.localBranch} />}
+      {pill.kind === 'remote' && <Globe size={14} strokeWidth={1.75} className={styles.pillIcon} aria-label={m.remoteBranch} />}
       <span className={styles.pillName}>{pill.name}</span>
     </span>
   )

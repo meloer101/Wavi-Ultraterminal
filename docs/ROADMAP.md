@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-13
+> 最后更新：2026-11-15
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,22 @@
 
 ## 当前位置
 
+- 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
+- 2026-11-15：设置 · 额度 统计去掉多余的线：四个数字之间不再有竖线，只靠留白分开；还没有记录的月份 / 日期不再画空框，只留下面的标签；柱状图去掉中间那条参考线和它的刻度，只留顶线和底线（热力图的空格子没动；Figma 69″ 未同步）。
+- 2026-11-15：侧栏「定时任务」挪到上方「看板」下面，「额度」挪回底部「设置」上方（PRD v1.194）。
+- 2026-11-15：英文版（PRD v1.193，Figma 89 / 89′）：设置 · 外观 · 语言（跟随系统 / 中文 / English），桌面全部界面文字、菜单、对话框、通知、发给 agent 和写进 PR 的文字都有英文；macOS 权限弹窗按系统语言；iPhone 跟随它给 Wavi 设的语言（String Catalog）。待作者定：Mac 生成后发给手机的文字（当前动作、出口步骤、错误）现在用 Mac 的语言。
+- 2026-11-15：PR 评论的回复和关闭 issue 交给 agent（PRD v1.192）：「让 <agent> 处理」请 agent 推送后在 thread 下回复、resolve；自动修复由 Wavi 推送后再请 agent 回复；GitHub 页签交 issue 时请 agent 写「Closes #N」，交 PR 时推送后回复 thread；本地 squash 说明保留关闭关键字行。`src/shared/pull-requests.ts`（`prThreadsPrompt`、`threadRepliesPrompt`、`threadReplyRules`）、`src/shared/github-board.ts`、`src/shared/git-merge.ts`、`src/renderer/pull-requests/auto-fix.ts`；单元测试。没在真实 GitHub 上跑过：`addPullRequestReviewThreadReply` / `resolveReviewThread` 的命令、各 agent 能否联网跑 gh（Claude Code、Codex 和其余 agent）都还没实测。
+- 2026-11-14：出口区改成三个节点（PRD v1.191，Figma 87⁗）：提交 → 合并（本地 squash，说明 = 会话标题 + 各提交标题，不推送、不审阅）/ 创建 PR → 推送（先拉取，推送前审阅只看远程没有的提交，P0 / P1 停下给「让 <agent> 修 / 照样推送」）→ 归档，一次只亮一个主按钮；项目主目录检出基线（路径 ①）能提交和推送基线；归档在基线推送后或 PR 合并 / 关闭后，「合并后自动归档」是一个订阅者；「合并前审阅」去掉；⇧⌘M 执行主按钮，菜单项改名「Git 下一步」；合并面板去掉推送、删除 worktree 两个开关和审阅。e2e：`ship-chain`、`pull-requests`、`merge-chain`、`remote-exits`、`worktree-panel`、`git-panel`、`settings`、`menu-keys` 按新流程改写并通过（含审阅停下、推送前拉取 origin/main、路径 ①），两种主题截图。没做：手机上的「提交」（iOS 端）、iOS 读 `reviewStop` 显示审阅停下、⌘K 里「继续 / 中止」的图标、Worktree 视图的「合并到 <base>…」按钮仍总写 ⇧⌘M（⇧⌘M 已改为执行主按钮）；手机的归档在本地合并后、基线推送前不挡（Mac 上挡「先推送 <base>」）。
+- 2026-11-14：本地合并面板去掉「合并方式」一行，一律 squash（PRD v1.190）。依据是竞品里能本地合并的 Paseo、Vibe Kanban 都只用一种方式。PR 合并面板和出口 A 不变。
+- 2026-11-14：用户自己上传背景图片（PRD v1.189，Figma 86）：设置 · 外观 · 背景图片（选择图片… / 更换… / 移除、模糊），图铺在整窗最底层、一层底下面，全屏代替光场，实色不画；主进程按内容哈希存进 `<userData>/backgrounds/`，经 `wavi-bg:` 读。单测 + `e2e/background-image.spec.ts`。
+- 2026-11-14：Worktree 视图减负（PRD v1.188，Figma 85B″）：每个 worktree 一行——状态 · 会话名 · agent 标志和分支 · 未提交 / 领先 / 冲突三个固定列；去掉路径、落后数、选中行的 kv 表和端口段，选中行只列冲突和文件；冲突雷达图标换八角形感叹号 octagon-alert（看板浮层同步）。e2e `worktree-panel.spec.ts`、`conflict-radar.spec.ts` 和两种主题截图核对过；没在作者的真实仓库上看过。
+- 2026-11-14：「总览」改名「看板」，只留看板一种排法、叫「进度」，新增「GitHub」页签（PRD v1.184，Figma 77）：每个项目打开的 issue 和 PR（全部 / 指派给我 / 我创建的 / 请我审阅），点开看正文、评论、PR 的分支和检查，「交给 agent」在新建会话面板里预填任务并「创建并发送」；PR 的 worktree 接在 PR 分支上（fork 的拉到 `refs/wavi/pull/<号>`），会话记下它处理的 issue / PR。列表视图、原地展开终端和列表才有的 todo / context / PR / 冲突雷达列去掉。`src/shared/github-board.ts`、`src/main/github-board.ts`、`src/renderer/overview/GitHub*`；单元测试 + e2e `github-board.spec.ts`（假 gh）。没在真实 GitHub 上跑过；PR 交给 agent 只有单元测试（主进程拉 PR 头），e2e 没走。同日按 Figma 77′（unslop）改了 GitHub 页签：行尾固定成列、范围改文字页签、颜色只留给要你处理和失败的、详情浮层跟内容高。同日修复 issue #7：看板浮层里半透明终端四周的边距露出一圈看板、和终端底色不一样（借用的终端没带上主区域的边距着色规则，`BorrowedTerminal.module.css` 补上，e2e `overview.spec.ts` 断言）。随后作者定浮层窗口改玻璃底（PRD v1.185）：背景磨砂 + 窗口底层色调，不再透出看板（`SessionOverlay.module.css`）。同日修复：「进度 / GitHub」页签点不动——看板顶栏是窗口拖拽区，免拖拽规则只放行 `radiogroup`，页签改成 `tablist` 后点击被系统当成拖窗口（`Overview.module.css` 补上 `[role='tablist']`；e2e 的合成点击不经过拖拽区，测不到）。
+- 2026-11-14：一层底（PRD v1.183，Figma 84A）：侧栏那层色调铺满整个窗口（侧栏、卡片之间的缝、四周留边），在每张卡片处挖空，卡片按自己的不透明度浮在上面；设置 · 外观的小窗口预览同样画法。e2e 核对了底层的不透明度和挖洞的位置；玻璃上的实际效果还没在作者的 Mac 上看过。
+- 2026-11-14：CLI 会话的 agent teams（PRD v1.182，Figma 83″B / 83′C / 82′F）：lead 终端下面的队伍条，展开是按时间的泳道（谁在干活、谁给谁发了消息）；侧栏 lead 下面列队友，队友不再被当成 subagent 删掉。数据来自 hooks（2.1.325 实测）；GUI 会话没有队伍（`claude -p` 不起队友）。没在作者的 Mac 上跑过真实队伍。
+- 2026-11-14：侧栏派活树换成弯线，等你点开始的会话先以虚线行挂在派活方下面（PRD v1.181，Figma 83B / 83B′）。接管的等开始行等 leader 分支合进来再加。
+- 2026-11-14：右侧栏 · 文件 按文件类型显示图标（PRD v1.180，Figma 72A / 72A′）：material-icon-theme 的 136 个图标，色度 × 0.65；文件夹不变，浅色主题下黑白标志换 `_light` 版。深色、浅色都截图对照过 72A / 72A′。
+- 2026-11-14：不透明度只留终端、对话两个（PRD v1.179）：最低 20%、默认 85%；终端页、对话页的预览垫上光场，拖动时看得到变化；去掉窗口底层不透明度，侧栏比当前会话的卡片厚 10%，右侧面板、总览、欢迎页跟卡片一样。全屏和真机上的效果还没在作者的 Mac 上看过。
+- 2026-11-13：会话下方的卡片（出错、计划、派活确认等 8 种）放进各自的 pane（PRD v1.178，Figma 80A / 80B′ / 80C）：终端会话和卡片同宽、隔 6，GUI 会话进对话列、和输入框同宽，分屏只在自己那格下面。
 - 2026-11-13：GUI 输入框的底色改成叠在卡片上的半透明色（PRD v1.177，Figma 79B / 79B″）：玻璃材质、对话半透明时不再是一块不透明的黑底；卡片不透明和实色材质时和原来一样。
 - 2026-11-12：F17 右侧栏加「终端」和「iOS 模拟器」（PRD v1.176，Figma 76）：终端是当前 worktree 的 shell，多个 tab、重载和重启后接回；模拟器用 serve-sim 画面和输入，可点按、滚动、打字、主屏幕、旋转、选设备和启动设备。会话头 6 个图标，默认 480 宽时额度收起。打包后的 app（`npm run dist:dir`，Developer ID 签名、hardened runtime，未公证）里 helper 从 `app.asar.unpacked` 跑起来，点按、旋转、退出不留进程都验过。还没测：公证后的下载版、Xcode 27 的 Device Hub 路径、横屏 app 的画面方向。
 - 2026-11-10：架构评估的修复：Git 视图和后台审阅的 IPC 只接受 workspace 目录；token 检查也算 `rgb()` 等颜色函数；自动修复和建 worktree 的 4 处静默失败改成记日志；「这家 CLI 能做什么」收进 `agents.ts`（PRD v1.169：批量操作对每家 agent 生效、⌘O 启动最近用过的 agent）；renderer 分层规则（ui/styles → state → 功能 → app-shell，现有 33 处列入基线只减不增）；手机与 Mac 的消息契约测试
@@ -64,7 +80,7 @@
 - 2026-10-27：右侧栏拖窄时，上方的 context / 额度不再压到视图图标上（窄于 464 收起额度，窄于 408 收起 context，PRD v1.84）。
 - 2026-10-27：**合入链路重做**（PRD v1.78，Figma 29）：三个检查点（看 diff、可选审阅、CI）、两个出口（合并到 main 并推送 / 创建 PR）；文字和修代码交给会话里的 agent，提交 / 合并 / 推送 / gh 由 Wavi 执行并把关。见下面“合入链路”。
 - 将发布 **v0.18.0**（2026-11-13：F17 右侧栏「终端」和「iOS 模拟器」两个视图、会话头 6 个图标，PRD v1.176）。之前是 **v0.17.0**（2026-11-12：Ultracode F25——开关由用户自己打开、Workflow 运行卡和侧栏 workflow 行；合入链路 v2——Git · 变更 写卡在哪和下一步、已看、⌘K 的 Git 组；GUI 发出的图片留在消息上；窗口材质合成「玻璃 / 实色」；卡片离窗口边留 6；⌘O 启动最近用过的 agent、总览批量操作对每一家生效；热力图去起始线，PRD v1.169–v1.175）。之前是 **v0.16.0**（2026-11-10：定时任务 F24、GUI 派活可视化和 `wavi run` 子会话开成 GUI、GUI 会话的 context 圆环、GUI 对话里连续的工具调用收成一行、新端口自动打开浏览器、设置 · 额度的 token 统计、手机新建会话一律 GUI，PRD v1.161–v1.168）。之前是 **v0.15.1**（2026-11-08：GUI 会话第二轮——对话字号体系和少画线、工具行「图标 · 动词 · 目标」、多文件 diff 和确认卡片 diff、子 agent 原处展开、任务清单、「/」菜单分命令和 Skills、输入框按 Figma 65、发消息前换 agent 和项目、模式和快速、会话标题取 agent 的名字、Pi 走 `pi --mode rpc`；设置外观拆成 外观 / 终端 / 对话、实色时卡片也不透明，PRD v1.145–v1.160）。之前是 **v0.15.0**（2026-11-07：iPhone App 重新设计——连不上时说明原因、工具调用合成一句、头像和表格、只改本会话的模型 · 思考程度 · 权限、Live Activity 汇总行和已过期；窗口材质「实色」；重新加载不丢进行中的事；自动修复交给所有能报告一轮结束的 agent；架构审阅修复，PRD v1.136–v1.144）。之前是 **v0.14.0**（2026-11-05：GUI 会话（F23），Claude / Codex / 15 家 ACP agent 用聊天界面，所有 agent 同一套模型 · 推理强度 · 权限 · 计划，复制和改之前的消息；侧栏按状态分组；卡片贴窗口边；终端和 agent 走系统代理；`wavi` 派活；手机远程 Mac 端，PRD v1.109–v1.135）。之前是 **v0.13.0**（2026-10-31：深色三级字提亮、标题改 Medium、导航行 32 高；菜单和弹出层从触发处长出、缓出曲线更利落、设置弹窗入场、按钮按压、减少动态效果只去位移；官网动效只用 transform、导航不再 hover 乱码，PRD v1.107–v1.108）。之前是 **v0.12.3**（2026-10-30；v0.12.1 / v0.12.2 的 tag 没有构建出来：macOS 14 runner 停机，macos-15 上 stapler 的 UDP 443 连接被断开（actions/runner-images#14924）；发布流水线改用 macos-15 并临时屏蔽 UDP 443，那个 issue 关闭后删掉：主目录会话显示分支；squash 合并后不再给第二次合并、分支移到 squash 提交上（已推送的不动）；读取仓库允许的合并方式；自画背景的 CLI 四周不再有一圈主题色；全屏光场上的文字可读、标题栏 36 px，PRD v1.100–v1.106）。之前是 **v0.12.0**（2026-10-29：macOS 26 上外壳换成系统的 Liquid Glass；侧栏会话行重排、选中是一块流动的玻璃水滴；侧栏「更新」；全屏背景；启动画面；派活确认挂在派活会话的终端下面、Esc 撤回；hook 大载荷裁剪、快照异步、隐藏会话限流，PRD v1.90–v1.99）。之前是 **v0.11.0**（2026-10-28：设置 · 额度 集中显示每个 agent 的套餐额度（⇧⌘U）；Git · 变更 按 Figma 29R 重排，文件行吸顶可收起；应用内菜单去分隔线；光标靠右时输入中文不再让终端横移，PRD v1.85–v1.89）。之前是 **v0.10.0**（2026-10-27：合入链路重做，Git · 变更 一处完成看 diff、审阅、合并到 main 并推送 / 创建 PR，CI 回到原会话并由 agent 修；半透明终端改用 WebGL、中文对齐网格；新 logo，PRD v1.78–v1.84）。之前是 **v0.9.0**（2026-10-26：窗口外壳固定成玻璃，侧栏和右侧栏有开合动效，右侧栏打开时会话工具留在窗口最右，PRD v1.73 / v1.74，Figma 28）。之前是 **v0.8.1**（2026-10-26：主目录作为会话文件夹时不再触发“Wavi 想访问桌面”，PRD v1.72）、 **v0.8.0**（2026-10-25：终端底色可以改、导入 Ghostty / iTerm 主题，PRD v1.71）、**v0.7.0**（2026-10-25：19 家 agent CLI 原生启动、一个面板完成提交 / 推送 / PR 和 AI 写、同任务多解、侧栏显示 agent 图标和分支、设置去分隔线、浮层精简）。之前是 **v0.6.0**（2026-10-22：派活与回报，任何一家 agent 派给任何一家、结果自动回到派活方；PR 闭环到合并：创建 PR 面板、PR 评论回到变更视图、在合并面板合并 GitHub PR、自动修复和通过后合并；审阅结果存盘和另一家来审。之前是 v0.5.0，2026-10-21：多 agent 第二批——这一轮跑过哪些检查、冲突雷达、一题多解 + 总览批量操作、多窗口；文件预览换行和 Markdown；状态准确性、隐藏终端不再重画、守护进程 SIGTERM 修复）。
-- 2026-10-27：换新 logo（两条交织的环，米白底；PRD v1.77，Figma Logo 页 `Logo/交织`）：应用图标、官网 favicon、空状态问候图标已换；官网首屏线屏图形（`site/src/assets/orbit.svg`）仍是旧轨道，待定。
+- 2026-10-27：换新 logo（两条交织的环，米白底；PRD v1.77，Figma Logo 页 `Logo/交织`）：应用图标、官网 favicon、空状态问候图标已换；官网首屏线屏图形（`site/src/assets/orbit.svg`）仍是旧轨道，待定（2026-11-15 随官网改版去掉）。
 - 2026-10-25：侧栏会话行多一行「agent 图标 · 分支」，context 和额度浮层只留数字（PRD v1.70，Figma 27）已完成；Claude 的 diff 默认展开、没有只折叠 diff 的设置（只有 `viewMode: focus`，会同时收起所有中途输出）；作者试过后定**不做**设置里的收起开关（Figma 27E 已标取消），用户要的话在自己的终端里用 `--settings '{"viewMode":"focus"}'`。
 - 2026-10-24：原生适配更多 agent（第 7 项 ①②，19 家，PRD §6.15）和设置去分隔线完成；一题多解改从对话里发起（方案 A / B 待作者定）。
 - 2026-10-24：读完 T3 Code 后定下要借鉴的 7 项（PRD v1.68），见下面“进行中：借鉴 T3 Code”；先做一键提交 / 推送 / PR。
@@ -334,6 +350,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] GUI 发出的图片留在消息上（PRD v1.169，Figma 71A）：`ChatItem` 用户消息加 `attachments`；`KeepImage`（`transcript-chat.ts`）由 `src/main/files.ts` `keepInlineImage` 实现，经 `DriverOptions.keepImage` 和读历史传进 Claude / Codex / Pi 的解析，ACP 发出时带附件路径、`session/load` 回放的图片块存成文件；`Feed.tsx` 复用输入框的 `Attachment`；e2e `gui-session.spec.ts` 粘贴一张图发出后气泡上方是 `sent-*.png`。没测：真 Claude / Codex / Pi / ACP agent 发图后的样子（只有假 Claude 和单测）；ACP 续上会话时的图片
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
+- [x] 对话头像和单行气泡一样高（PRD v1.186）：`--avatar` = 8 + 行高 + 8、列两侧留「头像 + 12」至少 40（`src/renderer/gui/Chat.module.css`）；e2e `reads like a chat` 量了高度和对齐
+- [x] 侧栏「额度」挪到「看板」下面（PRD v1.187，`src/renderer/sidebar/Sidebar.tsx`）；e2e `the sidebar’s 额度 opens 设置 · 额度` 量了上方顺序
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
@@ -493,6 +511,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - 还没测：1 万行 diff 实际滚动帧率（行已窗口化）。“创建 PR”移到 M5（F16 之后）
 - [x] F17 Worktree 页签（2026-10-17）：`git worktree list` + 会话状态、未提交 `+N −M`、领先 / 落后，选中行展开详情和操作（打开文件夹 · 在此新建会话 · 复制路径 · 删除），可清理分组一键清理（只碰没有会话、已合并的）、没有会话分组逐个删除；删除在有改动、git 检查失败、分离 HEAD 有孤立提交、变基中、会话在跑时拒绝；监听 `.git` 变化 + 可见时轮询；e2e `worktree-panel.spec.ts`。以后：`worktree list -z`、lock 原因、squash / rebase 合并识别、删除时可选删分支（`branch -d`）、手动刷新和逐行错误、`core.fsmonitor=false`、我们 PTY 之外 cwd 在 worktree 里的进程。+ 已打开新建会话面板（2026-10-18）；“合并到 main…”已接上 F4（2026-10-18）；端口段显示预留的 TR_PORT 段（2026-10-18，PRD v1.28）
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
+  - [x] 文件按类型显示图标（2026-11-14，PRD v1.180，Figma 72A / 72A′）：`file-icon.ts` 查找（文件名 → 复合扩展名 → 扩展名），`file-icons.data.ts` 由 `scripts/update-file-icons.mjs` 生成；`file-icon.test.ts`，e2e `right-panel.spec.ts` 查图标在 CSP 下能加载。
 - [x] F13 一键 AI 审阅（2026-10-18）：“让 agent 审阅”在变更视图底部和总览“待审阅”行（展开后 / 浮层），向 Claude 发 `/code-review`、Codex 发 `/review`；agent 忙或未就绪时置灰写明原因，已退出的先 `--resume`；e2e 在 `merge-sheet.spec.ts`（2026-10-27 已删除；「审阅方式 · agent 自带命令」现在在 `merge-chain.spec.ts`）。2026-10-19 起默认走后台审阅，这条路径留作“审阅方式 · agent 自带命令”
 - [x] F13 后台审阅（2026-10-19，PRD v1.29）：主进程 `src/main/background-review.ts` 起只读的 `claude -p` / `codex exec`（登录 shell 的 PATH、提示走 stdin），diff 含未提交、未跟踪文本文件和对比基线的已提交，每段最多 40 万字符；结果落成带 P0–P3 和置信度的 F5 评论（P2 / P3 折叠、默认不勾，只发勾选的），变更视图底部显示状态、用时和花费、可取消；按 diff 哈希去重，新 diff 取消旧审阅；合并面板一行审阅状态和“先审阅”；设置 · 自动化 · 代码审阅（三个时机默认关，一轮结束用 prompt-submit / Stop + HEAD 比对）。测试：`src/main/background-review.test.ts`（真 git 仓库 + 假 CLI），e2e 在 `merge-sheet.spec.ts`（2026-10-27 已删除；后台审阅现在在 `merge-chain.spec.ts`）、`settings.spec.ts`。以后：真实 Codex 服务商上的结构化输出仍没跑通（§6.10）；审阅结果没有持久化，重启后同一 diff 会再审一次
 - [x] F15 归档（2026-10-19，Figma 16D，PRD v1.30）：会话右键“归档 worktree…”和 Worktree 详情“更多”打开 16D 面板；停会话（保留屏幕快照）→ 批准后运行 `archive`（失败可“仍然归档”）→ `src/main/archive-ref.ts` 把 HEAD、暂存区、未提交和未跟踪文件存进 `refs/wavi/archive/<id>` → 侧栏、总览、⌘K 会话和 ⌘1–9 里收起；会话在运行时不能归档。⌘K“历史”恢复：文件夹在就不动，没了就 `git worktree add` 回原分支（分支没了从快照重建）并放回改动，再删 ref；agent 第一次查看时 `--resume`。设置 · Worktree“合并后自动归档”（默认关）。测试：`archive-ref.test.ts`、`archive.test.ts`（真 git 仓库）、`workspace-model.test.ts`、`entries.test.ts`，e2e `archive.spec.ts`（16D 两种主题截图）。以后：历史里删除归档、归档太久的提醒和清理、Worktree 列表里标出已归档
@@ -535,7 +554,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - [ ] PRD §4 “P2 储备”中的各项
 
 ### D · 发布质量（穿插在各批次里）
-- [ ] 官网 `site/`：2026-10-21 按 Figma W11（PRD v1.61）改版，并改为 Astro 项目——开机引导、WebGL 老电视问号、全屏产品窗口首屏（会话轮换、git 栏新提交、滚动时显像管关机）、总览三步 + 通知和 Dock、一题多解三格比较（可合并、看 diff）、8 条分支的图谱播放头、叠印 + 六栏、线网轨道海报、ASCII 粒子页尾，以及光标拖尾、信号故障转场、输入 wavi 的彩蛋。2026-10-21 加了英文版（默认 `/`，中文在 `/zh/`，PRD v1.62），去掉了自定义光标和拖尾；加了整屏吸附（宽于 900 时），并按 1280 / 1024 / 900 / 768 / 375 五种宽度、中英两版过了一遍版式。还没做：继续按作者意见删减动效、og:image、文档页（Starlight）
+- [ ] 官网 `site/`：2026-11-15 改成杂志（PRD v1.196，Figma「官网·时尚杂志风」W9）——宽屏 12 个跨页沿中缝翻、手机 20 个单页沿左边翻，滚轮 / 触控板 / 触摸 / 键盘各翻一页，中英两版，截图英文版用英文界面、中文版用中文界面；W11 的动效页（2026-10-21，PRD v1.61）整套去掉，GSAP、Lenis 不再依赖。翻页数学有单测（`cd site && npm test`）。还没做：og:image、文档页（Starlight）
 - [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
   - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查
@@ -566,7 +585,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 
 - ~~F1 输入栏~~（v1.2，2026-10-16）：终端就是全部输入面，按键直接进 PTY。
 - ~~F3 应用内作答（PromptBar）~~（v1.2）：权限请求和提问只用来标记“等你处理”，在 TUI 里作答。
-- ~~渐变 / 图片背景~~（v1.2）：终端底色只跟随浅色 / 深色主题。
+- ~~渐变 / 图片背景~~（v1.2）：终端底色只跟随浅色 / 深色主题。v1.189 起整窗可以铺用户自己的背景图片（终端字符格仍不画图）。
 - ~~侧栏“等你处理”置顶队列~~（v1.1）：会让会话离开所属项目、在列表里跳来跳去；改由总览、⌘J、通知和 Dock 角标提示。
 
 ## 待作者手动确认

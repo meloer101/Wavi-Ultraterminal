@@ -1,20 +1,41 @@
 // Pure helpers for the welcome page (EmptyMain.tsx, PRD F18 · Figma 14).
 import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability } from '@shared/ipc'
+import { defineMessages, localized, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    morning: '早上好',
+    noon: '中午好',
+    afternoon: '下午好',
+    evening: '晚上好',
+    night: '夜深了',
+    withName: (hello: string, name: string) => `${hello}，${name}`
+  },
+  en: {
+    morning: 'Good morning',
+    noon: 'Hello',
+    afternoon: 'Good afternoon',
+    evening: 'Good evening',
+    night: 'Up late',
+    withName: (hello: string, name: string) => `${hello}, ${name}`
+  }
+})
 
 /** 5–11 早上好 · 11–13 中午好 · 13–18 下午好 · 18–23 晚上好 · 23–5 夜深了. */
 export function greetingFor(hour: number): string {
-  if (hour >= 5 && hour < 11) return '早上好'
-  if (hour >= 11 && hour < 13) return '中午好'
-  if (hour >= 13 && hour < 18) return '下午好'
-  if (hour >= 18 && hour < 23) return '晚上好'
-  return '夜深了'
+  const m = pick(M)
+  if (hour >= 5 && hour < 11) return m.morning
+  if (hour >= 11 && hour < 13) return m.noon
+  if (hour >= 13 && hour < 18) return m.afternoon
+  if (hour >= 18 && hour < 23) return m.evening
+  return m.night
 }
 
 /** "下午好，Jacoy", or just "下午好" without a name. */
 export function greeting(hour: number, name: string): string {
   const hello = greetingFor(hour)
-  return name ? `${hello}，${name}` : hello
+  return name ? pick(M).withName(hello, name) : hello
 }
 
 export interface Quote {
@@ -24,15 +45,28 @@ export interface Quote {
 }
 
 /** Short lines only: classic programming maxims (attributed) and our own. Attributed lines drop the final 。. */
-export const QUOTES: readonly Quote[] = [
-  { text: '先让它跑起来，再让它跑对，最后让它跑快', by: 'Kent Beck' },
-  { text: '简单是可靠的前提', by: 'Edsger Dijkstra' },
-  { text: '过早优化是万恶之源', by: 'Donald Knuth' },
-  { text: '让 agent 去写，你来决定写什么。' },
-  { text: '一次只做一件事，但可以同时开很多个会话。' },
-  { text: '好的提交说明，是写给三个月后的自己。' },
-  { text: '先读懂 diff，再按合并。' }
-]
+export const QUOTES: readonly Quote[] = localized(
+  defineMessages<readonly Quote[]>({
+    zh: [
+      { text: '先让它跑起来，再让它跑对，最后让它跑快', by: 'Kent Beck' },
+      { text: '简单是可靠的前提', by: 'Edsger Dijkstra' },
+      { text: '过早优化是万恶之源', by: 'Donald Knuth' },
+      { text: '让 agent 去写，你来决定写什么。' },
+      { text: '一次只做一件事，但可以同时开很多个会话。' },
+      { text: '好的提交说明，是写给三个月后的自己。' },
+      { text: '先读懂 diff，再按合并。' }
+    ],
+    en: [
+      { text: 'Make it work, make it right, make it fast', by: 'Kent Beck' },
+      { text: 'Simplicity is prerequisite for reliability', by: 'Edsger Dijkstra' },
+      { text: 'Premature optimization is the root of all evil', by: 'Donald Knuth' },
+      { text: 'Let the agent write; you decide what gets written.' },
+      { text: 'One thing at a time, but as many sessions as you like.' },
+      { text: 'A good commit message is a note to yourself three months from now.' },
+      { text: 'Read the diff before you press merge.' }
+    ]
+  })
+)
 
 /** One line per launch; `random` is injectable for tests. */
 export function pickQuote(random: () => number = Math.random): Quote {

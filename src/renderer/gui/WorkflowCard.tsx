@@ -4,6 +4,7 @@
 // the failed agents with their error, a failed run's error, where a stopped run stopped (74C).
 import { useEffect, useState } from 'react'
 import { Workflow } from 'lucide-react'
+import { defineMessages } from '@shared/i18n'
 import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionStatus } from '@shared/types'
 import {
@@ -20,7 +21,35 @@ import {
 } from '@shared/workflow-run'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { elapsedLabel } from './model'
+import { useMessages } from '../ui/i18n'
 import styles from './WorkflowCard.module.css'
+
+const M = defineMessages({
+  zh: {
+    outcome: { running: '运行中', paused: '已暂停', completed: '已完成', 'partly-failed': '有失败', failed: '失败', stopped: '已停止' },
+    errored: (count: number) => `${count} 个出错`,
+    runningQueued: '运行中 / 排队',
+    done: '完成',
+    stop: '停止',
+    paused: '等额度恢复后接着跑',
+    queued: '排队',
+    confirm: '等你确认',
+    deny: '拒绝',
+    run: '运行'
+  },
+  en: {
+    outcome: { running: 'Running', paused: 'Paused', completed: 'Done', 'partly-failed': 'Some failed', failed: 'Failed', stopped: 'Stopped' },
+    errored: (count: number) => `${count} failed`,
+    runningQueued: 'Running / queued',
+    done: 'Done',
+    stop: 'Stop',
+    paused: 'Continues once usage resets',
+    queued: 'Queued',
+    confirm: 'Needs you',
+    deny: 'Deny',
+    run: 'Run'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -35,13 +64,13 @@ const GLYPH: Readonly<Record<WorkflowPhaseView['state'] | WorkflowAgent['state']
   stopped: 'exited'
 }
 
-const OUTCOME: Readonly<Record<ReturnType<typeof runOutcome>, { glyph: SessionStatus; word: string }>> = {
-  running: { glyph: 'running', word: '运行中' },
-  paused: { glyph: 'idle', word: '已暂停' },
-  completed: { glyph: 'done_unread', word: '已完成' },
-  'partly-failed': { glyph: 'error', word: '有失败' },
-  failed: { glyph: 'error', word: '失败' },
-  stopped: { glyph: 'exited', word: '已停止' }
+const OUTCOME: Readonly<Record<ReturnType<typeof runOutcome>, { glyph: SessionStatus }>> = {
+  running: { glyph: 'running' },
+  paused: { glyph: 'idle' },
+  completed: { glyph: 'done_unread' },
+  'partly-failed': { glyph: 'error' },
+  failed: { glyph: 'error' },
+  stopped: { glyph: 'exited' }
 }
 
 /** Now, every second while `live` (the elapsed times count up). */
@@ -66,6 +95,7 @@ export interface WorkflowAsk {
 }
 
 export function WorkflowCard({ run, ask, onStop }: { run?: WorkflowRun; ask?: WorkflowAsk; onStop?: (run: WorkflowRun) => void }) {
+  const m = useMessages(M)
   const live = run ? isLiveRun(run) : false
   const now = useNow(live)
   if (!run) return ask ? <AskCard ask={ask} /> : null
@@ -82,19 +112,19 @@ export function WorkflowCard({ run, ask, onStop }: { run?: WorkflowRun; ask?: Wo
         {!live || outcome === 'paused' ? (
           <span className={styles.status} data-outcome={outcome}>
             <StatusGlyph status={OUTCOME[outcome].glyph} />
-            {outcome === 'partly-failed' ? `${counts.failed} 个出错` : OUTCOME[outcome].word}
+            {outcome === 'partly-failed' ? m.errored(counts.failed) : m.outcome[outcome]}
           </span>
         ) : null}
         <span className={styles.spacer} />
         {live && (
           <>
             {counts.running + counts.queued > 0 && (
-              <span className={styles.count} title="运行中 / 排队">
+              <span className={styles.count} title={m.runningQueued}>
                 <StatusGlyph status="running" />
                 {counts.running}
               </span>
             )}
-            <span className={styles.count} title="完成">
+            <span className={styles.count} title={m.done}>
               <StatusGlyph status="done_unread" />
               {counts.done}
             </span>
@@ -104,12 +134,12 @@ export function WorkflowCard({ run, ask, onStop }: { run?: WorkflowRun; ask?: Wo
         {elapsed !== undefined && <span className={styles.time}>{elapsedLabel(elapsed)}</span>}
         {live && onStop && run.taskId && (
           <button type="button" className={styles.button} onClick={() => onStop(run)}>
-            停止
+            {m.stop}
           </button>
         )}
       </header>
       {run.status === 'failed' && run.error && <p className={styles.error}>{run.error}</p>}
-      {outcome === 'paused' && <p className={styles.reason}>等额度恢复后接着跑</p>}
+      {outcome === 'paused' && <p className={styles.reason}>{m.paused}</p>}
       <ol className={styles.phases}>
         {views.map((phase, index) => (
           <li key={index}>
@@ -130,6 +160,7 @@ export function WorkflowCard({ run, ask, onStop }: { run?: WorkflowRun; ask?: Wo
 }
 
 function Agents({ agents, now, live }: { agents: WorkflowAgent[]; now: number; live: boolean }) {
+  const m = useMessages(M)
   if (agents.length === 0) return null
   return (
     <ul className={styles.agents}>
@@ -146,7 +177,7 @@ function Agents({ agents, now, live }: { agents: WorkflowAgent[]; now: number; l
             agent.model && <span className={styles.mono}>{claudeModelLabel(agent.model)}</span>
           )}
           <span className={styles.time}>
-            {agent.state === 'queued' ? '排队' : agent.ms !== undefined ? elapsedLabel(agent.ms) : agent.startedAt !== undefined && live ? elapsedLabel(now - agent.startedAt) : ''}
+            {agent.state === 'queued' ? m.queued : agent.ms !== undefined ? elapsedLabel(agent.ms) : agent.startedAt !== undefined && live ? elapsedLabel(now - agent.startedAt) : ''}
           </span>
         </li>
       ))}
@@ -156,6 +187,7 @@ function Agents({ agents, now, live }: { agents: WorkflowAgent[]; now: number; l
 
 /** Figma 74A: the run before it runs — what its script declares, and the two answers. */
 function AskCard({ ask }: { ask: WorkflowAsk }) {
+  const m = useMessages(M)
   return (
     <section className={styles.card} data-testid="gui-workflow-ask">
       <header className={styles.head}>
@@ -163,7 +195,7 @@ function AskCard({ ask }: { ask: WorkflowAsk }) {
         <span className={styles.name}>{ask.name}</span>
         <span className={styles.status} data-outcome="ask">
           <StatusGlyph status="needs_you" />
-          等你确认
+          {m.confirm}
         </span>
       </header>
       {ask.phases.length > 0 && (
@@ -179,10 +211,10 @@ function AskCard({ ask }: { ask: WorkflowAsk }) {
       )}
       <div className={styles.actions}>
         <button type="button" className={styles.button} disabled={ask.pending} onClick={() => ask.answer(false)}>
-          拒绝
+          {m.deny}
         </button>
         <button type="button" className={styles.primary} disabled={ask.pending} onClick={() => ask.answer(true)}>
-          运行
+          {m.run}
         </button>
       </div>
     </section>

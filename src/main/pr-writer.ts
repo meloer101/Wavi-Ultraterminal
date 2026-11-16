@@ -32,6 +32,36 @@ import { isQuitting } from './quit'
 import { getSettings } from './settings'
 import { isProjectRoot } from './workspace-store'
 import { killGroup } from './git/run'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    binaryFile: (path: string) => `新文件 ${path}（二进制）`,
+    timedOut: (seconds: number) => `超过 ${seconds} 秒没有结束，已停止`,
+    invalid: '请求无效',
+    notWorktree: '不是这个项目的 worktree',
+    detached: '处于分离 HEAD',
+    isBase: '这是基线分支本身',
+    noAgent: '没有找到 claude 或 codex：装好其中一个后再试',
+    noTickedChanges: '勾选的文件没有改动',
+    noBranchChanges: '分支没有比基线新的改动',
+    cancelled: '已取消',
+    notWritten: (agent: string, why: string, tail: string) => `${agent} 没写出来：${why}${tail ? `（${tail}）` : ''}`
+  },
+  en: {
+    binaryFile: (path: string) => `New file ${path} (binary)`,
+    timedOut: (seconds: number) => `Still running after ${seconds} s; stopped`,
+    invalid: 'Invalid request',
+    notWorktree: "Not a worktree of this project",
+    detached: 'Detached HEAD',
+    isBase: 'This is the base branch itself',
+    noAgent: "Can't find claude or codex: install one of them and try again",
+    noTickedChanges: 'The ticked files have no changes',
+    noBranchChanges: 'The branch has no changes newer than the base',
+    cancelled: 'Cancelled',
+    notWritten: (agent: string, why: string, tail: string) => `${agent} didn't write it: ${why}${tail ? ` (${tail})` : ''}`
+  }
+})
 
 const RUN_TIMEOUT_MS = 120_000
 const KILL_GRACE_MS = 2_000
@@ -59,7 +89,7 @@ async function uncommittedDiff(cwd: string, paths: readonly string[]): Promise<s
       .then((buffer) => buffer.subarray(0, MAX_UNTRACKED_BYTES))
       .catch(() => null)
     if (!content) continue
-    parts.push(content.includes(0) ? `新文件 ${file.path}（二进制）\n` : untrackedFileDiff(file.path, content.toString('utf8')))
+    parts.push(content.includes(0) ? `${pick(M).binaryFile(file.path)}\n` : untrackedFileDiff(file.path, content.toString('utf8')))
   }
   return parts.join('\n')
 }
@@ -112,7 +142,7 @@ function run(key: string, binary: string, args: string[], prompt: string, cwd: s
     let cancelled = false
     let settled = false
     const timer = setTimeout(() => {
-      stderr += `\n超过 ${RUN_TIMEOUT_MS / 1000} 秒没有结束，已停止`
+      stderr += `\n${pick(M).timedOut(RUN_TIMEOUT_MS / 1000)}`
       killGroup(child, 'SIGTERM')
       setTimeout(() => killGroup(child, 'SIGKILL'), KILL_GRACE_MS).unref()
     }, RUN_TIMEOUT_MS)
@@ -143,23 +173,25 @@ function run(key: string, binary: string, args: string[], prompt: string, cwd: s
 /** Writes a commit message or a PR title / body for the sheet. */
 export async function writeShipText(raw: unknown): Promise<WriteResult> {
   const request = parseWriteRequest(raw)
-  if (!request || !isProjectRoot(request.root)) return fail('请求无效')
+  if (!request || !isProjectRoot(request.root)) return fail(pick(M).invalid)
   const info = await branchInfo(request)
-  if (!info) return fail('不是这个项目的 worktree')
-  if (!info.branch) return fail('处于分离 HEAD')
-  if (!info.base || info.base === info.branch) return fail('这是基线分支本身')
+  if (!info) return fail(pick(M).notWorktree)
+  if (!info.branch) return fail(pick(M).detached)
+  // A commit message describes only the ticked files: it is written on the base too (提交 in the main checkout).
+  if (request.kind === 'pr' && (!info.base || info.base === info.branch)) return fail(pick(M).isBase)
+  const base = info.base ?? info.branch
 
   const path = await searchPath()
   const order: WriterAgent[] = [request.agent, ...HEADLESS_AGENTS.filter((a) => a !== request.agent)]
   const agent = order.find((name) => executableOnPath(path, name))
-  if (!agent) return fail('没有找到 claude 或 codex：装好其中一个后再试')
+  if (!agent) return fail(pick(M).noAgent)
   const binary = executableOnPath(path, agent)!
   const settings = getSettings().pr
   const model = agent === 'claude' ? settings.writerClaudeModel : settings.writerCodexModel
 
   // The base as exit A and 创建 PR read it: on its own remote, not the one the branch was published to (a fork).
-  const facts = await material(request, info.cwd, info.branch, info.base, await baseRemoteFor(info.cwd, info.branch, info.base))
-  if (!facts.diff.trim()) return fail(request.kind === 'commit' ? '勾选的文件没有改动' : '分支没有比基线新的改动')
+  const facts = await material(request, info.cwd, info.branch, base, await baseRemoteFor(info.cwd, info.branch, base))
+  if (!facts.diff.trim()) return fail(request.kind === 'commit' ? pick(M).noTickedChanges : pick(M).noBranchChanges)
 
   let dir: string | null = null
   try {
@@ -169,12 +201,12 @@ export async function writeShipText(raw: unknown): Promise<WriteResult> {
     if (agent === 'codex') await writeFile(schemaPath, JSON.stringify(schemaFor(request.kind)))
     const argv = writerArgv({ agent, kind: request.kind, model, schemaPath, outputPath })
     const ran = await run(`${request.worktree}\0${request.kind}`, binary, argv.slice(1), writerPrompt(request.kind, facts), info.cwd, buildPtyEnv(process.env, { PATH: path }))
-    if (ran.cancelled) return fail('已取消')
+    if (ran.cancelled) return fail(pick(M).cancelled)
     const output = agent === 'codex' ? await readFile(outputPath, 'utf8').catch(() => '') : ran.stdout
     const parsed = parseWriterOutput(request.kind, output || ran.stdout)
     if (!parsed.ok) {
       const tail = ran.stderr.trim().split('\n').slice(-2).join(' ')
-      return fail(`${agent === 'claude' ? 'Claude' : 'Codex'} 没写出来：${parsed.reason}${ran.code !== 0 && tail ? `（${tail.slice(0, 300)}）` : ''}`)
+      return fail(pick(M).notWritten(agent === 'claude' ? 'Claude' : 'Codex', parsed.reason, ran.code !== 0 && tail ? tail.slice(0, 300) : ''))
     }
     return 'message' in parsed
       ? { ok: true, kind: 'commit', message: parsed.message, agent, model }

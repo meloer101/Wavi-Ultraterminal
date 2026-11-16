@@ -7,6 +7,8 @@
 // setPlainDetails). PRD F16 v1.78: `api repos/…` answers the base's branch protection (200 / 404) and the check runs
 // of a pushed base commit. 合入链路 v2: a `signed-out` file makes `auth status`
 // say gh is not logged in; a `fail-pr-list` file makes `pr list` fail as an unreachable GitHub does.
+// 看板 · GitHub (PRD F9 v1.184): `pr list` without --head answers board-prs.json, `issue list` board-issues.json,
+// `issue view N` / `pr view N` issue-N.json / prview-N.json, and `api user` the login jacob.
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -21,7 +23,12 @@ case "$1 $2" in
     echo "github.com: Logged in"; exit 0 ;;
   "pr list")
     if [ -f "$d/fail-pr-list" ]; then echo "error connecting to api.github.com" >&2; exit 1; fi
+    if [ -z "$head" ]; then cat "$d/board-prs.json" 2>/dev/null || echo '[]'; exit 0; fi
     cat "$d/pr-$head.json" 2>/dev/null || echo '[]'; exit 0 ;;
+  "issue list") cat "$d/board-issues.json" 2>/dev/null || echo '[]'; exit 0 ;;
+  "issue view") cat "$d/issue-$3.json" 2>/dev/null || { echo "issue $3 not found" >&2; exit 1; }; exit 0 ;;
+  "pr view") cat "$d/prview-$3.json" 2>/dev/null || { echo "PR $3 not found" >&2; exit 1; }; exit 0 ;;
+  "api user") echo jacob; exit 0 ;;
   "pr create")
     [ -f "$d/after-create-$head.json" ] && cp "$d/after-create-$head.json" "$d/pr-$head.json"
     cat "$d/create-url"; exit 0 ;;
@@ -110,6 +117,13 @@ export function fakeGh(bin: string, dir: string) {
           }))
         })
       ),
+    /** 看板 · GitHub: the open issues and PRs `gh issue list` / `gh pr list` (without --head) answer, as gh's JSON. */
+    setBoard: (issues: unknown[], prs: unknown[]) => {
+      writeFileSync(join(dir, 'board-issues.json'), JSON.stringify(issues))
+      writeFileSync(join(dir, 'board-prs.json'), JSON.stringify(prs))
+    },
+    /** What `gh issue view N` / `gh pr view N` print. */
+    setView: (kind: 'issue' | 'pr', number: number, json: unknown) => writeFileSync(join(dir, `${kind === 'issue' ? 'issue' : 'prview'}-${number}.json`), JSON.stringify(json)),
     setFailedLog: (text: string) => writeFileSync(join(dir, 'log-failed.txt'), text),
     /** gh says it is not logged in (true) or logged in (false, the default). */
     setSignedOut: (on: boolean) => (on ? writeFileSync(join(dir, 'signed-out'), '') : rmSync(join(dir, 'signed-out'), { force: true })),

@@ -1,7 +1,13 @@
 // What a session's visible terminal screen says about the agent's startup and dialogs (phase 2 · A6/A7).
 // Pure text matching on `readViewport` output; the status controller feeds the result to the state machine.
+import { defineMessages, pick } from './i18n'
 import { detectBlockingDialog, type BlockingDialog } from './send-protocol'
 import type { AgentKind } from './types'
+
+const M = defineMessages({
+  zh: { confirmUpdate: '等你确认：更新提示', confirmTrust: '等你确认：信任此文件夹', answerPrompt: '等你回答：终端里的提示' },
+  en: { confirmUpdate: 'Confirm: update notice', confirmTrust: 'Confirm: trust this folder', answerPrompt: 'Answer: the prompt in the terminal' }
+})
 
 export interface ScreenReading {
   /** A first-run dialog that swallows keystrokes (trust, update). */
@@ -59,8 +65,9 @@ export function blockedReasonOf(reading: ScreenReading): BlockedReason | null {
 
 /** Sidebar / status text, in the style of `等你确认：…`. */
 export function blockedAction(reason: BlockedReason): string {
-  if (reason.kind === 'dialog') return reason.dialog === 'codex-update' ? '等你确认：更新提示' : '等你确认：信任此文件夹'
-  return '等你回答：终端里的提示'
+  const m = pick(M)
+  if (reason.kind === 'dialog') return reason.dialog === 'codex-update' ? m.confirmUpdate : m.confirmTrust
+  return m.answerPrompt
 }
 
 /**

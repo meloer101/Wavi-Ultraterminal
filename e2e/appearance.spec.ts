@@ -92,6 +92,9 @@ test.beforeAll(async () => {
   await page.reload()
   await expect(pane(FIRST)).toBeVisible()
   await expect.poll(() => screen(FIRST), { timeout: 20_000 }).not.toBe('')
+  // An opaque terminal to start from (85% by default since PRD v1.179): the pixel checks read the theme color.
+  await update({ appearance: { terminalOpacity: 1 } })
+  await expect.poll(async () => (await info(FIRST))?.allowTransparency).toBe(false)
 })
 
 test.afterAll(async () => {
@@ -193,9 +196,11 @@ test('a custom terminal background and imported colors reach a live terminal, an
   await expect.poll(async () => (await info(FIRST))?.background).toBe('#0a0a0a')
 })
 
-test('the window shell is fixed glass: the sidebar and the header row are see-through, the terminal card is not', async () => {
+test('the window is glass: one base layer one step over the card, the main area is see-through, the opaque terminal card is not (PRD v1.183)', async () => {
   const background = (selector: string) => page.locator(selector).first().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor)
+  // The tint is the base layer's, under the sidebar and the gaps alike (Figma 84A); beside an opaque card it is opaque too.
   expect(await background('[data-region="sidebar"]')).toBe('rgba(0, 0, 0, 0)')
+  expect(await background('[data-glass-base]')).not.toBe('rgba(0, 0, 0, 0)')
   expect(await background('[data-region="main"]')).toBe('rgba(0, 0, 0, 0)')
   expect(await background('[data-region="terminal"] [data-session-id][data-shown="true"]')).not.toBe('rgba(0, 0, 0, 0)')
   await page.screenshot({ path: `${SHOTS}/appearance-glass-window.png` })

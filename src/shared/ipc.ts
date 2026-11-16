@@ -12,12 +12,14 @@ import type { CliPermission } from './gui-chat'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
+import type { GitHubBoardApi } from './github-board'
 import type { ShipApi } from './ship'
 import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
 import type { UsageDataset } from './usage-stats'
 import type { AppSettings, SettingsPatch } from './settings'
+import type { Lang } from './i18n'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 import type { WindowKey, WindowStateEvent } from './window-layout'
@@ -27,7 +29,7 @@ import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 import type { DispatchApi } from './dispatch'
 import type { RemoteApi } from './remote'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
-import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
+import type { MergePrecheck } from './git-merge'
 import type { CapturedScript, RepoScripts, RunnableScript } from './repo-scripts'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
@@ -243,8 +245,6 @@ export interface GitWorktreesApi {
   create(request: WorktreeCreateRequest): Promise<WorktreeCreateResult>
   /** Whether `worktree`'s branch can be merged into its base, and what is in the way (PRD F4 预检). Rejects on bad input. */
   mergePrecheck(root: string, worktree: string): Promise<MergePrecheck>
-  /** Merges the branch into its base (squash / merge / rebase), then optionally pushes the base to origin (PRD F4). */
-  merge(request: MergeRequest): Promise<MergeResult>
 }
 
 /** What `.tr/settings.toml` of a worktree says (PRD F4 · 脚本与端口), plus the worktree's TR_PORT. */
@@ -327,6 +327,11 @@ export interface SettingsApi {
    * resolves to what happened. A file that cannot be read is explained by a native dialog from main.
    */
   importTheme(): Promise<ThemeImportOutcome>
+  /**
+   * 背景图片 (PRD v1.189): stores a JPEG the settings page encoded from the picked file (shared/background-image.ts) and
+   * makes it the window's background. Resolves to false when main refused it (not a JPEG, too large, write failed).
+   */
+  setBackgroundImage(jpeg: Uint8Array): Promise<boolean>
   /** A settings write failed (disk full, permissions, …); the change is applied in memory but not saved. */
   onSaveError(listener: (error: SettingsSaveError) => void): Unsubscribe
 }
@@ -355,6 +360,10 @@ export type AgentVersions = Partial<Record<CliAgent, string | null>>
 export interface AppInfoApi {
   /** package.json version of the running app. */
   version: string
+  /** The interface language when the window loaded (main resolves 设置 · 外观 · 语言 against the system). */
+  language: Lang
+  /** Later changes of the interface language. */
+  onLanguage(listener: (lang: Lang) => void): Unsubscribe
   /** Latest GitHub release if newer than the running version, else null. Never throws. */
   checkForUpdates(): Promise<UpdateInfo | null>
   /** Keeps main informed about live sessions (quit confirmation). */
@@ -440,6 +449,8 @@ export interface TrApi {
   archive: ArchiveApi
   /** PR / CI status and 创建 PR through the user's gh login (PRD F16); channels in PR_IPC. */
   pr: PullRequestApi
+  /** 看板 · GitHub: open issues and PRs, one item, a PR's head for its worktree (PRD F9 v1.184); channels in GITHUB_BOARD_IPC. */
+  githubBoard: GitHubBoardApi
   /** The merge chain's two exits, agent handoff files, brakes and base CI (PRD F16 v1.78); channels in SHIP_IPC. */
   ship: ShipApi
   /** Background pairwise / base merge-tree checks of active worktrees (冲突雷达); channels in RADAR_IPC. */
@@ -528,12 +539,15 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   settingsImportTheme: 'settings:import-theme',
+  settingsSetBackgroundImage: 'settings:set-background-image',
   /** main → every window, payload AppSettings */
   settingsChanged: 'settings:changed',
   /** main → every window, payload SettingsSaveError */
   settingsSaveFailed: 'settings:save-failed',
   /** sync: returns the app version */
   appVersion: 'app:version',
+  appLanguage: 'app:language',
+  appLanguageChanged: 'app:language-changed',
   appCheckForUpdates: 'app:check-for-updates',
   appReportActivity: 'app:report-activity',
   /** renderer → main, payload boolean */
@@ -583,8 +597,6 @@ export const IPC = {
   gitWorktreesCreate: 'git-worktrees:create',
   /** invoke(root, worktree) → MergePrecheck */
   gitWorktreesMergePrecheck: 'git-worktrees:merge-precheck',
-  /** invoke(MergeRequest) → MergeResult */
-  gitWorktreesMerge: 'git-worktrees:merge',
   /** invoke(dir) → RepoScriptsInfo */
   repoScriptsGet: 'repo-scripts:get',
   /** invoke(dir, name) → ScriptApproval */

@@ -17,7 +17,10 @@ export const CLAUDE_HOOK_EVENTS = [
   'StopFailure',
   'SessionEnd',
   // A subagent finished: nothing of it waits on the user any more (two dialogs up at once, PRD §3.1).
-  'SubagentStop'
+  'SubagentStop',
+  // Agent teams (PRD §6.20, Figma 83″B): a teammate took up a message / ended its turn (./teams.ts).
+  'SubagentStart',
+  'TeammateIdle'
 ] as const
 
 export type ClaudeHookEvent = (typeof CLAUDE_HOOK_EVENTS)[number]

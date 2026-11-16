@@ -2,6 +2,13 @@
 // PTY's launch arguments. Scripts are POSIX sh (`/bin/sh -e`, stop at the first failing command) whatever the user's
 // own shell is; they still run inside the user's interactive login shell, so its PATH (nvm, Homebrew, …) applies.
 import { shellQuote } from './agent-launch'
+import { defineMessages, pick } from './i18n'
+
+// Inside printf formats in single quotes: no `'`, and `%s` is the exit code.
+const M = defineMessages({
+  zh: { running: '[运行 setup 脚本 · .tr/settings.toml]', failed: '[setup 脚本失败，退出码 %s · 按回车继续]' },
+  en: { running: '[Running setup script · .tr/settings.toml]', failed: '[setup script failed, exit code %s · press Return to continue]' }
+})
 
 /** OSC number the setup runner reports through (the agent's own markers use AGENT_MARKER_OSC). */
 export const SCRIPT_MARKER_OSC = 7772
@@ -24,14 +31,14 @@ export function parseScriptMarker(payload: string): ScriptMarker | null {
  * Runs the setup script ($1) and reports how it went. A failure (or ⌃C, which only stops the script) waits for ↵ so
  * its output can be read before the agent's TUI takes the screen; the strip under the session sends that ↵ too.
  */
-const SETUP_RUNNER = [
+const setupRunner = (m = pick(M)): string => [
   'trap : INT',
-  `printf '\\033[2m[运行 setup 脚本 · .tr/settings.toml]\\033[0m\\n'`,
+  `printf '\\033[2m${m.running}\\033[0m\\n'`,
   '/bin/sh -ec "$1"',
   'code=$?',
   `printf '\\033]${SCRIPT_MARKER_OSC};setup;%s\\007' "$code"`,
   'if [ "$code" -ne 0 ]; then',
-  `  printf '\\n\\033[2m[setup 脚本失败，退出码 %s · 按回车继续]\\033[0m' "$code"`,
+  `  printf '\\n\\033[2m${m.failed}\\033[0m' "$code"`,
   '  read -r _ || true',
   `  printf '\\n'`,
   'fi',
@@ -40,7 +47,7 @@ const SETUP_RUNNER = [
 
 /** One command (valid in sh, bash, zsh and fish) that runs the setup script before whatever follows it. */
 export function setupCommand(script: string): string {
-  return `/bin/sh -c ${shellQuote(SETUP_RUNNER)} tr-setup ${shellQuote(script)}`
+  return `/bin/sh -c ${shellQuote(setupRunner())} tr-setup ${shellQuote(script)}`
 }
 
 /**

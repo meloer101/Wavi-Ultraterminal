@@ -6,12 +6,34 @@ import { claudeOrCodex } from '@shared/agents'
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
 import { inputLineText, normalizeSendText, planSend, sendRefusal } from '@shared/send-protocol'
 import type { AgentKind, SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
 import { addAttachments, clearComposer, draftOf, insertIntoDraft, isGuiSession, useGuiSessions } from './gui/store'
 import { attachmentInput } from './terminal/attachments'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
 import { noteInserted } from './terminal/typing'
+
+const M = defineMessages({
+  zh: {
+    noSession: '会话不存在',
+    notShown: '终端没有显示刚才的输入，没有按回车',
+    noPhoto: '终端里没有出现照片，没有按回车',
+    notAgent: '不是 agent 会话',
+    minutes: (n: number) => `${n} 分钟`,
+    seconds: (n: number) => `${n} 秒`,
+    notStarted: (within: string) => `agent 没有在 ${within}内启动`
+  },
+  en: {
+    noSession: 'Session not found',
+    notShown: "The terminal didn't show what was typed; Enter was not pressed",
+    noPhoto: "The photo didn't appear in the terminal; Enter was not pressed",
+    notAgent: 'Not an agent session',
+    minutes: (n: number) => `${n} min`,
+    seconds: (n: number) => `${n} s`,
+    notStarted: (within: string) => `The agent didn't start within ${within}`
+  }
+})
 
 // One serial queue per session: two sends to the same PTY must never interleave.
 const queue = createSendQueue()
@@ -36,7 +58,7 @@ function refuseOverMenu(sessionId: SessionId): void {
 /** Types `text` into the session's agent and presses Enter once the agent shows it. Rejects with a user-facing message. */
 export async function submitPrompt(sessionId: SessionId, text: string): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (!session) throw new Error('会话不存在')
+  if (!session) throw new Error(pick(M).noSession)
   if (session.ui === 'gui') {
     const body = normalizeSendText(text).trim()
     if (!body) return
@@ -50,7 +72,7 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
   try {
     await sendQueued(queue, sessionId, steps, getSendIo(sessionId))
   } catch (error) {
-    if (error instanceof SendTimeoutError) throw new Error('终端没有显示刚才的输入，没有按回车', { cause: error })
+    if (error instanceof SendTimeoutError) throw new Error(pick(M).notShown, { cause: error })
     throw error
   }
 }
@@ -106,7 +128,7 @@ export async function submitInputLine(sessionId: SessionId, needle: string): Pro
   try {
     await sendQueued(queue, sessionId, [{ type: 'waitForText', needles: [needle], timeoutMs: 5_000 }, { type: 'delay', ms: 150 }, { type: 'write', data: '\r' }], getSendIo(sessionId))
   } catch (error) {
-    if (error instanceof SendTimeoutError) throw new Error('终端里没有出现照片，没有按回车', { cause: error })
+    if (error instanceof SendTimeoutError) throw new Error(pick(M).noPhoto, { cause: error })
     throw error
   }
 }
@@ -131,11 +153,11 @@ export async function insertSlashCommand(sessionId: SessionId, command: string):
 }
 
 /**
- * 总览 · 停止 (PRD F9 batch): one Esc to the agent, as the user would press it in the terminal — it ends the turn and
+ * 看板 · 停止 (PRD F9 batch): one Esc to the agent, as the user would press it in the terminal — it ends the turn and
  * keeps the conversation. Queued behind any send in flight. Not for plain terminals (no agent to interrupt).
  */
 export async function interruptAgent(sessionId: SessionId): Promise<void> {
-  if (!agentIn(sessionId)) throw new Error('不是 agent 会话')
+  if (!agentIn(sessionId)) throw new Error(pick(M).notAgent)
   if (isGuiSession(sessionId)) {
     await window.tr.gui.interrupt(sessionId)
     return
@@ -155,7 +177,8 @@ export function whenAgentReady(sessionId: SessionId, timeoutMs = READY_TIMEOUT_M
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       unsubscribe()
-      reject(new Error(`agent 没有在 ${timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分钟` : `${Math.round(timeoutMs / 1000)} 秒`}内启动`))
+      const m = pick(M)
+      reject(new Error(m.notStarted(timeoutMs >= 60_000 ? m.minutes(Math.round(timeoutMs / 60_000)) : m.seconds(Math.round(timeoutMs / 1000)))))
     }, timeoutMs)
     const unsubscribe = useWorkspace.subscribe(() => {
       if (!ready()) return

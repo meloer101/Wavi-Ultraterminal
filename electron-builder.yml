@@ -49,10 +49,14 @@ mac:
   # are set (release.yml); the dmgs are notarized and stapled there too.
   notarize: true
   extendInfo:
-    # Prompts for what programs in Wavi's terminals ask for (build/entitlements.mac.plist).
-    NSAppleEventsUsageDescription: 在 Wavi 中运行的程序请求控制其他应用。
-    NSMicrophoneUsageDescription: 在 Wavi 中运行的程序请求使用麦克风。
-    NSCameraUsageDescription: 在 Wavi 中运行的程序请求使用摄像头。
+    # Prompts for what programs in Wavi's terminals ask for (build/entitlements.mac.plist). English here; each
+    # language's text is in build/locales/<lang>.lproj/InfoPlist.strings, copied next to Electron's own lproj folders.
+    NSAppleEventsUsageDescription: A program running in Wavi wants to control other apps.
+    NSMicrophoneUsageDescription: A program running in Wavi wants to use the microphone.
+    NSCameraUsageDescription: A program running in Wavi wants to use the camera.
+  extraResources:
+    - from: build/locales
+      to: .
   target:
     - target: dmg
       arch: [arm64, x64]

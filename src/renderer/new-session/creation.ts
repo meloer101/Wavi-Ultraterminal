@@ -3,12 +3,18 @@
 // session's terminal is held until the folder exists, and a failure is reported on the session itself. With 准备 on,
 // the repository's setup script (`.tr/settings.toml`) is approved next and runs in that terminal before the agent.
 import { create } from 'zustand'
+import { defineMessages, pick } from '@shared/i18n'
 import type { Workdir, WorktreeCreateRequest } from '@shared/new-session'
 import type { AgentKind, ProjectId, SessionId, SessionUi } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { prepareSetup } from '../scripts/setup-runs'
 import { useWorkspace } from '../state/workspace'
 import { createFailureText, type CreatePlan } from './model'
+
+const M = defineMessages({
+  zh: { failed: (message: string) => `没能创建 worktree：${message}` },
+  en: { failed: (message: string) => `Couldn't create the worktree: ${message}` }
+})
 
 /** Sessions whose worktree is being created, or could not be (their terminal must not start). Not persisted. */
 export const useWorktreeCreations = create<{ held: Record<SessionId, 'creating' | 'failed' | undefined> }>(() => ({ held: {} }))
@@ -23,7 +29,7 @@ function setHeld(sessionId: SessionId, state: 'creating' | 'failed' | undefined)
 function fail(sessionId: SessionId, kind: AgentKind, message: string): void {
   setHeld(sessionId, 'failed')
   reportLaunchIssue(sessionId, { kind: 'worktree-failed', message })
-  useWorkspace.getState().patchSession(sessionId, { status: 'error', currentAction: `没能创建 worktree：${message}`, ...(kind === 'shell' ? {} : { phase: 'exited' as const }) })
+  useWorkspace.getState().patchSession(sessionId, { status: 'error', currentAction: pick(M).failed(message), ...(kind === 'shell' ? {} : { phase: 'exited' as const }) })
 }
 
 /**

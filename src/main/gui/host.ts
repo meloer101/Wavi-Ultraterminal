@@ -21,6 +21,32 @@ import { isRec, type DriverIO, type GuiDriver, type ImageBlock } from './driver'
 import { cleanTitle } from '../hooks/agent-title'
 import { exitReason } from './launch'
 import { createGuiStatusTracker, toolInputOf, type GuiStatusTracker } from './status'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    closed: '会话已关闭',
+    startFailed: (binary: string, why: string) => `没能启动 ${binary}：${why}`,
+    exited: '智能体已经退出了',
+    sendFailed: '没能发给智能体',
+    noSession: '会话不存在',
+    cantEdit: '这个会话不能改之前的消息',
+    stopFirst: '先停止这一轮再改',
+    noMessage: '找不到这条消息',
+    notInTranscript: '对话记录里找不到这条消息'
+  },
+  en: {
+    closed: 'The session is closed',
+    startFailed: (binary: string, why: string) => `Couldn't start ${binary}: ${why}`,
+    exited: 'The agent has exited',
+    sendFailed: "Couldn't send it to the agent",
+    noSession: "The session doesn't exist",
+    cantEdit: "Earlier messages can't be edited in this session",
+    stopFirst: 'Stop this turn before editing',
+    noMessage: "Can't find this message",
+    notInTranscript: "Can't find this message in the transcript"
+  }
+})
 
 export interface GuiOwner {
   isDestroyed(): boolean
@@ -233,14 +259,14 @@ class GuiSession<O extends GuiOwner> {
     }
     this.binary = prepared.binary
     this.hookless = prepared.synthStatus === true
-    if (this.stopped) return { ok: false, reason: '会话已关闭' }
+    if (this.stopped) return { ok: false, reason: pick(M).closed }
     const started = await this.deps
       .link()
       .spawn({ id: this.id, cwd: this.launch.cwd, agent: this.launch.agent, command: prepared.command, args: prepared.args, env: prepared.env, ...(prepared.baseEnv ? { baseEnv: prepared.baseEnv } : {}) }, this.handlers())
     if (!started.ok) {
       this.exited = true
       this.deps.ended(this.id, this.launch.agent)
-      return { ok: false, reason: `没能启动 ${prepared.binary}：${started.message}` }
+      return { ok: false, reason: pick(M).startFailed(prepared.binary, started.message) }
     }
     this.driver.start()
     return { ok: true, state: this.snapshot() }
@@ -462,12 +488,12 @@ class GuiSession<O extends GuiOwner> {
   }
 
   async send(text: string, attachments: readonly string[]): Promise<GuiSendResult> {
-    if (this.exited) return { ok: false, reason: this.state.failure ?? '智能体已经退出了' }
+    if (this.exited) return { ok: false, reason: this.state.failure ?? pick(M).exited }
     if (!this.ready || this.state.busy || this.state.queued.length > 0) {
       this.enqueue(text, attachments)
       return { ok: true, queued: true }
     }
-    return (await this.sendNow(text, attachments)) ? { ok: true, queued: false } : { ok: false, reason: '没能发给智能体' }
+    return (await this.sendNow(text, attachments)) ? { ok: true, queued: false } : { ok: false, reason: pick(M).sendFailed }
   }
 
   editQueued(queuedId: string, text: string): boolean {
@@ -591,7 +617,7 @@ export class GuiHost<O extends GuiOwner> {
 
   send(sessionId: string, message: { text: string; attachments: readonly string[] }): Promise<GuiSendResult> {
     const session = this.sessions.get(sessionId)
-    return session ? session.send(message.text, message.attachments) : Promise.resolve({ ok: false, reason: '会话不存在' })
+    return session ? session.send(message.text, message.attachments) : Promise.resolve({ ok: false, reason: pick(M).noSession })
   }
 
   answer(sessionId: string, answer: GuiAnswer): boolean {
@@ -621,16 +647,16 @@ export class GuiHost<O extends GuiOwner> {
    */
   async edit(sessionId: string, messageId: string, text: string): Promise<GuiOpenResult> {
     const session = this.sessions.get(sessionId)
-    if (!session || session.exited || !guiCanEdit(session.launch.agent)) return { ok: false, reason: '这个会话不能改之前的消息' }
+    if (!session || session.exited || !guiCanEdit(session.launch.agent)) return { ok: false, reason: pick(M).cantEdit }
     const { state, launch } = session
-    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return { ok: false, reason: '先停止这一轮再改' }
+    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return { ok: false, reason: pick(M).stopFirst }
     const index = state.items.findIndex((item) => item.kind === 'user' && item.id === messageId)
     const owner = session.owner
-    if (index < 0 || !owner) return { ok: false, reason: '找不到这条消息' }
+    if (index < 0 || !owner) return { ok: false, reason: pick(M).noMessage }
     const agentSessionId = session.agentSessionId
     const at = agentSessionId ? await this.deps.resumePoint(launch.agent, launch.cwd, agentSessionId, messageId).catch(() => undefined) : null
-    if (at === undefined) return { ok: false, reason: '对话记录里找不到这条消息' }
-    if (this.sessions.get(sessionId) !== session || session.state.busy) return { ok: false, reason: '先停止这一轮再改' }
+    if (at === undefined) return { ok: false, reason: pick(M).notInTranscript }
+    if (this.sessions.get(sessionId) !== session || session.state.busy) return { ok: false, reason: pick(M).stopFirst }
     const next: GuiLaunch = { ...launch, ...currentModel(state), initialPrompt: text }
     delete next.resumeAgentSessionId
     delete next.resumeAt

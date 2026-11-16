@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
+import { parseCommitRange, parseDiffSinceRequest, parseHandoffRequest, parsePrepushRequest, parsePushRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
 
 const target = { root: '/r', worktree: '/w' }
 
@@ -34,12 +34,31 @@ describe('parseDiffSinceRequest', () => {
   })
 })
 
-describe('parsePushBaseRequest', () => {
-  it('takes a target and, optionally, the merge commit to push', () => {
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w' })).toEqual({ root: '/r', worktree: '/w' })
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'abc1234' })).toEqual({ root: '/r', worktree: '/w', commit: 'abc1234' })
-    expect(parsePushBaseRequest({ root: '/r', worktree: '/w', commit: 'HEAD~1' })).toBeNull()
-    expect(parsePushBaseRequest({ root: 'r', worktree: '/w' })).toBeNull()
+describe('parsePushRequest', () => {
+  it('takes a target and, optionally, the full commit id the review read', () => {
+    const tip = 'a'.repeat(40)
+    expect(parsePushRequest({ root: '/r', worktree: '/w' })).toEqual({ root: '/r', worktree: '/w' })
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: tip })).toEqual({ root: '/r', worktree: '/w', expect: tip })
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: 'abc1234' })).toBeNull()
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: 'HEAD~1' })).toBeNull()
+    expect(parsePushRequest({ root: '/r', worktree: '/w', expect: '--force' })).toBeNull()
+    expect(parsePushRequest({ root: 'r', worktree: '/w' })).toBeNull()
+  })
+})
+
+describe('parsePrepushRequest / parseCommitRange (the push node)', () => {
+  it('accepts the three pushes only', () => {
+    for (const push of ['base', 'branch', 'new-pr']) expect(parsePrepushRequest({ ...target, push })).toEqual({ ...target, push })
+    for (const push of ['force', '', undefined, 'toString']) expect(parsePrepushRequest({ ...target, push })).toBeNull()
+    expect(parsePrepushRequest({ root: 'r', worktree: '/w', push: 'base' })).toBeNull()
+  })
+
+  it('takes two full commit ids, nothing git could read as an option or a revision expression', () => {
+    const range = { from: 'a'.repeat(40), to: 'b'.repeat(64) }
+    expect(parseCommitRange(range)).toEqual(range)
+    for (const bad of [null, 'a..b', { from: 'HEAD~1', to: 'b'.repeat(40) }, { from: 'a'.repeat(39), to: 'b'.repeat(40) }, { from: 'A'.repeat(40), to: 'b'.repeat(40) }, { from: '--all', to: 'b'.repeat(40) }]) {
+      expect(parseCommitRange(bad)).toBeNull()
+    }
   })
 })
 
@@ -54,6 +73,19 @@ describe('parseShipMainRequest', () => {
   it('lets the message be empty only without paths', () => {
     expect(parseShipMainRequest({ ...valid, message: '', paths: null })).toEqual({ ...target, message: '', method: 'squash', paths: null })
     expect(parseShipMainRequest({ ...valid, message: ' \n' })).toBeNull()
+  })
+
+  it('asks for a push only when push is true, and keeps a one-line title and a full head', () => {
+    const plain = { ...target, message: '', method: 'squash', paths: null }
+    expect(parseShipMainRequest(plain)).not.toHaveProperty('push')
+    expect(parseShipMainRequest({ ...plain, push: false })).not.toHaveProperty('push')
+    expect(parseShipMainRequest({ ...plain, push: true })).toMatchObject({ push: true })
+    expect(parseShipMainRequest({ ...plain, push: 'yes' })).toBeNull()
+    expect(parseShipMainRequest({ ...plain, title: '修好\n登录' })).toMatchObject({ title: '修好 登录' })
+    expect(parseShipMainRequest({ ...plain, title: ' ' })).not.toHaveProperty('title')
+    expect(parseShipMainRequest({ ...plain, title: 3 })).toBeNull()
+    expect(parseShipMainRequest({ ...plain, head: 'a'.repeat(40) })).toMatchObject({ head: 'a'.repeat(40) })
+    expect(parseShipMainRequest({ ...plain, head: 'abc1234' })).toBeNull()
   })
 
   it('reads an empty path list as nothing to commit and drops duplicates', () => {

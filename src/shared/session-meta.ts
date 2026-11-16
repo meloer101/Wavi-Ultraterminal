@@ -5,6 +5,90 @@
 //   `rate_limits.primary / secondary` with `window_minutes`), and `codex app-server`'s `account/rateLimits/read`.
 // Main parses with these; the renderer selects and formats with the helpers further down.
 import type { UsageVendor } from './agents'
+import { defineMessages, localized, pick } from './i18n'
+
+const M = defineMessages({
+  zh: {
+    weekly: '每周',
+    days: (n: number) => `${n} 天`,
+    hours: (n: number) => `${n} 小时`,
+    minutes: (n: number) => `${n} 分钟`,
+    /** `10 月 20 日`: month is 1–12. */
+    date: (month: number, day: number) => `${month} 月 ${day} 日`,
+    resetsAt: (time: string) => `${time} 重置`,
+    resetsOn: (date: string) => `${date}重置`,
+    updatedNow: '刚刚更新',
+    updatedMinutes: (n: number) => `${n} 分钟前更新`,
+    updatedHours: (n: number) => `${n} 小时前更新`,
+    updatedDays: (n: number) => `${n} 天前更新`,
+    durationMinutes: (n: number) => `${n} 分钟`,
+    durationHours: (h: number, m: number) => (m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`),
+    durationDays: (d: number, h: number) => (h === 0 ? `${d} 天` : `${d} 天 ${h} 小时`),
+    loading: '读取中…',
+    chipUsedUp: (name: string) => `${name} 用完`,
+    chipUsedUpUntil: (name: string, at: string) => `${name} 用完 · ${at} 恢复`,
+    usedUp: '已用完',
+    usedUpFor: (left: string) => `已用完 · 还有 ${left}恢复`,
+    elapsed: (percent: number) => `时间过了 ${percent}%`,
+    paceRecent: '按最近的速度',
+    paceAverage: '按这个速度',
+    runsOut: (elapsed: string, pace: string, at: string) => `${elapsed}，用得比时间快 · ${pace}约 ${at} 用完`,
+    lasts: (elapsed: string, pace: string) => `${elapsed} · ${pace}用得完`,
+    // A model name ends in Latin letters, which take a space before the Chinese that follows.
+    alertName: (vendor: string, window: string, scoped: boolean) => `${vendor} ${window}${scoped ? ' ' : ''}额度`,
+    alertUsedUp: (name: string) => `${name}已用完`,
+    alertResets: (at: string) => `${at} 恢复`,
+    alertWait: '等它重置后再继续',
+    alertRunsOut: (at: string) => `按这个速度约 ${at} 用完`,
+    alertUsed: (name: string, percent: number) => `${name}已用 ${percent}%`,
+    maybeStale: (base: string) => `${base} · 可能不是最新`,
+    forecastCompact: '自动压缩',
+    forecastFull: '用满',
+    forecastOver: '超过 80%',
+    forecast: (turns: number, span: string, what: string) => `按最近 ${turns} 轮的增速，大约 ${span} 轮后${what}`,
+    otherSessions: (n: number) => `其他 ${n} 个会话`,
+    closedSessions: '已关闭的会话'
+  },
+  en: {
+    weekly: 'Weekly',
+    days: (n: number) => (n === 1 ? '1 day' : `${n} days`),
+    hours: (n: number) => (n === 1 ? '1 hour' : `${n} hours`),
+    minutes: (n: number) => `${n} min`,
+    date: (month: number, day: number) => `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1] ?? month} ${day}`,
+    resetsAt: (time: string) => `resets ${time}`,
+    resetsOn: (date: string) => `resets ${date}`,
+    updatedNow: 'updated just now',
+    updatedMinutes: (n: number) => `updated ${n} min ago`,
+    updatedHours: (n: number) => `updated ${n} h ago`,
+    updatedDays: (n: number) => (n === 1 ? 'updated 1 day ago' : `updated ${n} days ago`),
+    durationMinutes: (n: number) => `${n} min`,
+    durationHours: (h: number, m: number) => (m === 0 ? `${h} h` : `${h} h ${m} min`),
+    durationDays: (d: number, h: number) => (h === 0 ? `${d} d` : `${d} d ${h} h`),
+    loading: 'Loading…',
+    chipUsedUp: (name: string) => `${name} used up`,
+    chipUsedUpUntil: (name: string, at: string) => `${name} used up · resets ${at}`,
+    usedUp: 'Used up',
+    usedUpFor: (left: string) => `Used up · resets in ${left}`,
+    elapsed: (percent: number) => `${percent}% of the time passed`,
+    paceRecent: 'at the recent pace',
+    paceAverage: 'at this pace',
+    runsOut: (elapsed: string, pace: string, at: string) => `${elapsed}, using faster than time · ${pace} it runs out around ${at}`,
+    lasts: (elapsed: string, pace: string) => `${elapsed} · lasts ${pace}`,
+    alertName: (vendor: string, window: string) => `${vendor} usage (${window})`,
+    alertUsedUp: (name: string) => `${name} used up`,
+    alertResets: (at: string) => `resets ${at}`,
+    alertWait: 'Continue once it resets',
+    alertRunsOut: (at: string) => `at this pace it runs out around ${at}`,
+    alertUsed: (name: string, percent: number) => `${name} at ${percent}%`,
+    maybeStale: (base: string) => `${base} · may be out of date`,
+    forecastCompact: 'auto-compacts',
+    forecastFull: 'is full',
+    forecastOver: 'passes 80%',
+    forecast: (turns: number, span: string, what: string) => `At the pace of the last ${turns} turns, it ${what} in about ${span} ${span === '1' ? 'turn' : 'turns'}`,
+    otherSessions: (n: number) => (n === 1 ? '1 other session' : `${n} other sessions`),
+    closedSessions: 'Closed sessions'
+  }
+})
 
 export type { UsageVendor }
 
@@ -95,14 +179,26 @@ export interface UsageAccount {
 }
 
 /** The 额度 page's status text for a vendor without figures. */
-export const ACCOUNT_STATE_LABEL: Record<Exclude<UsageAccountState, 'ok'>, string> = {
-  'signed-out': '没登录',
-  'api-key': 'API key 登录',
-  'no-plan': '没有套餐额度',
-  outdated: 'CLI 版本太旧',
-  missing: '没装',
-  error: '读取失败'
-}
+export const ACCOUNT_STATE_LABEL: Record<Exclude<UsageAccountState, 'ok'>, string> = localized(
+  defineMessages<Record<Exclude<UsageAccountState, 'ok'>, string>>({
+    zh: {
+      'signed-out': '没登录',
+      'api-key': 'API key 登录',
+      'no-plan': '没有套餐额度',
+      outdated: 'CLI 版本太旧',
+      missing: '没装',
+      error: '读取失败'
+    },
+    en: {
+      'signed-out': 'Not signed in',
+      'api-key': 'Signed in with an API key',
+      'no-plan': 'No plan usage',
+      outdated: 'CLI too old',
+      missing: 'Not installed',
+      error: 'Could not read'
+    }
+  })
+)
 
 /** `max` → `Max`, `chatgpt_plus` → `Plus`; at most 20 characters. */
 export function planLabel(plan: string): string {
@@ -577,14 +673,15 @@ export function windowShort(minutes: number): string {
 
 /** Popover form: `5 小时`, `7 天`, `7 天 · Sonnet`; Codex calls its 7-day window 每周 (Figma 17 UsagePopover). */
 export function windowLabel(vendor: UsageVendor, minutes: number, scope?: string): string {
+  const m = pick(M)
   const base =
     minutes === 7 * 24 * 60 && vendor === 'codex'
-      ? '每周'
+      ? m.weekly
       : minutes % (24 * 60) === 0
-        ? `${minutes / (24 * 60)} 天`
+        ? m.days(minutes / (24 * 60))
         : minutes % 60 === 0
-          ? `${minutes / 60} 小时`
-          : `${minutes} 分钟`
+          ? m.hours(minutes / 60)
+          : m.minutes(minutes)
   return scope ? `${base} · ${scope}` : base
 }
 
@@ -593,18 +690,20 @@ export function formatReset(resetsAt: number, now: number): string {
   const at = new Date(resetsAt)
   const today = new Date(now)
   const sameDay = at.getFullYear() === today.getFullYear() && at.getMonth() === today.getMonth() && at.getDate() === today.getDate()
-  if (sameDay) return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} 重置`
-  return `${at.getMonth() + 1} 月 ${at.getDate()} 日重置`
+  const m = pick(M)
+  if (sameDay) return m.resetsAt(`${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`)
+  return m.resetsOn(m.date(at.getMonth() + 1, at.getDate()))
 }
 
 /** `刚刚更新`, `1 分钟前更新`, `3 小时前更新`. */
 export function formatUpdated(at: number, now: number): string {
+  const m = pick(M)
   const minutes = Math.floor(Math.max(0, now - at) / 60_000)
-  if (minutes < 1) return '刚刚更新'
-  if (minutes < 60) return `${minutes} 分钟前更新`
+  if (minutes < 1) return m.updatedNow
+  if (minutes < 60) return m.updatedMinutes(minutes)
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前更新`
-  return `${Math.floor(hours / 24)} 天前更新`
+  if (hours < 24) return m.updatedHours(hours)
+  return m.updatedDays(Math.floor(hours / 24))
 }
 
 /** `172k`, `1.2M`, `850`. */
@@ -666,17 +765,17 @@ function sameDay(a: number, b: number): boolean {
 export function formatClock(at: number, now: number): string {
   const d = new Date(at)
   const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-  return sameDay(at, now) ? time : `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${time}`
+  return sameDay(at, now) ? time : `${pick(M).date(d.getMonth() + 1, d.getDate())} ${time}`
 }
 
 /** `38 分钟`, `2 小时 5 分钟`, `3 天 4 小时`. */
 export function formatDuration(ms: number): string {
+  const m = pick(M)
   const minutes = Math.max(1, Math.ceil(ms / MINUTE))
-  if (minutes < 60) return `${minutes} 分钟`
+  if (minutes < 60) return m.durationMinutes(minutes)
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return minutes % 60 === 0 ? `${hours} 小时` : `${hours} 小时 ${minutes % 60} 分钟`
-  const days = Math.floor(hours / 24)
-  return hours % 24 === 0 ? `${days} 天` : `${days} 天 ${hours % 24} 小时`
+  if (hours < 24) return m.durationHours(hours, minutes % 60)
+  return m.durationDays(Math.floor(hours / 24), hours % 24)
 }
 
 /** How a window is going: how much of its time has passed, and whether the current pace runs out before the reset. */
@@ -759,26 +858,28 @@ export function vendorStatus(usage: VendorUsage | undefined, account: UsageAccou
   // The account answered and every window has reset since: nothing open right now, nothing being read either.
   if (windows.length > 0 || account?.state === 'ok') return { text: account?.plan ? planLabel(account.plan) : '', windows }
   if (account) return { text: ACCOUNT_STATE_LABEL[account.state], windows }
-  return { text: '读取中…', windows }
+  return { text: pick(M).loading, windows }
 }
 
 /** UsageChip v2 text: `5h 62%`, `7d Sonnet 84%`, or `5h 用完 · 14:20 恢复` once the window is used up. */
 export function usageChipText(w: UsageWindow, now: number): string {
   const name = w.scope ? `${windowShort(w.minutes)} ${w.scope}` : windowShort(w.minutes)
-  if (w.percent >= 100) return w.resetsAt !== undefined ? `${name} 用完 · ${formatClock(w.resetsAt, now)} 恢复` : `${name} 用完`
+  const m = pick(M)
+  if (w.percent >= 100) return w.resetsAt !== undefined ? m.chipUsedUpUntil(name, formatClock(w.resetsAt, now)) : m.chipUsedUp(name)
   return `${name} ${w.percent}%`
 }
 
 /** UsageWindowBlock's last line. */
 export function paceNote(w: UsageWindow, now: number): string {
   const pace = windowPace(w, now)
-  if (pace.exhausted) return w.resetsAt !== undefined ? `已用完 · 还有 ${formatDuration(w.resetsAt - now)}恢复` : '已用完'
+  const m = pick(M)
+  if (pace.exhausted) return w.resetsAt !== undefined ? m.usedUpFor(formatDuration(w.resetsAt - now)) : m.usedUp
   if (pace.elapsed === undefined) return ''
-  const elapsed = `时间过了 ${Math.round(pace.elapsed * 100)}%`
-  const speed = pace.basis === 'recent' ? '按最近的速度' : '按这个速度'
-  if (pace.runsOutAt !== undefined) return `${elapsed}，用得比时间快 · ${speed}约 ${formatClock(pace.runsOutAt, now)} 用完`
+  const elapsed = m.elapsed(Math.round(pace.elapsed * 100))
+  const speed = pace.basis === 'recent' ? m.paceRecent : m.paceAverage
+  if (pace.runsOutAt !== undefined) return m.runsOut(elapsed, speed, formatClock(pace.runsOutAt, now))
   if (pace.basis === undefined) return elapsed
-  return `${elapsed} · ${speed}用得完`
+  return m.lasts(elapsed, speed)
 }
 
 /** A Wavi usage alert: one per window per period at each of these levels. */
@@ -802,15 +903,15 @@ export interface UsageAlert {
 
 /** The system notification for an alert. */
 export function usageAlertText(alert: UsageAlert, now: number): { title: string; body: string } {
-  // A model name ends in Latin letters, which take a space before the Chinese that follows.
-  const name = `${VENDOR_LABEL[alert.vendor]} ${windowLabel(alert.vendor, alert.minutes, alert.scope)}${alert.scope ? ' ' : ''}额度`
+  const m = pick(M)
+  const name = m.alertName(VENDOR_LABEL[alert.vendor], windowLabel(alert.vendor, alert.minutes, alert.scope), !!alert.scope)
   const reset = alert.resetsAt
-  if (alert.level === 100) return { title: `${name}已用完`, body: reset !== undefined ? `${formatClock(reset, now)} 恢复` : '等它重置后再继续' }
+  if (alert.level === 100) return { title: m.alertUsedUp(name), body: reset !== undefined ? m.alertResets(formatClock(reset, now)) : m.alertWait }
   const w: UsageWindow = { minutes: alert.minutes, percent: alert.percent, ...(reset !== undefined ? { resetsAt: reset } : {}) }
   const pace = windowPace(w, now)
   const parts = [reset !== undefined ? formatReset(reset, now) : '']
-  if (pace.runsOutAt !== undefined) parts.push(`按这个速度约 ${formatClock(pace.runsOutAt, now)} 用完`)
-  return { title: `${name}已用 ${alert.percent}%`, body: parts.filter(Boolean).join(' · ') }
+  if (pace.runsOutAt !== undefined) parts.push(m.alertRunsOut(formatClock(pace.runsOutAt, now)))
+  return { title: m.alertUsed(name, alert.percent), body: parts.filter(Boolean).join(' · ') }
 }
 
 /** A reading is old when nothing has refreshed it for this long (the popover says it may be out of date). */
@@ -819,7 +920,7 @@ export const STALE_MS = 30 * MINUTE
 /** `1 分钟前更新`, or `35 分钟前更新 · 可能不是最新`. */
 export function formatUpdatedNote(at: number, now: number): string {
   const base = formatUpdated(at, now)
-  return now - at >= STALE_MS ? `${base} · 可能不是最新` : base
+  return now - at >= STALE_MS ? pick(M).maybeStale(base) : base
 }
 
 /** One finished turn: the tokens in the context window when the agent's last reply of the turn came back. */
@@ -875,8 +976,9 @@ export function contextProjection(segment: readonly number[], options: { minTurn
   const lo = Math.max(1, Math.floor(n))
   const hi = Math.max(1, Math.ceil(n))
   const span = lo === hi ? `${lo}` : `${lo}–${hi}`
-  const what = compact !== undefined ? '自动压缩' : target === 100 ? '用满' : '超过 80%'
-  return `按最近 ${turns} 轮的增速，大约 ${span} 轮后${what}`
+  const m = pick(M)
+  const what = compact !== undefined ? m.forecastCompact : target === 100 ? m.forecastFull : m.forecastOver
+  return m.forecast(turns, span, what)
 }
 
 /** SVG geometry for the ContextPopover sparkline: one path per segment, gaps marked where it was compacted. */
@@ -943,8 +1045,8 @@ export function shareRows(
   const rest = open.slice(max)
   const rows: ShareRow[] = shown.map((s) => ({ sessionId: s.sessionId, title: s.title, project: s.project, percent: (s.tokens / total) * 100 }))
   const restTokens = rest.reduce((n, s) => n + s.tokens, 0)
-  if (restTokens > 0) rows.push({ sessionId: null, title: `其他 ${rest.length} 个会话`, project: '', percent: (restTokens / total) * 100 })
-  if (closed > 0) rows.push({ sessionId: null, title: '已关闭的会话', project: '', percent: (closed / total) * 100 })
+  if (restTokens > 0) rows.push({ sessionId: null, title: pick(M).otherSessions(rest.length), project: '', percent: (restTokens / total) * 100 })
+  if (closed > 0) rows.push({ sessionId: null, title: pick(M).closedSessions, project: '', percent: (closed / total) * 100 })
   // Whole percents that still add up to 100 (largest remainders get the leftover points).
   const floors = rows.map((r) => Math.floor(r.percent))
   let left = 100 - floors.reduce((n, f) => n + f, 0)

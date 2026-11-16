@@ -63,13 +63,13 @@ struct SessionsView: View {
   @ViewBuilder private var content: some View {
     let groups = groupSessions(model.sessions)
     if model.link == .refused {
-      EmptyState(title: "\(model.macName) 不认识这台手机", action: "重新配对") { model.forget() }
+      EmptyState(title: String(localized: "\(model.macName) 不认识这台手机"), action: String(localized: "重新配对")) { model.forget() }
     } else if groups.isEmpty && model.isOpen {
-      EmptyState(title: "Mac 上还没有会话", action: "新建会话") { creating = true }
+      EmptyState(title: String(localized: "Mac 上还没有会话"), action: String(localized: "新建会话")) { creating = true }
     } else if groups.isEmpty && model.link == .connecting {
       SkeletonList()
     } else if groups.isEmpty {
-      EmptyState(title: model.connection.text, action: "重试") { model.wake() }
+      EmptyState(title: model.connection.text, action: String(localized: "重试")) { model.wake() }
     } else {
       list(groups)
     }
@@ -83,7 +83,7 @@ struct SessionsView: View {
         let now = context.date.timeIntervalSince1970 * 1000
         VStack(alignment: .leading, spacing: 0) {
           if stale {
-            Notice(tone: .warning, message: staleNotice(heardAt: model.heardAt, now: now), action: "重试") { model.wake() }
+            Notice(tone: .warning, message: staleNotice(heardAt: model.heardAt, now: now), action: String(localized: "重试")) { model.wake() }
               .padding(.horizontal, Metric.margin)
               .padding(.top, 4)
           }
@@ -109,9 +109,9 @@ struct SessionsView: View {
   private var dialogText: String {
     var lines = model.addresses.map { a in
       let host = a.url.replacing(/^wss?:\/\//, with: "")
-      return a.failure.map { "\(host)：\($0)" } ?? host
+      return a.failure.map { String(localized: "\(host)：\($0)", comment: "An address and why it failed") } ?? host
     }
-    if model.link == .refused { lines.append("这台手机在 Mac 上被撤销了，或者这个地址现在是别的电脑。取消配对后可以重新扫码。") }
+    if model.link == .refused { lines.append(String(localized: "这台手机在 Mac 上被撤销了，或者这个地址现在是别的电脑。取消配对后可以重新扫码。")) }
     return lines.joined(separator: "\n")
   }
 }
