@@ -8,7 +8,7 @@ import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, guiCanRewindFiles, type GuiAnswer, type GuiRewindInfo, type GuiRewindScope, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, guiCanRewindFiles, type GuiAnswer, type GuiBranch, type GuiRewindInfo, type GuiRewindScope, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem, KeepImage } from '@shared/transcript-chat'
 import type { WorkflowRun } from '@shared/workflow-run'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
@@ -80,6 +80,8 @@ export interface GuiHostDeps<O extends GuiOwner> {
    * conversation's first message, undefined when the transcript has no such prompt.
    */
   resumePoint(agent: CliAgent, cwd: string, agentSessionId: string, messageId: string): Promise<string | null | undefined>
+  /** Figma 90G′: the edited messages and their earlier versions, from the transcript (Claude). */
+  branches?(agent: CliAgent, cwd: string, agentSessionId: string): Promise<GuiBranch[]>
   /**
    * Status for the session's owner: everything for the agents without hooks (and a Claude whose hooks do not reach the
    * app, PreparedLaunch.synthStatus), start and exit for Claude (PRD §3.1); the agent's own title (`agent-title`) for
@@ -686,6 +688,17 @@ export class GuiHost<O extends GuiOwner> {
     }
     if (scope === 'code') return { ok: true, state: session.state }
     return this.restartBefore(sessionId, messageId)
+  }
+
+  /** Figma 90G′: the conversation's edited messages with their earlier versions; [] while there is no transcript yet. */
+  async branches(sessionId: string): Promise<GuiBranch[]> {
+    const session = this.sessions.get(sessionId)
+    if (!session || !session.agentSessionId || !this.deps.branches || !guiCanEdit(session.launch.agent)) return []
+    const { launch, agentSessionId } = session
+    const found = await this.deps.branches(launch.agent, launch.cwd, agentSessionId).catch(() => [])
+    // Only messages the chat still has (the transcript may be ahead of or behind what is drawn).
+    const ids = new Set(session.state.items.flatMap((item) => (item.kind === 'user' ? [item.id] : [])))
+    return found.filter((b) => ids.has(b.messageId))
   }
 
   /** Restarts the agent on the conversation before the prompt `messageId`, sending `text` first when there is one. */

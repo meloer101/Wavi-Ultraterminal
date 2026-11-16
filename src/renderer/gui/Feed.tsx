@@ -8,8 +8,8 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowDown, Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type LucideIcon } from 'lucide-react'
-import type { GuiLive } from '@shared/gui-chat'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type LucideIcon } from 'lucide-react'
+import type { GuiBranch, GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
 import type { ChatItem, FileDiff } from '@shared/transcript-chat'
@@ -27,6 +27,7 @@ import { outputRuns, refPieces } from './file-refs'
 import { FileRef, RefSession } from './FileRef'
 import { PageTitles, SearchResults } from './WebLink'
 import { TestResults } from './TestResults'
+import { branchedChat, type BranchSwitch } from './branches'
 import { testResults, type TestResults as TestRun } from './test-results'
 import { pageTitles, shortUrl, siteOf } from './web-links'
 import { TodoList } from './Todos'
@@ -67,6 +68,8 @@ const M = defineMessages({
     pictures: '图片',
     edit: '编辑',
     rewind: '回退',
+    previousVersion: '上一个版本',
+    nextVersion: '下一个版本',
     editMessage: '编辑消息',
     cancel: '取消',
     send: '发送',
@@ -84,6 +87,8 @@ const M = defineMessages({
     pictures: 'Pictures',
     edit: 'Edit',
     rewind: 'Rewind',
+    previousVersion: 'Previous version',
+    nextVersion: 'Next version',
     editMessage: 'Edit message',
     cancel: 'Cancel',
     send: 'Send',
@@ -130,6 +135,9 @@ function waviOf(item: Extract<ChatItem, { kind: 'user' }>): WaviMessage | null {
   return found
 }
 
+const NO_BRANCHES: readonly GuiBranch[] = []
+const NO_VIEWING: ReadonlyMap<string, number> = new Map()
+
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
 
@@ -147,6 +155,8 @@ interface FeedProps {
   onEdit(messageId: string, text: string): Promise<string | null>
   /** Figma 90G: back to before an earlier message (the menu hangs from `anchor`). */
   onRewind?(messageId: string, text: string, anchor: HTMLElement): Promise<void>
+  /** Figma 90G′: edited messages and their earlier versions (ChatPane asks main for them). */
+  branches?: readonly GuiBranch[]
   /** Claude's workflow runs (PRD F25): drawn as a card at their Workflow call. */
   workflows?: readonly WorkflowRun[]
   /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
@@ -182,7 +192,18 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, onRewind, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+  // Figma 90G′: the version chosen per edited message; back to the current ones when a message is sent.
+  const users = useMemo(() => chatItems.filter((item) => item.kind === 'user').length, [chatItems])
+  const [chosen, setChosen] = useState<{ users: number; versions: ReadonlyMap<string, number> }>({ users, versions: NO_VIEWING })
+  // A choice is kept while no message is added (sending one draws the current versions again).
+  const viewing = chosen.users === users ? chosen.versions : NO_VIEWING
+  const chat = useMemo(() => branchedChat(chatItems, branches, viewing), [chatItems, branches, viewing])
+  const items = chat.items
+  // An earlier version is drawn as it was: the reply being streamed belongs to the current one.
+  const live = chat.readOnlyFrom === null ? liveBlock : null
+  const readOnly = useMemo(() => new Set(chat.readOnlyFrom === null ? [] : items.slice(chat.readOnlyFrom).map((item) => item.id)), [chat.readOnlyFrom, items])
+  const switchVersion = useCallback((messageId: string, index: number) => setChosen({ users, versions: new Map(viewing).set(messageId, index) }), [users, viewing])
   const slot = useMemo<WorkflowSlot>(
     () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
     [workflows, workflowAsk, onStopWorkflow]
@@ -264,7 +285,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
               sessionId={sessionId}
               item={block.item}
               faded={editingAt >= 0 && i > editingAt}
-              editable={canEdit && !busy && !block.item.id.startsWith('pending-')}
+              editable={canEdit && !busy && !block.item.id.startsWith('pending-') && !readOnly.has(block.item.id)}
+              {...(chat.switches.has(block.item.id) ? { branch: chat.switches.get(block.item.id)!, onSwitch: switchVersion } : {})}
               editing={editing === block.item.id}
               onStartEdit={startEdit}
               onCancel={cancelEdit}
@@ -420,6 +442,8 @@ interface UserMessageProps {
   onCancel(): void
   onSave(id: string, text: string): Promise<string | null>
   onRewind?(id: string, text: string, anchor: HTMLElement): Promise<void>
+  branch?: BranchSwitch
+  onSwitch?(messageId: string, index: number): void
 }
 
 /**
@@ -427,7 +451,7 @@ interface UserMessageProps {
  * copy · edit under it on hover; 54C: editing, a text box in its place. 71A: the pictures sent with it over the bubble
  * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
-const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave, onRewind }: UserMessageProps) {
+const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave, onRewind, branch, onSwitch }: UserMessageProps) {
   const m = useMessages(M)
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
@@ -452,6 +476,7 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
                 <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
               </div>
             )}
+            {branch && onSwitch && <VersionSwitch branch={branch} onSwitch={onSwitch} />}
             <div className={styles.messageActions} data-testid="gui-message-actions">
               <span className={styles.messageTime}>{timeOf(item.at)}</span>
               <CopyButton text={item.text} />
@@ -480,6 +505,24 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
     </div>
   )
 })
+
+/** Figma 90G′: ‹ 1 / 2 › under an edited message, always shown. */
+function VersionSwitch({ branch, onSwitch }: { branch: BranchSwitch; onSwitch(messageId: string, index: number): void }) {
+  const m = useMessages(M)
+  return (
+    <div className={styles.versionSwitch} data-testid="gui-version-switch">
+      <button type="button" className={styles.actionIcon} aria-label={m.previousVersion} disabled={branch.index === 0} onClick={() => onSwitch(branch.messageId, branch.index - 1)}>
+        <ChevronLeft {...ICON} />
+      </button>
+      <span className={styles.versionCount}>
+        {branch.index + 1} / {branch.count}
+      </span>
+      <button type="button" className={styles.actionIcon} aria-label={m.nextVersion} disabled={branch.index === branch.count - 1} onClick={() => onSwitch(branch.messageId, branch.index + 1)}>
+        <ChevronRight {...ICON} />
+      </button>
+    </div>
+  )
+}
 
 /** 54C: the message as text to change; ⏎ sends it in the original's place (the rest is dropped), ⎋ cancels. */
 function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void; onSave(text: string): Promise<string | null> }) {

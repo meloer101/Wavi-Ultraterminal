@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
-import { GUI_IPC, isGuiRewindScope, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiRewindInfo, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_IPC, isGuiRewindScope, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiBranch, type GuiOpenResult, type GuiRewindInfo, type GuiSendResult } from '@shared/gui-chat'
 import { GUI_TASK_ID } from '@shared/workflow-run'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
@@ -23,7 +23,7 @@ import { sniffPhoto } from '../remote/photos'
 import { portFor } from '../repo-scripts'
 import type { ImageBlock } from './driver'
 import { agentModels } from './catalog'
-import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, piSessionFileFor, piSessionsDir, readPiHistory, readTranscript } from './history'
+import { claudeBranches, claudeResumePoint, claudeTranscriptFor, codexRolloutFor, piSessionFileFor, piSessionsDir, readPiHistory, readTranscript } from './history'
 import { GuiHost, type PreparedLaunch } from './host'
 import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
 import { parseGuiAnswer, parseGuiLaunch, parseGuiMessage, parseGuiSessionId, parseGuiText, parseGuiValue } from './validate'
@@ -137,6 +137,12 @@ async function resumePoint(agent: CliAgent, cwd: string, agentSessionId: string,
   return path ? claudeResumePoint(path, messageId) : undefined
 }
 
+async function branches(agent: CliAgent, cwd: string, agentSessionId: string) {
+  if (agent !== 'claude') return []
+  const path = claudeTranscriptFor(cwd, agentSessionId, defaultAgentDataDirs())
+  return path ? claudeBranches(path, keepInlineImage) : []
+}
+
 async function readImage(path: string): Promise<ImageBlock | null> {
   try {
     if ((await stat(path)).size > MAX_IMAGE_BYTES) return null
@@ -154,6 +160,7 @@ const host = new GuiHost<WebContents>({
   prepare,
   history,
   resumePoint,
+  branches,
   status: (sessionId, agent, events, owner) => {
     const at = Date.now()
     for (const event of events) emitGuiAgentEvent({ sessionId, agent: hookAgentOf(agent), at, event }, owner)
@@ -265,6 +272,11 @@ export function registerGuiHandlers(): void {
     const messageId = parseGuiValue(rawMessage)
     if (!id || !messageId || !isGuiRewindScope(rawScope)) return Promise.resolve({ ok: false, reason: pick(M).badMessage })
     return host.rewind(id, messageId, rawScope)
+  })
+
+  ipcMain.handle(GUI_IPC.branches, (event, rawId: unknown): Promise<GuiBranch[]> => {
+    const id = owned(event.sender, rawId)
+    return id ? host.branches(id) : Promise.resolve([])
   })
 
   ipcMain.handle(GUI_IPC.stop, async (event, rawId: unknown): Promise<void> => {

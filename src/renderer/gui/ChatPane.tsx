@@ -7,7 +7,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { agentName, type CliAgent } from '@shared/agents'
-import { emptyGuiState, guiCanEdit, type GuiAnswer, type GuiRewindScope } from '@shared/gui-chat'
+import { emptyGuiState, guiCanEdit, type GuiAnswer, type GuiBranch, type GuiRewindScope } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
@@ -191,6 +191,23 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
     },
     [sessionId]
   )
+  // Figma 90G′: edited messages' earlier versions, asked again whenever a turn ends or a message is added.
+  const [branches, setBranches] = useState<GuiBranch[]>([])
+  const sent = userCount(state.items)
+  useEffect(() => {
+    if (state.busy || !guiCanEdit(agent) || sent === 0) return
+    let live = true
+    window.tr.gui.branches(sessionId).then(
+      (found) => {
+        if (live) setBranches(found)
+      },
+      () => {}
+    )
+    return () => {
+      live = false
+    }
+  }, [sessionId, agent, state.busy, sent])
+
   // Figma 90G: back to before an earlier message — what the agent can take back (the code only when that message
   // changed files), chosen from a menu; with one thing to take back, no menu. The message goes back into the composer.
   const rewind = useCallback(
@@ -304,6 +321,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
           canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}
           onEdit={edit}
           onRewind={rewind}
+          branches={branches}
           workflows={workflows}
           workflowAsk={workflowAsk}
           onStopWorkflow={stopWorkflow}

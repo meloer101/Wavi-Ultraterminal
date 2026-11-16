@@ -339,6 +339,8 @@ export interface GuiApi {
   rewindInfo(sessionId: string, messageId: string): Promise<GuiRewindInfo>
   /** Figma 90G: back to before your message `messageId` — the conversation, the code, or both. The state to draw comes back. */
   rewind(sessionId: string, messageId: string, scope: GuiRewindScope): Promise<GuiOpenResult>
+  /** Figma 90G′: the edited messages of the conversation and their earlier versions (Claude; [] for any other). */
+  branches(sessionId: string): Promise<GuiBranch[]>
   /** Ends the agent process (closing the session), also one this app run never opened. */
   stop(sessionId: string): Promise<void>
   /** Agent processes the pipe host holds that no other window owns (to adopt, or end, at load). */
@@ -358,6 +360,7 @@ export const GUI_IPC = {
   edit: 'gui:edit',
   rewindInfo: 'gui:rewind-info',
   rewind: 'gui:rewind',
+  branches: 'gui:branches',
   stop: 'gui:stop',
   live: 'gui:live',
   models: 'gui:models',
@@ -377,6 +380,16 @@ export interface GuiRewindInfo {
   conversation: boolean
   /** Files the code would get back; null when it cannot, 0 when the message changed none. */
   files: number | null
+}
+
+/**
+ * Figma 90G′: a message you edited (or rewound and sent again) and what came of it before: each earlier version is its
+ * prompt and the conversation under it, as it was, oldest first. Shown read-only; the current version is the chat.
+ */
+export interface GuiBranch {
+  /** The message on the current branch. */
+  messageId: string
+  older: ChatItem[][]
 }
 
 /**

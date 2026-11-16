@@ -303,6 +303,7 @@ const api: TrApi = {
     edit: (sessionId, messageId, text) => ipcRenderer.invoke(GUI_IPC.edit, sessionId, messageId, text),
     rewindInfo: (sessionId, messageId) => ipcRenderer.invoke(GUI_IPC.rewindInfo, sessionId, messageId),
     rewind: (sessionId, messageId, scope) => ipcRenderer.invoke(GUI_IPC.rewind, sessionId, messageId, scope),
+    branches: (sessionId) => ipcRenderer.invoke(GUI_IPC.branches, sessionId),
     stop: (sessionId) => ipcRenderer.invoke(GUI_IPC.stop, sessionId),
     live: () => ipcRenderer.invoke(GUI_IPC.live),
     models: (agent) => ipcRenderer.invoke(GUI_IPC.models, agent),
