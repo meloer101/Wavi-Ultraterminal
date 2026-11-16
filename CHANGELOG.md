@@ -4,6 +4,57 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-16
+
+Wavi in English, 看板 with a GitHub tab, and a leader for each project: the whole interface follows 设置 · 外观 · 语言; 总览 becomes 看板 with 进度 and GitHub; a leader session dispatches the work and never edits code. 0.18.0 was tagged but never published (notarization failed), so its right-panel 终端 and iOS 模拟器 ship here too.
+Wavi 有英文了，看板加了 GitHub，每个项目可以有一个 leader：整个界面跟着 设置 · 外观 · 语言；总览改成看板，分「进度」和「GitHub」；leader 会话只派活、不改代码。0.18.0 打了 tag 但公证失败没有发布，它的右侧栏「终端」和「iOS 模拟器」也在这一版里。
+
+### Language / 语言
+- 设置 · 外观 · 语言: 跟随系统, 中文 or English; every desktop text, the macOS permission prompts and the prompts Wavi writes for agents follow it, switching without a restart. The iPhone app follows the language you set for it in iOS.
+  设置 · 外观 · 语言：跟随系统、中文或 English；桌面上所有文字、macOS 权限弹窗、Wavi 写给 agent 的提示都跟着它，切换不用重启。iPhone 跟随 iOS 里给 Wavi 设的语言。
+
+### 看板 (was 总览)
+- 总览 is now 看板: 进度 groups every session by status as a board (the list view is gone), and a GitHub tab lists issues and PRs for each project, one click from an agent.
+  「总览」改名「看板」：「进度」按状态把所有会话排成看板（列表视图去掉），「GitHub」页签列出每个项目的 issue 和 PR，点一下交给 agent。
+- A GUI session's overlay shows its chat, which you can answer there, instead of an empty terminal; a terminal's overlay keeps its own background to the edge.
+  GUI 会话的浮层显示它的对话，可以直接回复，不再是一块空终端；终端浮层的底色铺满到边。
+
+### Leader sessions / Leader 会话
+- With 设置 · 自动化 · leader 会话 on, a project can have one leader (Claude Code or Codex in a terminal): it only dispatches (Codex starts read-only), asks you with `wavi tell`, and after one confirmation takes over sessions you opened (`wavi adopt`).
+  打开 设置 · 自动化 · leader 会话 后，每个项目可以有一个 leader（终端里的 Claude Code 或 Codex）：只派活（Codex 以只读启动），用 `wavi tell` 问你，经你确认一次后接管你开的会话（`wavi adopt`）。
+- The dispatch tree bends into each child and shows what waits for 开始; Claude agent teams draw as lanes under the lead's terminal.
+  派活树用弯线连到每个子会话，等你点「开始」的先挂在下面；Claude agent team 画成 lead 终端下面的泳道。
+
+### Sidebar / 侧栏
+- ⇧ / ⌘ click picks several sessions; right-click 关闭 N 个会话 or ⌫ closes them after one confirmation (issue #6).
+  ⇧ / ⌘ 点击多选会话，右键「关闭 N 个会话」或按 ⌫，确认一次后一起关掉（issue #6）。
+- 定时任务 sits under 看板; 额度 is back at the bottom above 设置.
+  「定时任务」挪到「看板」下面，「额度」回到底部「设置」上面。
+
+### Git / 合入
+- The exit zone is three nodes with one main button at a time: 提交 → 合并 (a local squash) or 创建 PR → 推送 → 归档; the review runs only before a push, on what the remote does not have yet.
+  出口区改成三个节点，一次只亮一个主按钮：提交 → 合并（本地 squash）或 创建 PR → 推送 → 归档；审阅只在推送前做，只看远程还没有的提交。
+- 让 <agent> 处理 a PR comment: the agent fixes it, pushes, replies on the thread and resolves it; issues handed to an agent close through `Closes #N`.
+  PR 评论「让 <agent> 处理」：agent 改完、推送、在 thread 下回复并 resolve；交给 agent 的 issue 靠 `Closes #N` 关闭。
+
+### GUI sessions / GUI 会话
+- 模式, 快速 and Ultracode share one composer button; the composer's fill follows the see-through chat card; avatars are as tall as a one-line bubble.
+  模式、快速、Ultracode 合成输入框里的一个按钮；输入框底色跟着半透明的对话卡片；头像和单行气泡一样高。
+
+### Appearance / 外观
+- 设置 · 外观 · 背景图片: a picture of your own under the whole window; one base layer over the window, cut out at each card; two opacities only, CLI and GUI, 20–100%, 85% by default.
+  设置 · 外观 · 背景图片：整窗最底层铺你自己的图；整个窗口一层底，在每张卡片处挖空；透明度只有 CLI 和 GUI 两项，20–100%，默认 85%。
+- Session strips sit in their own pane under the card; 文件 rows show their file type's icon; the Worktree view is one line per worktree.
+  会话下方的卡片放进各自的 pane；「文件」每行显示文件类型图标；Worktree 视图每个 worktree 一行。
+
+### Right panel (from 0.18.0) / 右侧栏（0.18.0 的内容）
+- 终端 view: shells in the session's worktree, one tab each; iOS 模拟器 view: tap, scroll and type into a simulator without leaving Wavi.
+  「终端」视图：会话 worktree 里的 shell，一个 tab 一个；「iOS 模拟器」视图：不离开 Wavi 就能点按、滚动、打字。
+
+### Usage / 额度
+- 设置 · 额度's stats drop the rules between the numbers and the empty frames before your first log; the bar chart keeps only its top rule and baseline.
+  设置 · 额度 的统计去掉数字之间的竖线和第一条记录之前的空月份；柱状图只留顶线和基线。
+
 ## [0.18.0] - 2026-11-13
 
 A terminal and an iOS simulator in the right panel: shells in the session's worktree, and a simulator you tap, scroll and type into without leaving Wavi.
