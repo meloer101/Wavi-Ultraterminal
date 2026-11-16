@@ -18,6 +18,9 @@ export type SessionStatus =
   | 'error' // turn failed or process exited non-zero
   | 'exited' // process is gone
 
+/** Wavi's own ask a session waits on (PRD F21 / F24): sessions to start or adopt, 定时任务 to make, a leader's decision. */
+export type WaviAskKind = 'confirm' | 'schedule' | 'tell'
+
 export interface Project {
   id: ProjectId
   name: string
@@ -88,6 +91,13 @@ export interface Session {
   turnStartedAt?: number
   /** The subagents (Claude `agent_id`) whose ask is pending: their sidebar rows show “等你处理” (PRD F21 v1.109). Transient. */
   askingAgents?: string[]
+  /** While `needs_you` on its agent's own ask: a permission dialog or a question (PRD F21 v1.198 · 看). Transient. */
+  waitingFor?: 'permission' | 'question'
+  /**
+   * Which of Wavi's own asks it shows while `needs_you` on one (its `currentAction` is that ask's label): an agent's
+   * `wavi run` / `wavi adopt` waiting for 开始, its `wavi schedule`, or a leader's `wavi tell` (PRD F21 v1.198). Transient.
+   */
+  waviAsk?: WaviAskKind
   /** A shell session made by the Run button for the worktree's `run` script (PRD F4). Persisted. */
   script?: 'run'
   /** The session whose agent started this one through Wavi's dispatch tools (PRD F21). Persisted. */

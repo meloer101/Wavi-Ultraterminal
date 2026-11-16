@@ -117,6 +117,20 @@ describe('StatusController', () => {
     expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBeUndefined()
   })
 
+  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.198)', () => {
+    const waiting = () => h.sessions.find((s) => s.id === 'b')?.waitingFor
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    expect(waiting()).toBeUndefined()
+    h.controller.handleEvent('b', { type: 'permission-request', tool: 'Bash', input: { command: 'pnpm lint' } })
+    expect(waiting()).toBe('permission')
+    h.controller.handleEvent('b', { type: 'tool-end', tool: 'Bash', input: { command: 'pnpm lint' }, ok: true })
+    expect(waiting()).toBeUndefined()
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'AskUserQuestion', input: { questions: [{ question: 'Which?' }] } })
+    expect(waiting()).toBe('question')
+    h.controller.setWaviAsk('b', '想开 1 个会话')
+    expect(waiting()).toBeUndefined()
+  })
+
   it('does not patch when nothing changed', () => {
     const before = h.sessions
     h.controller.tick()
@@ -341,6 +355,21 @@ describe('Wavi’s own asks (PRD F21)', () => {
     expect(b?.status).toBe('running')
     expect(b?.currentAction).toBe('读取 b.ts')
     expect(h.badges.at(-1)).toBe(0)
+  })
+
+  it('marks which of its asks is shown, so a tell is told apart without comparing labels (PRD F21 v1.198)', () => {
+    const h = harness([session('a'), session('b')], 'a')
+    const ask = () => h.sessions.find((s) => s.id === 'b')?.waviAsk
+    expect(ask()).toBeUndefined()
+    h.controller.setWaviAsk('b', '先合哪个？', 'tell')
+    expect(ask()).toBe('tell')
+    // The same words as another kind of ask are that kind.
+    h.controller.setWaviAsk('b', '先合哪个？', 'confirm')
+    expect(ask()).toBe('confirm')
+    h.controller.setWaviAsk('b', '想建 1 个定时任务', 'schedule')
+    expect(ask()).toBe('schedule')
+    h.controller.setWaviAsk('b', null)
+    expect(ask()).toBeUndefined()
   })
 
   it('reads a dispatched session’s finished turn for its dispatcher, and gives it back when the report is held (PRD F21)', () => {

@@ -22,7 +22,7 @@ import {
   setHookTarget,
   type AgentLaunchHooks
 } from '../hooks'
-import { dispatchLaunchFor, type DispatchLaunch } from '../dispatch'
+import { dispatchLaunchFor, leaderArgsFor, type DispatchLaunch } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { replacePendingStart, shouldKillLateSpawn } from './late-spawn'
@@ -360,7 +360,8 @@ async function hostLaunch(
   const script = options.script ? await approvedScript(realCwd, options.script) : null
   const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
   if (options.script === 'run' && script) return { command: shell, args: runShellArgs(script) }
-  const extraArgs = [...(hooks?.extraArgs ?? []), ...(dispatch?.extraArgs ?? [])]
+  const leader = agent ? await leaderArgsFor(agent, options.leader === true, dispatch) : []
+  const extraArgs = [...(hooks?.extraArgs ?? []), ...leader, ...(dispatch?.extraArgs ?? [])]
   const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
     ...(hooks?.codexConfig && hooks.codexConfig.length > 0 ? { codexConfig: hooks.codexConfig } : {}),
@@ -402,7 +403,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   const attached = hooks !== null || shellEnv !== null
   const port = realCwd ? portFor(realCwd) : null
   // Every agent CLI can dispatch: `wavi` on its PATH and its session's WAVI_DIR (PRD F21).
-  const dispatch = agent && options.command === undefined ? await dispatchLaunchFor(id, agent, { child: options.dispatched === true }) : null
+  const dispatch = agent && options.command === undefined ? await dispatchLaunchFor(id, agent, { child: options.dispatched === true, leader: options.leader === true }) : null
   const env = { ...options.env, ...(agent ? AGENT_SPECS[agent].env : {}), ...hooks?.env, ...shellEnv, ...dispatch?.env, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null
   try {
@@ -438,7 +439,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       else reject(error)
     }, SPAWN_TIMEOUT_MS)
     replacePendingStart(pendingSpawns, id, { resolve, reject, timer })
-    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, permission: _permission, dispatched: _dispatched, ...rest } = options
+    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, permission: _permission, dispatched: _dispatched, leader: _leader, ...rest } = options
     send({
       type: 'spawn',
       id,

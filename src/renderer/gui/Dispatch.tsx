@@ -6,7 +6,7 @@
 // report, the notice of what the user decided — are drawn as such, never as the user's bubble.
 import { memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Split } from 'lucide-react'
-import { agentLabel, DISPATCH_LIMITS, type PendingStart } from '@shared/dispatch'
+import { agentLabel, DISPATCH_LIMITS, pendingShown, type PendingStart } from '@shared/dispatch'
 import { defineMessages, pick } from '@shared/i18n'
 import type { AgentKind, SessionId, SessionStatus } from '@shared/types'
 import { decideCalls } from '../dispatch/handler'
@@ -100,6 +100,12 @@ const GLYPH: Record<NodeState, SessionStatus> = { pending: 'idle', working: 'run
 const COUNT_ORDER: readonly NodeState[] = ['working', 'attention', 'error', 'done', 'exited']
 
 const open = (id: SessionId): void => useWorkspace.getState().setActiveSession(id)
+
+/** Where the waiting new sessions start: the first `wavi run`'s base (an adopted session keeps its own branch). */
+function waitingBase(waiting: readonly PendingStart[]): string | undefined {
+  const run = waiting.find((c) => c.kind === 'start')
+  return run && (run.plan.item.base === 'snapshot' ? pick(M).snapshot : run.base)
+}
 
 function useDispatchView(parentId: SessionId, ids: readonly SessionId[]): DispatchView {
   const sessions = useWorkspace((s) => s.sessions)
@@ -226,7 +232,7 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
         </span>
         {waiting > 0 ? (
           <span className={styles.muted}>
-            {m.basedOn} {view.waiting[0]?.plan.item.base === 'snapshot' ? m.snapshot : view.waiting[0]?.base}
+            {m.basedOn} {waitingBase(view.waiting)}
           </span>
         ) : (
           grand > 0 && <span className={styles.muted}>{m.grand(grand)}</span>
@@ -452,9 +458,9 @@ function WaitingStrip({ waiting }: { waiting: readonly PendingStart[] }) {
       <div className={styles.rows}>
         {waiting.map((c) => (
           <div key={c.callId} className={styles.row}>
-            <AgentIcon kind={c.plan.item.agent} size={14} />
-            <span className={styles.rowTitle}>{c.plan.item.title}</span>
-            <span className={styles.action}>{c.plan.item.task.split('\n', 1)[0]}</span>
+            <AgentIcon kind={pendingShown(c).agent} size={14} />
+            <span className={styles.rowTitle}>{pendingShown(c).title}</span>
+            <span className={styles.action}>{pendingShown(c).task.split('\n', 1)[0]}</span>
           </div>
         ))}
       </div>

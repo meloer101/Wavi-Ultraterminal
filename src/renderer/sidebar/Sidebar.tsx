@@ -112,6 +112,7 @@ export function Sidebar() {
     collapsedProjectIds,
     groupBy,
     collapsedStatusGroups,
+    leaderSessions,
     setActiveSession,
     toggleSidebar,
     toggleProjectCollapsed,
@@ -126,6 +127,7 @@ export function Sidebar() {
         collapsedProjectIds: s.collapsedProjectIds,
         groupBy: s.sidebarGroupBy,
         collapsedStatusGroups: s.collapsedStatusGroups,
+        leaderSessions: s.leaderSessions,
         toggleStatusGroupCollapsed: s.toggleStatusGroupCollapsed,
         setActiveSession: s.setActiveSession,
         toggleSidebar: s.toggleSidebar,
@@ -198,14 +200,14 @@ export function Sidebar() {
       const lines = teamItems(team)
       if (lines.length > 0) out[id] = [...lines, ...(out[id] ?? [])]
     }
-    for (const [id, waiting] of Object.entries(pendingItems(confirms))) out[id] = [...waiting, ...(out[id] ?? [])]
+    for (const [id, waiting] of Object.entries(pendingItems(confirms.flatMap((c) => (c.kind === 'start' ? [c] : []))))) out[id] = [...waiting, ...(out[id] ?? [])]
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps -- lang: the lines' text follows the interface language
   }, [subagentLists, runLists, sessions, folded, confirms, teams, lang])
   const groups = useMemo(
-    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
+    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, ...(leaderSessions ? { leaderSessions } : {}) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- lang: the rows' text follows the interface language
-    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, lang]
+    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups, leaderSessions, lang]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   // Rows picked with ⇧ / ⌘ click (issue #6), closed together after one confirmation. A closed or folded row drops out.

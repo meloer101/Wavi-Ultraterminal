@@ -289,7 +289,8 @@ const api: TrApi = {
   dispatch: {
     onRequest: (listener) => listen(DISPATCH_IPC.request, listener),
     reply: (callId, result) => ipcRenderer.send(DISPATCH_IPC.reply, callId, result),
-    deliver: (request) => ipcRenderer.invoke(DISPATCH_IPC.deliver, request)
+    deliver: (request) => ipcRenderer.invoke(DISPATCH_IPC.deliver, request),
+    leaderCheck: () => ipcRenderer.invoke(DISPATCH_IPC.leaderCheck)
   },
   gui: {
     open: (launch) => ipcRenderer.invoke(GUI_IPC.open, launch),

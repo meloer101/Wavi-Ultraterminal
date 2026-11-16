@@ -33,6 +33,7 @@ vi.stubGlobal('window', {
 
 const { insertIntoTerminal, insertPaths, insertSlashCommand, interruptAgent, submitInputLine, submitPrompt } = await import('./session-io')
 const { useGuiSessions, draftOf } = await import('./gui/store')
+const { forgetTyping, lastSubmitIn } = await import('./terminal/typing')
 
 // Claude Code 2.1.304's /rate-limit-options (PRD §6.6), as in send-protocol.test.ts.
 const LIMIT_MENU = [
@@ -84,6 +85,40 @@ describe('insertIntoTerminal', () => {
   it('types at a plain input line', async () => {
     await insertIntoTerminal('s-1', '@src/app.ts ')
     expect(term.writes.join('')).toContain('@src/app.ts')
+  })
+})
+
+describe('who sent a prompt (PRD F21 v1.198)', () => {
+  it('counts the user’s click as their line, not Wavi’s own send nor a send refused over a menu', async () => {
+    forgetTyping('s-gui')
+    forgetTyping('s-1')
+    await submitPrompt('s-gui', 'a report')
+    expect(lastSubmitIn('s-gui')).toBeNull()
+    await submitPrompt('s-gui', '继续', { user: true })
+    expect(lastSubmitIn('s-gui')).not.toBeNull()
+    term.viewport = LIMIT_MENU
+    await expect(submitPrompt('s-1', '继续', { user: true })).rejects.toThrow(MENU_REFUSAL)
+    expect(lastSubmitIn('s-1')).toBeNull()
+  })
+
+  it('counts the phone’s photos sent without text as the user’s line too, only when said so', async () => {
+    forgetTyping('s-1')
+    // The photo's `[Image #1]` shows up after the send began, as the paste lands.
+    const photo = async (options?: { user?: boolean }): Promise<void> => {
+      term.viewport = '❯ '
+      const sent = submitInputLine('s-1', '[Image #', options)
+      setTimeout(() => (term.viewport = '❯ [Image #1] '), 60)
+      await sent
+    }
+    await photo()
+    expect(lastSubmitIn('s-1')).toBeNull()
+    await photo({ user: true })
+    expect(lastSubmitIn('s-1')).not.toBeNull()
+    expect(term.writes.at(-1)).toBe('\r')
+    forgetTyping('s-1')
+    term.viewport = LIMIT_MENU
+    await expect(submitInputLine('s-1', '[Image #', { user: true })).rejects.toThrow(MENU_REFUSAL)
+    expect(lastSubmitIn('s-1')).toBeNull()
   })
 })
 

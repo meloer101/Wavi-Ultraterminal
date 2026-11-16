@@ -70,7 +70,14 @@ export interface Ask {
   agent: string
   label: string
   at: number
+  /** A permission dialog or a question to answer (a leader's `wavi ls --all` tells them apart, PRD F21 v1.198). */
+  kind?: AskKind
 }
+
+export type AskKind = 'permission' | 'question'
+
+/** What the oldest pending ask waits for, when the session waits for one. */
+export const askKindOf = (state: Pick<SessionState, 'asks'>): AskKind | undefined => state.asks[0]?.kind
 
 /** What a session does apart from its asks: its status once the last ask is answered. */
 export interface Underneath {
@@ -336,7 +343,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
       // Its own earlier asks are settled now (see ASK_SETTLE_MS); an unnamed one by any main-thread call.
       const asks = state.asks.filter((a) => a.agent !== agent || (a.key !== '' && now - a.at < ASK_SETTLE_MS))
       if (event.tool === 'AskUserQuestion') {
-        return { ...addAsk({ ...withAsks(state, asks), lastEventAt: now }, { key: toolCallKey(event.tool, event.input), agent, label: action, at: now }, now), toolAction: action }
+        return { ...addAsk({ ...withAsks(state, asks), lastEventAt: now }, { key: toolCallKey(event.tool, event.input), agent, label: action, at: now, kind: 'question' }, now), toolAction: action }
       }
       // A subagent's work says nothing about the main turn (it runs on after the turn ended); only its asks count.
       if (agent !== '') return asks.length === state.asks.length ? state : withAsks(state, asks)
@@ -355,7 +362,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
 
     case 'permission-request': {
       const label = pick(M).confirmAction(currentAction(event.tool, event.input))
-      return addAsk(state, { key: toolCallKey(event.tool, event.input), agent: event.agentId ?? '', label, at: now }, now)
+      return addAsk(state, { key: toolCallKey(event.tool, event.input), agent: event.agentId ?? '', label, at: now, kind: 'permission' }, now)
     }
 
     case 'subagent-stop': {
@@ -368,7 +375,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         // Its PermissionRequest (about 6 s earlier) already named what is asked.
         if (state.asks.length > 0) return touched
         const label = event.kind === 'permission' ? confirmLabel(state.toolAction) : (state.toolAction ?? pick(M).answer)
-        return addAsk(state, { key: '', agent: '', label, at: now }, now)
+        return addAsk(state, { key: '', agent: '', label, at: now, kind: event.kind }, now)
       }
       // Claude sends idle_prompt only while its prompt is idle: no turn, no dialog up, no background agent (PRD §6.6).
       if (event.kind === 'idle' && (state.status === 'running' || state.status === 'needs_you')) return settledIdle(touched)
@@ -518,7 +525,7 @@ function reduceScreen(state: SessionState, text: string, now: number): SessionSt
     // A dialog no hook announced (its PermissionRequest and the Notification after it both lost, or hooks silent):
     // the title went idle mid-turn and the screen shows the dialog. Without hooks also a background agent's, after it.
     if (claude && state.titleIdle && reading.askDialog && (state.status === 'running' || (state.hooksSilent && (state.status === 'idle' || state.status === 'done_unread')))) {
-      return addAsk(state, { key: '', agent: '', label: confirmLabel(state.toolAction), at: now }, now)
+      return addAsk(state, { key: '', agent: '', label: confirmLabel(state.toolAction), at: now, kind: 'permission' }, now)
     }
     // Claude is up and its hooks stayed silent: the header says status follows the title only.
     if (claude && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent && now - state.phaseSince >= STARTUP_TIMEOUT_MS) {

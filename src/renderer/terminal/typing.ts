@@ -4,6 +4,9 @@
 import type { SessionId } from '@shared/types'
 
 const typing = new Map<SessionId, { at: number; draft: boolean }>()
+/** When the user last submitted a line (Enter) in each terminal: a leader's turn they started is theirs (PRD F21 v1.198). */
+const submits = new Map<SessionId, number>()
+const submitListeners = new Set<(sessionId: SessionId) => void>()
 
 /** Mouse reports (SGR and X10) and focus in / out: not the user typing. */
 // eslint-disable-next-line no-control-regex
@@ -21,6 +24,10 @@ function lastSubmit(data: string, before: string): number {
 
 const lastChar = new Map<SessionId, string>()
 
+/** Printable text apart from escape sequences (arrows and the like). */
+// eslint-disable-next-line no-control-regex
+const hasText = (data: string): boolean => /[^\x00-\x1f\x7f]/.test(data.replace(/\x1b\[[\d;?]*[A-Za-z~]|\x1bO[A-Za-z]|\x1b./g, ''))
+
 export function noteInput(sessionId: SessionId, data: string, now = Date.now()): void {
   if (data === '' || NOT_TYPING.test(data)) return
   const last = lastSubmit(data, lastChar.get(sessionId) ?? '')
@@ -29,11 +36,34 @@ export function noteInput(sessionId: SessionId, data: string, now = Date.now()):
   // Ctrl+C / Ctrl+U clear the input line in the agents' TUIs; Esc sequences alone (arrows) leave it as it was.
   // eslint-disable-next-line no-control-regex
   const cleared = /[\x03\x15]/.test(after)
-  // eslint-disable-next-line no-control-regex
-  const printable = /[^\x00-\x1f\x7f]/.test(after.replace(/\x1b\[[\d;?]*[A-Za-z~]|\x1bO[A-Za-z]|\x1b./g, ''))
+  const printable = hasText(after)
   const before = typing.get(sessionId)?.draft ?? false
   const draft = cleared ? false : printable ? true : last >= 0 ? false : before
   typing.set(sessionId, { at: now, draft })
+  // A line sent: Enter after text (an Enter alone answers a menu or does nothing).
+  if (last >= 0 && (before || hasText(data.slice(0, last)))) {
+    submits.set(sessionId, now)
+    for (const listener of submitListeners) listener(sessionId)
+  }
+}
+
+/** The user pressed Enter in a session's terminal (a leader's `wavi tell` is answered then, PRD F21 v1.198). */
+export function onUserSubmit(listener: (sessionId: SessionId) => void): () => void {
+  submitListeners.add(listener)
+  return () => submitListeners.delete(listener)
+}
+
+/**
+ * The user sent a line to this session from outside its terminal (the phone, 总览's batch send): their turn, not a
+ * report's (PRD F21 v1.198). Only `lastSubmitIn`; a leader's `wavi tell` is answered in its terminal.
+ */
+export function noteUserLine(sessionId: SessionId, now = Date.now()): void {
+  submits.set(sessionId, now)
+}
+
+/** When the user last submitted a line in this terminal, or null. */
+export function lastSubmitIn(sessionId: SessionId): number | null {
+  return submits.get(sessionId) ?? null
 }
 
 /** Wavi put text into the input line without Enter (插入路径, a slash command, attachments): a draft like the user's. */
@@ -49,4 +79,5 @@ export function typingIn(sessionId: SessionId): { lastKeyAt: number | null; draf
 export function forgetTyping(sessionId: SessionId): void {
   typing.delete(sessionId)
   lastChar.delete(sessionId)
+  submits.delete(sessionId)
 }

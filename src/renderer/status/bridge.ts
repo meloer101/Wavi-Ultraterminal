@@ -1,9 +1,9 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
 import { hasOwnAdapter } from '@shared/agents'
-import { confirmLabels } from '@shared/dispatch'
+import { confirmLabels, tellLabel } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
-import type { SessionId } from '@shared/types'
+import type { SessionId, WaviAskKind } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
@@ -15,7 +15,7 @@ import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 import { dropConfirmsOf } from '../dispatch/handler'
-import { finishGoesToDispatcher } from '../dispatch/reports'
+import { finishGoesToDispatcher, leaderTurnQuiet } from '../dispatch/reports'
 import { useDispatch } from '../dispatch/store'
 import { scheduleRequestCounts, useScheduleRequests } from '../schedules/agent-requests'
 
@@ -82,7 +82,8 @@ export function startStatusBridge(): () => void {
     // PRD F21: the dispatcher's agent is gone, so its requests to start sessions go too.
     onWaviAskAbandoned: (id) => dropConfirmsOf(id),
     // PRD F21 回报: a dispatched session's finished turn that goes to its dispatcher as a report is read already.
-    finishReported: (id) => finishGoesToDispatcher(id)
+    // PRD F21 v1.198: so is a leader's turn that a report woke, unless the user spoke there since.
+    finishReported: (id) => finishGoesToDispatcher(id) || leaderTurnQuiet(id)
   })
 
   const exitSubscriptions = new Map<SessionId, () => void>()
@@ -235,17 +236,23 @@ export function startStatusBridge(): () => void {
   // PRD F24: so does an agent's `wavi schedule` (想建 N 个定时任务); a session with both shows the sessions first.
   let asking = new Set<string>()
   const applyConfirms = (): void => {
-    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
-    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, pick(M).schedules(n))
-    for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
-    asking = new Set(labels.keys())
+    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1, adopt: c.kind === 'adopt' })))
+    const asks = new Map<string, { label: string; kind: WaviAskKind }>([...labels].map(([id, label]) => [id, { label, kind: 'confirm' as const }]))
+    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!asks.has(id)) asks.set(id, { label: pick(M).schedules(n), kind: 'schedule' })
+    // PRD F21 v1.198: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
+    for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !asks.has(id)) asks.set(id, { label: tellLabel(text), kind: 'tell' })
+    for (const id of new Set([...asking, ...asks.keys()])) {
+      const ask = asks.get(id)
+      controller.setWaviAsk(id, ask?.label ?? null, ask?.kind)
+    }
+    asking = new Set(asks.keys())
   }
   applyConfirms()
   const unsubscribeScheduleRequests = useScheduleRequests.subscribe((state, prev) => {
     if (state.pending !== prev.pending) applyConfirms()
   })
   const unsubscribeConfirms = useDispatch.subscribe((state, prev) => {
-    if (state.confirms !== prev.confirms) applyConfirms()
+    if (state.confirms !== prev.confirms || state.tells !== prev.tells) applyConfirms()
     // A report that could not go in waits for 送进去: the turn it is about is the user's to read after all.
     if (state.held !== prev.held) {
       for (const [id, items] of Object.entries(state.held)) {

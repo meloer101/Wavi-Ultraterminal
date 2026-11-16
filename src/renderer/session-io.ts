@@ -12,7 +12,7 @@ import { useWorkspace } from './state/workspace'
 import { addAttachments, clearComposer, draftOf, insertIntoDraft, isGuiSession, useGuiSessions } from './gui/store'
 import { attachmentInput } from './terminal/attachments'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
-import { noteInserted } from './terminal/typing'
+import { noteInserted, noteUserLine } from './terminal/typing'
 
 const M = defineMessages({
   zh: {
@@ -55,13 +55,18 @@ function refuseOverMenu(sessionId: SessionId): void {
   if (refusal) throw new Error(refusal)
 }
 
-/** Types `text` into the session's agent and presses Enter once the agent shows it. Rejects with a user-facing message. */
-export async function submitPrompt(sessionId: SessionId, text: string): Promise<void> {
+/**
+ * Types `text` into the session's agent and presses Enter once the agent shows it. Rejects with a user-facing message.
+ * `user`: the user's click sent it (a button, 送进去), so the turn it starts is theirs, like a line typed in its terminal
+ * (`noteUserLine`, PRD F21 v1.198); Wavi's own sends (reports, 定时任务, auto-resume, auto-fix) leave it out.
+ */
+export async function submitPrompt(sessionId: SessionId, text: string, options: { user?: boolean } = {}): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session) throw new Error(pick(M).noSession)
   if (session.ui === 'gui') {
     const body = normalizeSendText(text).trim()
     if (!body) return
+    if (options.user) noteUserLine(sessionId)
     const result = await window.tr.gui.send(sessionId, { text: body, attachments: [] })
     if (!result.ok) throw new Error(result.reason)
     return
@@ -69,6 +74,8 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
   refuseOverMenu(sessionId)
   const steps = planSend(text, session.kind)
   if (steps.length === 0) return
+  // Before the send: the turn it starts can reach the window before the send resolves.
+  if (options.user) noteUserLine(sessionId)
   try {
     await sendQueued(queue, sessionId, steps, getSendIo(sessionId))
   } catch (error) {
@@ -114,8 +121,9 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
 /**
  * Presses Enter on what is already in the agent's input line once `needle` shows there — the phone's photos sent
  * without text (PRD F22): their paths became `[Image #N]`. Rejects with a user-facing message while a menu is open.
+ * `user`: as for `submitPrompt`.
  */
-export async function submitInputLine(sessionId: SessionId, needle: string): Promise<void> {
+export async function submitInputLine(sessionId: SessionId, needle: string, options: { user?: boolean } = {}): Promise<void> {
   if (isGuiSession(sessionId)) {
     // The photos are the composer's attachments: send them with whatever is typed.
     const attachments = useGuiSessions.getState().attachments[sessionId] ?? []
@@ -125,6 +133,7 @@ export async function submitInputLine(sessionId: SessionId, needle: string): Pro
     return
   }
   refuseOverMenu(sessionId)
+  if (options.user) noteUserLine(sessionId)
   try {
     await sendQueued(queue, sessionId, [{ type: 'waitForText', needles: [needle], timeoutMs: 5_000 }, { type: 'delay', ms: 150 }, { type: 'write', data: '\r' }], getSendIo(sessionId))
   } catch (error) {

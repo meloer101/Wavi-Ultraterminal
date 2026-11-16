@@ -32,6 +32,41 @@ describe('sanitizeWorkspaceFile', () => {
     for (const key of ['fixRuns', 'shipRuns', 'dispatch']) expect(plain).not.toHaveProperty(key)
   })
 
+  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.198)', () => {
+    const raw = {
+      ...structuredClone(valid),
+      projects: [...valid.projects, { id: 'p2', name: 'other', rootPath: '/code/other' }],
+      worktrees: [...valid.worktrees, { id: 'w2', projectId: 'p2', branch: 'main', path: '/code/other', isMain: true }],
+      leaderSessions: { p1: 's1', p2: 's1', gone: 's1' }
+    }
+    expect(sanitizeWorkspaceFile(raw, 0)!.leaderSessions).toEqual({ p1: 's1' })
+    // A plain terminal, a session that is gone and junk are dropped; with nothing left the key is absent.
+    for (const leaderSessions of [{ p1: 's2' }, { p1: 'nope' }, 'junk', { p1: 7 }]) {
+      expect(sanitizeWorkspaceFile({ ...structuredClone(valid), leaderSessions }, 0)).not.toHaveProperty('leaderSessions')
+    }
+  })
+
+  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.198)', () => {
+    const sessions = [
+      ...valid.sessions,
+      { id: 's3', worktreeId: 'w1', kind: 'gemini', title: 'Gemini', startedAt: 150, lastActivityAt: 150 },
+      { id: 's4', worktreeId: 'w1', kind: 'claude', ui: 'gui', title: 'Claude Code', startedAt: 150, lastActivityAt: 150 }
+    ]
+    for (const leaderSessions of [{ p1: 's3' }, { p1: 's4' }]) {
+      const file = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions }, 0)!
+      expect(file.sessions.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4'])
+      expect(file).not.toHaveProperty('leaderSessions')
+    }
+  })
+
+  it('drops a leader that reports to a dispatcher, as setLeader refuses one, and keeps a top-level one (PRD F21 v1.198)', () => {
+    const sessions = [...valid.sessions, { id: 's3', worktreeId: 'w1', kind: 'codex', title: 'Codex', startedAt: 150, lastActivityAt: 150, dispatchedBy: 's1' }]
+    const dispatched = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions: { p1: 's3' } }, 0)!
+    expect(dispatched.sessions.find((s) => s.id === 's3')?.dispatchedBy).toBe('s1')
+    expect(dispatched).not.toHaveProperty('leaderSessions')
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions: { p1: 's1' } }, 0)!.leaderSessions).toEqual({ p1: 's1' })
+  })
+
   it('round-trips a valid file', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })

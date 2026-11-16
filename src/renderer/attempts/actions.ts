@@ -106,7 +106,7 @@ async function deliver(id: SessionId, prompt: string): Promise<void> {
   try {
     await whenAgentReady(id, READY_TIMEOUT_MS)
     setMemberLaunch(id, { phase: 'sending' })
-    await submitPrompt(id, prompt)
+    await submitPrompt(id, prompt, { user: true })
     setMemberLaunch(id, { phase: 'sent' })
   } catch (error) {
     setMemberLaunch(id, { phase: 'failed', message: message(error) })

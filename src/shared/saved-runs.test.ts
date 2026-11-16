@@ -175,6 +175,7 @@ describe('sanitizeShipRuns', () => {
 })
 
 const pending: PendingStart = {
+  kind: 'start',
   callId: 'c1',
   parentId: 's1',
   childId: 'child-1',
@@ -187,6 +188,8 @@ const pending: PendingStart = {
     request: { root: '/code/acme', folder: 'acme-wt-tests', branch: 'jacob/tests', base: 'feat', prepare: false }
   }
 }
+
+const adoptPending: PendingStart = { kind: 'adopt', callId: 'c3', parentId: 's1', childId: 's2', agent: 'claude', title: 'Login form', branch: 'main', task: 'Finish it' }
 
 describe('sanitizeSavedDispatch', () => {
   it('keeps what waits for the user and the reports on their way, for sessions that exist', () => {
@@ -208,6 +211,18 @@ describe('sanitizeSavedDispatch', () => {
     expect(sanitizeSavedDispatch({ confirms: [gui] }, sessions)?.confirms).toEqual([gui])
     const odd = { ...pending, plan: { ...pending.plan, item: { ...pending.plan.item, ui: 'tui' } } }
     expect(sanitizeSavedDispatch({ confirms: [odd] }, sessions)?.confirms).toEqual([pending])
+  })
+
+  it('keeps a leader’s adopt request with only what it shows and does (PRD F21 v1.198)', () => {
+    expect(sanitizeSavedDispatch({ confirms: [adoptPending] }, sessions)?.confirms).toEqual([adoptPending])
+    expect(sanitizeSavedDispatch({ confirms: [{ ...adoptPending, agent: 'nope' }] }, sessions)).toBeNull()
+    expect(sanitizeSavedDispatch({ confirms: [{ ...adoptPending, task: 7 }] }, sessions)).toBeNull()
+  })
+
+  it('reads a request saved before kinds as a wavi run, and drops an unknown kind', () => {
+    const { kind: _kind, ...old } = pending
+    expect(sanitizeSavedDispatch({ confirms: [old] }, sessions)?.confirms).toEqual([pending])
+    expect(sanitizeSavedDispatch({ confirms: [{ ...pending, kind: 'fork' }] }, sessions)).toBeNull()
   })
 
   it('is nothing when nothing is left', () => {

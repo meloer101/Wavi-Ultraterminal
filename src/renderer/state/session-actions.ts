@@ -21,11 +21,12 @@ import { everyWindow, windowOf } from '../app-shell/windows-runtime'
 import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
-import { newProjectAgent, projectOfSession } from './workspace-model'
+import { leaderOf, newProjectAgent, projectOfSession } from './workspace-model'
 
 const M = defineMessages({
   zh: {
     newSession: '新建会话…',
+    newLeader: '新建 leader…',
     openInNewWindow: '在新窗口中打开',
     revealInFinder: '在 Finder 中显示',
     copyPath: '复制路径',
@@ -38,6 +39,7 @@ const M = defineMessages({
   },
   en: {
     newSession: 'New session…',
+    newLeader: 'New leader…',
     openInNewWindow: 'Open in new window',
     revealInFinder: 'Show in Finder',
     copyPath: 'Copy path',
@@ -113,9 +115,12 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   if (!project) return
   const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
   const sessionCount = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).length
+  // PRD F21 v1.198, Figma 81E: while 设置 · 派活 · leader 会话 is on, a project without a leader offers one.
+  const offerLeader = leaderOf(state, projectId) === null && (await window.tr.settings.get().then((s) => s.dispatch.leader).catch(() => false))
   const m = pick(M)
   const entries: MenuEntry[] = [
     { type: 'item', id: 'new', label: m.newSession, accelerator: 'CmdOrCtrl+N' },
+    ...(offerLeader ? [{ type: 'item', id: 'new-leader', label: m.newLeader } as const] : []),
     { type: 'item', id: 'window', label: m.openInNewWindow },
     { type: 'item', id: 'reveal', label: m.revealInFinder },
     { type: 'item', id: 'copy-path', label: m.copyPath },
@@ -126,6 +131,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   else if (choice === 'copy-path') void navigator.clipboard.writeText(project.rootPath).catch(() => {})
   else if (choice === 'remove') await removeProjectInteractive(projectId)
   else if (choice === 'new') openNewSessionSheet(projectId)
+  else if (choice === 'new-leader') openNewSessionSheet(projectId, null, { leader: true })
   else if (choice === 'window') openProjectInNewWindow(projectId)
 }
 

@@ -5,6 +5,7 @@ import { useContext } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { CliAgent } from '@shared/agents'
+import { canLead } from '@shared/dispatch'
 import type { WorktreeArchive } from '@shared/archive'
 import type { GuiPicks } from '@shared/gui-chat'
 import { rememberUi, rememberWorkdir, type Workdir } from '@shared/new-session'
@@ -42,6 +43,8 @@ import {
   closeSession,
   forgetWorktrees,
   archiveWorktrees,
+  leaderOf,
+  setLeader,
   unarchiveWorktrees,
   syncWorktreeBranches,
   persistedStateChanged,
@@ -151,6 +154,12 @@ interface WorkspaceState extends WorkspaceData {
   removeProject(id: ProjectId): void
   /** Starts a session in the project and selects it; null if the project is gone. `ui` 'gui': a GUI session (PRD F23). */
   addSession(projectId: ProjectId, kind: AgentKind, ui?: SessionUi): SessionId | null
+  /**
+   * 作为 leader / 新建… (PRD F21 v1.198 · 开): starts a session in the project's main checkout as its leader and
+   * selects it, in one change (its first launch already runs as a leader). Null when the project is gone, already has
+   * a leader, or the agent cannot lead (`canLead`).
+   */
+  addLeaderSession(projectId: ProjectId, kind: AgentKind): SessionId | null
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
@@ -210,6 +219,8 @@ export type SessionPatch = Partial<
     | 'statusSince'
     | 'turnStartedAt'
     | 'askingAgents'
+    | 'waitingFor'
+    | 'waviAsk'
     | 'dispatchedBy'
     | 'dispatchTask'
     | 'dispatchBase'
@@ -263,7 +274,8 @@ const pick = (s: WorkspaceState): WorkspaceData => ({
   worktrees: s.worktrees,
   sessions: s.sessions,
   activeSessionId: s.activeSessionId,
-  split: s.split
+  split: s.split,
+  ...(s.leaderSessions ? { leaderSessions: s.leaderSessions } : {})
 })
 
 /** A split with fewer than two panes is no split. */
@@ -407,6 +419,16 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       commit(result.data)
       return result.sessionId
     },
+    addLeaderSession(projectId, kind) {
+      const data = pick(get())
+      if (leaderOf(data, projectId) !== null || !canLead(kind)) return null
+      const result = addSession(data, projectId, kind, Date.now())
+      if (!result) return null
+      const next = setLeader(result.data, projectId, result.sessionId)
+      if (next === result.data) return null
+      commit(next)
+      return result.sessionId
+    },
     addSessionInWorktree(projectId, target, kind, ui) {
       const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), randomId, ui)
       if (!result) return null
@@ -432,8 +454,9 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     rememberUi: (projectId, ui, forced) => set((s) => ({ newSessionUi: rememberUi(s.newSessionUi, projectId, ui, forced) })),
     retargetSession: (id, change) =>
       set((s) => {
-        const next = retargetSession(s, id, change)
-        return next === s ? {} : { sessions: next.sessions }
+        const data = pick(s)
+        const next = retargetSession(data, id, change)
+        return next === data ? {} : { sessions: next.sessions, leaderSessions: next.leaderSessions }
       }),
     rememberGuiPicks: (agent, picks) =>
       set((s) => {

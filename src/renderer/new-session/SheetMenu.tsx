@@ -14,6 +14,8 @@ export interface SheetMenuItem {
   label: string
   icon: ReactNode
   meta?: string
+  /** Listed but not choosable (Figma 81C: an agent that cannot lead here); its label is dimmed, its meta says why. */
+  disabled?: boolean
 }
 
 export interface SheetMenuSection {
@@ -125,7 +127,7 @@ export function SheetMenu({
       event.preventDefault()
       event.stopPropagation()
       const item = flat[active]
-      if (item) onPick(item.value)
+      if (item && !item.disabled) onPick(item.value)
     } else if (event.key === 'Tab') {
       onClose(false)
     }
@@ -180,9 +182,11 @@ export function SheetMenu({
                   aria-selected={item.value === selected}
                   data-index={at}
                   data-active={at === active}
+                  aria-disabled={item.disabled === true ? true : undefined}
+                  data-disabled={item.disabled === true}
                   className={styles.menuItem}
                   onPointerMove={() => setActive(at)}
-                  onClick={() => onPick(item.value)}
+                  onClick={() => !item.disabled && onPick(item.value)}
                 >
                   <span className={styles.menuIcon}>{item.icon}</span>
                   <span className={styles.menuLabel}>{item.label}</span>

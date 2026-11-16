@@ -25,7 +25,8 @@ const M = defineMessages({
     status: { needs_you: '等你处理', done_unread: '已完成', error: '出错', running: '运行中', idle: '空闲', exited: '已退出' } as Record<SessionStatus, string>,
     shell: (path: string) => `终端 · ${path}`,
     sessions: (n: number) => `${n} 个会话`,
-    needYou: (n: number) => `${n} 个需要你`
+    needYou: (n: number) => `${n} 个需要你`,
+    answer: '等你回答'
   },
   en: {
     starting: 'Starting',
@@ -33,7 +34,8 @@ const M = defineMessages({
     status: { needs_you: 'Needs you', done_unread: 'Done', error: 'Error', running: 'Running', idle: 'Idle', exited: 'Exited' },
     shell: (path: string) => `Terminal · ${path}`,
     sessions: (n: number) => (n === 1 ? '1 session' : `${n} sessions`),
-    needYou: (n: number) => (n === 1 ? '1 needs you' : `${n} need you`)
+    needYou: (n: number) => (n === 1 ? '1 needs you' : `${n} need you`),
+    answer: 'Needs an answer'
   }
 })
 
@@ -121,6 +123,9 @@ function cardOf(status: SessionStatus): CardTone {
   }
 }
 
+/** The leader's `wavi tell` is what its session waits on now (a confirm or a 定时任务 request is shown before it). */
+const toldNow = (session: Session): boolean => session.status === 'needs_you' && session.waviAsk === 'tell'
+
 function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number): OverviewRow {
   const status = glyphStatus(session)
   const projectName = project?.name ?? ''
@@ -131,7 +136,7 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
   return {
     session,
     status,
-    statusLabel: statusLabel(session, status),
+    statusLabel: toldNow(session) ? pick(M).answer : statusLabel(session, status),
     tone: toneOf(status),
     card: cardOf(status),
     title: session.title,

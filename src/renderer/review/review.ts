@@ -57,5 +57,5 @@ export async function requestReview(sessionId: SessionId): Promise<void> {
   const blocker = reviewBlocker(session)
   if (!command || blocker) throw new Error(blocker ?? pick(M).cannotReview)
   await ensureAgentUp(sessionId)
-  await submitPrompt(sessionId, command)
+  await submitPrompt(sessionId, command, { user: true })
 }

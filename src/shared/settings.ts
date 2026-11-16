@@ -186,6 +186,8 @@ export interface DispatchSettings {
   tools: boolean
   /** Start the sessions an agent asks for without the confirmation strip (the limits still apply). */
   autoApprove: boolean
+  /** 「leader 会话」(PRD F21 v1.198): the new-session panel offers 作为 leader. Off by default. */
+  leader: boolean
 }
 
 /** 设置 · 自动化 · 定时任务 (PRD F24). */
@@ -284,7 +286,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     writerCodexModel: '',
     writeOnOpen: false
   },
-  dispatch: { tools: true, autoApprove: false },
+  dispatch: { tools: true, autoApprove: false, leader: false },
   remote: { enabled: false, port: DEFAULT_REMOTE_PORT, push: true },
   schedules: { paused: false, whileClosed: true, openAtLogin: false, agents: true }
 }
@@ -433,7 +435,8 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     pr: prSettings(v.pr),
     dispatch: {
       tools: typeof dp.tools === 'boolean' ? dp.tools : DEFAULT_SETTINGS.dispatch.tools,
-      autoApprove: typeof dp.autoApprove === 'boolean' ? dp.autoApprove : DEFAULT_SETTINGS.dispatch.autoApprove
+      autoApprove: typeof dp.autoApprove === 'boolean' ? dp.autoApprove : DEFAULT_SETTINGS.dispatch.autoApprove,
+      leader: typeof dp.leader === 'boolean' ? dp.leader : DEFAULT_SETTINGS.dispatch.leader
     },
     remote: {
       enabled: typeof rm.enabled === 'boolean' ? rm.enabled : DEFAULT_SETTINGS.remote.enabled,

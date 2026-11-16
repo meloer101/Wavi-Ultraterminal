@@ -5,11 +5,12 @@ import type { GuiPicks } from '@shared/gui-chat'
 import { defineMessages, localized } from '@shared/i18n'
 import type { WorktreeArchive } from '@shared/archive'
 import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
+import { canLead } from '@shared/dispatch'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
 import type { AgentKind, Project, ProjectId, Session, SessionId, SessionStatus, SessionUi, Worktree, WorktreeId } from '@shared/types'
-import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type SidebarGroupBy, type WorkspaceFile } from '@shared/workspace-file'
+import { MAX_RECENT_PROJECTS, sanitizeLeaders, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type SidebarGroupBy, type WorkspaceFile } from '@shared/workspace-file'
 import type { PersistedWindow } from '@shared/window-layout'
 
 export interface WorkspaceData {
@@ -19,6 +20,8 @@ export interface WorkspaceData {
   activeSessionId: SessionId | null
   /** The main area's split (PRD F20); absent / null = the active session alone. Kept in step by reconcileSplit. */
   split?: SplitNode | null
+  /** Each project's leader session (PRD F21 v1.198); absent / empty = none. Kept valid by pruneLeaders. */
+  leaderSessions?: Readonly<Record<ProjectId, SessionId>>
 }
 
 export const EMPTY_WORKSPACE: WorkspaceData = { projects: [], worktrees: [], sessions: [], activeSessionId: null }
@@ -175,7 +178,42 @@ export function retargetSession(data: WorkspaceData, sessionId: SessionId, chang
     worktreeId: change.worktreeId ?? session.worktreeId,
     title: isDefaultSessionTitle(session.kind, session.title) ? DEFAULT_SESSION_TITLE[kind] : session.title
   }
-  return { ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) }
+  return pruneLeaders({ ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) })
+}
+
+/** The project's leader session (PRD F21 v1.198), or null. */
+export function leaderOf(data: Pick<WorkspaceData, 'leaderSessions'>, projectId: ProjectId): SessionId | null {
+  return data.leaderSessions?.[projectId] ?? null
+}
+
+/** Whether the session is its project's leader. */
+export function isLeader(data: Pick<WorkspaceData, 'leaderSessions'>, sessionId: SessionId): boolean {
+  return Object.values(data.leaderSessions ?? {}).includes(sessionId)
+}
+
+/** Leaders still valid as `sanitizeLeaders` checks them (a session that exists in its project, not a plain terminal). */
+function pruneLeaders(data: WorkspaceData): WorkspaceData {
+  if (!data.leaderSessions) return data
+  const projectIds = new Set(data.projects.map((p) => p.id))
+  const kept = sanitizeLeaders(data.leaderSessions, { sessions: data.sessions, worktrees: data.worktrees, projectIds })
+  if (Object.keys(kept).length === Object.keys(data.leaderSessions).length) return data
+  return { ...data, leaderSessions: kept }
+}
+
+/**
+ * Makes a session its project's leader (PRD F21 v1.198 · 开): only an agent that can lead (`canLead`), in that
+ * project, not dispatched by another session, and only while the project has no other leader. `data` itself when refused.
+ */
+export function setLeader(data: WorkspaceData, projectId: ProjectId, sessionId: SessionId): WorkspaceData {
+  const session = data.sessions.find((s) => s.id === sessionId)
+  if (!session || !canLead(session.kind, session.ui ?? 'cli')) return data
+  // A leader is a top-level session: one that reports to a dispatcher could adopt that dispatcher (a cycle) or build a
+  // tree deeper than DISPATCH_LIMITS.depth with `wavi adopt`.
+  if (session.dispatchedBy !== undefined) return data
+  if (data.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) return data
+  const current = leaderOf(data, projectId)
+  if (current !== null) return data
+  return { ...data, leaderSessions: { ...data.leaderSessions, [projectId]: sessionId } }
 }
 
 /** Removes a session; if it was selected, selects its neighbour (next, else previous). */
@@ -192,7 +230,8 @@ export function closeSession(data: WorkspaceData, sessionId: SessionId): Workspa
     })
   const activeSessionId =
     data.activeSessionId === sessionId ? (sessions[at]?.id ?? sessions[at - 1]?.id ?? null) : data.activeSessionId
-  return { ...data, sessions, activeSessionId }
+  // A closed leader leaves its project without one (PRD F21 v1.198 · 存盘).
+  return pruneLeaders({ ...data, sessions, activeSessionId })
 }
 
 /**
@@ -257,11 +296,11 @@ export function removeProject(data: WorkspaceData, projectId: ProjectId): Worksp
   const worktreeIds = new Set(data.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
   let next: WorkspaceData = data
   for (const s of data.sessions) if (worktreeIds.has(s.worktreeId)) next = closeSession(next, s.id)
-  return {
+  return pruneLeaders({
     ...next,
     projects: next.projects.filter((p) => p.id !== projectId),
     worktrees: next.worktrees.filter((w) => !worktreeIds.has(w.id))
-  }
+  })
 }
 
 export function projectOfSession(data: WorkspaceData, sessionId: SessionId | null): ProjectId | null {
@@ -408,7 +447,8 @@ export function serializeWorkspace(
     ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {}),
     ...(split ? { split } : {}),
     ...(ui.secondaryWindows && ui.secondaryWindows.length > 0 ? { windows: [...ui.secondaryWindows] } : {}),
-    ...(attemptGroups.length > 0 ? { attemptGroups: attemptGroups.map((g) => ({ ...g, members: [...g.members] })) } : {})
+    ...(attemptGroups.length > 0 ? { attemptGroups: attemptGroups.map((g) => ({ ...g, members: [...g.members] })) } : {}),
+    ...(data.leaderSessions && Object.keys(data.leaderSessions).length > 0 ? { leaderSessions: { ...data.leaderSessions } } : {})
   }
 }
 
@@ -452,7 +492,8 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId,
-    split: file.split ?? null
+    split: file.split ?? null,
+    ...(file.leaderSessions ? { leaderSessions: { ...file.leaderSessions } } : {})
   }
 }
 
@@ -479,6 +520,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.newSessionAgent !== prev.newSessionAgent ||
     next.newSessionUi !== prev.newSessionUi ||
     next.guiPicks !== prev.guiPicks ||
+    (next.leaderSessions ?? null) !== (prev.leaderSessions ?? null) ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true

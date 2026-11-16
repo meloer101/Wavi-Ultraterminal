@@ -4,22 +4,29 @@
 // agent later as a message; one a dispatched session starts begins right away. Children start in new worktrees — a
 // branch off the dispatcher's, or a snapshot of its working tree — with Wavi's brief as their first message (§6.14).
 import { CLI_AGENTS } from '@shared/agents'
-import { diffSummary, diffSummaryText } from '@shared/attempt-groups'
+import { diffSummary, diffSummaryText, groupOfSession } from '@shared/attempt-groups'
 import {
   ackReport,
+  adoptBrief,
+  adoptRefusal,
   agentLabel,
   childBrief,
   childUi,
   DISPATCH_LIMITS,
   messagePage,
   noticeText,
+  pendingShown,
   planChild,
   startRefusal,
+  confirmHead,
+  tellLabel,
   titleFor,
   waviFail,
   waviOk,
   type ChildPlan,
   type DispatchRequest,
+  type NotAdopted,
+  type PendingAdopt,
   type StartedChild,
   type WaviCommand,
   type WaviResult
@@ -30,22 +37,28 @@ import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { binaryInstalled } from '../new-session/model'
 import { interruptAgent } from '../session-io'
+import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { handleScheduleCommand } from '../schedules/agent-requests'
-import { checksOf, childrenOf, conflictsOf, placeOf, type Place } from './places'
+import { checksOf, childrenOf, conflictsOf, isLeaderSession, placeOf, type Place } from './places'
 import { deliverMessage, queueReport } from './reports'
-import { addConfirm, queueOf, setLaunch, setQueue, setReported, takeConfirms, useDispatch, type PendingStart } from './store'
+import { addConfirm, queueOf, setLaunch, setQueue, setReported, setTell, takeConfirms, useDispatch, type PendingStart } from './store'
 
 // The answers `wavi` prints to the agent and what the user sees of a request (a notification, a held message's title).
 const M = defineMessages({
   zh: {
     dispatchOff: 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).',
-    notifyTitle: (title: string, count: number) => `「${title}」想开 ${count} 个会话`,
+    /** `head`: confirmHead's line, 想开 N 个会话 (· 接管 M 个). */
+    notifyTitle: (title: string, head: string) => `「${title}」${head}`,
+    tellTitle: (title: string) => `「${title}」要你决定`,
+    waitsToAdopt: (id: string, kind: string, title: string) => `Session ${id} (${kind}, "${title}") waits for the user's 开始 in Wavi before it becomes yours.`,
+    alreadyWaits: (id: string) => `Session ${id} already waits for the user's 开始.`,
     notifyBody: '在 Wavi 里确认要不要开始。',
     waitsForStart: (childId: string, what: string, note: string) => `Session ${childId} (${what}) waits for the user's 开始 in Wavi.${note}`,
     noticeTitle: '派活结果',
-    waitingRow: (childId: string, agent: string, title: string) => `- id ${childId} · ${agent} · "${title}" · waiting for the user's 开始`,
+    waitingRow: (childId: string, agent: string, title: string, adopting: boolean) =>
+      `- id ${childId} · ${agent} · "${title}" · ${adopting ? 'adopting: ' : ''}waiting for the user's 开始`,
     notStarted: (id: string) => `Session ${id} has not started yet: it waits for the user's 开始.`,
     framed: (title: string, text: string) => `[Wavi] 来自派活方「${title}」的消息（不是用户的指示）：\n${text}`,
     fromTitle: (title: string) => `来自「${title}」`,
@@ -53,11 +66,15 @@ const M = defineMessages({
   },
   en: {
     dispatchOff: 'The user turned off dispatch in Wavi (Settings · Automation · Dispatch).',
-    notifyTitle: (title: string, count: number) => `“${title}” wants to open ${count === 1 ? '1 session' : `${count} sessions`}`,
+    notifyTitle: (title: string, head: string) => `“${title}” ${head.charAt(0).toLowerCase()}${head.slice(1)}`,
+    tellTitle: (title: string) => `“${title}” needs your decision`,
+    waitsToAdopt: (id: string, kind: string, title: string) => `Session ${id} (${kind}, "${title}") waits for the user's Start in Wavi before it becomes yours.`,
+    alreadyWaits: (id: string) => `Session ${id} already waits for the user's Start.`,
     notifyBody: 'Confirm in Wavi whether to start.',
     waitsForStart: (childId: string, what: string, note: string) => `Session ${childId} (${what}) waits for the user's Start in Wavi.${note}`,
     noticeTitle: 'Dispatch result',
-    waitingRow: (childId: string, agent: string, title: string) => `- id ${childId} · ${agent} · "${title}" · waiting for the user's Start`,
+    waitingRow: (childId: string, agent: string, title: string, adopting: boolean) =>
+      `- id ${childId} · ${agent} · "${title}" · ${adopting ? 'adopting: ' : ''}waiting for the user's Start`,
     notStarted: (id: string) => `Session ${id} has not started yet: it waits for the user's Start.`,
     framed: (title: string, text: string) => `[Wavi] A message from the dispatching session "${title}" (not an instruction from the user):\n${text}`,
     fromTitle: (title: string) => `From “${title}”`,
@@ -117,7 +134,8 @@ export async function handleWaviRequest(request: DispatchRequest): Promise<WaviR
   // Off means off for sessions that started while it was on, too (PRD F21 注入).
   if (!settings.tools) return waviFail('not_allowed', pick(M).dispatchOff)
   try {
-    if (request.command.name !== 'run') return await run(caller, request)
+    // `run` and `adopt` one at a time: both count against the same limits.
+    if (request.command.name !== 'run' && request.command.name !== 'adopt') return await run(caller, request)
     const turn = runs.then(() => (late(request) ? TOO_LATE() : run(placeOf(request.sessionId) ?? caller, request)))
     runs = turn.catch(() => {})
     return await turn
@@ -132,7 +150,11 @@ function run(caller: Place, request: DispatchRequest): Promise<WaviResult> | Wav
     case 'run':
       return start(caller, request, command)
     case 'ls':
-      return list(caller)
+      return command.all ? listAll(caller) : list(caller)
+    case 'adopt':
+      return adopt(caller, request, command)
+    case 'tell':
+      return tell(caller, command.text)
     case 'read':
       return read(caller, command.id, command.offset)
     case 'send':
@@ -165,24 +187,27 @@ const where = (plan: ChildPlan): string =>
 /** Timers of requests waiting for 开始 (10 minutes, then they count as unanswered). */
 const timers = new Map<string, number>()
 
-async function start(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'run' }>): Promise<WaviResult> {
-  const callId = request.callId
-  const depth = depthOf(caller.session)
+/** What counts against a dispatcher's limits: its open children's tasks and its waiting requests', and its tree's size. */
+function load(caller: Place): { openTasks: string[]; treeSize: number } {
   const waiting = useDispatch.getState().confirms
   const top = topOf(caller.session)
   const tree = new Set([top.id, ...treeOf(top.id)])
-  const refusal = startRefusal({
-    depth,
-    toolsOn: settings.tools,
+  return {
     openTasks: [
       ...childrenOf(caller.session.id)
         .filter(isOpen)
         .map((c) => c.session.dispatchTask ?? c.session.title),
-      ...waiting.filter((c) => c.parentId === caller.session.id).map((c) => c.plan.item.task)
+      ...waiting.filter((c) => c.parentId === caller.session.id).map((c) => pendingShown(c).task)
     ],
-    treeSize: tree.size - 1 + waiting.filter((c) => tree.has(c.parentId)).length,
-    task: command.task
-  })
+    treeSize: tree.size - 1 + waiting.filter((c) => tree.has(c.parentId)).length
+  }
+}
+
+async function start(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'run' }>): Promise<WaviResult> {
+  const callId = request.callId
+  const depth = depthOf(caller.session)
+  const waiting = useDispatch.getState().confirms.flatMap((c) => (c.kind === 'start' ? [c] : []))
+  const refusal = startRefusal({ depth, toolsOn: settings.tools, ...load(caller), task: command.task })
   if (refusal) return refusal
   // In parallel: `wavi` waits 5 s for the whole answer (PRD F21 接口).
   const autoStart = settings.autoApprove || depth >= 1
@@ -235,21 +260,110 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
       `Started session ${started.id} (${command.agent}${model}, ${where(plan)}).${note} It works on its own: Wavi sends you its report when it finishes a turn, fails or exits. End your turn now instead of waiting.`
     )
   }
-  addConfirm({ callId, parentId: caller.session.id, childId, plan, base: base ?? 'HEAD', uncommitted })
-  timers.set(
-    callId,
-    window.setTimeout(() => decide([callId], 'timeout'), DISPATCH_LIMITS.confirmMs)
-  )
-  if (!document.hasFocus()) {
-    const count = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id).length
-    window.tr.ui.notify({ title: pick(M).notifyTitle(caller.session.title, count), body: pick(M).notifyBody, tag: caller.session.id })
-  }
+  hold({ kind: 'start', callId, parentId: caller.session.id, childId, plan, base: base ?? 'HEAD', uncommitted }, caller)
   return waviOk(
     [
       `${pick(M).waitsForStart(childId, `${command.agent}${model}, ${where(plan)}`, note)}${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
       'wavi does not wait: end your turn now. Wavi sends you a message when the user decides, and a report when the session finishes a turn, fails or exits.'
     ].join('\n')
   )
+}
+
+/** A request waits for 开始 under the dispatcher's terminal (10 minutes), with a notification when Wavi is not in front. */
+function hold(pending: PendingStart, caller: Place): void {
+  addConfirm(pending)
+  timers.set(
+    pending.callId,
+    window.setTimeout(() => decide([pending.callId], 'timeout'), DISPATCH_LIMITS.confirmMs)
+  )
+  if (!document.hasFocus()) {
+    const waiting = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id)
+    const adopts = waiting.filter((c) => c.kind === 'adopt').length
+    window.tr.ui.notify({ title: pick(M).notifyTitle(caller.session.title, confirmHead(waiting.length - adopts, adopts)), body: pick(M).notifyBody, tag: caller.session.id })
+  }
+}
+
+// --- wavi adopt (PRD F21 v1.198 · 接管) ------------------------------------------------------------------------------
+
+/** How many levels of sessions hang under this one (0: none), archived ones too: they keep their dispatcher. */
+function levelsBelow(id: SessionId): number {
+  const kids = childrenOf(id)
+  if (kids.length === 0) return 0
+  return 1 + Math.max(...kids.map((k) => (childrenOf(k.session.id).length > 0 ? 1 : 0)))
+}
+
+const gone = (session: Session): boolean => session.phase === 'exited' || session.status === 'exited'
+
+/**
+ * Why `leader` may not adopt `target` now (`adoptRefusal` on the workspace as it is), or null. Asked when the leader
+ * runs `wavi adopt` and again at 开始: the session may have changed while the request waited.
+ */
+function adoptCheck(leader: Place, target: Place | null, task: string): WaviResult | null {
+  return adoptRefusal({
+    toolsOn: settings.tools,
+    leader: isLeaderSession(leader.session.id),
+    self: target?.session.id === leader.session.id,
+    kind: target?.session.kind ?? 'shell',
+    dispatchedBy: target?.session.dispatchedBy !== undefined,
+    attemptMember: target ? groupOfSession(useAttemptGroups.getState().groups, target.session.id) !== undefined : false,
+    archived: Boolean(target?.worktree.archived),
+    exited: target ? gone(target.session) : false,
+    subtreeSize: target ? treeOf(target.session.id).length : 0,
+    subtreeDepth: target ? levelsBelow(target.session.id) : 0,
+    ...load(leader),
+    task
+  })
+}
+
+async function adopt(caller: Place, request: DispatchRequest, command: Extract<WaviCommand, { name: 'adopt' }>): Promise<WaviResult> {
+  const found = placeOf(command.id)
+  const target = found && found.project.id === caller.project.id ? found : null
+  if (isLeaderSession(caller.session.id) && !target) return waviFail('not_found', `No session with id ${command.id} in this project. wavi ls --all shows them.`)
+  const refusal = adoptCheck(caller, target, command.task)
+  const kind = target?.session.kind
+  if (refusal || !target || kind === undefined || kind === 'shell') return refusal ?? waviFail('not_allowed', 'That session cannot be adopted.')
+  const { session, worktree } = target
+  if (useDispatch.getState().confirms.some((c) => c.childId === session.id)) return waviFail('duplicate', pick(M).alreadyWaits(session.id))
+  if (late(request)) return TOO_LATE()
+  hold({ kind: 'adopt', callId: request.callId, parentId: caller.session.id, childId: session.id, agent: kind, title: session.title, branch: worktree.branch, task: command.task }, caller)
+  return waviOk(
+    [
+      pick(M).waitsToAdopt(session.id, session.kind, session.title),
+      'wavi does not wait: end your turn now. Wavi sends you a message when the user decides; once adopted, it gets your task from you and reports to you like a session you started.'
+    ].join('\n')
+  )
+}
+
+/**
+ * 开始 on an adopt request: the session reports to the leader from now on and gets the task (PRD F21 v1.198 · 接管).
+ * The checks run again on the workspace as it is now (it may have closed, exited, been dispatched, or dispatched
+ * sessions of its own while the request waited); when one fails, nothing is adopted and the leader hears why.
+ */
+function adoptNow(leader: Place, pending: PendingAdopt): StartedChild | NotAdopted {
+  const found = placeOf(pending.childId)
+  const target = found && found.project.id === leader.project.id ? found : null
+  const notAdopted = (reason: string): NotAdopted => ({ id: pending.childId, title: pending.title, reason })
+  if (!target) return notAdopted('That session was closed.')
+  const refusal = adoptCheck(leader, target, pending.task)
+  if (refusal) return notAdopted(refusal.text)
+  const { session } = target
+  if (session.kind === 'shell') return notAdopted('That is a plain terminal, not an agent session; it cannot take a task.')
+  useWorkspace.getState().patchSession(session.id, { dispatchedBy: leader.session.id, dispatchTask: pending.task })
+  const leaderAgent = leader.session.kind === 'shell' ? 'claude' : leader.session.kind
+  const brief = adoptBrief({ task: pending.task, leaderTitle: leader.session.title, leaderAgent, depth: depthOf(leader.session) + 1 })
+  void deliverMessage(session, brief, { key: `adopt:${pending.callId}`, title: pick(M).fromTitle(leader.session.title) })
+  return { id: session.id, agent: session.kind, title: session.title, branch: target.worktree.branch, adopted: true }
+}
+
+// --- wavi tell (PRD F21 v1.198 · 交给用户) ---------------------------------------------------------------------------
+
+function tell(caller: Place, text: string): WaviResult {
+  if (!isLeaderSession(caller.session.id)) {
+    return waviFail('not_allowed', "Only the project's leader session hands decisions to the user with wavi tell. Ask the user in your reply instead.")
+  }
+  setTell(caller.session.id, text)
+  if (!document.hasFocus()) window.tr.ui.notify({ title: pick(M).tellTitle(caller.session.title), body: tellLabel(text), tag: caller.session.id })
+  return waviOk('The user sees it on your session in Wavi until they answer in your terminal. End your turn now; do not wait or poll.')
 }
 
 /** Requests taken up from a saved workspace get their time to be answered again (the old timers went with the window). */
@@ -298,12 +412,22 @@ function decide(callIds: readonly string[], outcome: 'started' | 'declined' | 't
   for (const [parentId, confirms] of byParent) {
     const parent = placeOf(parentId)
     if (!parent) continue
-    const children: StartedChild[] = confirms.flatMap((c) => {
-      if (outcome !== 'started') return [{ id: c.childId, agent: c.plan.item.agent, title: c.plan.item.title, branch: c.plan.branch }]
-      const started = launch(parent, c.plan, c.childId, c.base, depthOf(parent.session) + 1)
-      return started ? [started] : []
-    })
-    void deliverMessage(parent.session, noticeText(outcome, children), { key: `notice:${confirms[0]!.callId}`, title: pick(M).noticeTitle })
+    const children: StartedChild[] = []
+    const notAdopted: NotAdopted[] = []
+    for (const c of confirms) {
+      if (outcome !== 'started') {
+        const { agent, title, branch } = pendingShown(c)
+        children.push({ id: c.childId, agent, title, branch, ...(c.kind === 'adopt' ? { adopted: true as const } : {}) })
+      } else if (c.kind === 'adopt') {
+        const adopted = adoptNow(parent, c)
+        if ('reason' in adopted) notAdopted.push(adopted)
+        else children.push(adopted)
+      } else {
+        const started = launch(parent, c.plan, c.childId, c.base, depthOf(parent.session) + 1)
+        if (started) children.push(started)
+      }
+    }
+    void deliverMessage(parent.session, noticeText(outcome, children, notAdopted), { key: `notice:${confirms[0]!.callId}`, title: pick(M).noticeTitle })
   }
 }
 
@@ -323,7 +447,7 @@ function launch(caller: Place, plan: ChildPlan, childId: SessionId, base: string
     ...(plan.item.model ? { dispatchModel: plan.item.model } : {})
   })
   const parentAgent = caller.session.kind === 'shell' ? 'claude' : caller.session.kind
-  const brief = childBrief({ task: plan.item.task, parentTitle: caller.session.title, parentAgent, depth, branch: plan.branch, base, snapshot })
+  const brief = childBrief({ task: plan.item.task, parentTitle: caller.session.title, parentAgent, depth, branch: plan.branch, base, snapshot, leader: isLeaderSession(caller.session.id) })
   setLaunch(id, { initialPrompt: brief, ...(plan.item.model ? { model: plan.item.model } : {}) })
   holdForWorktree(id)
   startEagerly(id)
@@ -342,9 +466,16 @@ const STATUS_TEXT: Record<Session['status'], string> = {
   exited: 'exited'
 }
 
+/** What its agent's own ask waits for (PRD F21 v1.198: a leader tells a permission from a question). */
+const WAITING_TEXT: Record<NonNullable<Session['waitingFor']>, string> = {
+  permission: 'waiting for the user to answer a permission prompt in its terminal',
+  question: 'waiting for the user to answer a question in its terminal'
+}
+
 function statusOf(session: Session): string {
   if (session.phase === 'starting') return 'starting'
   if (session.phase === 'exited') return 'agent exited'
+  if (session.status === 'needs_you' && session.waitingFor) return WAITING_TEXT[session.waitingFor]
   return STATUS_TEXT[session.status]
 }
 
@@ -385,13 +516,67 @@ async function list(caller: Place): Promise<WaviResult> {
       return { line: `- ${facts.filter(Boolean).join(' · ')}${reply}`, place: c, conflicts, size: changes.size }
     })
   )
-  const pending = waiting.map((c) => pick(M).waitingRow(c.childId, c.plan.item.agent, c.plan.item.title))
+  const pending = waiting.map((c) => pick(M).waitingRow(c.childId, pendingShown(c).agent, pendingShown(c).title, c.kind === 'adopt'))
   // Merge the work that conflicts with nothing first, smaller diffs before larger ones (the user merges, in Wavi).
   const order = rows
     .filter((r) => !r.place.worktree.archived && r.place.session.dispatchBase !== 'snapshot')
     .sort((a, b) => Number(Boolean(a.conflicts)) - Number(Boolean(b.conflicts)) || a.size - b.size)
     .map((r) => r.place.worktree.branch)
   return waviOk([...rows.map((r) => r.line), ...pending, '', `Suggested merge order (the user merges in Wavi): ${order.join(' → ') || 'none'}`].join('\n'))
+}
+
+/** Whether `place` is in `leaderId`'s tree: the leader started or adopted it, or one of those did. */
+function underLeader(place: Place, leaderId: SessionId): boolean {
+  const sessions = useWorkspace.getState().sessions
+  let at: Session | undefined = place.session
+  for (let i = 0; i < DISPATCH_LIMITS.depth && at?.dispatchedBy !== undefined; i++) {
+    if (at.dispatchedBy === leaderId) return true
+    const parentId: SessionId = at.dispatchedBy
+    at = sessions.find((s) => s.id === parentId)
+  }
+  return false
+}
+
+/** `wavi ls --all` (PRD F21 v1.198 · 看): every open agent session of the leader's project but its own. */
+async function listAll(caller: Place): Promise<WaviResult> {
+  if (!isLeaderSession(caller.session.id)) return waviFail('not_allowed', "Only the project's leader session lists the whole project. wavi ls lists the sessions you started.")
+  const places = useWorkspace
+    .getState()
+    .sessions.filter((s) => s.id !== caller.session.id && s.kind !== 'shell')
+    .flatMap((s) => placeOf(s.id) ?? [])
+    .filter((p) => p.project.id === caller.project.id && isOpen(p))
+  const waiting = useDispatch.getState().confirms.filter((c) => c.parentId === caller.session.id)
+  if (places.length === 0 && waiting.length === 0) return waviOk('No other sessions in this project.')
+  const rows = await Promise.all(
+    places.map(async (p) => {
+      const changes = await changesText(p)
+      const by = p.session.dispatchedBy
+      const facts = [
+        `id ${p.session.id}`,
+        p.session.kind,
+        p.session.dispatchModel,
+        `"${p.session.title}"`,
+        statusOf(p.session),
+        p.session.dispatchBase === 'snapshot' ? 'snapshot' : p.worktree.branch ? `branch ${p.worktree.branch}` : undefined,
+        changes.text,
+        checksOf(p.session.id),
+        conflictsOf(p),
+        by === caller.session.id ? 'mine' : by ? `${underLeader(p, caller.session.id) ? 'mine' : 'user'} (dispatched by ${by})` : 'user'
+      ]
+      const reply = p.session.lastReply ? `\n  last: ${p.session.lastReply}` : ''
+      return `- ${facts.filter(Boolean).join(' · ')}${reply}`
+    })
+  )
+  const pending = waiting.map((c) => pick(M).waitingRow(c.childId, pendingShown(c).agent, pendingShown(c).title, c.kind === 'adopt'))
+  return waviOk([...rows, ...pending, '', 'wavi read <id> reads any of them; wavi send and wavi stop only the ones you started or adopted.'].join('\n'))
+}
+
+/** A session `wavi read` may read: one the caller started, or — for a leader — any other of its project (read-only). */
+function readable(caller: Place, id: string): Place | WaviResult {
+  const own = target(caller, id)
+  if (isPlace(own) || id === caller.session.id || !isLeaderSession(caller.session.id)) return own
+  const place = placeOf(id)
+  return place && place.project.id === caller.project.id ? place : waviFail('not_found', `No session with id ${id} in this project. wavi ls --all shows them.`)
 }
 
 function target(caller: Place, id: string): Place | WaviResult {
@@ -406,7 +591,7 @@ function target(caller: Place, id: string): Place | WaviResult {
 const isPlace = (value: Place | WaviResult): value is Place => 'session' in value
 
 async function read(caller: Place, id: string, offset: number): Promise<WaviResult> {
-  const child = target(caller, id)
+  const child = readable(caller, id)
   if (!isPlace(child)) return child
   const whole = useDispatch.getState().messages[child.session.id] ?? child.session.lastReply ?? ''
   const page = messagePage(whole, offset)

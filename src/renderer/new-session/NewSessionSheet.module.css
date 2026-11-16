@@ -379,6 +379,15 @@
   background: var(--bg-selected);
 }
 
+/* An agent that cannot lead here (Figma 81C): its name at 0.4, its meta (version · reason) as usual; no hover block. */
+.menuItem[data-disabled='true'] .menuLabel {
+  opacity: 0.4;
+}
+
+.menuItem[data-disabled='true'][data-active='true'] {
+  background: transparent;
+}
+
 .menuIcon {
   display: grid;
   flex-shrink: 0;
@@ -439,6 +448,22 @@
 .labelSpacer {
   flex-shrink: 0;
   width: 64px;
+}
+
+/* 作为 leader (Figma 81C′): a toggle and its words in the control column, on the select rows' 30 line. */
+.leader {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  height: 30px;
+}
+
+.leaderText {
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .adapterText {

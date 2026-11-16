@@ -82,6 +82,15 @@
   white-space: nowrap;
 }
 
+/* leader · 本小时叫醒 N 次 (PRD F21 v1.198, Figma 81E): in 由「…」派出's place and type, not a button. */
+.leaderMeta {
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 /* 由「…」派出 (PRD F21): quiet like the branch; the name ellipsizes before anything else in the header. */
 .dispatchedBy {
   display: inline-flex;

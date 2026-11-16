@@ -130,7 +130,7 @@ export async function sendHeldAttemptReport(parentId: SessionId): Promise<string
   const held = useAttemptReports.getState().held[parentId]
   if (!held) return null
   try {
-    await submitPrompt(parentId, held.text)
+    await submitPrompt(parentId, held.text, { user: true })
     useAttemptReports.setState((s) => ({ held: { ...s.held, [parentId]: undefined } }))
     return null
   } catch (error) {

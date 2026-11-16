@@ -28,6 +28,12 @@ describe('parseSpawnOptions', () => {
     expect(() => parseSpawnOptions({ ...base, agent: 'bash' })).toThrow()
   })
 
+  it('takes a leader launch only as a boolean (PRD F21 v1.198)', () => {
+    expect(parseSpawnOptions({ ...base, agent: 'claude', leader: true }).leader).toBe(true)
+    expect(parseSpawnOptions({ ...base, agent: 'claude', leader: false })).not.toHaveProperty('leader')
+    expect(() => parseSpawnOptions({ ...base, agent: 'claude', leader: 'yes' })).toThrow('invalid leader')
+  })
+
   it('accepts a resume id and rejects ones that could be read as an option or a shell word', () => {
     expect(parseSpawnOptions({ ...base, agent: 'claude', resumeAgentSessionId: '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b' }).resumeAgentSessionId).toBe(
       '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b'

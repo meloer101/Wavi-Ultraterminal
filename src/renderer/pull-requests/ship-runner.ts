@@ -745,7 +745,7 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
       else if (event.type === 'agent-exit' || event.type === 'session-end') gate.open(pick(M).exited(agent))
     })
     try {
-      await submitPrompt(sessionId, handoffPrompt(context))
+      await submitPrompt(sessionId, handoffPrompt(context), { user: true })
       return await awaitTexts(worktree, token, target, {
         wantsPr,
         wantsCommit,

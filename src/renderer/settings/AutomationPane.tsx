@@ -44,6 +44,7 @@ const M = defineMessages({
     dispatch: '派活',
     dispatchTools: '允许 agent 开新会话',
     autoApprove: '开新会话时不再确认',
+    leader: 'leader 会话',
     schedules: '定时任务',
     pauseAll: '全部暂停',
     whileClosed: 'Wavi 关着时也运行',
@@ -85,6 +86,7 @@ const M = defineMessages({
     dispatch: 'Dispatch',
     dispatchTools: 'Let agents open new sessions',
     autoApprove: 'Open new sessions without asking',
+    leader: 'Leader session',
     schedules: 'Scheduled tasks',
     pauseAll: 'Pause all',
     whileClosed: 'Run while Wavi is closed',
@@ -230,6 +232,10 @@ export function AutomationPane({
               disabled={!dispatch.tools}
               onChange={(autoApprove) => updateDispatch({ autoApprove })}
             />
+          </Row>
+          {/* PRD F21 v1.198, Figma 81D: offers 作为 leader in 新建会话 and 新建 leader… in a project's ⋯ menu. */}
+          <Row label={m.leader}>
+            <Toggle label={m.leader} checked={dispatch.leader} onChange={(leader) => updateDispatch({ leader })} />
           </Row>
         </Section>
         <Section title={m.schedules}>

@@ -2,6 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { CLI_AGENTS } from './agents'
+import { canLead } from './dispatch'
 import { sanitizeGuiPicks, type GuiPicks } from './gui-chat'
 import { archiveRefName, type WorktreeArchive } from './archive'
 import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
@@ -166,6 +167,11 @@ export interface WorkspaceFile {
   shipRuns?: SavedShipRun[]
   /** Dispatch's waiting 开始 and reports on their way (saved-runs.ts); only sessions that exist. Absent when none. */
   dispatch?: SavedDispatch
+  /**
+   * Each project's leader session (PRD F21 v1.198), by project id: an agent session (not a plain terminal) in one of that
+   * project's worktrees. At most one per project. Absent when none.
+   */
+  leaderSessions?: Record<string, string>
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -290,6 +296,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     delete s.dispatchModel
   }
 
+  const leaderSessions = sanitizeLeaders(value.leaderSessions, { sessions, worktrees, projectIds })
+
   const drafts: Record<string, string> = {}
   if (isRecord(value.drafts)) {
     for (const [id, text] of Object.entries(value.drafts)) {
@@ -382,8 +390,34 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(attemptGroups.length > 0 ? { attemptGroups } : {}),
     ...(fixRuns.length > 0 ? { fixRuns } : {}),
     ...(shipRuns.length > 0 ? { shipRuns } : {}),
-    ...(dispatch ? { dispatch } : {})
+    ...(dispatch ? { dispatch } : {}),
+    ...(Object.keys(leaderSessions).length > 0 ? { leaderSessions } : {})
   }
+}
+
+/**
+ * A leader whose session is gone, is in another project's worktree, cannot lead (`canLead`: a plain terminal, a GUI
+ * session, an agent not measured as leader) or reports to a dispatcher (`dispatchedBy`: a leader is a top-level
+ * session, as workspace-model `setLeader` has it) is dropped (PRD F21 v1.198 · 存盘).
+ */
+export function sanitizeLeaders(
+  raw: unknown,
+  workspace: {
+    sessions: readonly (Pick<PersistedSession, 'id' | 'worktreeId' | 'kind' | 'dispatchedBy'> & { ui?: SessionUi })[]
+    worktrees: readonly Pick<PersistedWorktree, 'id' | 'projectId'>[]
+    projectIds: ReadonlySet<string>
+  }
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!isRecord(raw)) return out
+  for (const [projectId, sessionId] of Object.entries(raw)) {
+    if (!workspace.projectIds.has(projectId) || !isText(sessionId)) continue
+    const session = workspace.sessions.find((s) => s.id === sessionId)
+    if (!session || !canLead(session.kind, session.ui ?? 'cli') || session.dispatchedBy !== undefined) continue
+    if (workspace.worktrees.find((w) => w.id === session.worktreeId)?.projectId !== projectId) continue
+    out[projectId] = sessionId
+  }
+  return out
 }
 
 function parseJson(raw: string | null): unknown {

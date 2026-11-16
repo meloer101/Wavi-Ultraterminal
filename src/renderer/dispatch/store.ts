@@ -23,9 +23,16 @@ interface State {
   reported: Record<SessionId, true | undefined>
   /** A child's `+84 −3 · 2 个文件` as its last report counted, for the GUI dispatcher's graph (Figma 68′). Not saved. */
   changes: Record<SessionId, string | undefined>
+  /**
+   * A leader's `wavi tell` (PRD F21 v1.198 · 交给用户): the decision it put before the user, shown as a Wavi ask on the
+   * leader until the user submits a line in its terminal. Not saved.
+   */
+  tells: Record<SessionId, string | undefined>
+  /** When a report last went into a leader (its next turn is the reports', not the user's, PRD F21 v1.198). Not saved. */
+  woken: Record<SessionId, number | undefined>
 }
 
-export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {}, changes: {} }))
+export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {}, changes: {}, tells: {}, woken: {} }))
 
 /** What a reload must not lose (null: nothing). */
 export function savedDispatch(state: Pick<State, 'confirms' | 'queues' | 'held'>): SavedDispatch | null {
@@ -117,4 +124,29 @@ export function takeHeld(sessionId: SessionId): HeldItem[] {
 export function setReported(childId: SessionId, reported: boolean): void {
   if (Boolean(useDispatch.getState().reported[childId]) === reported) return
   useDispatch.setState((s) => ({ reported: { ...s.reported, [childId]: reported ? true : undefined } }))
+}
+
+/** A leader's decision for the user; null clears it. */
+export function setTell(id: SessionId, text: string | null): void {
+  if ((useDispatch.getState().tells[id] ?? null) === text) return
+  useDispatch.setState((s) => ({ tells: { ...s.tells, [id]: text ?? undefined } }))
+}
+
+export function setWoken(id: SessionId, at: number | null): void {
+  if ((useDispatch.getState().woken[id] ?? null) === at) return
+  useDispatch.setState((s) => ({ woken: { ...s.woken, [id]: at ?? undefined } }))
+}
+
+/**
+ * The session is no longer its project's leader (closed, or no longer the leader): its decision for the user and the
+ * time a report last woke it go (PRD F21 v1.198), so nothing of it as leader remains.
+ */
+export function forgetLeader(id: SessionId): void {
+  const { tells, woken } = useDispatch.getState()
+  if (!(id in tells) && !(id in woken)) return
+  useDispatch.setState((s) => {
+    const { [id]: _tell, ...keptTells } = s.tells
+    const { [id]: _woken, ...keptWoken } = s.woken
+    return { tells: keptTells, woken: keptWoken }
+  })
 }

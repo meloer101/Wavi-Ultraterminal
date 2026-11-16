@@ -10,9 +10,9 @@ import type { Session, SessionId } from '@shared/types'
 import { submitPrompt } from '../session-io'
 import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
-import { typingIn } from '../terminal/typing'
-import { checksOf, conflictsOf, childrenOf } from './places'
-import { addHeld, heldReports, queueOf, setChanges, setMessage, setQueue, setReported, takeHeld, useDispatch, type HeldItem } from './store'
+import { lastSubmitIn, typingIn } from '../terminal/typing'
+import { checksOf, conflictsOf, childrenOf, isLeaderSession, leaderOfProject, placeOf } from './places'
+import { addHeld, heldReports, queueOf, setChanges, setMessage, setQueue, setReported, setWoken, takeHeld, useDispatch, type HeldItem } from './store'
 
 const timers = new Map<SessionId, number>()
 
@@ -61,6 +61,25 @@ export function finishGoesToDispatcher(id: SessionId): boolean {
   if (!child || !parent || !isDispatchAgent(parent.kind) || gone(parent)) return false
   if (groupOfSession(useAttemptGroups.getState().groups, child.id)?.reportTo === parent.id) return false
   return reportChannelOf(parent.kind) !== 'manual'
+}
+
+/**
+ * A leader's turn that a delivered report woke ends quietly, like a child's (PRD F21 v1.198 · 交给用户): read already,
+ * no notification, badge or ⌘J. Not when the user submitted a line in its terminal since, nor for a turn that began
+ * before the report went in (the user's own, which read the report on the way).
+ */
+export function leaderTurnQuiet(id: SessionId): boolean {
+  const woken = useDispatch.getState().woken[id]
+  if (woken === undefined || !isLeaderSession(id)) return false
+  const submitted = lastSubmitIn(id)
+  if (submitted !== null && submitted >= woken) {
+    setWoken(id, null)
+    return false
+  }
+  const turn = useWorkspace.getState().sessions.find((s) => s.id === id)?.turnStartedAt
+  if (turn === undefined || turn < woken) return false
+  setWoken(id, null)
+  return true
 }
 
 /** Queues a report about `child` for its dispatcher: its own (`report`, with its text) or one of Wavi's. */
@@ -140,8 +159,11 @@ async function flush(parentId: SessionId, batch: readonly ChildReport[]): Promis
   // Nobody left to tell (closed: its children were made ordinary sessions already).
   if (!parent) return
   const full = await Promise.all(batch.map(complete))
+  // Taken before the report goes in: the turn it wakes can start (its hook reach the window) before deliverTo returns.
+  const sentAt = Date.now()
   const result = await deliverTo(parent, reportText(full, stillRunning(parentId, full)))
   if (result !== 'delivered') addHeld(parentId, heldReports(full))
+  else if (isLeaderSession(parentId)) setWoken(parentId, sentAt)
 }
 
 /** What 送进去 types: the held reports as one report, then each held message. */
@@ -159,7 +181,7 @@ export async function sendHeld(sessionId: SessionId): Promise<string | null> {
   const items = takeHeld(sessionId)
   if (items.length === 0) return null
   try {
-    await submitPrompt(sessionId, await heldText(sessionId, items))
+    await submitPrompt(sessionId, await heldText(sessionId, items), { user: true })
     return null
   } catch (error) {
     addHeld(sessionId, items)
@@ -193,7 +215,9 @@ export function startReports(): () => void {
   })
   const offEvents = window.tr.agent.onEvent(({ sessionId, event }) => {
     if (event.type !== 'stop' || !event.message) return
-    if (useWorkspace.getState().sessions.some((s) => s.id === sessionId && s.dispatchedBy)) setMessage(sessionId, event.message)
+    // A leader reads any session of its project whole (PRD F21 v1.198 · 看), not only the ones it dispatched.
+    const place = placeOf(sessionId)
+    if (place && (place.session.dispatchedBy || leaderOfProject(place.project.id) !== null)) setMessage(sessionId, event.message)
   })
   return () => {
     offWorkspace()

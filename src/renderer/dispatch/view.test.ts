@@ -9,8 +9,9 @@ function session(over: Partial<Session> & Pick<Session, 'id'>): Session {
   return { worktreeId: 'w', kind: 'codex', title: over.id, status: 'running', startedAt: T0, lastActivityAt: T0, dispatchedBy: 'p', ...over }
 }
 
-function pending(childId: string, over: Partial<PendingStart['plan']['item']> = {}): PendingStart {
+function pending(childId: string, over: Partial<Extract<PendingStart, { kind: 'start' }>['plan']['item']> = {}): PendingStart {
   return {
+    kind: 'start',
     callId: `c-${childId}`,
     parentId: 'p',
     childId,
@@ -52,6 +53,17 @@ describe('dispatchView (Figma 68′)', () => {
     const view = dispatchView(input({ ids: ['w'], confirms: [pending('w'), pending('other-parent-or-call')] }))
     expect(view.nodes).toEqual([{ id: 'w', agent: 'gemini', title: 'Drop', model: 'gemini-3-pro', task: 'Drop localStorage', state: 'pending', children: [], reported: false }])
     expect(view.waiting.map((c) => c.childId)).toEqual(['w'])
+  })
+
+  it('draws a leader’s adopt still waiting for 开始 as pending, though its session exists, and as the session once adopted', () => {
+    const adopt: PendingStart = { kind: 'adopt', callId: 'c-u', parentId: 'p', childId: 'u', agent: 'claude', title: 'Login form', branch: 'main', task: 'Finish it\nand test' }
+    const own = session({ id: 'u', kind: 'claude', title: 'Login form', status: 'idle', finishedAt: T0 + 5, dispatchedBy: undefined })
+    const waiting = dispatchView(input({ ids: ['u'], sessions: [own], confirms: [adopt] }))
+    expect(waiting.nodes).toEqual([{ id: 'u', agent: 'claude', title: 'Login form', task: 'Finish it', state: 'pending', children: [], reported: false }])
+    expect(waiting.waiting).toEqual([adopt])
+    expect(waiting.settled).toBe(false)
+    const adopted = dispatchView(input({ ids: ['u'], sessions: [{ ...own, dispatchedBy: 'p' }], confirms: [] }))
+    expect(adopted.nodes[0]?.state).toBe('done')
   })
 
   it('names what needs the user first: an error, then a question; a session gone from the workspace is drawn as exited', () => {

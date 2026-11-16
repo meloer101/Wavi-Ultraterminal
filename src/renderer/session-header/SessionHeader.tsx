@@ -1,6 +1,10 @@
 import { usageVendor } from '@shared/agents'
 import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type LucideIcon } from 'lucide-react'
-import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react'
+import { emptyQueue, wakesThisHour } from '@shared/dispatch'
+import { useDispatch } from '../dispatch/store'
+import { subscribeClock } from '../sidebar/clock'
+import { isLeader } from '../state/workspace-model'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { useWorktreeCreations } from '../new-session/creation'
@@ -30,6 +34,7 @@ import { SHORTCUTS } from '@shared/shortcuts'
 const M = defineMessages({
   zh: {
     showSidebar: '显示侧栏',
+    leaderWakes: (n: number) => `leader · 本小时叫醒 ${n} 次`,
     openBoard: '打开看板 · ⇧⌘A',
     waiting: (n: number) => `${n} 个会话需要你`,
     dragTitle: '拖动到别的格或边上 · 双击重命名',
@@ -54,6 +59,7 @@ const M = defineMessages({
   },
   en: {
     showSidebar: 'Show sidebar',
+    leaderWakes: (n: number) => `leader · woken ${n} ${n === 1 ? 'time' : 'times'} this hour`,
     openBoard: 'Open board · ⇧⌘A',
     waiting: (n: number) => (n === 1 ? '1 session needs you' : `${n} sessions need you`),
     dragTitle: 'Drag to another pane or an edge · double-click to rename',
@@ -206,6 +212,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             </span>
           )}
           {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
+          <LeaderMeta sessionId={active.session.id} />
           <LoopBadge sessionId={active.session.id} />
           {active.session.scheduledBy && (
             <button
@@ -389,6 +396,20 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone(value: strin
       onKeyDown={onKeyDown}
       onBlur={() => finish(value)}
     />
+  )
+}
+
+/** A project's leader (PRD F21 v1.198 · 花费, Figma 81E): how many times reports woke it in the last hour. */
+function LeaderMeta({ sessionId }: { sessionId: SessionId }) {
+  const leader = useWorkspace((s) => isLeader(s, sessionId))
+  const queue = useDispatch((s) => s.queues[sessionId])
+  const wakes = useSyncExternalStore(subscribeClock, () => wakesThisHour(queue ?? emptyQueue(), Date.now()))
+  const m = useMessages(M)
+  if (!leader) return null
+  return (
+    <span className={styles.leaderMeta} data-testid="leader-meta">
+      {m.leaderWakes(wakes)}
+    </span>
   )
 }
 

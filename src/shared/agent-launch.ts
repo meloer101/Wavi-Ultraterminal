@@ -48,7 +48,10 @@ export interface AgentLaunchOptions {
   pathPrefix?: string
   /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
   model?: string
-  /** A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming. */
+  /**
+   * A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming, and
+   * when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.198).
+   */
   permission?: CliPermission
   /**
    * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
@@ -76,13 +79,15 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
   const prompt = !resumeId && options.initialPrompt?.trim() ? ['--', options.initialPrompt] : []
   if (!hasOwnAdapter(kind)) return otherAgentArgv(kind, resumeId, model, options)
   if (kind === 'claude') {
+    // A leader's own `--permission-mode default` (dispatch.ts `leaderLaunchArgs`) wins over a 定时任务's 权限.
+    const ownMode = options.extraArgs?.includes('--permission-mode') === true
     return [
       'claude',
       ...(resumeId ? ['--resume', resumeId] : []),
       ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : []),
       ...(options.extraArgs ?? []),
       ...(model ? ['--model', model] : []),
-      ...(options.permission && !resumeId ? ['--permission-mode', options.permission === 'auto' ? 'auto' : 'acceptEdits'] : []),
+      ...(options.permission && !resumeId && !ownMode ? ['--permission-mode', options.permission === 'auto' ? 'auto' : 'acceptEdits'] : []),
       ...prompt
     ]
   }
