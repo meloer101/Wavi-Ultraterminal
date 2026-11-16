@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-16：发送即上屏 + 运行行（PRD v1.199，Figma 91 / 91′）：桌面 GUI 会话发出的同一帧出现 agent 头像和运行行（正在跑的步骤或「思考中」+ 到 0.1 秒、逐位翻滚的用时），手机会话页同样；`renderer/gui/Feed.tsx` `RunLine`、`model.ts` `runRowOf` / `runClock`、`GuiState.busySince`，手机 `SessionView.swift` `RunLine`、`Format.swift` `runRow` / `runClock`；e2e `gui-session.spec.ts`，iOS `FormatTests`。
 - 2026-11-15：看板浮层里的 GUI 会话显示它的聊天（可以直接回复），不再是一块空终端（PRD F9 / F23）。`overview/BorrowedTerminal.tsx` 对 GUI 会话画 `ChatPane`；e2e `gui-session.spec.ts`（同时把侧栏入口的名字从「总览」改成「看板」）。
 - 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
 - 2026-11-15：设置 · 额度 统计去掉多余的线：四个数字之间不再有竖线，只靠留白分开；还没有记录的月份 / 日期不再画空框，只留下面的标签；柱状图去掉中间那条参考线和它的刻度，只留顶线和底线（热力图的空格子没动；Figma 69″ 未同步）。

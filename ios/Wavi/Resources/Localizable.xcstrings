@@ -1329,6 +1329,22 @@
         }
       }
     },
+    "思考中" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考中"
+          }
+        }
+      }
+    },
     "思考程度" : {
       "localizations" : {
         "en" : {

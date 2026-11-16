@@ -367,9 +367,9 @@ export function emptyGuiState(): GuiState {
 
 /**
  * Folds one event into the state. Returns a new state object; unchanged parts keep their identity (cheap renders).
- * `now` stamps the start of a turn.
+ * Two parameters only, so `events.reduce(applyGuiEvent, state)` stays right; a turn's start is stamped from the clock.
  */
-export function applyGuiEvent(state: GuiState, event: GuiEvent, now = Date.now()): GuiState {
+export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
   switch (event.type) {
     case 'items': {
       if (event.changes.length === 0) return state
@@ -390,7 +390,7 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent, now = Date.now()
       return state.prompts.some((p) => p.id === event.id) ? { ...state, prompts: state.prompts.filter((p) => p.id !== event.id) } : state
     case 'busy':
       // A turn that ends takes its stream and its questions with it.
-      if (event.busy) return state.busy ? state : { ...state, busy: true, busySince: now }
+      if (event.busy) return state.busy ? state : { ...state, busy: true, busySince: Date.now() }
       return { ...state, busy: false, busySince: undefined, live: null, prompts: [] }
     case 'config':
       return { ...state, config: event.config }

@@ -75,8 +75,14 @@ struct SessionView: View {
           }
           .onAppear { if index == 0 { Task { await model.loadOlder() } } }
         }
-        ForEach(model.sending[id] ?? []) { item in FeedRow(item: item, session: id).opacity(0.6) }
-        if session.status == .running, let action = session.action { Live(action: action, since: session.since) }
+        let sending = model.sending[id] ?? []
+        ForEach(sending) { item in FeedRow(item: item, session: id).opacity(0.6) }
+        if let run = runRow(session: session, sending: sending, lastIsUser: blocks.last.map(isUser) ?? true) {
+          VStack(alignment: .leading, spacing: 8) {
+            if run.startsTurn { AgentAvatar(agent: session.agent) }
+            RunLine(run: run)
+          }
+        }
       }
       .padding(.horizontal, Metric.margin)
       .padding(.vertical, 8)
@@ -118,25 +124,30 @@ struct SessionView: View {
   }
 }
 
-/// What the agent does right now, with how long it has been at it.
-private struct Live: View {
-  let action: String
-  let since: Double?
+/// Figma 91′: what the agent does now (or 思考中) and the turn's clock, a changed digit rolling into place.
+private struct RunLine: View {
+  let run: RunRow
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    TimelineView(.periodic(from: .now, by: 1)) { context in
-      HStack(spacing: 8) {
-        Spinner(color: .textSecondary)
-        Text([action, since.map { shortAge(context.date.timeIntervalSince1970 * 1000 - $0) }].compactMap { $0 }.joined(separator: " · "))
-          .font(.ui(.footnote)).monospacedDigit().foregroundStyle(Color.textSecondary).lineLimit(1)
+    HStack(spacing: 8) {
+      Text(run.action ?? String(localized: "思考中")).font(.ui(.subheadline)).lineLimit(1)
+      TimelineView(.periodic(from: .now, by: 0.1)) { context in
+        let clock = runClock(context.date.timeIntervalSince1970 * 1000 - run.since)
+        Text(clock).font(.mono(.footnote)).monospacedDigit()
+          .contentTransition(reduceMotion ? .identity : .numericText())
+          .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: clock)
+          .accessibilityHidden(true)
       }
     }
+    .foregroundStyle(Color.textPrimary)
   }
 }
 
 /// The agent's first block after a message of the user's (or the first on screen) carries its mark above it.
+private func isUser(_ block: TranscriptBlock) -> Bool { if case .item(let item) = block { item.kind == "user" } else { false } }
+
 private func startsTurn(_ blocks: [TranscriptBlock], at index: Int) -> Bool {
-  func isUser(_ block: TranscriptBlock) -> Bool { if case .item(let item) = block { item.kind == "user" } else { false } }
   if case .receipt = blocks[index] { return false }
   guard !isUser(blocks[index]) else { return false }
   return index == 0 || isUser(blocks[index - 1])

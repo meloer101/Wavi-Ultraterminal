@@ -237,6 +237,7 @@ test.describe('F23 GUI session (Claude)', () => {
     // The turn's first row: the agent's mark is beside it.
     await expect(run.locator('..').locator('> [data-agent-mark]')).toHaveCount(1)
     await expect(run.getByTestId('gui-run-clock')).toHaveText(/^\d+\.\ds$/)
+    await page.screenshot({ path: join(SHOTS, 'run-row.png') })
     await expect(feed().getByText('Hello: think first')).toBeVisible(WITHIN)
     await expect(run).toHaveCount(0)
     await expect(feed().getByText(/^思考了/)).toHaveCount(0)

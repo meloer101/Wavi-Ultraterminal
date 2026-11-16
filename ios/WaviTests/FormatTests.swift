@@ -71,6 +71,27 @@ private func session(_ id: String = "s", project: String = "p1", status: Session
     #expect(rowTime(session(activity: 0), now: 60_000) == "1m")
   }
 
+  @Test func runClockReadsTenthsThenMinutesThenHours() {
+    #expect([runClock(0), runClock(4321), runClock(59_999), runClock(65_000), runClock(3_725_000), runClock(-5)]
+      == ["0.0s", "4.3s", "59.9s", "1m 05s", "1h 02m", "0.0s"])
+  }
+
+  @Test func runRowComesWithTheMessageAndGoesWhenTheTurnEnds() {
+    let sent = ChatItem(kind: "user", id: "sending-1", at: 900)
+    // Sent from the phone, before the Mac says the turn runs: the agent's mark and 思考中, counted from the send.
+    let fresh = runRow(session: session(status: .idle), sending: [sent], lastIsUser: false)
+    #expect(fresh == RunRow(action: nil, since: 900, startsTurn: true))
+    // Running: what the agent does now, counted from when it started; the mark only right after the user's message.
+    var running = session(status: .running, since: 1000)
+    running = RemoteSession(id: running.id, projectId: running.projectId, title: running.title, agent: running.agent, status: .running,
+      action: "运行 npm test", since: 1000, activity: 0, branch: nil, model: nil, reply: nil, ship: nil, shipNotice: nil)
+    #expect(runRow(session: running, sending: [], lastIsUser: false) == RunRow(action: "运行 npm test", since: 1000, startsTurn: false))
+    #expect(runRow(session: running, sending: [], lastIsUser: true)?.startsTurn == true)
+    // Waiting on the user (the sheet says so) or not running: none.
+    #expect(runRow(session: session(status: .needsYou, since: 1000), sending: [], lastIsUser: false) == nil)
+    #expect(runRow(session: session(status: .idle), sending: [], lastIsUser: true) == nil)
+  }
+
   @Test func connectionPathsAndLastLine() {
     #expect(viaOf("ws://100.101.2.3:7429") == "Tailscale")
     #expect(viaOf("ws://100.20.2.3:7429") == "局域网")

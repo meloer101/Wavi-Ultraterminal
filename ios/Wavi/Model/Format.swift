@@ -53,6 +53,32 @@ func groupSessions(_ list: RemoteSessionList) -> [SessionGroup] {
   return groups
 }
 
+/// Figma 91D: how long a turn has run — tenths under a minute (`4.3s`), then `1m 05s`, then `1h 02m`.
+func runClock(_ ms: Double) -> String {
+  let t = max(0, ms)
+  if t < 60_000 { return String(format: "%.1fs", (t / 100).rounded(.down) / 10) }
+  let s = Int(t / 1000)
+  if s < 3600 { return String(format: "%dm %02ds", s / 60, s % 60) }
+  return String(format: "%dh %02dm", s / 3600, s / 60 % 60)
+}
+
+/// Figma 91′: the running turn's last row, there from the moment a message is sent until the turn ends or waits on the
+/// user — what the agent does now (nil: 思考中) and since when; `startsTurn` puts the agent's mark above it.
+struct RunRow: Equatable {
+  let action: String?
+  let since: Double
+  let startsTurn: Bool
+}
+
+func runRow(session: RemoteSession, sending: [ChatItem], lastIsUser: Bool) -> RunRow? {
+  let startsTurn = !sending.isEmpty || lastIsUser
+  if session.status == .running {
+    return RunRow(action: session.action, since: session.since ?? sending.first?.at ?? 0, startsTurn: startsTurn)
+  }
+  guard session.status != .needsYou, let first = sending.first else { return nil }
+  return RunRow(action: nil, since: first.at, startsTurn: true)
+}
+
 /// `45s` / `3m` / `2h` / `4d`.
 func shortAge(_ ms: Double) -> String {
   let s = max(0, Int(ms / 1000))
