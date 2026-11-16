@@ -2175,3 +2175,114 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- Figma 90D: test results --- */
+
+/* 「1 失败 · 11 通过 · 1.8s」 at a test command's row end. */
+.testCountFailed {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-step);
+  color: var(--status-error);
+}
+
+.testCount {
+  flex-shrink: 0;
+  font: var(--type-step);
+  color: var(--text-tertiary);
+}
+
+.testDuration {
+  flex-shrink: 0;
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+/* Opened: a hairline box, the failures first. */
+.testResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: var(--space-4) 0 0 var(--step-indent);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.testFailure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.testHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--type-step);
+  color: var(--text-tertiary);
+  text-align: left;
+}
+
+button.testHead {
+  cursor: pointer;
+}
+
+button.testHead:hover {
+  color: var(--text-secondary);
+}
+
+.testFailed {
+  flex: none;
+  color: var(--status-error);
+}
+
+.testPassed {
+  flex: none;
+  color: var(--status-done);
+}
+
+.testName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testPlace {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testMeta {
+  color: inherit;
+}
+
+.testMessage {
+  margin: 0 0 0 var(--space-24);
+  overflow-x: auto;
+  font: var(--type-code);
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.testMessage [data-kind='expected'] {
+  color: var(--diff-add-fg);
+}
+
+.testMessage [data-kind='received'] {
+  color: var(--diff-del-fg);
+}

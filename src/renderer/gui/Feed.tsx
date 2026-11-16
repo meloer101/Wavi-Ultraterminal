@@ -26,6 +26,8 @@ import { DiffBlock, diffText } from './DiffBlock'
 import { outputRuns, refPieces } from './file-refs'
 import { FileRef, RefSession } from './FileRef'
 import { PageTitles, SearchResults } from './WebLink'
+import { TestResults } from './TestResults'
+import { testResults, type TestResults as TestRun } from './test-results'
 import { pageTitles, shortUrl, siteOf } from './web-links'
 import { TodoList } from './Todos'
 import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
@@ -72,7 +74,9 @@ const M = defineMessages({
     copyOutput: '复制输出',
     thinking: '思考中',
     dependencyFrames: (count: number) => `依赖里的 ${count} 帧`,
-    results: (count: number) => `${count} 个结果`
+    results: (count: number) => `${count} 个结果`,
+    testsFailed: (count: number) => `${count} 失败`,
+    testsPassed: (count: number) => `${count} 通过`
   },
   en: {
     pictures: 'Pictures',
@@ -85,7 +89,9 @@ const M = defineMessages({
     copyOutput: 'Copy output',
     thinking: 'Thinking',
     dependencyFrames: (count: number) => `${count} frames in dependencies`,
-    results: (count: number) => (count === 1 ? '1 result' : `${count} results`)
+    results: (count: number) => (count === 1 ? '1 result' : `${count} results`),
+    testsFailed: (count: number) => `${count} failed`,
+    testsPassed: (count: number) => `${count} passed`
   }
 })
 
@@ -572,6 +578,8 @@ function Tool({
   const files = item.files ?? (item.diff ? [item.diff] : [])
   const hasChildren = children.length > 0
   const expandable = view.expandable || hasChildren
+  // Figma 90D: a test command's results, read from what it printed.
+  const tests = useMemo(() => (view.icon === 'terminal' && item.state !== 'running' && view.output ? testResults(view.output) : null), [view.icon, view.output, item.state])
   // Figma 90B: a fetched page by its title (when a search found it) and site, not its whole URL.
   const titles = useContext(PageTitles)
   const fetched = isFetch(item.name) && /^https?:\/\//i.test(item.arg) ? { title: titles.get(item.arg) ?? shortUrl(item.arg), site: titles.has(item.arg) ? siteOf(item.arg) : '' } : null
@@ -594,7 +602,15 @@ function Tool({
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>{m.waiting}</span>}
-        {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
+        {tests ? (
+          <>
+            {tests.failed > 0 && <span className={styles.testCountFailed}>{m.testsFailed(tests.failed)}</span>}
+            <span className={tests.failed > 0 ? styles.testCount : styles.toolMeta}>{m.testsPassed(tests.passed)}</span>
+            {tests.duration && <span className={styles.testDuration}>{tests.duration}</span>}
+          </>
+        ) : (
+          view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>
+        )}
         {subagent && <Elapsed item={item} />}
         {item.links && item.links.length > 0 && <span className={styles.toolMeta}>{m.results(item.links.length)}</span>}
       </button>
@@ -615,22 +631,33 @@ function Tool({
           </div>
         )
       ) : (
-        <ToolBody item={item} open={open} files={files} view={view} />
+        <ToolBody item={item} open={open} files={files} view={view} tests={tests} />
       )}
     </div>
   )
 }
 
 /** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
-function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
+function ToolBody({ item, open, files, view, tests }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView; tests: TestRun | null }) {
   const m = useMessages(M)
   const sessionId = useContext(RefSession)
   return (
     <>
-      {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
+      {view.summary && !open && !tests && <p className={styles.toolSummary}>{view.summary}</p>}
+      {open && tests && (
+        <TestResults
+          results={tests}
+          output={
+            <div className={styles.codeWrap}>
+              <Output raw={item.output ?? ''} command={view.command} />
+              <CopyButton text={() => view.output ?? ''} label={m.copyOutput} className={styles.cornerCopy} />
+            </div>
+          }
+        />
+      )}
       {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
       {open && item.links && item.links.length > 0 && sessionId && <SearchResults sessionId={sessionId} links={item.links} />}
-      {open && !item.todos && !item.links?.length && (files.length > 0 || view.output || view.command) && (
+      {open && !tests && !item.todos && !item.links?.length && (files.length > 0 || view.output || view.command) && (
         <div className={styles.codeWrap}>
           {files.length > 0 ? (
             <div className={styles.fileBlocks}>
