@@ -238,6 +238,8 @@ export interface GuiState {
   prompts: GuiPrompt[]
   /** A turn is running (the stop button, the queue). */
   busy: boolean
+  /** Epoch ms the running turn started (Figma 91: the run row counts from it); absent while none runs. */
+  busySince?: number
   config: GuiConfigOption[]
   commands: GuiCommand[]
   /** Messages the user sent while a turn ran; sent, in order, when it ends (Figma 49″C). */
@@ -363,8 +365,11 @@ export function emptyGuiState(): GuiState {
   return { items: [], live: null, prompts: [], busy: false, config: [], commands: [], queued: [], failure: null }
 }
 
-/** Folds one event into the state. Returns a new state object; unchanged parts keep their identity (cheap renders). */
-export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
+/**
+ * Folds one event into the state. Returns a new state object; unchanged parts keep their identity (cheap renders).
+ * `now` stamps the start of a turn.
+ */
+export function applyGuiEvent(state: GuiState, event: GuiEvent, now = Date.now()): GuiState {
   switch (event.type) {
     case 'items': {
       if (event.changes.length === 0) return state
@@ -385,7 +390,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
       return state.prompts.some((p) => p.id === event.id) ? { ...state, prompts: state.prompts.filter((p) => p.id !== event.id) } : state
     case 'busy':
       // A turn that ends takes its stream and its questions with it.
-      return event.busy ? { ...state, busy: true } : { ...state, busy: false, live: null, prompts: [] }
+      if (event.busy) return state.busy ? state : { ...state, busy: true, busySince: now }
+      return { ...state, busy: false, busySince: undefined, live: null, prompts: [] }
     case 'config':
       return { ...state, config: event.config }
     case 'commands':

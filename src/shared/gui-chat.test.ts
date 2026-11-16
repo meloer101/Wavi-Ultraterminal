@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, composerPickers, emptyGuiState, fastOption, matchCommands, permissionOption, picksOf, planOption, sanitizeGuiPicks, type GuiConfigOption } from './gui-chat'
 
 describe('applyGuiEvent', () => {
+  it('notes when a turn starts and keeps it while the turn runs (Figma 91: the run row counts from it)', () => {
+    const s1 = applyGuiEvent(emptyGuiState(), { type: 'busy', busy: true }, 1000)
+    expect(s1.busySince).toBe(1000)
+    expect(applyGuiEvent(s1, { type: 'busy', busy: true }, 5000).busySince).toBe(1000)
+    const s2 = applyGuiEvent(s1, { type: 'busy', busy: false }, 6000)
+    expect(s2.busySince).toBeUndefined()
+    expect(applyGuiEvent(s2, { type: 'busy', busy: true }, 7000).busySince).toBe(7000)
+  })
   it('appends and replaces items by index and keeps untouched parts', () => {
     const s0 = emptyGuiState()
     const s1 = applyGuiEvent(s0, { type: 'items', changes: [{ index: 0, item: { kind: 'text', id: 't0', at: 1, text: 'a' } }] })

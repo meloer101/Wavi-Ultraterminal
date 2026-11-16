@@ -36,6 +36,7 @@ import {
   groupView,
   isSubagentTool,
   liveStartsTurn,
+  runClock,
   sentMessage,
   stepParts,
   subagentElapsed,
@@ -48,6 +49,7 @@ import {
   type DispatchRow,
   type FeedBlock,
   type NestedItem,
+  type RunRow,
   type StepItem,
   type ToolIcon,
   type ToolView,
@@ -120,6 +122,8 @@ interface FeedProps {
   agent: AgentKind
   items: readonly ChatItem[]
   live: GuiLive | null
+  /** Figma 91: the running turn's last row — what the agent does now and for how long (runRowOf). */
+  run: RunRow | null
   waitingTool: string | null
   /** A turn runs: its reply has no actions yet, and nothing can be edited. */
   busy: boolean
@@ -162,11 +166,14 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items: all, live, run, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
   const slot = useMemo<WorkflowSlot>(
     () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
     [workflows, workflowAsk, onStopWorkflow]
   )
+  // The step the run row carries is not drawn twice; it becomes a row when it is done.
+  const running = run?.tool ?? null
+  const items = useMemo(() => (running ? all.filter((item) => item !== running) : all), [all, running])
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
@@ -212,7 +219,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
     if (sentMessage(seen.current, blocks)) stuck.current = true
     seen.current = blocks
     follow()
-  }, [blocks, live, follow])
+  }, [blocks, live, run, follow])
 
   return (
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
@@ -246,9 +253,14 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
             </AgentTurn>
           )
         )}
-        {live && (
+        {live?.kind === 'text' && (
           <AgentTurn agent={agent} start={liveStartsTurn(blocks)} faded={editingAt >= 0}>
-            <Live sessionId={sessionId} live={live} />
+            <ChatMarkdown sessionId={sessionId} text={live.text} className={`${styles.block} ${styles.live}`} />
+          </AgentTurn>
+        )}
+        {run && (
+          <AgentTurn agent={agent} start={liveStartsTurn(blocks)} faded={editingAt >= 0}>
+            <RunLine run={run} />
           </AgentTurn>
         )}
       </div>
@@ -684,20 +696,75 @@ function Output({ raw, command }: { raw: string; command?: string }) {
   )
 }
 
-/** The block being streamed: the agent's text so far with a caret, or its thinking going on. */
-function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
+/**
+ * Figma 91: the running turn's last row, there from the moment the message is sent — the step running now (its verb and
+ * target) or 思考中, and the turn's clock.
+ */
+function RunLine({ run }: { run: RunRow }) {
   const m = useMessages(M)
-  if (live.kind === 'thinking') {
-    return (
-      <div className={styles.steps}>
-        <div className={styles.thinkingRow}>
-          <StepMark>
-            <Brain {...ICON} />
-          </StepMark>
-          <p className={styles.thinkingLive}>{m.thinking}</p>
-        </div>
-      </div>
-    )
-  }
-  return <ChatMarkdown sessionId={sessionId} text={live.text} className={`${styles.block} ${styles.live}`} />
+  const view = run.tool ? toolView(run.tool, false) : null
+  return (
+    <div className={styles.runRow} data-testid="gui-run-row">
+      <span className={styles.runLabel} role="status">
+        {view ? `${view.verb} ${view.arg}` : m.thinking}
+      </span>
+      <RunClock since={run.since} />
+    </div>
+  )
+}
+
+/**
+ * Figma 91D: how long the turn has run, to the tenth under a minute; a digit that changes rolls up into place. It ticks
+ * only while on screen.
+ */
+function RunClock({ since }: { since: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let timer: number | undefined
+    const stop = (): void => {
+      window.clearTimeout(timer)
+      timer = undefined
+    }
+    // Next tick on the clock's own edge: every tenth under a minute, every second after.
+    const tick = (): void => {
+      const at = Date.now()
+      setNow(at)
+      const ran = Math.max(0, at - since)
+      timer = window.setTimeout(tick, ran < 60_000 ? 100 - (ran % 100) : 1000 - (ran % 1000))
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return stop()
+      if (timer === undefined) tick()
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      stop()
+    }
+  }, [since])
+  const text = runClock(now - since)
+  // The text drawn before this one: which digits roll (state adjusted while rendering, as in ChatPane).
+  const [shown, setShown] = useState({ text, before: text })
+  if (shown.text !== text) setShown({ text, before: shown.text })
+  const before = shown.text === text ? shown.before : shown.text
+  const same = before.length === text.length
+  return (
+    <span ref={ref} className={styles.runClock} aria-hidden data-testid="gui-run-clock">
+      {[...text].map((char, i) =>
+        same && before[i] !== char && /\d/.test(char) ? (
+          <span key={`${i}:${before[i]}${char}`} className={styles.runDigit}>
+            <span className={styles.runRoll}>
+              <span>{before[i]}</span>
+              <span>{char}</span>
+            </span>
+          </span>
+        ) : (
+          <span key={i}>{char}</span>
+        )
+      )}
+    </span>
+  )
 }

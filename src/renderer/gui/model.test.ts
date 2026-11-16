@@ -33,6 +33,8 @@ import {
   turnEnds,
   turnStarts,
   liveStartsTurn,
+  runRowOf,
+  runClock,
   waitingToolId,
   currentTodos,
   todoProgress,
@@ -681,5 +683,47 @@ describe('composer', () => {
     const blocks = feedBlocks(items)
     expect([...turnEnds(blocks, true)]).toEqual([['t2', { text: 'Looking.\n\nDone.', at: 4 }]])
     expect([...turnEnds(blocks, false).keys()]).toEqual(['t2', 't3'])
+  })
+})
+
+describe('runRowOf (Figma 91)', () => {
+  const base = { busy: true, live: null, prompts: [], busySince: 500 }
+  it('shows from the moment a turn starts, before the agent says anything, counting from the turn start', () => {
+    expect(runRowOf({ ...base, items: [user('u1')] })).toEqual({ tool: null, since: 500 })
+  })
+
+  it('carries the step running now, so that step is not drawn twice; a finished one is a row again', () => {
+    const running = tool('t1', { name: 'Bash', arg: 'npm test', state: 'running' })
+    expect(runRowOf({ ...base, items: [user('u1'), running] })?.tool).toBe(running)
+    expect(runRowOf({ ...base, items: [user('u1'), { ...running, state: 'ok' }] })?.tool).toBeNull()
+  })
+
+  it('leaves a subagent, a workflow or a subagent\'s own call where it is (the row reads Thinking)', () => {
+    const agent = tool('t1', { name: 'Agent', state: 'running' })
+    expect(runRowOf({ ...base, items: [user('u1'), agent] })?.tool).toBeNull()
+    const nested = tool('t2', { state: 'running', parent: 't1' })
+    expect(runRowOf({ ...base, items: [user('u1'), nested] })?.tool).toBeNull()
+  })
+
+  it('is away while the agent writes, while a card waits for you and when no turn runs', () => {
+    expect(runRowOf({ ...base, items: [user('u1')], live: { kind: 'text', text: 'Hel' } })).toBeNull()
+    expect(runRowOf({ ...base, items: [user('u1')], live: { kind: 'thinking', text: '' } })).not.toBeNull()
+    expect(runRowOf({ ...base, items: [user('u1')], prompts: [{ kind: 'permission' } as never] })).toBeNull()
+    expect(runRowOf({ ...base, busy: false, items: [user('u1')] })).toBeNull()
+  })
+
+  it('without a noted start counts from the last message sent', () => {
+    expect(runRowOf({ ...base, busySince: undefined, items: [{ ...user('u1'), at: 42 }] })?.since).toBe(42)
+  })
+})
+
+describe('runClock (Figma 91D)', () => {
+  it('reads tenths under a minute, then minutes and seconds, then hours and minutes', () => {
+    expect(runClock(0)).toBe('0.0s')
+    expect(runClock(4321)).toBe('4.3s')
+    expect(runClock(59_999)).toBe('59.9s')
+    expect(runClock(65_000)).toBe('1m 05s')
+    expect(runClock(3_725_000)).toBe('1h 02m')
+    expect(runClock(-5)).toBe('0.0s')
   })
 })

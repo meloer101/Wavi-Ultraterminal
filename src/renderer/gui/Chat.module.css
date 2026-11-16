@@ -177,6 +177,10 @@
   padding-top: max(0px, (var(--avatar) - var(--line-step)) / 2);
 }
 
+.agentTurn[data-start]:has(> .runRow) {
+  padding-top: max(0px, (var(--avatar) - var(--line-step)) / 2);
+}
+
 .agentTurn > .agentAvatar {
   position: absolute;
   top: 0;
@@ -293,25 +297,53 @@
 
 /* 「思考中」 while the agent thinks: the text breathes (T3 Code, Orca keep a live row like it); still under reduced
    motion. Two spinner turns per breath, on purpose: the app's waiting signs keep one tempo. */
-.thinkingLive {
-  margin: 0;
+.runRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
   font: var(--type-step);
-  color: var(--text-tertiary);
-  animation: thinking-pulse calc(2 * var(--duration-spin)) var(--ease-in-out) infinite alternate;
+  color: var(--text-primary);
 }
 
-@keyframes thinking-pulse {
-  from {
-    opacity: 1;
-  }
+.runLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Figma 91D: the clock; a digit that changed rolls up into place, the others hold still. */
+.runClock {
+  flex: none;
+  display: inline-flex;
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.runDigit {
+  display: inline-block;
+  height: var(--line-code);
+  overflow: hidden;
+}
+
+.runRoll {
+  display: flex;
+  flex-direction: column;
+  animation: run-roll var(--duration-roll) var(--ease-out) forwards;
+}
+
+@keyframes run-roll {
   to {
-    opacity: 0.35;
+    transform: translateY(-50%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thinkingLive {
+  .runRoll {
     animation: none;
+    transform: translateY(-50%);
   }
 }
 

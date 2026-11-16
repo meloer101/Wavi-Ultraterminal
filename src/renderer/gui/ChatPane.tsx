@@ -25,7 +25,7 @@ import { useSessionMeta } from '../session-meta/store'
 import { PaneStrips } from '../lifecycle/PaneStrips'
 import type { WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
-import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
+import { cardKey, chatIsEmpty, currentTodos, projectChoices, runRowOf, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
 import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
 import { useMessages } from '../ui/i18n'
@@ -97,6 +97,11 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
   // Its copy arrived: drop it (state adjusted while rendering, React's pattern for state derived from props).
   if (pending && users > pending.users) setPending(null)
   const items = useMemo(() => withPendingSend(state.items, pending), [state.items, pending])
+  // Figma 91: the run row comes with the message just sent, before main says the turn started.
+  const run = useMemo(
+    () => runRowOf({ items, live: state.live, busy: state.busy || pending !== null, prompts: state.prompts, busySince: state.busySince }),
+    [items, state.live, state.busy, pending, state.prompts, state.busySince]
+  )
   // Figma 59G / 65H: nothing said yet — the welcome over the composer, in the middle of the card.
   const empty = items.length === 0 && chatIsEmpty(state)
   const worktreeId = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId)?.worktreeId)
@@ -258,6 +263,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
           agent={agent}
           items={items}
           live={state.live}
+          run={run}
           waitingTool={waitingTool}
           busy={state.busy}
           canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}

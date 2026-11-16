@@ -404,6 +404,43 @@ export function liveStartsTurn(blocks: readonly FeedBlock[]): boolean {
 }
 
 /**
+ * Figma 91: the run row at the end of a running turn — from the moment the message is sent until the turn ends, what
+ * the agent does now and how long the turn has run. The step running now (`tool`) is drawn in it rather than as a row
+ * of its own, except a subagent or a workflow, which open where they are (the row reads 思考中 then); a subagent's
+ * own calls stay under their row. Away while the agent writes (the caret shows it), while a card waits for the user and
+ * when no turn runs.
+ */
+export interface RunRow {
+  tool: Extract<ChatItem, { kind: 'tool' }> | null
+  since: number
+}
+
+export function runRowOf(state: Pick<GuiState, 'live' | 'busy' | 'busySince'> & { items: readonly ChatItem[]; prompts: readonly GuiPrompt[] }): RunRow | null {
+  if (!state.busy || state.prompts.length > 0 || state.live?.kind === 'text') return null
+  let last: ChatItem | undefined
+  let sent = 0
+  for (let i = state.items.length - 1; i >= 0; i--) {
+    const item = state.items[i]!
+    if (item.kind === 'user') {
+      sent = item.at
+      break
+    }
+    if (!last && !('parent' in item && item.parent !== undefined)) last = item
+  }
+  const tool = last?.kind === 'tool' && last.state === 'running' && !isSubagentTool(last.name) && last.name !== 'Workflow' ? last : null
+  return { tool, since: state.busySince ?? sent }
+}
+
+/** Figma 91D: how long a turn has run — tenths under a minute (`4.3s`), then `1m 05s`, then `1h 02m`. */
+export function runClock(ms: number): string {
+  const t = Math.max(0, ms)
+  if (t < 60_000) return `${(Math.floor(t / 100) / 10).toFixed(1)}s`
+  const s = Math.floor(t / 1000)
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`
+}
+
+/**
  * A user message as the Markdown its bubble shows (Figma 51A): what the composer sent, with each line break kept — a
  * text area's lines are not paragraphs — except inside a fenced code block, where lines stay as they are.
  */
