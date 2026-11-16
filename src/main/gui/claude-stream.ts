@@ -20,6 +20,44 @@ import {
 import { scriptMeta, workflowRows, workflowStatus, type WorkflowPhase, type WorkflowRun } from '@shared/workflow-run'
 import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    fastWhy: {
+      extra_usage_disabled: '账户没有开启额外用量',
+      free: '免费账户不能用',
+      model_not_allowed: '组织不允许这个模型',
+      not_first_party: '只在直接连 Anthropic API 时可用',
+      preference: '组织设置关掉了快速模式',
+      disabled_by_env: '环境变量关掉了快速模式',
+      network_error: '查不到是否可用（网络错误）'
+    },
+    fastOff: (why: string) => `快速没有生效：${why}`,
+    deny: '拒绝',
+    alwaysAllow: '总是允许',
+    allow: '允许',
+    model: '模型',
+    effort: '推理强度'
+  },
+  en: {
+    fastWhy: {
+      extra_usage_disabled: "Extra usage isn't turned on for the account",
+      free: 'Not available on a free account',
+      model_not_allowed: "The organization doesn't allow this model",
+      not_first_party: 'Only available when connected directly to the Anthropic API',
+      preference: 'Fast mode is turned off in the organization settings',
+      disabled_by_env: 'Fast mode is turned off by an environment variable',
+      network_error: "Couldn't check whether it's available (network error)"
+    },
+    fastOff: (why: string) => `Fast mode is not on: ${why}`,
+    deny: 'Deny',
+    alwaysAllow: 'Always allow',
+    allow: 'Allow',
+    model: 'Model',
+    effort: 'Effort'
+  }
+})
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -53,16 +91,8 @@ export interface ClaudePickerState {
 /** Claude's `fast_mode_disabled_reason` (2.1.319) in words, for the 快速 button's tooltip; null = nothing to say. */
 export function claudeFastHint(reason: string | undefined): string | undefined {
   if (!reason || reason === 'pending' || reason === 'sdk_opt_in_required') return undefined
-  const why: Record<string, string> = {
-    extra_usage_disabled: '账户没有开启额外用量',
-    free: '免费账户不能用',
-    model_not_allowed: '组织不允许这个模型',
-    not_first_party: '只在直接连 Anthropic API 时可用',
-    preference: '组织设置关掉了快速模式',
-    disabled_by_env: '环境变量关掉了快速模式',
-    network_error: '查不到是否可用（网络错误）'
-  }
-  return `快速没有生效：${why[reason] ?? reason}`
+  const why: Record<string, string> = pick(M).fastWhy
+  return pick(M).fastOff(why[reason] ?? reason)
 }
 
 /** A `can_use_tool` request still waiting, kept to build the answer. */
@@ -99,10 +129,10 @@ export function asTranscriptLine(message: Rec, cwd: string): Rec {
   return line
 }
 
-const ANSWER_OPTIONS: GuiPermissionOption[] = [
-  { id: 'reject_once', label: '拒绝', kind: 'reject_once' },
-  { id: 'allow_always', label: '总是允许', kind: 'allow_always' },
-  { id: 'allow_once', label: '允许', kind: 'allow_once' }
+const answerOptions = (): GuiPermissionOption[] => [
+  { id: 'reject_once', label: pick(M).deny, kind: 'reject_once' },
+  { id: 'allow_always', label: pick(M).alwaysAllow, kind: 'allow_always' },
+  { id: 'allow_once', label: pick(M).allow, kind: 'allow_once' }
 ]
 
 function questionsOf(input: Rec): GuiQuestion[] {
@@ -156,7 +186,7 @@ export function promptOf(pending: ClaudePending, description?: string, cwd?: str
   const id = pending.requestId
   if (pending.tool === 'AskUserQuestion') return { kind: 'question', id, questions: questionsOf(pending.input) }
   if (pending.tool === 'ExitPlanMode') return { kind: 'plan', id, plan: str(pending.input.plan) ?? '' }
-  const options = pending.suggestions.length > 0 ? ANSWER_OPTIONS : ANSWER_OPTIONS.filter((o) => o.kind !== 'allow_always')
+  const options = pending.suggestions.length > 0 ? answerOptions() : answerOptions().filter((o) => o.kind !== 'allow_always')
   const diff = permissionDiff(pending.tool, pending.input, cwd)
   const workflow = pending.tool === 'Workflow' ? workflowCall(pending.input) : undefined
   return {
@@ -386,14 +416,14 @@ export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOp
   const byResolved = wanted ? models.find((m) => m.value !== 'default' && m.resolvedModel === wanted) ?? models.find((m) => m.resolvedModel === wanted) : undefined
   const model =
     current.model && values.some((v) => v.value === current.model) ? current.model : (str(byResolved?.value) ?? values[0]?.value ?? 'default')
-  const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: '模型', current: model, values }]
+  const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: pick(M).model, current: model, values }]
   const chosen = models.find((m) => m.value === model)
   const levels = Array.isArray(chosen?.supportedEffortLevels) ? chosen.supportedEffortLevels.filter((l): l is string => typeof l === 'string') : []
   if (chosen?.supportsEffort === true && levels.length > 0) {
     config.push({
       id: 'effort',
       category: 'thought_level',
-      label: '推理强度',
+      label: pick(M).effort,
       current: current.effort && levels.includes(current.effort) ? current.effort : (levels.includes('high') ? 'high' : levels[0]!),
       values: levels.map((l) => ({ value: l, label: effortLabel(l) }))
     })

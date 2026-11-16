@@ -5,6 +5,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_VIEW_LABEL } from '../state/workspace-model'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { BrowserView } from './browser/BrowserView'
 import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'
@@ -16,7 +18,21 @@ import { SessionHeader } from '../session-header/SessionHeader'
 import { startColumnResize } from '../ui/column-resize'
 import styles from './RightPanel.module.css'
 
+const M = defineMessages({
+  zh: {
+    inDevelopment: (view: string) => `${view} 视图还在开发中`,
+    noSession: '选中一个会话后，这里显示它所在的 worktree',
+    resize: '调整右侧栏宽度'
+  },
+  en: {
+    inDevelopment: (view: string) => `The ${view} view is still in development`,
+    noSession: 'Select a session to see its worktree here',
+    resize: 'Resize right panel'
+  }
+})
+
 export function RightPanel({ view }: { view: PanelView }) {
+  const m = useMessages(M)
   const active = useActiveSession()
   const project = useWorkspace((s) => s.projects.find((p) => p.id === active?.worktree?.projectId))
   const projectName = project?.name ?? ''
@@ -24,7 +40,7 @@ export function RightPanel({ view }: { view: PanelView }) {
   return (
     <>
       <ResizeHandle />
-      <div className={styles.card} data-view={view} data-testid="right-panel">
+      <div className={styles.card} data-view={view} data-testid="right-panel" data-glass-card="">
         <SessionHeader part="tools" />
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />
@@ -42,7 +58,7 @@ export function RightPanel({ view }: { view: PanelView }) {
           <>
             <PaneHeader title={PANEL_VIEW_LABEL[view]} context={view === 'browser' ? '' : projectName} />
             <p className={styles.placeholder}>
-              {worktree ? `${PANEL_VIEW_LABEL[view]} 视图还在开发中` : '选中一个会话后，这里显示它所在的 worktree'}
+              {worktree ? m.inDevelopment(PANEL_VIEW_LABEL[view]) : m.noSession}
             </p>
           </>
         )}
@@ -53,6 +69,7 @@ export function RightPanel({ view }: { view: PanelView }) {
 
 /** The card's left edge: drag to resize (min 400, saved), double-click for the default width. */
 function ResizeHandle() {
+  const m = useMessages(M)
   const setWidth = useWorkspace((s) => s.setRightPanelWidth)
   // The card is anchored on the right: moving the edge left by n px makes it n px wider. Starts from the width as
   // shown, which can be narrower than the saved one in a small window (app-shell/layout.ts).
@@ -66,7 +83,7 @@ function ResizeHandle() {
       className={styles.resize}
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整右侧栏宽度"
+      aria-label={m.resize}
       onPointerDown={onPointerDown}
       onDoubleClick={() => setWidth(PANEL_WIDTH_DEFAULT)}
     />

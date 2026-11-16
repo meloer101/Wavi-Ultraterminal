@@ -38,7 +38,7 @@ describe('typing (PRD F21: Wavi types a report in only while nobody types there)
   })
 })
 
-describe('a line the user sent (PRD F21 v1.178: a leader’s tell is answered, its turn is the user’s)', () => {
+describe('a line the user sent (PRD F21 v1.198: a leader’s tell is answered, its turn is the user’s)', () => {
   it('counts Enter after text, typed before or in the same chunk; not a bare Enter, nor a newline', () => {
     forgetTyping('l')
     const sent: string[] = []

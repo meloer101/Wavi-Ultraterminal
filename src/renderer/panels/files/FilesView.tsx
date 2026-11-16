@@ -3,6 +3,8 @@ import { Ellipsis, FolderOpen, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { indexStatus } from '@shared/worktree-files'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { IconButton } from '../../ui/IconButton'
 import { popupMenu } from '../../ui/menu'
 import { PaneHeader } from '../PaneHeader'
@@ -13,10 +15,50 @@ import { collapseAll, filesOf, listenForChanges, openRoot, refreshAll, setChange
 import { baseName, filterPaths, pathRows, treeRows, type TreeRow } from './tree-model'
 import styles from './FilesView.module.css'
 
+const M = defineMessages({
+  zh: {
+    cannotReadFolder: '无法读取这个文件夹',
+    notRepo: '不是 git 仓库',
+    noMatchingChanges: '没有匹配的改动',
+    noChanges: '没有改动',
+    searching: '正在查找…',
+    noMatchingFiles: '没有匹配的文件',
+    emptyFolder: '文件夹是空的',
+    files: '文件',
+    openInFinder: '在 Finder 中打开',
+    more: '更多',
+    refresh: '刷新',
+    collapseAll: '全部折叠',
+    filter: '筛选文件名',
+    showAll: '显示全部文件',
+    changedOnlyTitle: '只显示有改动的文件',
+    changed: (count: number) => `有改动 ${count}`
+  },
+  en: {
+    cannotReadFolder: "Can't read this folder",
+    notRepo: 'Not a git repository',
+    noMatchingChanges: 'No matching changes',
+    noChanges: 'No changes',
+    searching: 'Searching…',
+    noMatchingFiles: 'No matching files',
+    emptyFolder: 'Folder is empty',
+    files: 'Files',
+    openInFinder: 'Open in Finder',
+    more: 'More',
+    refresh: 'Refresh',
+    collapseAll: 'Collapse all',
+    filter: 'Filter files',
+    showAll: 'Show all files',
+    changedOnlyTitle: 'Show only changed files',
+    changed: (count: number) => `Changed ${count}`
+  }
+})
+
 /** The filter lists at most this many matches. */
 const MAX_MATCHES = 500
 
 export function FilesView({ root, sessionId }: { root: string; sessionId: SessionId }) {
+  const m = useMessages(M)
   const files = useFiles((s) => s.roots[root]) ?? filesOf(root)
   const treeRef = useRef<HTMLDivElement>(null)
   // Leaving the preview hands the keyboard back to the tree, once it is shown again.
@@ -71,35 +113,35 @@ export function FilesView({ root, sessionId }: { root: string; sessionId: Sessio
 
   const rootError = files.errors['']
   const empty = rootError
-    ? '无法读取这个文件夹'
+    ? m.cannotReadFolder
     : files.changedOnly
       ? files.status === null
-        ? '不是 git 仓库'
+        ? m.notRepo
         : query
-          ? '没有匹配的改动'
-          : '没有改动'
+          ? m.noMatchingChanges
+          : m.noChanges
       : query
         ? files.allFiles === null
-          ? '正在查找…'
-          : '没有匹配的文件'
+          ? m.searching
+          : m.noMatchingFiles
         : files.children[''] && files.children[''].length === 0
-          ? '文件夹是空的'
+          ? m.emptyFolder
           : null
 
   return (
     <>
-      <PaneHeader title="文件" context={baseName(root)}>
-        <IconButton label="在 Finder 中打开" onClick={() => window.tr.worktree.reveal(root, '')}>
+      <PaneHeader title={m.files} context={baseName(root)}>
+        <IconButton label={m.openInFinder} onClick={() => window.tr.worktree.reveal(root, '')}>
           <FolderOpen size={16} strokeWidth={1.75} />
         </IconButton>
         <IconButton
-          label="更多"
+          label={m.more}
           aria-haspopup="menu"
           onClick={(e) => {
             void popupMenu(
               [
-                { type: 'item', id: 'refresh', label: '刷新' },
-                { type: 'item', id: 'collapse', label: '全部折叠' }
+                { type: 'item', id: 'refresh', label: m.refresh },
+                { type: 'item', id: 'collapse', label: m.collapseAll }
               ],
               e.currentTarget
             ).then((choice) => {
@@ -117,8 +159,8 @@ export function FilesView({ root, sessionId }: { root: string; sessionId: Sessio
           <input
             className={styles.input}
             type="search"
-            aria-label="筛选文件名"
-            placeholder="筛选文件名"
+            aria-label={m.filter}
+            placeholder={m.filter}
             spellCheck={false}
             value={files.filter}
             onChange={(e) => setFilter(root, e.target.value)}
@@ -129,10 +171,10 @@ export function FilesView({ root, sessionId }: { root: string; sessionId: Sessio
             className={styles.segment}
             aria-pressed={files.changedOnly}
             disabled={files.status === null && !files.changedOnly}
-            title={files.changedOnly ? '显示全部文件' : '只显示有改动的文件'}
+            title={files.changedOnly ? m.showAll : m.changedOnlyTitle}
             onClick={() => setChangedOnly(root, !files.changedOnly)}
           >
-            有改动 {status.count}
+            {m.changed(status.count)}
           </button>
         </label>
       </div>

@@ -9,17 +9,40 @@ import { quitKeepsSessions } from './pty'
 import { watchRebuilds, type BuildChange } from './rebuilds'
 import { sourceRoot } from './source-checkout'
 import { getMainWindow } from './windows'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    keeps: '终端会话会接回。',
+    ends: '这次运行没有后台会话进程，正在运行的终端会结束。',
+    rebuilt: (name: string) => `${name} 已重新构建，重启后生效。`,
+    restartNow: '立即重启',
+    later: '稍后',
+    uiRebuilt: (name: string) => `${name} 的界面已重新构建。`,
+    reload: '重新载入'
+  },
+  en: {
+    keeps: 'Terminal sessions will reconnect.',
+    ends: 'This run has no background session process; running terminals will end.',
+    rebuilt: (name: string) => `${name} was rebuilt. Restart to use it.`,
+    restartNow: 'Restart now',
+    later: 'Later',
+    uiRebuilt: (name: string) => `${name}'s interface was rebuilt.`,
+    reload: 'Reload'
+  }
+})
 
 function reloadWindows(): void {
   for (const win of appWindows()) win.webContents.reload()
 }
 
 function ask(change: BuildChange, keepsSessions: boolean): Promise<boolean> {
-  const sessions = keepsSessions ? '终端会话会接回。' : '这次运行没有后台会话进程，正在运行的终端会结束。'
+  const m = pick(M)
+  const sessions = keepsSessions ? m.keeps : m.ends
   return confirm(
     change.restartApp
-      ? { message: `${app.name} 已重新构建，重启后生效。`, detail: sessions, confirmLabel: '立即重启', cancelLabel: '稍后', destructive: !keepsSessions }
-      : { message: `${app.name} 的界面已重新构建。`, detail: sessions, confirmLabel: '重新载入', cancelLabel: '稍后', destructive: true },
+      ? { message: m.rebuilt(app.name), detail: sessions, confirmLabel: m.restartNow, cancelLabel: m.later, destructive: !keepsSessions }
+      : { message: m.uiRebuilt(app.name), detail: sessions, confirmLabel: m.reload, cancelLabel: m.later, destructive: true },
     getMainWindow()
   )
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, Session, SessionStatus, Worktree } from '@shared/types'
-import { buildOverview, clampTrayHeight, moveSelection, orderedIds, overviewSummary, parseFilter } from './model'
+import { buildOverview, moveSelection, orderedIds, overviewSummary, parseFilter } from './model'
 
 const MIN = 60_000
 const NOW = 100 * MIN
@@ -19,7 +19,7 @@ function session(id: string, worktreeId: string, status: SessionStatus, minutesA
   return { id, worktreeId, kind: 'claude', title: id, status, startedAt: NOW - 30 * MIN, lastActivityAt: NOW - minutesAgo * MIN, ...extra }
 }
 
-describe('a leader’s wavi tell (PRD F21 v1.178, Figma 81B)', () => {
+describe('a leader’s wavi tell (PRD F21 v1.198, Figma 81B)', () => {
   it('reads 等你回答 with its sentence while the tell is the ask shown, 等你处理 otherwise', () => {
     const told = session('lead', 'wam', 'needs_you', 1, { currentAction: '旧的「记住我」还留吗？', waviAsk: 'tell' })
     const confirming = session('lead2', 'wb', 'needs_you', 1, { currentAction: '想开 1 个会话', waviAsk: 'confirm' })
@@ -138,12 +138,5 @@ describe('navigation helpers', () => {
   it('summarises the header', () => {
     expect(overviewSummary([{ status: 'idle' }, { status: 'running' }], 0)).toBe('2 个会话')
     expect(overviewSummary([{ status: 'idle' }, { status: 'needs_you' }], 1)).toBe('2 个会话 · 1 个需要你')
-  })
-
-  it('keeps the tray between 240 and 70% of the window', () => {
-    expect(clampTrayHeight(420, 900)).toBe(420)
-    expect(clampTrayHeight(100, 900)).toBe(240)
-    expect(clampTrayHeight(2000, 900)).toBe(630)
-    expect(clampTrayHeight(500, 300)).toBe(240)
   })
 })

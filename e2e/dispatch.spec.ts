@@ -250,6 +250,12 @@ test.describe('派活与回报 · wavi', () => {
     const dispatcherRow = sidebar().locator('[data-session-id="s-plan"]')
     await expect(dispatcherRow).toHaveAttribute('data-attention', 'true')
     await expect(dispatcherRow).toContainText('想开 2 个会话')
+    // Figma 83B: what waits for 开始 hangs under the dispatcher on its line, a dashed row each, gone once answered.
+    const waiting = sidebar().getByTestId('pending-row')
+    await expect(waiting).toHaveCount(2)
+    await expect(waiting.first()).toContainText('Fix login')
+    await expect(waiting.first()).toContainText('待开始')
+    await expect(waiting.nth(1)).toHaveAttribute('data-tree', 'last')
     expect(existsSync(worktreesDir)).toBe(false)
     await shoot('confirm')
     // A reload (a crash, a rebuild) keeps what waits for the user: the strip and the dispatcher's row come back.
@@ -261,6 +267,7 @@ test.describe('派活与回报 · wavi', () => {
     await page.keyboard.press('Meta+Enter')
     await expect(strip()).toBeHidden()
     await expect(dispatcherRow).not.toContainText('想开')
+    await expect(waiting).toHaveCount(0)
     await expect.poll(() => inbox(project).join('\n'), WITHIN).toContain('[Wavi 派活] 用户同意了')
     const notice = inbox(project)[0]!
     expect(notice).toContain(`id ${ids.fix} · claude · 「Fix login」 · 分支 jacob/fix-login`)
@@ -399,7 +406,7 @@ test.describe('派活与回报 · wavi', () => {
   })
 })
 
-// The project's leader session (PRD F21 v1.178, Figma 81): 设置 turns it on, the new-session panel (from the project's
+// The project's leader session (PRD F21 v1.198, Figma 81): 设置 turns it on, the new-session panel (from the project's
 // ⋯ · 新建 leader…) makes one in the main checkout, it lists and adopts the user's own session through the confirm
 // strip, and its `wavi tell` waits on the user until they send a line in its terminal. The user's session sits in a
 // linked worktree, so each fake agent has a folder (and step file) of its own. Codex's config sets sandbox_mode, so the

@@ -11,6 +11,12 @@ import { getSettings, onSettingsChange } from '../settings'
 import { getMainWindow } from '../windows'
 import { projectRootOf } from '../workspace-store'
 import { PRECHECK_TIMEOUT_MS, Scheduler, SchedulesFile } from './scheduler'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { projectGone: '项目不在了', precheckTimedOut: '前置检查 60 秒没跑完' },
+  en: { projectGone: 'The project is gone', precheckTimedOut: "The pre-check didn't finish in 60 seconds" }
+})
 
 const TICK_MS = 15_000
 
@@ -48,11 +54,11 @@ function syncLoginItem(): void {
 
 async function precheck(projectId: string, command: string, key: string): Promise<{ passed: boolean } | { error: string }> {
   const root = projectRootOf(projectId)
-  if (!root) return { error: '项目不在了' }
+  if (!root) return { error: pick(M).projectGone }
   const timer = setTimeout(() => cancelCapturedScript(key), PRECHECK_TIMEOUT_MS)
   try {
     const run = await startCapturedScript({ key, cwd: root, script: command, baseEnv: process.env })
-    if (run.cancelled) return { error: '前置检查 60 秒没跑完' }
+    if (run.cancelled) return { error: pick(M).precheckTimedOut }
     return { passed: run.code === 0 }
   } finally {
     clearTimeout(timer)

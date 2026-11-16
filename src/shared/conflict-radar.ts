@@ -5,6 +5,33 @@
 // This file holds the IPC contract, payload validation and the pure parts: what to (re)check, what a merge into the
 // base did to the others, and what the window shows.
 import type { MergeConflict } from './git-merge'
+import { defineMessages, pick } from './i18n'
+
+const M = defineMessages({
+  zh: {
+    moreFiles: (n: number) => ` 等 ${n} 个文件`,
+    listSep: '、',
+    pairLine: (name: string, files: string) => `和 ${name} 会冲突：${files}`,
+    baseLine: (base: string, files: string) => `合并到 ${base} 会冲突：${files}`,
+    behindLine: (base: string, branch: string, n: number) => `${base} 已前进，${branch} 落后 ${n} 个提交`,
+    uncommitted: '含未提交的改动',
+    conflictsWith: (name: string) => `和 ${name} 会冲突`,
+    conflictsWithMany: (name: string, n: number) => `和 ${name} 等 ${n} 个会冲突`,
+    baseMoved: (base: string, n: number) => `${base} 已前进 · 落后 ${n}`
+  },
+  en: {
+    moreFiles: (n: number) => ` and ${n} files in all`,
+    listSep: ', ',
+    pairLine: (name: string, files: string) => `Conflicts with ${name}: ${files}`,
+    baseLine: (base: string, files: string) => `Merging into ${base} conflicts: ${files}`,
+    behindLine: (base: string, branch: string, n: number) =>
+      `${base} moved ahead; ${branch} is ${n} ${n === 1 ? 'commit' : 'commits'} behind`,
+    uncommitted: 'Includes uncommitted changes',
+    conflictsWith: (name: string) => `Conflicts with ${name}`,
+    conflictsWithMany: (name: string, n: number) => `Conflicts with ${name} and ${n - 1} more`,
+    baseMoved: (base: string, n: number) => `${base} moved ahead · ${n} behind`
+  }
+})
 
 export const RADAR_IPC = {
   /** send(RadarTarget[]): the worktrees this window shows (replaces its earlier list) */
@@ -163,9 +190,10 @@ export interface RadarMark {
 const MAX_DETAIL_FILES = 8
 
 function fileList(conflicts: readonly MergeConflict[]): string {
+  const m = pick(M)
   const shown = conflicts.slice(0, MAX_DETAIL_FILES).map((c) => c.path)
-  const more = conflicts.length > shown.length ? ` 等 ${conflicts.length} 个文件` : ''
-  return `${shown.join('、')}${more}`
+  const more = conflicts.length > shown.length ? m.moreFiles(conflicts.length) : ''
+  return `${shown.join(m.listSep)}${more}`
 }
 
 /**
@@ -182,21 +210,22 @@ export function radarMark(report: RadarReport | undefined, worktree: string, nam
       const other = p.a === worktree ? p.b : p.a
       return { worktree: other, name: nameOf(other), conflicts: p.conflicts }
     })
+  const m = pick(M)
   const lines: string[] = []
-  for (const pair of pairs) lines.push(`和 ${pair.name} 会冲突：${fileList(pair.conflicts)}`)
-  if (self.baseConflicts.length > 0) lines.push(`合并到 ${self.base} 会冲突：${fileList(self.baseConflicts)}`)
+  for (const pair of pairs) lines.push(m.pairLine(pair.name, fileList(pair.conflicts)))
+  if (self.baseConflicts.length > 0) lines.push(m.baseLine(self.base, fileList(self.baseConflicts)))
   if (self.behind > 0 && (self.baseMoved || self.baseConflicts.length > 0)) {
-    lines.push(`${self.base} 已前进，${self.branch} 落后 ${self.behind} 个提交`)
+    lines.push(m.behindLine(self.base, self.branch, self.behind))
   }
-  if (lines.length > 0 && self.uncommitted) lines.push('含未提交的改动')
+  if (lines.length > 0 && self.uncommitted) lines.push(m.uncommitted)
 
   let label: string
   let tone: RadarMark['tone'] = 'conflict'
-  if (pairs.length > 0) label = pairs.length === 1 ? `和 ${pairs[0]!.name} 会冲突` : `和 ${pairs[0]!.name} 等 ${pairs.length} 个会冲突`
-  else if (self.baseConflicts.length > 0) label = `和 ${self.base} 会冲突`
+  if (pairs.length > 0) label = pairs.length === 1 ? m.conflictsWith(pairs[0]!.name) : m.conflictsWithMany(pairs[0]!.name, pairs.length)
+  else if (self.baseConflicts.length > 0) label = m.conflictsWith(self.base)
   else if (self.baseMoved && self.behind > 0) {
     tone = 'behind'
-    label = `${self.base} 已前进 · 落后 ${self.behind}`
+    label = m.baseMoved(self.base, self.behind)
   } else return null
   return { tone, label, detail: lines.join('\n'), pairs, self }
 }

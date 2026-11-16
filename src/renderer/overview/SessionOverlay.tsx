@@ -7,6 +7,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { Columns2, X } from 'lucide-react'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { getXtermSurface } from '../terminal/registry'
@@ -39,6 +41,31 @@ import {
 } from './pane-layout'
 import { enterSession, useOverviewStore } from './store'
 import styles from './SessionOverlay.module.css'
+
+const M = defineMessages({
+  zh: {
+    resizeWidth: '调整宽度',
+    resizeHeight: '调整高度',
+    edgeTitle: '拖动调整大小，双击恢复默认',
+    addSideBySide: '并排添加会话',
+    sideBySide: '并排',
+    close: '关闭',
+    addSession: '添加会话',
+    cancel: '取消',
+    noOthers: '看板上没有其他会话了。'
+  },
+  en: {
+    resizeWidth: 'Resize width',
+    resizeHeight: 'Resize height',
+    edgeTitle: 'Drag to resize, double-click to reset',
+    addSideBySide: 'Add a session side by side',
+    sideBySide: 'Side by side',
+    close: 'Close',
+    addSession: 'Add session',
+    cancel: 'Cancel',
+    noOthers: 'No other sessions on the board.'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -73,6 +100,7 @@ export function SessionOverlay({
   candidates: OverviewRow[]
   onClose(): void
 }) {
+  const m = useMessages(M)
   const panelRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -267,7 +295,7 @@ export function SessionOverlay({
             data-kind={h.kind}
             role="separator"
             aria-orientation={h.kind === 'column' ? 'vertical' : 'horizontal'}
-            aria-label={h.kind === 'column' ? '调整宽度' : '调整高度'}
+            aria-label={h.kind === 'column' ? m.resizeWidth : m.resizeHeight}
             onPointerDown={(e) => onSplitPointerDown(h, e)}
           />
         ))}
@@ -277,7 +305,7 @@ export function SessionOverlay({
             key={edge}
             className={styles.edge}
             data-edge={edge}
-            title="拖动调整大小，双击恢复默认"
+            title={m.edgeTitle}
             aria-hidden
             onPointerDown={(e) => onEdgePointerDown(edge, e)}
             onDoubleClick={() => setOverlayRect(null)}
@@ -308,6 +336,7 @@ function Pane({
   /** Under the title bar, above the terminal (一题多解's compare bar). */
   below?: ReactNode
 }) {
+  const m = useMessages(M)
   const id = row.session.id
   return (
     <section className={styles.tile} style={style} data-pane-id={id} data-dragged={dragged} aria-label={row.title}>
@@ -324,12 +353,12 @@ function Pane({
         {row.session.status === 'done_unread' && <ReviewButton sessionId={id} className={enterStyles.enter} />}
         <EnterButton sessionId={id} />
         {onAdd && (
-          <button type="button" className={`${enterStyles.enter} ${styles.add}`} aria-label="并排添加会话" title="并排添加会话" onClick={onAdd}>
+          <button type="button" className={`${enterStyles.enter} ${styles.add}`} aria-label={m.addSideBySide} title={m.addSideBySide} onClick={onAdd}>
             <Columns2 {...ICON} />
-            并排
+            {m.sideBySide}
           </button>
         )}
-        <IconButton label="关闭" onClick={onClose}>
+        <IconButton label={m.close} onClick={onClose}>
           <X {...ICON} />
         </IconButton>
       </header>
@@ -353,6 +382,7 @@ function Picker({
   onPick(id: SessionId): void
   onCancel(): void
 }) {
+  const m = useMessages(M)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => listRef.current?.querySelector('button')?.focus(), [])
@@ -368,16 +398,16 @@ function Picker({
   }
 
   return (
-    <section className={styles.tile} style={style} aria-label="添加会话">
+    <section className={styles.tile} style={style} aria-label={m.addSession}>
       <header className={styles.bar}>
-        <span className={styles.title}>添加会话</span>
+        <span className={styles.title}>{m.addSession}</span>
         <span className={styles.spacer} />
-        <IconButton label="取消" onClick={onCancel}>
+        <IconButton label={m.cancel} onClick={onCancel}>
           <X {...ICON} />
         </IconButton>
       </header>
       {rows.length === 0 ? (
-        <p className={styles.pickerEmpty}>看板上没有其他会话了。</p>
+        <p className={styles.pickerEmpty}>{m.noOthers}</p>
       ) : (
         <div ref={listRef} className={styles.picker} onKeyDown={onKeyDown}>
           {rows.map((row) => (

@@ -16,7 +16,7 @@ vi.mock('../state/workspace', async () => {
 })
 vi.mock('../state/persistence', () => ({ addSnapshotPart: () => () => {}, initialWorkspaceFile: () => null, requestSave: () => {} }))
 
-describe('a leader’s wavi tell (PRD F21 v1.178 · 交给用户)', () => {
+describe('a leader’s wavi tell (PRD F21 v1.198 · 交给用户)', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('stays until the user sends a line in the leader’s terminal, not another one’s', () => {
@@ -40,7 +40,7 @@ describe('a leader’s wavi tell (PRD F21 v1.178 · 交给用户)', () => {
   })
 })
 
-describe('a leader that is closed or no longer the leader (PRD F21 v1.178)', () => {
+describe('a leader that is closed or no longer the leader (PRD F21 v1.198)', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('leaves no tell or wake time behind, and the other leaders keep theirs', () => {

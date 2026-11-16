@@ -27,6 +27,24 @@ import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, piSessionFileF
 import { GuiHost, type PreparedLaunch } from './host'
 import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
 import { parseGuiAnswer, parseGuiLaunch, parseGuiMessage, parseGuiSessionId, parseGuiText, parseGuiValue } from './validate'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    cliOnly: '这个智能体只能用 CLI',
+    noFolder: (path: string) => `文件夹 ${path} 不存在`,
+    badLaunch: '会话参数无效',
+    badMessage: '消息无效',
+    badAgent: '智能体无效'
+  },
+  en: {
+    cliOnly: 'This agent only works as a CLI',
+    noFolder: (path: string) => `The folder ${path} doesn't exist`,
+    badLaunch: 'Invalid session settings',
+    badMessage: 'Invalid message',
+    badAgent: 'Invalid agent'
+  }
+})
 
 /** Claude's API takes images up to 5 MB; a bigger one goes as its path instead. */
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -50,12 +68,12 @@ function appEnv(): Record<string, string> {
 
 async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | undefined): Promise<PreparedLaunch> {
   const driver = AGENT_GUI[launch.agent]
-  if (!driver) throw new Error(NO_GUI_REASON[launch.agent] ?? '这个智能体只能用 CLI')
+  if (!driver) throw new Error(NO_GUI_REASON[launch.agent] ?? pick(M).cliOnly)
   let realCwd: string
   try {
     realCwd = realpathSync(launch.cwd)
   } catch {
-    throw new Error(`文件夹 ${launch.cwd} 不存在`)
+    throw new Error(pick(M).noFolder(launch.cwd))
   }
   const claude = driver.protocol === 'claude-stream'
   // Claude keeps its hooks under -p (PRD §6.17): status, titles and the phone work as for a TUI. Marked first, so its
@@ -78,7 +96,7 @@ async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | u
     ...(driver.protocol === 'pi-rpc' ? { piExtensionPath: join(dirname(hookScriptPath()), 'wavi-pi-gui.js') } : {}),
     extraArgs: dispatch && takesSystemPromptArgs(driver.protocol) ? dispatch.extraArgs : []
   })
-  if (!argv) throw new Error('这个智能体只能用 CLI')
+  if (!argv) throw new Error(pick(M).cliOnly)
   const port = portFor(realCwd)
   const env = {
     ...guiEnv(launch.agent),
@@ -184,7 +202,7 @@ export function registerGuiHandlers(): void {
 
   ipcMain.handle(GUI_IPC.open, (event, raw: unknown): Promise<GuiOpenResult> => {
     const launch = parseGuiLaunch(raw)
-    if (!launch) return Promise.resolve({ ok: false, reason: '会话参数无效' })
+    if (!launch) return Promise.resolve({ ok: false, reason: pick(M).badLaunch })
     watchOwner(event.sender)
     return host.open(launch, event.sender)
   })
@@ -192,7 +210,7 @@ export function registerGuiHandlers(): void {
   ipcMain.handle(GUI_IPC.send, (event, rawId: unknown, rawMessage: unknown): Promise<GuiSendResult> => {
     const id = owned(event.sender, rawId)
     const message = parseGuiMessage(rawMessage)
-    if (!id || !message) return Promise.resolve({ ok: false, reason: '消息无效' })
+    if (!id || !message) return Promise.resolve({ ok: false, reason: pick(M).badMessage })
     return host.send(id, message)
   })
 
@@ -231,7 +249,7 @@ export function registerGuiHandlers(): void {
     const id = owned(event.sender, rawId)
     const messageId = parseGuiValue(rawMessage)
     const text = parseGuiText(rawText)
-    if (!id || !messageId || text === null || !text.trim()) return Promise.resolve({ ok: false, reason: '消息无效' })
+    if (!id || !messageId || text === null || !text.trim()) return Promise.resolve({ ok: false, reason: pick(M).badMessage })
     return host.edit(id, messageId, text)
   })
 
@@ -251,7 +269,7 @@ export function registerGuiHandlers(): void {
 
   // Figma 65: an agent's models without a conversation (catalog.ts); any agent name not known is refused.
   ipcMain.handle(GUI_IPC.models, (_event, raw: unknown): Promise<GuiCatalogResult> =>
-    isCliAgent(raw) ? agentModels(raw) : Promise.resolve({ ok: false, reason: '智能体无效' })
+    isCliAgent(raw) ? agentModels(raw) : Promise.resolve({ ok: false, reason: pick(M).badAgent })
   )
 
   // Without the daemon the processes are this app's children: end them with it (the next run resumes by id).

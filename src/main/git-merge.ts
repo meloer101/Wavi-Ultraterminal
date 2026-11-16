@@ -29,10 +29,17 @@ import {
 import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
 import { gitAvailable } from './git-graph'
+import { checkoutIn } from './git/base'
 import { operationOnBranch } from './git/operation'
 import { baseRemoteFor, renamedUpstream } from './git/remote'
 import { lastLines, pinned, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { renamedUpstream: (base: string, renamed: string) => `${base} 跟踪的是 ${renamed}，不是同名分支，没有推送` },
+  en: { renamedUpstream: (base: string, renamed: string) => `${base} tracks ${renamed}, not a branch of the same name; not pushed` }
+})
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 30_000
@@ -243,8 +250,8 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
   check.baseHead = baseHead
   if (ownOperation) return done({ kind: 'busy', where: 'worktree', operation: ownOperation })
 
-  const baseIndex = entries.findIndex((e) => !e.bare && e.branch === base)
-  check.baseCheckout = baseIndex < 0 ? null : reals[baseIndex]!
+  const holder = checkoutIn(entries, base)
+  check.baseCheckout = holder ? reals[entries.indexOf(holder)]! : null
   // In the base's checkout, or a rebase of the base stopped in any checkout (detached there): exit A's catch-up and the
   // fast-forward below would move the ref under it.
   const baseOperation = await operationOnBranch(entries, base)
@@ -345,20 +352,26 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
     const body = await git(cwd, ['log', '-1', '--format=%B', head])
     return [{ subject: body.split('\n')[0] ?? '', body }]
   }
-  const subjects = await git(cwd, ['log', '--reverse', `--max-count=${MAX_SQUASH_SUBJECTS}`, '--format=%s', `${base}..${head}`])
-  return subjects
-    .split('\n')
-    .filter(Boolean)
-    .map((subject) => ({ subject, body: subject }))
+  // The bodies too: squashMessage keeps their closing-keyword lines (PRD F16 v1.192). \x1e opens a commit, \x1f ends its subject.
+  const log = await git(cwd, ['log', '--reverse', `--max-count=${MAX_SQUASH_SUBJECTS}`, '--format=%x1e%s%x1f%B', `${base}..${head}`])
+  return log
+    .split('\x1e')
+    .filter((record) => record.includes('\x1f'))
+    .map((record) => {
+      const [subject = '', body = ''] = record.split('\x1f')
+      return { subject, body: body.trimEnd() }
+    })
+    .filter((c) => c.subject !== '')
 }
 
-/** Pushes the local base to `remote`; '' when it went through, else what git
- *  printed (all the stderr main keeps, its last 8 KiB, so the failure can be classified). A base that tracks another branch name there is not
- *  pushed (see renamedUpstream). */
-export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
+/** Pushes the local base to `remote` — `source` (a full commit id: the tip the review read) when given, so a commit that
+ *  lands meanwhile is not sent — ; '' when it went through, else what git printed (all the stderr main keeps, its last
+ *  8 KiB, so the failure can be classified). A base that tracks another branch name there is not pushed (see
+ *  renamedUpstream). */
+export async function pushBase(realRoot: string, base: string, remote = 'origin', source = `refs/heads/${base}`): Promise<string> {
   const renamed = await renamedUpstream(realRoot, base, remote)
-  if (renamed) return `${base} 跟踪的是 ${renamed}，不是同名分支，没有推送`
-  const ran = await runGit(realRoot, pinned.push('--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`), {
+  if (renamed) return pick(M).renamedUpstream(base, renamed)
+  const ran = await runGit(realRoot, pinned.push('--quiet', '--', remote, `${source}:refs/heads/${base}`), {
     timeout: PUSH_TIMEOUT_MS,
     maxStdout: MAX_BUFFER,
     env: { GIT_EDITOR: 'true', ...(await pushEnv(realRoot)) }
@@ -466,14 +479,4 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
 
 export function registerGitMergeHandlers(): void {
   ipcMain.handle(IPC.gitWorktreesMergePrecheck, (_event, root: unknown, worktree: unknown) => mergePrecheck(root, worktree))
-  // The merge sheet shows a failed push in one line, as before pushBase kept git's whole output for classification; a
-  // failed merge's whole output (kept for the ship chain's classification) stays in main.
-  ipcMain.handle(IPC.gitWorktreesMerge, async (_event, request: unknown) => {
-    const result = await mergeWorktree(request)
-    if (!result.ok) {
-      const { output: _output, ...shown } = result
-      return shown
-    }
-    return result.push ? { ...result, push: lastLines(result.push) } : result
-  })
 }

@@ -1,11 +1,18 @@
 import { CaseSensitive, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
+import { useMessages } from '../ui/i18n'
 import { IconButton } from '../ui/IconButton'
 import { findStatus } from './find'
 import { getXtermSurface } from './registry'
 import { closeTerminalSearch, useTerminalSearch } from './search-store'
 import styles from './TerminalSearch.module.css'
+
+const M = defineMessages({
+  zh: { find: '在终端中查找', matchCase: '区分大小写', previous: '上一个 · ↵', next: '下一个 · ⇧↵', close: '关闭 · esc' },
+  en: { find: 'Find in terminal', matchCase: 'Match case', previous: 'Previous · ↵', next: 'Next · ⇧↵', close: 'Close · esc' }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -14,6 +21,7 @@ export function TerminalSearch({ sessionId }: { sessionId: SessionId }) {
   const open = useTerminalSearch((s) => s.open)
   const focusToken = useTerminalSearch((s) => s.focusToken)
   const inputRef = useRef<HTMLInputElement>(null)
+  const m = useMessages(M)
   const [query, setQuery] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [results, setResults] = useState<{ resultIndex: number; resultCount: number } | null>(null)
@@ -67,8 +75,8 @@ export function TerminalSearch({ sessionId }: { sessionId: SessionId }) {
         ref={inputRef}
         className={styles.input}
         value={query}
-        placeholder="在终端中查找"
-        aria-label="在终端中查找"
+        placeholder={m.find}
+        aria-label={m.find}
         spellCheck={false}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -80,7 +88,7 @@ export function TerminalSearch({ sessionId }: { sessionId: SessionId }) {
         {findStatus(query, results)}
       </span>
       <IconButton
-        label="区分大小写"
+        label={m.matchCase}
         active={caseSensitive}
         aria-pressed={caseSensitive}
         onClick={() => {
@@ -90,13 +98,13 @@ export function TerminalSearch({ sessionId }: { sessionId: SessionId }) {
       >
         <CaseSensitive {...ICON} />
       </IconButton>
-      <IconButton label="上一个 · ↵" onClick={() => find('previous')}>
+      <IconButton label={m.previous} onClick={() => find('previous')}>
         <ChevronUp {...ICON} />
       </IconButton>
-      <IconButton label="下一个 · ⇧↵" onClick={() => find('next')}>
+      <IconButton label={m.next} onClick={() => find('next')}>
         <ChevronDown {...ICON} />
       </IconButton>
-      <IconButton label="关闭 · esc" onClick={close}>
+      <IconButton label={m.close} onClick={close}>
         <X {...ICON} />
       </IconButton>
     </div>

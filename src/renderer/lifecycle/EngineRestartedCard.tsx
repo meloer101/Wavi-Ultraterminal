@@ -1,23 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { defineMessages } from '@shared/i18n'
+import type { SessionId } from '@shared/types'
+import { useMessages } from '../ui/i18n'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { lostSessionIds, recoverLostSessions, startHostRestartTracking, useHostRestart } from './host-restart'
-import { usePaneView } from '../state/window-scope'
+import { lostSessionIds, recoverLostSessions, useHostRestart } from './host-restart'
 import styles from './EngineRestartedCard.module.css'
+
+const M = defineMessages({
+  zh: { title: '终端进程意外退出，已自动重启', lost: (n: number) => `${n} 个会话需要恢复`, recover: '全部恢复' },
+  en: {
+    title: 'The terminal process quit unexpectedly and was restarted',
+    lost: (n: number) => (n === 1 ? '1 session needs recovering' : `${n} sessions need recovering`),
+    recover: 'Recover all'
+  }
+})
 
 /**
  * Figma Screen 10 "Engine restarted" (64:2344): shown in each session the pty-host crash took down.
  * The terminal process is gone but the workspace is intact; 全部恢复 respawns every affected session.
  */
-export function EngineRestartedCard() {
-  useEffect(() => startHostRestartTracking(), [])
+export function EngineRestartedCard({ sessionId }: { sessionId: SessionId }) {
   const [busy, setBusy] = useState(false)
+  const m = useMessages(M)
   const sessions = useWorkspace((s) => s.sessions)
-  // This window's active session (F20 · 多窗口).
-  const activeId = usePaneView().activeSessionId
   const lost = useHostRestart((s) => s.lost)
   const lostIds = lostSessionIds(lost, sessions)
-  if (!activeId || !lostIds.includes(activeId)) return null
+  if (!lostIds.includes(sessionId)) return null
 
   const recover = () => {
     setBusy(true)
@@ -30,11 +39,11 @@ export function EngineRestartedCard() {
         <StatusGlyph status="error" />
       </span>
       <div className={styles.text}>
-        <p className={styles.title}>终端进程意外退出，已自动重启</p>
-        <p className={styles.detail}>{lostIds.length} 个会话需要恢复</p>
+        <p className={styles.title}>{m.title}</p>
+        <p className={styles.detail}>{m.lost(lostIds.length)}</p>
       </div>
       <button type="button" className={styles.primary} disabled={busy} onClick={recover}>
-        全部恢复
+        {m.recover}
       </button>
     </div>
   )

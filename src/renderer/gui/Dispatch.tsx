@@ -7,6 +7,7 @@
 import { memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Split } from 'lucide-react'
 import { agentLabel, DISPATCH_LIMITS, pendingShown, type PendingStart } from '@shared/dispatch'
+import { defineMessages, pick } from '@shared/i18n'
 import type { AgentKind, SessionId, SessionStatus } from '@shared/types'
 import { decideCalls } from '../dispatch/handler'
 import { useDispatch } from '../dispatch/store'
@@ -16,13 +17,86 @@ import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { dispatchOutcomes, dispatchRows, elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
 import { useGuiSessions } from './store'
+import { useMessages } from '../ui/i18n'
 import styles from './Dispatch.module.css'
+
+const M = defineMessages({
+  zh: {
+    word: { pending: '等你点开始', working: '运行中', attention: '等你处理', done: '已完成', error: '出错', exited: '已退出' } as Record<NodeState, string>,
+    waited: (time: string) => `已等 ${time}`,
+    dispatch: '派活',
+    wants: (count: number) => `想开 ${count} 个会话`,
+    noneOpened: (count: number) => `没有开 ${count} 个会话`,
+    dispatched: (count: number) => `派出 ${count} 个会话`,
+    basedOn: '基于',
+    snapshot: '当前改动的快照',
+    grand: (count: number) => `另有 ${count} 个是它们再派的`,
+    dispatcher: '派活方',
+    deny: '拒绝',
+    start: (count: number) => `开始 ${count} 个`,
+    youDeclined: '你拒绝了',
+    noAnswer: '没有回答，没开',
+    reportBack: '· 报告已送回',
+    handle: '去处理',
+    open: '打开',
+    gone: '已不在工作区的会话',
+    allEnded: (count: number) => `${count} 个会话都结束了`,
+    reports: (count: number) => `${count} 份报告`,
+    session: '会话',
+    error: '出错',
+    wantsAction: (action: string) => `要${action}`,
+    needsYou: '等你处理',
+    showGraph: '看图',
+    collapse: '收起',
+    expand: '展开',
+    event: { report: '发来报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' },
+    started: (count: number, titles: string[]) => `已开始 ${count} 个会话：${titles.join('、')}`,
+    declined: (count: number) => `你拒绝了 ${count} 个会话`,
+    timedOut: (minutes: number, count: number) => `${minutes} 分钟没有回答，没有开 ${count} 个会话`,
+    report: '报告',
+    openSession: '打开会话'
+  },
+  en: {
+    word: { pending: 'Waiting for Start', working: 'Running', attention: 'Needs you', done: 'Done', error: 'Error', exited: 'Exited' },
+    waited: (time: string) => `waiting ${time}`,
+    dispatch: 'Dispatch',
+    wants: (count: number) => (count === 1 ? 'Wants to open 1 session' : `Wants to open ${count} sessions`),
+    noneOpened: (count: number) => (count === 1 ? 'Didn’t open 1 session' : `Didn’t open ${count} sessions`),
+    dispatched: (count: number) => (count === 1 ? 'Dispatched 1 session' : `Dispatched ${count} sessions`),
+    basedOn: 'Based on',
+    snapshot: 'Snapshot of current changes',
+    grand: (count: number) => `plus ${count} they dispatched`,
+    dispatcher: 'Dispatcher',
+    deny: 'Deny',
+    start: (count: number) => `Start ${count}`,
+    youDeclined: 'You declined',
+    noAnswer: 'No answer, not opened',
+    reportBack: '· Report sent back',
+    handle: 'Handle',
+    open: 'Open',
+    gone: 'Session no longer in the workspace',
+    allEnded: (count: number) => (count === 1 ? 'The session has ended' : `All ${count} sessions have ended`),
+    reports: (count: number) => (count === 1 ? '1 report' : `${count} reports`),
+    session: 'Session',
+    error: 'error',
+    wantsAction: (action: string) => action,
+    needsYou: 'needs you',
+    showGraph: 'Show graph',
+    collapse: 'Collapse',
+    expand: 'Expand',
+    event: { report: 'sent a report', done: 'turn ended', error: 'error', exited: 'agent exited' },
+    started: (count: number, titles: string[]) => `Started ${count === 1 ? '1 session' : `${count} sessions`}: ${titles.join(', ')}`,
+    declined: (count: number) => `You declined ${count === 1 ? '1 session' : `${count} sessions`}`,
+    timedOut: (minutes: number, count: number) => `No answer for ${minutes} min, didn’t open ${count === 1 ? '1 session' : `${count} sessions`}`,
+    report: 'Report',
+    openSession: 'Open session'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const NO_ITEMS: never[] = []
 
 const GLYPH: Record<NodeState, SessionStatus> = { pending: 'idle', working: 'running', attention: 'needs_you', done: 'done_unread', error: 'error', exited: 'exited' }
-const WORD: Record<NodeState, string> = { pending: '等你点开始', working: '运行中', attention: '等你处理', done: '已完成', error: '出错', exited: '已退出' }
 const COUNT_ORDER: readonly NodeState[] = ['working', 'attention', 'error', 'done', 'exited']
 
 const open = (id: SessionId): void => useWorkspace.getState().setActiveSession(id)
@@ -30,7 +104,7 @@ const open = (id: SessionId): void => useWorkspace.getState().setActiveSession(i
 /** Where the waiting new sessions start: the first `wavi run`'s base (an adopted session keeps its own branch). */
 function waitingBase(waiting: readonly PendingStart[]): string | undefined {
   const run = waiting.find((c) => c.kind === 'start')
-  return run && (run.plan.item.base === 'snapshot' ? '当前改动的快照' : run.base)
+  return run && (run.plan.item.base === 'snapshot' ? pick(M).snapshot : run.base)
 }
 
 function useDispatchView(parentId: SessionId, ids: readonly SessionId[]): DispatchView {
@@ -59,7 +133,7 @@ const ticking = (view: DispatchView): boolean => (view.counts.working ?? 0) + (v
 function clock(node: DispatchNode, now: number): string | null {
   if (node.since === undefined) return null
   if (node.state === 'working') return elapsedLabel(now - node.since)
-  if (node.state === 'attention') return `已等 ${elapsedLabel(now - node.since)}`
+  if (node.state === 'attention') return pick(M).waited(elapsedLabel(now - node.since))
   return node.until !== undefined ? elapsedLabel(node.until - node.since) : null
 }
 
@@ -77,12 +151,13 @@ function Changes({ text }: { text: string }) {
 }
 
 function Counts({ view }: { view: DispatchView }) {
+  const m = useMessages(M)
   return (
     <span className={styles.counts}>
       {COUNT_ORDER.flatMap((state) => {
         const n = view.counts[state]
         return n ? [
-          <span key={state} className={styles.count} title={WORD[state]}>
+          <span key={state} className={styles.count} title={m.word[state]}>
             <StatusGlyph status={GLYPH[state]} />
             {n}
           </span>
@@ -138,6 +213,7 @@ const wire = (p: Placed, py: number): string =>
 const wireBack = (p: Placed, py: number): string => `M ${KX - R1} ${p.y} C ${KX - R1 - BEND} ${p.y} ${PX + RP + BEND} ${py} ${PX + RP} ${py}`
 
 export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: readonly SessionId[] }) {
+  const m = useMessages(M)
   const view = useDispatchView(parentId, ids)
   const now = useNow(ticking(view))
   const parentKind = useWorkspace((s) => s.sessions.find((x) => x.id === parentId)?.kind)
@@ -148,16 +224,18 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
   const total = !view.settled && first.length > 0 ? elapsedLabel(now - Math.min(...first)) : null
 
   return (
-    <section className={styles.dispatch} data-dispatch-graph data-testid="dispatch-graph" aria-label="派活">
+    <section className={styles.dispatch} data-dispatch-graph data-testid="dispatch-graph" aria-label={m.dispatch}>
       <div className={styles.head}>
         {waiting > 0 ? <StatusGlyph status="needs_you" /> : <Split {...ICON} className={styles.headIcon} />}
         <span className={styles.headTitle}>
-          {waiting > 0 ? `想开 ${waiting} 个会话` : view.nodes.every((n) => n.declined) ? `没有开 ${view.nodes.length} 个会话` : `派出 ${view.nodes.length} 个会话`}
+          {waiting > 0 ? m.wants(waiting) : view.nodes.every((n) => n.declined) ? m.noneOpened(view.nodes.length) : m.dispatched(view.nodes.length)}
         </span>
         {waiting > 0 ? (
-          <span className={styles.muted}>基于 {waitingBase(view.waiting)}</span>
+          <span className={styles.muted}>
+            {m.basedOn} {waitingBase(view.waiting)}
+          </span>
         ) : (
-          grand > 0 && <span className={styles.muted}>另有 {grand} 个是它们再派的</span>
+          grand > 0 && <span className={styles.muted}>{m.grand(grand)}</span>
         )}
         <span className={styles.spacer} />
         {waiting === 0 && <Counts view={view} />}
@@ -186,7 +264,7 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
           {view.reports > 0 && <span className={styles.badge}>{view.reports}</span>}
         </span>
         <span className={styles.parentLabel} style={{ left: PX - RP - 4, top: py + RP + 4 }}>
-          派活方
+          {m.dispatcher}
         </span>
         {placed.map((p) => (
           <span key={`m-${p.node.id}`} className={styles.mark} data-state={p.node.state} style={{ left: p.x - (p.r > R2 ? 8 : 6), top: p.y - (p.r > R2 ? 8 : 6) }}>
@@ -203,10 +281,10 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
       {waiting > 0 && (
         <div className={styles.actions}>
           <button type="button" className={styles.button} onClick={() => decideCalls(view.waiting.map((c) => c.callId), false)}>
-            拒绝
+            {m.deny}
           </button>
           <button type="button" className={styles.primary} onClick={() => decideCalls(view.waiting.map((c) => c.callId), true)} data-testid="dispatch-graph-start">
-            开始 {waiting} 个
+            {m.start(waiting)}
           </button>
         </div>
       )}
@@ -215,6 +293,7 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
 }
 
 function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: number; left: number; top: number; small: boolean }) {
+  const m = useMessages(M)
   const time = clock(node, now)
   const who = node.agent ? [agentLabel(node.agent), node.model].filter(Boolean).join(' · ') : ''
   const strong = node.state === 'attention' || node.state === 'error'
@@ -223,12 +302,12 @@ function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: n
       <span className={styles.muted}>{node.task}</span>
     ) : (
       <>
-        <span data-tone={node.state}>{node.declined === 'declined' ? '你拒绝了' : node.declined === 'timeout' ? '没有回答，没开' : WORD[node.state]}</span>
+        <span data-tone={node.state}>{node.declined === 'declined' ? m.youDeclined : node.declined === 'timeout' ? m.noAnswer : m.word[node.state]}</span>
         {node.action && <span className={styles.action}>· {node.action}</span>}
-        {node.state === 'done' && node.reported && <span className={styles.muted}>· 报告已送回</span>}
+        {node.state === 'done' && node.reported && <span className={styles.muted}>{m.reportBack}</span>}
         {(node.state === 'attention' || node.state === 'error') && !node.gone && (
           <button type="button" className={styles.button} onClick={() => open(node.id)}>
-            {node.state === 'attention' ? '去处理' : '打开'}
+            {node.state === 'attention' ? m.handle : m.open}
           </button>
         )}
       </>
@@ -237,7 +316,7 @@ function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: n
     <span className={styles.label} style={{ left, top }} data-small={small || undefined} data-testid="dispatch-node" data-state={node.state}>
       <span className={styles.line}>
         <button type="button" className={styles.title} data-strong={strong || undefined} disabled={node.gone || node.declined !== undefined || node.state === 'pending'} onClick={() => open(node.id)}>
-          {node.gone ? '已不在工作区的会话' : node.title}
+          {node.gone ? m.gone : node.title}
         </button>
         {who && <span className={styles.muted}>{who}</span>}
         {small && time && <span className={styles.mono}>{time}</span>}
@@ -258,6 +337,7 @@ function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: n
 const NO_IDS: SessionId[] = []
 
 export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
+  const m = useMessages(M)
   const sessions = useWorkspace((s) => s.sessions)
   const confirms = useDispatch((s) => s.confirms)
   const ids = useMemo(() => {
@@ -298,13 +378,13 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
         {view.settled ? (
           <>
             <span className={styles.stripTitle} data-quiet>
-              {all.length} 个会话都结束了
+              {m.allEnded(all.length)}
             </span>
-            <span className={styles.muted}>{view.reports} 份报告</span>
+            <span className={styles.muted}>{m.reports(view.reports)}</span>
           </>
         ) : (
           <>
-            <span className={styles.stripTitle}>派出 {view.nodes.length} 个会话</span>
+            <span className={styles.stripTitle}>{m.dispatched(view.nodes.length)}</span>
             <Counts view={view} />
           </>
         )}
@@ -312,20 +392,20 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
         {!expanded && urgent && (
           <>
             <span className={styles.urgent} data-tone={urgent.state}>
-              {urgent.agent ? agentLabel(urgent.agent) : '会话'} {urgent.state === 'error' ? '出错' : urgent.action ? `要${urgent.action}` : '等你处理'}
+              {urgent.agent ? agentLabel(urgent.agent) : m.session} {urgent.state === 'error' ? m.error : urgent.action ? m.wantsAction(urgent.action) : m.needsYou}
             </span>
             <button type="button" className={styles.button} onClick={() => open(urgent.id)}>
-              {urgent.state === 'error' ? '打开' : '去处理'}
+              {urgent.state === 'error' ? m.open : m.handle}
             </button>
           </>
         )}
         {expanded && (
           <button type="button" className={styles.link} onClick={showGraph}>
             <Split {...ICON} size={14} />
-            看图
+            {m.showGraph}
           </button>
         )}
-        <button type="button" className={styles.toggle} aria-label={expanded ? '收起' : '展开'} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        <button type="button" className={styles.toggle} aria-label={expanded ? m.collapse : m.expand} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
           {expanded ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
         </button>
       </div>
@@ -337,15 +417,15 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
               <div key={n.id} className={styles.row} data-nested={n.nested || undefined}>
                 <StatusGlyph status={GLYPH[n.state]} />
                 {n.agent && <AgentIcon kind={n.agent} size={14} />}
-                <span className={styles.rowTitle}>{n.gone ? '已不在工作区的会话' : n.title}</span>
+                <span className={styles.rowTitle}>{n.gone ? m.gone : n.title}</span>
                 <span className={styles.action} data-tone={n.state === 'attention' || n.state === 'error' ? n.state : undefined}>
-                  {n.state === 'working' || n.state === 'attention' ? (n.action ?? WORD[n.state]) : n.state === 'pending' ? n.task : WORD[n.state]}
+                  {n.state === 'working' || n.state === 'attention' ? (n.action ?? m.word[n.state]) : n.state === 'pending' ? n.task : m.word[n.state]}
                 </span>
                 <span className={styles.spacer} />
                 {time && <span className={styles.mono}>{time}</span>}
                 {!n.gone && n.state !== 'pending' && (
                   <button type="button" className={styles.link} onClick={() => open(n.id)}>
-                    打开
+                    {m.open}
                   </button>
                 )}
               </div>
@@ -360,18 +440,19 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
 
 /** Requests waiting for 开始 that no graph shows: the same answer as the graph's, for exactly these. */
 function WaitingStrip({ waiting }: { waiting: readonly PendingStart[] }) {
+  const m = useMessages(M)
   const calls = waiting.map((c) => c.callId)
   return (
     <div className={styles.strip} data-testid="dispatch-waiting">
       <div className={styles.stripHead}>
         <StatusGlyph status="needs_you" />
-        <span className={styles.stripTitle}>想开 {waiting.length} 个会话</span>
+        <span className={styles.stripTitle}>{m.wants(waiting.length)}</span>
         <span className={styles.spacer} />
         <button type="button" className={styles.button} onClick={() => decideCalls(calls, false)}>
-          拒绝
+          {m.deny}
         </button>
         <button type="button" className={styles.primary} onClick={() => decideCalls(calls, true)}>
-          开始 {waiting.length} 个
+          {m.start(waiting.length)}
         </button>
       </div>
       <div className={styles.rows}>
@@ -390,18 +471,18 @@ function WaitingStrip({ waiting }: { waiting: readonly PendingStart[] }) {
 // --- Wavi's own messages -------------------------------------------------------------------------------------------
 
 const EVENT_STATE = { report: 'done', done: 'done', error: 'error', exited: 'exited' } as const
-const EVENT_WORD = { report: '发来报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' } as const
 
 /** A dispatch report: one card per child, its agent's mark beside it; a notice: one quiet line. */
 export const WaviMessageView = memo(function WaviMessageView({ message, time }: { message: WaviMessage; time: string }) {
+  const m = useMessages(M)
   if (message.kind === 'notice') {
     const { outcome, titles } = message.notice
     const text =
       outcome === 'started'
-        ? `已开始 ${titles.length} 个会话：${titles.join('、')}`
+        ? m.started(titles.length, titles)
         : outcome === 'declined'
-          ? `你拒绝了 ${titles.length} 个会话`
-          : `${Math.round(DISPATCH_LIMITS.confirmMs / 60_000)} 分钟没有回答，没有开 ${titles.length} 个会话`
+          ? m.declined(titles.length)
+          : m.timedOut(Math.round(DISPATCH_LIMITS.confirmMs / 60_000), titles.length)
     return (
       <p className={styles.notice} data-testid="dispatch-notice">
         <Split {...ICON} size={14} />
@@ -419,22 +500,23 @@ export const WaviMessageView = memo(function WaviMessageView({ message, time }: 
 })
 
 function ReportCard({ report: r, time }: { report: Extract<WaviMessage, { kind: 'report' }>['reports'][number]; time: string }) {
+  const m = useMessages(M)
   // Only this child's kind: a card does not redraw when any other session changes.
   const kind: AgentKind | undefined = useWorkspace((s) => s.sessions.find((x) => x.id === r.childId)?.kind)
   const state = r.event ? EVENT_STATE[r.event] : 'done'
   return (
     <article className={styles.report} data-testid="dispatch-report">
       <span className={styles.reportAvatar} aria-hidden>
-        {kind && <AgentIcon kind={kind} size={16} />}
+        {kind && <AgentIcon kind={kind} size={22} />}
         <span className={styles.dot} data-state={state} />
       </span>
       <div className={styles.reportCard}>
         <div className={styles.line}>
           <span className={styles.reportAgent}>{r.agent}</span>
-          <span className={styles.muted}>报告</span>
+          <span className={styles.muted}>{m.report}</span>
           <span className={styles.reportTitle}>{r.title}</span>
           <StatusGlyph status={GLYPH[state]} />
-          <span className={styles.muted}>{r.event ? EVENT_WORD[r.event] : ''}</span>
+          <span className={styles.muted}>{r.event ? m.event[r.event] : ''}</span>
           <span className={styles.spacer} />
           <span className={styles.muted}>{time}</span>
         </div>
@@ -446,7 +528,7 @@ function ReportCard({ report: r, time }: { report: Extract<WaviMessage, { kind: 
         {r.excerpt && <p className={styles.excerpt}>{r.excerpt}</p>}
         {kind && (
           <button type="button" className={styles.link} onClick={() => open(r.childId)}>
-            打开会话
+            {m.openSession}
             <ChevronRight {...ICON} size={14} />
           </button>
         )}

@@ -43,112 +43,182 @@
     }
   },
   "statusLabel": {
-    "running": "运行中",
-    "needs_you": "等你处理",
-    "done_unread": "已完成",
-    "idle": "空闲",
-    "error": "出错",
-    "exited": "已退出"
+    "zh": {
+      "running": "运行中",
+      "needs_you": "等你处理",
+      "done_unread": "已完成",
+      "idle": "空闲",
+      "error": "出错",
+      "exited": "已退出"
+    },
+    "en": {
+      "running": "Running",
+      "needs_you": "Needs you",
+      "done_unread": "Done",
+      "idle": "Idle",
+      "error": "Error",
+      "exited": "Exited"
+    }
   },
   "agents": [
     {
       "id": "claude",
-      "name": "Claude Code",
+      "name": {
+        "zh": "Claude Code",
+        "en": "Claude Code"
+      },
       "mark": true
     },
     {
       "id": "codex",
-      "name": "Codex",
+      "name": {
+        "zh": "Codex",
+        "en": "Codex"
+      },
       "mark": true
     },
     {
       "id": "opencode",
-      "name": "OpenCode",
+      "name": {
+        "zh": "OpenCode",
+        "en": "OpenCode"
+      },
       "mark": true
     },
     {
       "id": "gemini",
-      "name": "Gemini CLI",
+      "name": {
+        "zh": "Gemini CLI",
+        "en": "Gemini CLI"
+      },
       "mark": true
     },
     {
       "id": "qwen",
-      "name": "Qwen Code",
+      "name": {
+        "zh": "Qwen Code",
+        "en": "Qwen Code"
+      },
       "mark": true
     },
     {
       "id": "pi",
-      "name": "Pi",
+      "name": {
+        "zh": "Pi",
+        "en": "Pi"
+      },
       "mark": true
     },
     {
       "id": "copilot",
-      "name": "Copilot CLI",
+      "name": {
+        "zh": "Copilot CLI",
+        "en": "Copilot CLI"
+      },
       "mark": true
     },
     {
       "id": "cursor",
-      "name": "Cursor Agent",
+      "name": {
+        "zh": "Cursor Agent",
+        "en": "Cursor Agent"
+      },
       "mark": true
     },
     {
       "id": "grok",
-      "name": "Grok",
+      "name": {
+        "zh": "Grok",
+        "en": "Grok"
+      },
       "mark": true
     },
     {
       "id": "kimi",
-      "name": "Kimi Code",
+      "name": {
+        "zh": "Kimi Code",
+        "en": "Kimi Code"
+      },
       "mark": true
     },
     {
       "id": "droid",
-      "name": "Droid",
+      "name": {
+        "zh": "Droid",
+        "en": "Droid"
+      },
       "mark": false
     },
     {
       "id": "amp",
-      "name": "Amp",
+      "name": {
+        "zh": "Amp",
+        "en": "Amp"
+      },
       "mark": true
     },
     {
       "id": "kiro",
-      "name": "Kiro",
+      "name": {
+        "zh": "Kiro",
+        "en": "Kiro"
+      },
       "mark": true
     },
     {
       "id": "crush",
-      "name": "Crush",
+      "name": {
+        "zh": "Crush",
+        "en": "Crush"
+      },
       "mark": false
     },
     {
       "id": "goose",
-      "name": "Goose",
+      "name": {
+        "zh": "Goose",
+        "en": "Goose"
+      },
       "mark": true
     },
     {
       "id": "cline",
-      "name": "Cline",
+      "name": {
+        "zh": "Cline",
+        "en": "Cline"
+      },
       "mark": true
     },
     {
       "id": "antigravity",
-      "name": "Antigravity",
+      "name": {
+        "zh": "Antigravity",
+        "en": "Antigravity"
+      },
       "mark": true
     },
     {
       "id": "auggie",
-      "name": "Auggie",
+      "name": {
+        "zh": "Auggie",
+        "en": "Auggie"
+      },
       "mark": false
     },
     {
       "id": "codebuddy",
-      "name": "CodeBuddy",
+      "name": {
+        "zh": "CodeBuddy",
+        "en": "CodeBuddy"
+      },
       "mark": true
     },
     {
       "id": "shell",
-      "name": "终端",
+      "name": {
+        "zh": "终端",
+        "en": "Terminal"
+      },
       "mark": false
     }
   ],

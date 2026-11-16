@@ -1,6 +1,6 @@
 /* The section reuses the 一题多解 rows (attempts/AttemptGroups.module.css); names here are buttons that go to the session. */
 
-/* PRD F21 v1.178 (Figma 81B): the Split icon is a mark, not a hint, so text-primary. */
+/* PRD F21 v1.198 (Figma 81B): the Split icon is a mark, not a hint, so text-primary. */
 span.icon {
   color: var(--text-primary);
 }

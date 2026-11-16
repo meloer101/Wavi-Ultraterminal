@@ -296,6 +296,91 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(rows).toHaveCount(0, WITHIN)
   })
 
+  test('an agent team draws a lane per member under the lead’s terminal, and its teammates under the lead (PRD §6.20, Figma 83″B / 82′F)', async () => {
+    // The hook order measured on 2.1.325: SubagentStart per message taken up, SubagentStop + TeammateIdle after it.
+    const spawn = (name: string, model: string) =>
+      repo.step({ hook: 'PostToolUse', payload: { tool_name: 'Agent', tool_input: { name }, tool_response: { status: 'teammate_spawned', name, agent_id: `a${name}-1`, resolvedModel: model } } })
+    const turn = (name: string, to: string, message: string) => {
+      repo.step({ hook: 'SubagentStart', payload: { agent_id: `a${name}-1`, agent_type: name } })
+      repo.step({ hook: 'PreToolUse', payload: { agent_id: `a${name}-1`, agent_type: name, tool_name: 'SendMessage', tool_input: { to, message } } })
+      repo.step({ hook: 'SubagentStop', payload: { agent_id: `a${name}-1`, agent_type: name } })
+      repo.step({ hook: 'TeammateIdle', payload: { agent_id: `a${name}-1`, agent_type: name, teammate_name: name } })
+    }
+    spawn('coder', 'claude-sonnet-5-5')
+    spawn('reviewer', 'claude-opus-5-5')
+    spawn('docs', 'claude-haiku-5-5')
+    turn('coder', 'reviewer', '第 1 版好了')
+    turn('reviewer', 'coder', '退回：部分退款没处理')
+    turn('coder', 'reviewer', '第 2 版好了')
+    repo.step({ hook: 'SubagentStart', payload: { agent_id: 'areviewer-1', agent_type: 'reviewer' } })
+    repo.step({ hook: 'PreToolUse', payload: { agent_id: 'areviewer-1', agent_type: 'reviewer', tool_name: 'Read', tool_input: { file_path: '/r/src/pay/refund.ts' } } })
+    repo.step({ hook: 'SubagentStart', payload: { agent_id: 'adocs-1', agent_type: 'docs' } })
+    repo.step({ hook: 'PermissionRequest', payload: { agent_id: 'adocs-1', agent_type: 'docs', tool_name: 'Write', tool_input: { file_path: '/r/docs/pay.md', content: '#' } } })
+
+    const strip = page.getByTestId('team-strip')
+    await expect(strip).toContainText('队伍 · 3 人', WITHIN)
+    const lanes = strip.getByTestId('team-lane')
+    await expect(lanes).toHaveCount(4)
+    await expect(lanes.nth(2)).toHaveAttribute('data-state', 'working', WITHIN)
+    await expect(lanes.nth(2)).toContainText('reviewerOpus 5.5')
+    await expect(lanes.nth(3)).toHaveAttribute('data-state', 'asking', WITHIN)
+    await expect(lanes.nth(3)).toContainText('等你确认')
+    await expect(strip.locator('[data-latest="true"]').last()).toHaveText('第 2 版好了')
+    // Under the lead's terminal, as wide as its card (Figma 80A).
+    const card = await page.locator('[data-region="terminal"] [data-session-id="s-cookie"]').boundingBox()
+    const box = await strip.boundingBox()
+    expect(box!.x).toBeCloseTo(card!.x, 0)
+    expect(box!.width).toBeCloseTo(card!.width, 0)
+
+    // The sidebar: 队伍 · 3 人 under the lead, then a row per teammate; none of them is listed as a subagent.
+    const mates = page.locator('[data-region="sidebar"] [data-testid="teammate-row"]')
+    await expect(page.locator('[data-region="sidebar"] [data-testid="team-row"]')).toHaveText('队伍 · 3 人')
+    await expect(mates).toHaveCount(3)
+    await expect(mates.nth(2)).toContainText('等你确认')
+    await expect(page.locator('[data-region="sidebar"] [data-testid="subagent-row"]')).toHaveCount(0)
+
+    // Folded: one line, the one that needs you, and 去处理 puts the keyboard in the lead's terminal.
+    await strip.getByRole('button', { name: '收起队伍' }).click()
+    await expect(lanes).toHaveCount(0)
+    await expect(strip).toContainText('docs 等你确认')
+    await strip.getByRole('button', { name: '去处理' }).click()
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[data-session-id="s-cookie"]') != null)).toBe(true)
+    await strip.getByRole('button', { name: '展开队伍' }).click()
+
+    // Screenshots of Figma 83″B's scene, with its times (a hook replay is too quick to spread over minutes).
+    const now = Date.now()
+    const m = (n: number) => now - n * 60_000
+    const team = {
+      startedAt: m(12),
+      members: [
+        { name: 'lead', agentId: '', state: 'idle', spans: [{ from: m(12), to: m(11.7), kind: 'working' }, { from: m(11.3), to: m(11.1), kind: 'working' }] },
+        { name: 'coder', agentId: 'acoder-1', model: 'Sonnet 5.5', state: 'idle', spans: [{ from: m(11.7), to: m(8.2), kind: 'working' }, { from: m(6.4), to: m(3.3), kind: 'working' }] },
+        { name: 'reviewer', agentId: 'areviewer-1', model: 'Opus 5.5', state: 'working', action: '读取 refund.ts', spans: [{ from: m(8.1), to: m(6.5), kind: 'working' }, { from: m(3.2), kind: 'working' }] },
+        { name: 'tester', agentId: 'atester-1', model: 'Haiku 5.5', state: 'idle', spans: [] },
+        { name: 'docs', agentId: 'adocs-1', model: 'Haiku 5.5', state: 'asking', action: '写入 docs/pay.md', spans: [{ from: m(11), to: m(10), kind: 'working' }, { from: m(0.8), kind: 'asking' }] }
+      ],
+      messages: [
+        { from: 'lead', to: 'coder', text: '按订单拆退款', at: m(11.8) },
+        { from: 'lead', to: 'docs', text: '接口定了补文档', at: m(11.2) },
+        { from: 'coder', to: 'reviewer', text: '第 1 版好了', at: m(8.2) },
+        { from: 'reviewer', to: 'coder', text: '退回：部分退款没处理', at: m(6.5) },
+        { from: 'coder', to: 'reviewer', text: '第 2 版好了', at: m(3.3) }
+      ]
+    }
+    await fromMain('agent:event', { sessionId: 's-cookie', agent: 'claude', at: now, event: { type: 'team', team } })
+    await expect(lanes).toHaveCount(5, WITHIN)
+    await shoot('83B-team-lanes')
+    await strip.getByRole('button', { name: '收起队伍' }).click()
+    await shoot('83C-team-folded')
+    await strip.getByRole('button', { name: '展开队伍' }).click()
+
+    // Once the team is gone (a new conversation; teams.test.ts), the strip and the rows go. Not by /clear here: later
+    // tests keep this session's todo list.
+    await fromMain('agent:event', { sessionId: 's-cookie', agent: 'claude', at: Date.now(), event: { type: 'team', team: null } })
+    await expect(strip).toHaveCount(0, WITHIN)
+    await expect(mates).toHaveCount(0)
+  })
+
   test('context ≥ 80%: heavier number, /compact only fills the input line', async () => {
     repo.step(statusLine(86, { five: 13, seven: 26 }))
     const chip = header().getByTestId('context-chip')
@@ -443,18 +528,12 @@ test.describe('session metrics: todo · context · usage', () => {
     await shoot('17B-codex')
   })
 
-  test('the overview has todo / context columns and one usage chip per vendor', async () => {
-    await page.locator('[data-region="sidebar"]').getByText('总览').click()
+  test('看板 · 进度 has one usage chip per vendor', async () => {
+    await page.locator('[data-region="sidebar"]').getByText('看板').click()
     const overview = page.locator('[data-region="overview"]')
     await expect(overview.getByTestId('plan-usage')).toBeVisible()
     await expect(overview.getByTestId('usage-chip-claude')).toHaveText('Claude7d 85%')
     await expect(overview.getByTestId('usage-chip-codex')).toHaveText('Codex5h 40%')
-    const row = (id: string) => overview.locator(`[data-session-id="${id}"]`)
-    await expect(row('s-cookie').getByTestId('overview-todo')).toHaveText('3/7')
-    await expect(row('s-cookie').getByTestId('overview-context')).toHaveText('context 62%')
-    await expect(row('s-graph').getByTestId('overview-todo')).toHaveText('')
-    await expect(row('s-graph').getByTestId('overview-context')).toHaveText('context 41%')
-    await expect(row('s-main').getByTestId('overview-context')).toHaveText('')
     await overview.getByTestId('usage-chip-claude').click()
     await expect(page.getByTestId('usage-popover').getByRole('region')).toHaveCount(2)
     await shoot('17C-overview')
@@ -471,7 +550,7 @@ test.describe('session metrics: todo · context · usage', () => {
         { minutes: 10080, percent: 30, resetsAt: Date.now() + 5 * 86400_000 }
       ]
     })
-    await page.locator('[data-region="sidebar"]').getByText('总览').click()
+    await page.locator('[data-region="sidebar"]').getByText('看板').click()
     const chip = page.locator('[data-region="overview"]').getByTestId('usage-chip-codex')
     await expect(chip).toHaveText(/^Codex5h 用完 · \d\d:\d\d 恢复$/, WITHIN)
     await expect(chip).toHaveAttribute('data-level', 'exhausted')
@@ -484,6 +563,8 @@ test.describe('session metrics: todo · context · usage', () => {
   test('the sidebar’s 额度 opens 设置 · 额度: the fullest vendor first, with its plan and every window (F11 · 额度页)', async () => {
     await fromMain('agent:usage-account', { vendor: 'codex', state: 'ok', plan: 'plus', at: Date.now() })
     await fromMain('agent:usage-account', { vendor: 'claude', state: 'ok', plan: 'max', at: Date.now() })
+    // 额度 sits under 看板 at the top (PRD v1.187); the foot keeps 更新 · 定时任务 · 设置.
+    await expect(page.locator('[data-region="sidebar"]').getByRole('navigation', { name: '导航' }).getByRole('button')).toHaveText([/^打开项目/, /^跳转到/, /^看板/, /^额度/])
     await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^额度/ }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
     await expect(dialog.getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')

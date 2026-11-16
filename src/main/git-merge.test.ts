@@ -193,6 +193,24 @@ describe('mergeWorktree', () => {
     expect(existsSync(join(root, 'c.txt'))).toBe(true)
   })
 
+  // PRD F16 v1.192: the closing keyword an agent wrote in a commit body reaches the base, so GitHub closes the issue.
+  it('squash: keeps the closing-keyword lines of the commit bodies', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b\n\nwhy b\nCloses #12')
+    commit(wt, 'c.txt', 'c\n', 'add c\n\nFixes acme/web#3')
+    const result = await mergeWorktree(await request(root, wt, 'squash', { title: '修复导航' }))
+    expect(result.ok).toBe(true)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('修复导航\n\n- add b\n- add c\n\nCloses #12\nFixes acme/web#3')
+  })
+
+  it('squash: a single commit is titled too, its subject listed under the title', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const result = await mergeWorktree(await request(root, wt, 'squash', { title: '修复导航' }))
+    expect(result.ok).toBe(true)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('修复导航\n\n- add b')
+  })
+
   it('squash: an agent-written message wins over the title and keeps its body', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')

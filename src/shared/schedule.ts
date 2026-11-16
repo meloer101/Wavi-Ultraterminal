@@ -3,7 +3,56 @@
 // file (src/main/schedules), the renderer runs what comes due (src/renderer/schedules). schedule.test.ts.
 import { isCliAgent, type CliAgent } from './agents'
 import { isGuiPermission, type GuiPermission } from './gui-chat'
+import { defineMessages, pick } from './i18n'
 import type { SessionUi } from './types'
+
+const M = defineMessages({
+  zh: {
+    /** Sunday first, as Date.getDay(). */
+    weekday: ['日', '一', '二', '三', '四', '五', '六'] as readonly string[],
+    weekdayFull: ['日', '一', '二', '三', '四', '五', '六'] as readonly string[],
+    everyHours: (n: number) => `每隔 ${n} 小时`,
+    everyMinutes: (n: number) => `每隔 ${n} 分钟`,
+    daily: (time: string) => `每天 ${time}`,
+    weekdays: (time: string) => `工作日 ${time}`,
+    weekly: (days: readonly string[], time: string) => `每周${days.join('、')} ${time}`,
+    once: (when: string) => `${when} 一次`,
+    tomorrow: (time: string) => `明天 ${time}`,
+    thisWeek: (day: string, time: string) => `本周${day} ${time}`,
+    nextWeek: (day: string, time: string) => `下周${day} ${time}`,
+    running: '运行中',
+    opened: '已开出会话',
+    sent: '已发送',
+    archived: '没有改动，已归档',
+    unknownReason: '未知原因',
+    skipped: (reason: string) => `跳过：${reason}`,
+    failed: (reason: string) => `失败：${reason}`,
+    manual: (base: string) => `立即运行 · ${base}`,
+    caughtUp: (base: string) => `补跑 · ${base}`
+  },
+  en: {
+    weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    weekdayFull: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    everyHours: (n: number) => `every ${n} h`,
+    everyMinutes: (n: number) => `every ${n} min`,
+    daily: (time: string) => `every day ${time}`,
+    weekdays: (time: string) => `weekdays ${time}`,
+    weekly: (days: readonly string[], time: string) => `every ${days.join(', ')} ${time}`,
+    once: (when: string) => `once, ${when}`,
+    tomorrow: (time: string) => `tomorrow ${time}`,
+    thisWeek: (day: string, time: string) => `this ${day} ${time}`,
+    nextWeek: (day: string, time: string) => `next ${day} ${time}`,
+    running: 'Running',
+    opened: 'Session opened',
+    sent: 'Sent',
+    archived: 'No changes, archived',
+    unknownReason: 'unknown reason',
+    skipped: (reason: string) => `Skipped: ${reason}`,
+    failed: (reason: string) => `Failed: ${reason}`,
+    manual: (base: string) => `Run now · ${base}`,
+    caughtUp: (base: string) => `Caught up · ${base}`
+  }
+})
 
 export const MIN_INTERVAL_MINUTES = 10
 export const MAX_INTERVAL_MINUTES = 7 * 24 * 60
@@ -259,26 +308,29 @@ export function keepSchedule(schedule: Schedule): Schedule {
 
 // ── labels (Figma 67′) ────────────────────────────────────────────────────────
 
-const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'] as const
 export const pad = (n: number): string => String(n).padStart(2, '0')
 export const clock = (t: number): string => `${pad(new Date(t).getHours())}:${pad(new Date(t).getMinutes())}`
 export const monthDay = (t: number): string => `${pad(new Date(t).getMonth() + 1)}-${pad(new Date(t).getDate())}`
 
 /** `每天 09:00` · `工作日 08:30` · `每周五 17:00` · `每周一、三 10:00` · `每隔 30 分钟` · `每隔 2 小时` · `11-12 09:00 一次`. */
 export function timingLabel(timing: ScheduleTiming): string {
+  const m = pick(M)
   switch (timing.kind) {
     case 'interval':
-      return timing.minutes % 60 === 0 ? `每隔 ${timing.minutes / 60} 小时` : `每隔 ${timing.minutes} 分钟`
+      return timing.minutes % 60 === 0 ? m.everyHours(timing.minutes / 60) : m.everyMinutes(timing.minutes)
     case 'daily':
-      return `每天 ${timing.time}`
+      return m.daily(timing.time)
     case 'weekdays':
-      return `工作日 ${timing.time}`
+      return m.weekdays(timing.time)
     case 'weekly': {
       const days = [...timing.days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
-      return `每周${days.map((d) => WEEKDAY[d]).join('、')} ${timing.time}`
+      return m.weekly(
+        days.map((d) => m.weekday[d] ?? ''),
+        timing.time
+      )
     }
     case 'once':
-      return `${monthDay(timing.at)} ${clock(timing.at)} 一次`
+      return m.once(`${monthDay(timing.at)} ${clock(timing.at)}`)
   }
 }
 
@@ -286,29 +338,32 @@ export function timingLabel(timing: ScheduleTiming): string {
 export function whenLabel(t: number, now: number): string {
   const days = Math.round((startOfDay(t).getTime() - startOfDay(now).getTime()) / (24 * 60 * MINUTE))
   if (days === 0) return clock(t)
-  if (days === 1) return `明天 ${clock(t)}`
+  const m = pick(M)
+  if (days === 1) return m.tomorrow(clock(t))
   const weekStart = (x: number): number => addDays(startOfDay(x), -((new Date(x).getDay() + 6) % 7)).getTime()
   const weeks = Math.round((weekStart(t) - weekStart(now)) / (7 * 24 * 60 * MINUTE))
-  if (weeks === 0 && days > 0) return `本周${WEEKDAY[new Date(t).getDay()]} ${clock(t)}`
-  if (weeks === 1) return `下周${WEEKDAY[new Date(t).getDay()]} ${clock(t)}`
+  const day = m.weekdayFull[new Date(t).getDay()] ?? ''
+  if (weeks === 0 && days > 0) return m.thisWeek(day, clock(t))
+  if (weeks === 1) return m.nextWeek(day, clock(t))
   return `${monthDay(t)} ${clock(t)}`
 }
 
 /** A run as the list's second line and the history show it: `没有改动，已归档`, `跳过：前置检查没过`, `补跑 · 已发送`. */
 export function runLabel(run: ScheduleRun): string {
+  const m = pick(M)
   const base =
     run.outcome === 'running'
-      ? '运行中'
+      ? m.running
       : run.outcome === 'opened'
-        ? (run.reason ?? '已开出会话')
+        ? (run.reason ?? m.opened)
         : run.outcome === 'sent'
-          ? '已发送'
+          ? m.sent
           : run.outcome === 'archived'
-            ? '没有改动，已归档'
+            ? m.archived
             : run.outcome === 'skipped'
-              ? `跳过：${run.reason ?? '未知原因'}`
-              : `失败：${run.reason ?? '未知原因'}`
-  return run.manual ? `立即运行 · ${base}` : run.caughtUp ? `补跑 · ${base}` : base
+              ? m.skipped(run.reason ?? m.unknownReason)
+              : m.failed(run.reason ?? m.unknownReason)
+  return run.manual ? m.manual(base) : run.caughtUp ? m.caughtUp(base) : base
 }
 
 /** The session a run opens: `每日依赖检查 · 11-09 09:00`. */

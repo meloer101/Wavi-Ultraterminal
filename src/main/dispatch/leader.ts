@@ -1,6 +1,6 @@
-// What keeps an agent from being a project's leader session on this machine (PRD F21 v1.178 · 不改代码). A Codex leader
+// What keeps an agent from being a project's leader session on this machine (PRD F21 v1.198 · 不改代码). A Codex leader
 // runs with a read-only permission profile (`leaderLaunchArgs`), which Codex ignores when its config sets
-// `sandbox_mode` (Codex docs, §6.14 v1.178): then the new-session panel does not offer Codex as leader, and a Codex
+// `sandbox_mode` (Codex docs, §6.14 v1.198): then the new-session panel does not offer Codex as leader, and a Codex
 // leader launched anyway (made leader earlier, the config changed since) gets `--sandbox read-only` on its command line
 // (a flag, so it also wins over a `[profiles.<name>]` sandbox_mode), so it still cannot change files (its `wavi`
 // requests fail then too). Only reads the user's config, never writes it.

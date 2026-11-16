@@ -82,7 +82,7 @@
   white-space: nowrap;
 }
 
-/* leader · 本小时叫醒 N 次 (PRD F21 v1.178, Figma 81E): in 由「…」派出's place and type, not a button. */
+/* leader · 本小时叫醒 N 次 (PRD F21 v1.198, Figma 81E): in 由「…」派出's place and type, not a button. */
 .leaderMeta {
   flex-shrink: 0;
   padding: 0 var(--space-4);

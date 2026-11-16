@@ -91,11 +91,11 @@ export interface Session {
   turnStartedAt?: number
   /** The subagents (Claude `agent_id`) whose ask is pending: their sidebar rows show “等你处理” (PRD F21 v1.109). Transient. */
   askingAgents?: string[]
-  /** While `needs_you` on its agent's own ask: a permission dialog or a question (PRD F21 v1.178 · 看). Transient. */
+  /** While `needs_you` on its agent's own ask: a permission dialog or a question (PRD F21 v1.198 · 看). Transient. */
   waitingFor?: 'permission' | 'question'
   /**
    * Which of Wavi's own asks it shows while `needs_you` on one (its `currentAction` is that ask's label): an agent's
-   * `wavi run` / `wavi adopt` waiting for 开始, its `wavi schedule`, or a leader's `wavi tell` (PRD F21 v1.178). Transient.
+   * `wavi run` / `wavi adopt` waiting for 开始, its `wavi schedule`, or a leader's `wavi tell` (PRD F21 v1.198). Transient.
    */
   waviAsk?: WaviAskKind
   /** A shell session made by the Run button for the worktree's `run` script (PRD F4). Persisted. */
@@ -110,6 +110,15 @@ export interface Session {
   dispatchModel?: string
   /** The 定时任务 run that opened this session (PRD F24): its task, the task's name then, and the time it was due. Persisted. */
   scheduledBy?: ScheduledBy
+  /** The GitHub issue or PR it was started on from 看板 · GitHub (PRD F9 v1.184). Persisted. */
+  github?: GitHubLink
+}
+
+/** An issue or PR of a repository (`host/owner/name`); mirrors github-board.ts's GitHubLink. */
+export interface GitHubLink {
+  repo: string
+  kind: 'issue' | 'pr'
+  number: number
 }
 
 export interface ScheduledBy {

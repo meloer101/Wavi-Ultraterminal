@@ -11,12 +11,134 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
+import { defineMessages, LANGS, pick, type Lang } from './i18n'
 import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
 import type { AgentKind, SessionId, SessionStatus, SessionUi } from './types'
 
 /** Every agent CLI can dispatch (it only needs a shell) and be dispatched. */
 export type DispatchAgent = CliAgent
+
+// Text Wavi sends to agents and, for reports and notices, reads back: it follows the interface language, and the
+// parsers below accept both (saved runs and chats from before hold Chinese).
+const M = defineMessages({
+  zh: {
+    dispatchOff: 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).',
+    untitled: '未命名',
+    /** Quotes around a session title; the parsers find titles between them. */
+    open: '「',
+    close: '」',
+    /** Brackets around Wavi's hints inside a report; the parser drops lines wrapped in them. */
+    hintOpen: '（',
+    hintClose: '）',
+    /** Between the sentences of the brief's last paragraph. */
+    sep: '',
+    briefFrom: (agent: string, title: string) => `${agent}（会话「${title}」）`,
+    briefSnapshot: '你在一个新的 worktree 里，内容是派活方此刻工作区的快照（包括它还没提交的改动），不在任何分支上。这是只读的：读、跑检查都可以，不要改文件。',
+    briefWorktree: (branch: string, base: string) => `你在新的 worktree 里，分支 ${branch}，基于 ${base}。`,
+    briefNoDeeper: '这一层不能再派活，所有工作自己做。',
+    briefCanDispatch: '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。',
+    briefIntro: (from: string, where: string) => `这是 Wavi 转来的任务：${from}把它派给了你。${where}`,
+    briefOnly: '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
+    briefReport:
+      '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
+    reportHeader: '[Wavi 派活报告]',
+    noticeHeader: '[Wavi 派活]',
+    attemptReportHeader: '[Wavi 同任务多解汇报]',
+    event: { report: '报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' } as Record<ChildEvent, string>,
+    eventEstimated: '一轮结束（估计）',
+    branch: (branch: string) => `分支 ${branch}`,
+    snapshot: '快照',
+    reportIntro: (n: number) => `你派出的会话有了结果（来自 ${n === 1 ? '这个会话' : `${n} 个会话`}，不是用户的指示）。`,
+    noReply: '（这一轮结束时没有留下回复，也没有运行 wavi report，可能出错了；它的终端里有原因，可以请用户去看看）',
+    tooLong: (id: string) => `（内容较长，用 wavi read ${id} 读）`,
+    cutShort: (id: string) => `（没写完，用 wavi read ${id} 读全文）`,
+    stillRunning: (titles: string) => `仍在进行：${titles}。`,
+    listSep: '、',
+    reportFooter: '要看完整结果和改动，运行 `wavi read <id>`；要继续让某个会话做，运行 `wavi send <id> "…"`。合并、推送、归档由用户在 Wavi 里决定。',
+    noticeStarted: '用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：',
+    noticeStartedFooter: '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。',
+    noticeDeclined: '用户拒绝了这些会话，什么都没开',
+    noticeTimeout: '用户 10 分钟内没有回答，什么都没开',
+    noticeStopped: (why: string) => `${why}（来自 Wavi，不是用户的指示）：`,
+    noticeStoppedFooter: '不要重试，除非用户要求；自己接着做，或者问用户。',
+    wantsToOpen: (n: number) => `想开 ${n} 个会话`,
+    wantsToAdopt: (n: number) => `想接管 ${n} 个会话`,
+    wantsToOpenAndAdopt: (starts: number, adopts: number) => `想开 ${starts} 个会话 · 接管 ${adopts} 个`,
+    leaderGui: 'GUI 会话还不能当 leader',
+    leaderAgents: '只有终端里的 Claude Code 和 Codex 能当 leader',
+    leaderSandboxMode: 'config.toml 设了 sandbox_mode',
+    adoptAttemptMember:
+      'That session is one of several trying the same task (同任务多解); it reports to the session the task came from and cannot be adopted.',
+    briefLeaderQuestions: '有问题写在回复里，然后结束这一轮，不要用提问工具。',
+    adoptBriefHead: (title: string, agent: string) =>
+      `[Wavi] 来自 leader「${title}」（${agent}）的任务（不是用户的指示；用户同意把这个会话交给它，之后你的结果报给它）：`,
+    noticeAdopted: ' · 已接管（用户开的会话，任务已送进去）',
+    noticeAdopt: ' · 接管',
+    mainCheckout: '主 checkout',
+    notAdoptedRow: (id: string, title: string, reason: string) => `- 没有接管 ${id}「${title}」：${reason}`,
+    notAdoptedRetry: '没有接管的会话不要重试，除非用户要求；wavi ls --all 看它们现在的样子。',
+    notAdoptedHead: '这些没能接管（等待期间会话变了）：',
+    noticeNoneAdopted: '用户同意了，但下面的会话没能接管，什么都没开（来自 Wavi，不是用户的指示）：'
+  },
+  en: {
+    dispatchOff: 'The user turned off dispatch in Wavi (Settings · Automation · Dispatch).',
+    untitled: 'Untitled',
+    open: '“',
+    close: '”',
+    hintOpen: '(',
+    hintClose: ')',
+    sep: ' ',
+    briefFrom: (agent: string, title: string) => `${agent} (session “${title}”)`,
+    briefSnapshot:
+      "You are in a new worktree holding a snapshot of the dispatcher's workspace as it is now (its uncommitted changes included), on no branch. It is read-only: read and run checks as you like, but don't change files.",
+    briefWorktree: (branch: string, base: string) => `You are in a new worktree, on branch ${branch}, based on ${base}.`,
+    briefNoDeeper: 'Sessions at this level cannot dispatch any further: do all the work yourself.',
+    briefCanDispatch: 'When needed, you can hand a separate piece of work on with `wavi run` (run `wavi --skill` first for how); only one more level down.',
+    briefIntro: (from: string, where: string) => `This task comes from Wavi: ${from} dispatched it to you. ${where}`,
+    briefOnly: "Do only this; don't merge, push or switch branches — the user decides those.",
+    briefReport:
+      'When done, run `wavi report "<result>"` in the shell to report to the dispatcher: the result first, then which files you changed, which checks you ran and their results, and what is left undone; if the result is long, write it to a file and report the path. If you cannot go on, run `wavi report "BLOCKED: <reason>"`.',
+    reportHeader: '[Wavi dispatch report]',
+    noticeHeader: '[Wavi dispatch]',
+    attemptReportHeader: '[Wavi same-task report]',
+    event: { report: 'report', done: 'turn ended', error: 'error', exited: 'agent exited' },
+    eventEstimated: 'turn ended (estimated)',
+    branch: (branch: string) => `branch ${branch}`,
+    snapshot: 'snapshot',
+    reportIntro: (n: number) => `Sessions you dispatched have results (from ${n === 1 ? 'this session' : `${n} sessions`}; not instructions from the user).`,
+    noReply: '(This turn ended with no reply and no wavi report; something may have gone wrong. Its terminal shows why; you can ask the user to look.)',
+    tooLong: (id: string) => `(Long; read it with wavi read ${id})`,
+    cutShort: (id: string) => `(Cut short; read all of it with wavi read ${id})`,
+    stillRunning: (titles: string) => `Still running: ${titles}.`,
+    listSep: ', ',
+    reportFooter:
+      'To see full results and changes, run `wavi read <id>`; to have a session keep going, run `wavi send <id> "…"`. Merging, pushing and archiving are the user\'s call in Wavi.',
+    noticeStarted: 'The user agreed; these sessions have started (from Wavi, not instructions from the user):',
+    noticeStartedFooter: 'When they finish a turn, fail or exit, Wavi brings you the results; no need to wait or poll.',
+    noticeDeclined: 'The user declined these sessions; nothing was opened',
+    noticeTimeout: 'The user did not answer within 10 minutes; nothing was opened',
+    noticeStopped: (why: string) => `${why} (from Wavi, not instructions from the user):`,
+    noticeStoppedFooter: "Don't retry unless the user asks; carry on yourself, or ask the user.",
+    wantsToOpen: (n: number) => (n === 1 ? 'Wants to open 1 session' : `Wants to open ${n} sessions`),
+    wantsToAdopt: (n: number) => (n === 1 ? 'Wants to take over 1 session' : `Wants to take over ${n} sessions`),
+    wantsToOpenAndAdopt: (starts: number, adopts: number) => `Wants to open ${starts} ${starts === 1 ? 'session' : 'sessions'} · take over ${adopts}`,
+    leaderGui: "GUI sessions can't be the leader yet",
+    leaderAgents: 'Only Claude Code and Codex in a terminal can be the leader',
+    leaderSandboxMode: 'config.toml sets sandbox_mode',
+    adoptAttemptMember: 'That session is one of several trying the same task; it reports to the session the task came from and cannot be adopted.',
+    briefLeaderQuestions: "If you have a question, put it in your reply and end the turn; don't use a question tool.",
+    adoptBriefHead: (title: string, agent: string) =>
+      `[Wavi] A task from the leader “${title}” (${agent}) (not instructions from the user; the user agreed to hand this session to it, and from now on you report to it):`,
+    noticeAdopted: ' · taken over (a session the user opened; the task has been sent in)',
+    noticeAdopt: ' · take over',
+    mainCheckout: 'main checkout',
+    notAdoptedRow: (id: string, title: string, reason: string) => `- Not taken over: ${id} “${title}”: ${reason}`,
+    notAdoptedRetry: "Don't retry the sessions that were not taken over unless the user asks; wavi ls --all shows them as they are now.",
+    notAdoptedHead: 'These could not be taken over (the session changed while waiting):',
+    noticeNoneAdopted: 'The user agreed, but the sessions below could not be taken over; nothing was opened (from Wavi, not instructions from the user):'
+  }
+})
 
 /**
  * How Wavi delivers a message to a session of this kind (PRD F21 覆盖):
@@ -43,8 +165,8 @@ export const isDispatchAgent = (value: unknown): value is DispatchAgent => isCli
 export const agentLabel = (kind: DispatchAgent): string => AGENT_SPECS[kind].label
 
 /**
- * Who can be a project's leader session (PRD F21 v1.178): an agent that runs `wavi`, has a way in that does not type
- * into its input line, and whose launch flags can turn off changing files (§6.14 v1.178). Terminal sessions only; the
+ * Who can be a project's leader session (PRD F21 v1.198): an agent that runs `wavi`, has a way in that does not type
+ * into its input line, and whose launch flags can turn off changing files (§6.14 v1.198). Terminal sessions only; the
  * other CLIs and GUI sessions come when measured. Every CLI can still be a leader's worker.
  */
 const LEADER_AGENTS: Partial<Record<DispatchAgent, true>> = { claude: true, codex: true }
@@ -52,7 +174,7 @@ const LEADER_AGENTS: Partial<Record<DispatchAgent, true>> = { claude: true, code
 /** Whether a session of this kind and 界面 can be its project's leader (the only answer to that question). */
 export const canLead = (kind: AgentKind, ui: SessionUi = 'cli'): kind is DispatchAgent => kind !== 'shell' && ui !== 'gui' && LEADER_AGENTS[kind] === true
 
-/** What main found on this machine that keeps an agent from being a leader (PRD F21 v1.178 · 不改代码). */
+/** What main found on this machine that keeps an agent from being a leader (PRD F21 v1.198 · 不改代码). */
 export interface LeaderCheck {
   /** The user's `$CODEX_HOME/config.toml` sets `sandbox_mode`, so Codex ignores the read-only permission profile. */
   codexSandboxMode: boolean
@@ -60,8 +182,9 @@ export interface LeaderCheck {
 
 /** Why this agent cannot be the leader here (UI copy for the new-session panel's agent menu, Figma 81C), or null when it can. */
 export function leaderBlock(kind: AgentKind, ui: SessionUi, check: LeaderCheck | null): string | null {
-  if (!canLead(kind, ui)) return ui === 'gui' && kind !== 'shell' && LEADER_AGENTS[kind] ? 'GUI 会话还不能当 leader' : '只有终端里的 Claude Code 和 Codex 能当 leader'
-  if (kind === 'codex' && check?.codexSandboxMode) return 'config.toml 设了 sandbox_mode'
+  const m = pick(M)
+  if (!canLead(kind, ui)) return ui === 'gui' && kind !== 'shell' && LEADER_AGENTS[kind] ? m.leaderGui : m.leaderAgents
+  if (kind === 'codex' && check?.codexSandboxMode) return m.leaderSandboxMode
   return null
 }
 
@@ -104,13 +227,13 @@ export type WaviCommand =
   | { name: 'run'; agent: DispatchAgent; task: string; title?: string; model?: string; base: WaviBase; ui?: SessionUi }
   | { name: 'send'; id: string; text: string }
   | { name: 'report'; text: string }
-  /** `all`: a leader's `wavi ls --all`, every session of its project (PRD F21 v1.178). */
+  /** `all`: a leader's `wavi ls --all`, every session of its project (PRD F21 v1.198). */
   | { name: 'ls'; all?: true }
   | { name: 'read'; id: string; offset: number }
   | { name: 'stop'; id: string }
-  /** A leader takes over one of the user's own top-level sessions, with a task for it (PRD F21 v1.178 · 接管). */
+  /** A leader takes over one of the user's own top-level sessions, with a task for it (PRD F21 v1.198 · 接管). */
   | { name: 'adopt'; id: string; task: string }
-  /** A leader puts one decision in front of the user (PRD F21 v1.178 · 交给用户). */
+  /** A leader puts one decision in front of the user (PRD F21 v1.198 · 交给用户). */
   | { name: 'tell'; text: string }
   /** PRD F24: a 定时任务 the user confirms; to this session unless `agent` asks for a new session each time. */
   | { name: 'schedule'; text: string; when: WaviWhen; title?: string; agent?: CliAgent }
@@ -421,7 +544,7 @@ export const WAVI_SKILL = [
 export const WAVI_SYSTEM_PROMPT =
   'You are running inside Wavi. To hand a self-contained piece of work to another coding agent (Claude Code, Codex, Gemini, Grok, Pi and others), each in its own git worktree, run `wavi` in the shell; run `wavi --skill` first to learn how. Results come back to you as a message.'
 
-/** Appended to the launch's system prompt for a project's leader session (PRD F21 v1.178 · 不改代码). */
+/** Appended to the launch's system prompt for a project's leader session (PRD F21 v1.198 · 不改代码). */
 export const WAVI_LEADER_PROMPT = [
   "You are this project's leader session in Wavi: the user talks to you, and you get their work done through other sessions.",
   'Plan the work, start sessions with `wavi run`, take over the user\'s own sessions with `wavi adopt`, follow up with `wavi send`, and check results with `wavi ls --all` and `wavi read`; answer your sessions\' questions yourself.',
@@ -429,16 +552,16 @@ export const WAVI_LEADER_PROMPT = [
   'Bring the user only what needs their decision, with `wavi tell "<what to decide>"`, then end your turn. Run `wavi --skill` first.'
 ].join(' ')
 
-/** Claude Code's file-changing tools, off for a leader (measured 2.1.325: `wavi` still runs, §6.14 v1.178). */
+/** Claude Code's file-changing tools, off for a leader (measured 2.1.325: `wavi` still runs, §6.14 v1.198). */
 export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'MultiEdit'] as const
 
-/** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.178). */
+/** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.198). */
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
 /**
- * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.178). Claude: the default
+ * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.198). Claude: the default
  * permission mode, named so a `defaultMode` in the user's settings.json (bypassPermissions, acceptEdits) cannot let a
- * write from the shell through without asking (§6.14 v1.178 ② measured with it), and its editing tools off; it wins
+ * write from the shell through without asking (§6.14 v1.198 ② measured with it), and its editing tools off; it wins
  * over any other `--permission-mode` of the launch (`agentArgv`). Codex: a profile that extends `:read-only` and lets
  * it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout. Empty for an agent that
  * cannot lead.
@@ -478,7 +601,7 @@ const sameTask = (a: string, b: string): boolean => a.replace(/\s+/g, ' ').trim(
  * dispatcher, waiting ones included.
  */
 export function startRefusal(input: { depth: number; toolsOn: boolean; openTasks: readonly string[]; treeSize: number; task: string }): WaviResult | null {
-  if (!input.toolsOn) return waviFail('not_allowed', 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).')
+  if (!input.toolsOn) return waviFail('not_allowed', pick(M).dispatchOff)
   if (input.depth >= DISPATCH_LIMITS.depth) return waviFail('not_allowed', 'Sessions at this level cannot dispatch any further. Do the work yourself, or report back what else is needed.')
   if (input.openTasks.length >= DISPATCH_LIMITS.openChildren) {
     return waviFail('limit', `You already have ${input.openTasks.length} open sessions (the limit is ${DISPATCH_LIMITS.openChildren}). Use wavi send on one of them, or ask the user to close or archive some.`)
@@ -491,7 +614,7 @@ export function startRefusal(input: { depth: number; toolsOn: boolean; openTasks
 }
 
 /**
- * Why a leader may not adopt this session (PRD F21 v1.178 · 接管), or null. The session joins the leader's tree with
+ * Why a leader may not adopt this session (PRD F21 v1.198 · 接管), or null. The session joins the leader's tree with
  * the sessions it dispatched itself: `subtreeSize` of them (open ones), `subtreeDepth` levels below it (0: none).
  * `openTasks` / `treeSize` as for `startRefusal`, of the leader.
  */
@@ -511,12 +634,12 @@ export function adoptRefusal(input: {
   treeSize: number
   task: string
 }): WaviResult | null {
-  if (!input.toolsOn) return waviFail('not_allowed', 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).')
+  if (!input.toolsOn) return waviFail('not_allowed', pick(M).dispatchOff)
   if (!input.leader) return waviFail('not_allowed', "Only the project's leader session can adopt sessions. Use wavi run to start one of your own.")
   if (input.self) return waviFail('not_allowed', 'That is your own session.')
   if (input.kind === 'shell') return waviFail('not_allowed', 'That is a plain terminal, not an agent session; it cannot take a task.')
   if (input.dispatchedBy) return waviFail('not_allowed', 'That session already reports to a dispatcher (wavi ls --all shows which); it cannot be adopted.')
-  if (input.attemptMember) return waviFail('not_allowed', 'That session is one of several trying the same task (同任务多解); it reports to the session the task came from and cannot be adopted.')
+  if (input.attemptMember) return waviFail('not_allowed', pick(M).adoptAttemptMember)
   if (input.archived || input.exited) return waviFail('not_allowed', 'That session is archived or its agent has exited.')
   if (input.subtreeDepth + 1 > DISPATCH_LIMITS.depth) {
     return waviFail('not_allowed', `That session's own sessions dispatch further, so adopting it would make the tree deeper than ${DISPATCH_LIMITS.depth} levels.`)
@@ -615,53 +738,39 @@ export function childBrief(input: {
   branch: string
   base: string
   snapshot: boolean
-  /** The dispatcher is its project's leader (PRD F21 v1.178 · 问题): questions go in the reply, not a question tool. */
+  /** The dispatcher is its project's leader (PRD F21 v1.198 · 问题): questions go in the reply, not a question tool. */
   leader?: boolean
 }): string {
-  const from = `${agentLabel(input.parentAgent)}（会话「${input.parentTitle || '未命名'}」）`
-  const where = input.snapshot
-    ? `你在一个新的 worktree 里，内容是派活方此刻工作区的快照（包括它还没提交的改动），不在任何分支上。这是只读的：读、跑检查都可以，不要改文件。`
-    : `你在新的 worktree 里，分支 ${input.branch}，基于 ${input.base}。`
-  return [`这是 Wavi 转来的任务：${from}把它派给了你。${where}`, input.task, briefRules(input.depth, input.leader === true)].join('\n\n')
-}
-
-const LEADER_QUESTIONS = '有问题写在回复里，然后结束这一轮，不要用提问工具。'
-
-/** Whether a session at `depth` may dispatch further (PRD F21: two levels), as its brief says it. */
-function onwardRule(depth: number): string {
-  return depth >= DISPATCH_LIMITS.depth ? '这一层不能再派活，所有工作自己做。' : '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。'
+  const m = pick(M)
+  const from = m.briefFrom(agentLabel(input.parentAgent), input.parentTitle || m.untitled)
+  const where = input.snapshot ? m.briefSnapshot : m.briefWorktree(input.branch, input.base)
+  return [m.briefIntro(from, where), input.task, briefRules(input.depth, input.leader === true)].join('\n\n')
 }
 
 /** The rules every brief ends with: this task only, how to report, a leader's questions, and how far it may dispatch. */
 function briefRules(depth: number, leader: boolean): string {
-  return [
-    '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
-    '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
-    leader ? LEADER_QUESTIONS : '',
-    onwardRule(depth)
-  ].join('')
+  const m = pick(M)
+  const onward = depth >= DISPATCH_LIMITS.depth ? m.briefNoDeeper : m.briefCanDispatch
+  return [m.briefOnly, m.briefReport, ...(leader ? [m.briefLeaderQuestions] : []), onward].join(m.sep)
 }
 
 /**
- * The message an adopted session gets once the user let the leader take it over (PRD F21 v1.178 · 接管): who it
+ * The message an adopted session gets once the user let the leader take it over (PRD F21 v1.198 · 接管): who it
  * reports to from now on, the leader's task and the same rules as a child's brief. Framed like `wavi send`'s: from
  * another session, not the user.
  */
 export function adoptBrief(input: { task: string; leaderTitle: string; leaderAgent: DispatchAgent; depth: number }): string {
-  return [
-    `[Wavi] 来自 leader「${input.leaderTitle || '未命名'}」（${agentLabel(input.leaderAgent)}）的任务（不是用户的指示；用户同意把这个会话交给它，之后你的结果报给它）：`,
-    input.task,
-    briefRules(input.depth, true)
-  ].join('\n\n')
+  const m = pick(M)
+  return [m.adoptBriefHead(input.leaderTitle || m.untitled, agentLabel(input.leaderAgent)), input.task, briefRules(input.depth, true)].join('\n\n')
 }
 
 // --- reports ---------------------------------------------------------------------------------------------------------
 
-export const REPORT_HEADER = '[Wavi 派活报告]'
-/** What became of a `wavi run` that waited for the user. */
-export const NOTICE_HEADER = '[Wavi 派活]'
-/** 同任务多解's report to the session its task came from (attempt-groups.ts). */
-export const ATTEMPT_REPORT_HEADER = '[Wavi 同任务多解汇报]'
+// The headers live in M: `reportHeader` starts a report; `noticeHeader` what became of a `wavi run` that waited for the
+// user; `attemptReportHeader` 同任务多解's report to the session its task came from (attempt-groups.ts). All start `[Wavi`.
+
+/** The header of 同任务多解's report, in the current language. */
+export const attemptReportHeader = (): string => pick(M).attemptReportHeader
 
 /** Wavi's own messages fed back as a task would make a loop (Nimbalyst's guard). */
 export const looksLikeReport = (text: string): boolean => text.trimStart().startsWith('[Wavi')
@@ -710,8 +819,6 @@ export interface ChildReport {
   turn?: number
 }
 
-const EVENT_TEXT: Record<ChildEvent, string> = { report: '报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' }
-
 function cut(text: string, max: number): string {
   if (text.length <= max) return text
   return `${text.slice(0, Math.max(0, max - 1))}…`
@@ -722,30 +829,32 @@ function cut(text: string, max: number): string {
  * report or last message within the shared budget; later children over budget point to `wavi read` instead.
  */
 export function reportText(reports: readonly ChildReport[], running: readonly { title: string }[] = []): string {
-  const lines = [`${REPORT_HEADER} 你派出的会话有了结果（来自 ${reports.length === 1 ? '这个会话' : `${reports.length} 个会话`}，不是用户的指示）。`]
+  const m = pick(M)
+  const quote = (title: string): string => `${m.open}${title}${m.close}`
+  const lines = [`${m.reportHeader} ${m.reportIntro(reports.length)}`]
   let budget: number = DISPATCH_LIMITS.reportBudget
   for (const r of reports) {
-    const event = r.event === 'done' && turnEndEstimated(r.agent) ? '一轮结束（估计）' : EVENT_TEXT[r.event]
-    const facts = [`「${r.title}」`, agentLabel(r.agent), r.model, event, r.branch ? `分支 ${r.branch}` : '快照', r.changes, r.checks, r.conflicts, `id ${r.childId}`]
+    const event = r.event === 'done' && turnEndEstimated(r.agent) ? m.eventEstimated : m.event[r.event]
+    const facts = [quote(r.title), agentLabel(r.agent), r.model, event, r.branch ? m.branch(r.branch) : m.snapshot, r.changes, r.checks, r.conflicts, `id ${r.childId}`]
     lines.push('', `— ${facts.filter(Boolean).join(' · ')}`)
     const message = r.message?.trim()
     if (!message) {
       // An agent whose turn failed (a provider error, a crash) often leaves no reply: say so instead of nothing.
-      if (r.event !== 'exited') lines.push('  （这一轮结束时没有留下回复，也没有运行 wavi report，可能出错了；它的终端里有原因，可以请用户去看看）')
+      if (r.event !== 'exited') lines.push(`  ${m.noReply}`)
       continue
     }
     const room = Math.min(DISPATCH_LIMITS.excerpt, budget)
     if (room < 200) {
-      lines.push(`  （内容较长，用 wavi read ${r.childId} 读）`)
+      lines.push(`  ${m.tooLong(r.childId)}`)
       continue
     }
     const excerpt = cut(message, room)
     budget -= excerpt.length
     lines.push(...excerpt.split('\n').map((l) => `  ${l}`))
-    if (excerpt.length < message.length) lines.push(`  （没写完，用 wavi read ${r.childId} 读全文）`)
+    if (excerpt.length < message.length) lines.push(`  ${m.cutShort(r.childId)}`)
   }
-  if (running.length > 0) lines.push('', `仍在进行：${running.map((r) => `「${r.title}」`).join('、')}。`)
-  lines.push('', '要看完整结果和改动，运行 `wavi read <id>`；要继续让某个会话做，运行 `wavi send <id> "…"`。合并、推送、归档由用户在 Wavi 里决定。')
+  if (running.length > 0) lines.push('', m.stillRunning(running.map((r) => quote(r.title)).join(m.listSep)))
+  lines.push('', m.reportFooter)
   return lines.join('\n')
 }
 
@@ -758,7 +867,7 @@ export interface StartedChild {
   adopted?: true
 }
 
-/** A `wavi adopt` the user started that could not be done: the session changed while the request waited (PRD F21 v1.178). */
+/** A `wavi adopt` the user started that could not be done: the session changed while the request waited (PRD F21 v1.198). */
 export interface NotAdopted {
   id: SessionId
   title: string
@@ -771,22 +880,19 @@ export interface NotAdopted {
  * adopt requests the user started that Wavi could not carry out, each with why.
  */
 export function noticeText(outcome: 'started' | 'declined' | 'timeout', children: readonly StartedChild[], notAdopted: readonly NotAdopted[] = []): string {
-  const adopted = outcome === 'started' ? ' · 已接管（用户开的会话，任务已送进去）' : ' · 接管'
-  const rows = children.map((c) => `- id ${c.id} · ${c.agent} · 「${c.title}」 · ${c.branch ? `分支 ${c.branch}` : c.adopted ? '主 checkout' : '快照'}${c.adopted ? adopted : ''}`)
+  const m = pick(M)
+  const adopted = outcome === 'started' ? m.noticeAdopted : m.noticeAdopt
+  const rows = children.map(
+    (c) => `- id ${c.id} · ${c.agent} · ${m.open}${c.title}${m.close} · ${c.branch ? m.branch(c.branch) : c.adopted ? m.mainCheckout : m.snapshot}${c.adopted ? adopted : ''}`
+  )
   if (outcome === 'started') {
     // Not `- id …` rows: a GUI graph reads those as sessions of this notice (parseNoticeText).
-    const missed = notAdopted.map((n) => `- 没有接管 ${n.id}「${n.title}」：${n.reason}`)
-    const retry = '没有接管的会话不要重试，除非用户要求；wavi ls --all 看它们现在的样子。'
-    if (children.length === 0 && missed.length > 0) return [`${NOTICE_HEADER} 用户同意了，但下面的会话没能接管，什么都没开（来自 Wavi，不是用户的指示）：`, ...missed, retry].join('\n')
-    return [
-      `${NOTICE_HEADER} 用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：`,
-      ...rows,
-      ...(missed.length > 0 ? ['这些没能接管（等待期间会话变了）：', ...missed, retry] : []),
-      '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。'
-    ].join('\n')
+    const missed = notAdopted.map((n) => m.notAdoptedRow(n.id, n.title, n.reason))
+    if (children.length === 0 && missed.length > 0) return [`${m.noticeHeader} ${m.noticeNoneAdopted}`, ...missed, m.notAdoptedRetry].join('\n')
+    return [`${m.noticeHeader} ${m.noticeStarted}`, ...rows, ...(missed.length > 0 ? [m.notAdoptedHead, ...missed, m.notAdoptedRetry] : []), m.noticeStartedFooter].join('\n')
   }
-  const why = outcome === 'declined' ? '用户拒绝了这些会话，什么都没开' : '用户 10 分钟内没有回答，什么都没开'
-  return [`${NOTICE_HEADER} ${why}（来自 Wavi，不是用户的指示）：`, ...rows, '不要重试，除非用户要求；自己接着做，或者问用户。'].join('\n')
+  const why = outcome === 'declined' ? m.noticeDeclined : m.noticeTimeout
+  return [`${m.noticeHeader} ${m.noticeStopped(why)}`, ...rows, m.noticeStoppedFooter].join('\n')
 }
 
 // --- reading Wavi's own words back (a GUI dispatcher draws them, Figma 68′) ---------------------------------------
@@ -811,11 +917,29 @@ export interface ParsedReport {
   excerpt: string
 }
 
-const EVENT_OF: Readonly<Record<string, ChildEvent>> = { ...Object.fromEntries(Object.entries(EVENT_TEXT).map(([k, v]) => [v, k as ChildEvent])), '一轮结束（估计）': 'done' }
+// Read back in either language: a chat or saved run from before holds Chinese.
+const EVENT_OF: Readonly<Record<string, ChildEvent>> = Object.fromEntries(
+  LANGS.flatMap((lang) => [...Object.entries(M[lang].event).map(([k, v]) => [v, k as ChildEvent]), [M[lang].eventEstimated, 'done']])
+)
+const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** A title between either language's quotes: one capture group per language, the matching one set. */
+const TITLE = `(?:${LANGS.map((lang) => `${escapeRe(M[lang].open)}(.+?)${escapeRe(M[lang].close)}`).join('|')})`
+const REPORT_HEAD = new RegExp(`^— ${TITLE} · (.+) · id (\\S+)$`)
+/** Wavi's own hint lines in a report (noReply, tooLong, cutShort), with the child's id as any word. */
+const hintOf = (lang: Lang): string[] => {
+  const id = '\u0000'
+  return [M[lang].noReply, M[lang].tooLong(id), M[lang].cutShort(id)].map((hint) => escapeRe(hint).split(id).join('\\S+'))
+}
+// Chinese keeps the old reading (any whole line in full-width brackets); English matches only Wavi's hints, so an
+// agent's own line in ASCII parentheses stays in the excerpt.
+const HINT_LINE = new RegExp(`^(?:${escapeRe(M.zh.hintOpen)}.*${escapeRe(M.zh.hintClose)}|${hintOf('en').join('|')})$`)
+const NOTICE_ROW = new RegExp(`^- id (\\S+) · [^·]+ · ${TITLE}`, 'gm')
+const titleOf = (groups: readonly (string | undefined)[]): string => groups.slice(0, LANGS.length).find((t) => t !== undefined) ?? ''
 
 /** A `reportText` message read back, one entry per child; null for any other text. */
 export function parseReportText(text: string): ParsedReport[] | null {
-  if (!text.trimStart().startsWith(REPORT_HEADER)) return null
+  const start = text.trimStart()
+  if (!LANGS.some((lang) => start.startsWith(M[lang].reportHeader))) return null
   const out: ParsedReport[] = []
   let current: { entry: ParsedReport; lines: string[] } | null = null
   const flush = (): void => {
@@ -823,16 +947,17 @@ export function parseReportText(text: string): ParsedReport[] | null {
     current = null
   }
   for (const line of text.split('\n')) {
-    const head = /^— 「(.+?)」 · (.+) · id (\S+)$/.exec(line)
+    const head = REPORT_HEAD.exec(line)
     if (head) {
       flush()
-      const [agent = '', ...rest] = (head[2] ?? '').split(' · ')
+      const [facts = '', id = ''] = head.slice(1 + LANGS.length)
+      const [agent = '', ...rest] = facts.split(' · ')
       const at = rest.findIndex((f) => f in EVENT_OF)
       const event = EVENT_OF[rest[at] ?? ''] ?? null
-      current = { entry: { childId: head[3] ?? '', title: head[1] ?? '', agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
+      current = { entry: { childId: id, title: titleOf(head.slice(1)), agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
     } else if (current && line.startsWith('  ')) {
       const body = line.slice(2)
-      if (!/^（.*）$/.test(body.trim())) current.lines.push(body)
+      if (!HINT_LINE.test(body.trim())) current.lines.push(body)
     } else if (current && line.trim() === '') flush()
   }
   flush()
@@ -842,10 +967,12 @@ export function parseReportText(text: string): ParsedReport[] | null {
 /** A `noticeText` message read back; null for any other text. */
 export function parseNoticeText(text: string): { outcome: 'started' | 'declined' | 'timeout'; ids: SessionId[]; titles: string[] } | null {
   const first = text.trimStart().split('\n', 1)[0] ?? ''
-  if (!first.startsWith(`${NOTICE_HEADER} `)) return null
-  const outcome = first.includes('已经开始') ? 'started' : first.includes('拒绝') ? 'declined' : 'timeout'
-  const rows = [...text.matchAll(/^- id (\S+) · [^·]+ · 「(.+?)」/gm)]
-  return { outcome, ids: rows.map((m) => m[1] ?? ''), titles: rows.map((m) => m[2] ?? '') }
+  const m = LANGS.map((lang) => M[lang]).find((l) => first.startsWith(`${l.noticeHeader} `))
+  if (!m) return null
+  const said = first.slice(m.noticeHeader.length + 1)
+  const outcome = said.startsWith(m.noticeStarted) ? 'started' : said.startsWith(m.noticeDeclined) ? 'declined' : 'timeout'
+  const rows = [...text.matchAll(NOTICE_ROW)]
+  return { outcome, ids: rows.map((row) => row[1] ?? ''), titles: rows.map((row) => titleOf(row.slice(2))) }
 }
 
 // --- the queue between a child's event and the dispatcher -----------------------------------------------------------
@@ -914,7 +1041,7 @@ export function tellLabel(text: string): string {
   return chars.length > 200 ? `${chars.slice(0, 199).join('')}…` : line
 }
 
-/** How many times reports woke this dispatcher in the last hour (a leader's header, PRD F21 v1.178 · 花费). */
+/** How many times reports woke this dispatcher in the last hour (a leader's header, PRD F21 v1.198 · 花费). */
 export const wakesThisHour = (queue: ReportQueue, now: number): number => queue.sent.filter((t) => now - t < HOUR).length
 
 /** A page of a long message for `wavi read`. */
@@ -938,12 +1065,13 @@ export function confirmLabels(confirms: ReadonlyArray<{ parentId: string; count:
 }
 
 /**
- * The confirm strip's head line, the dispatcher's sidebar line and its notification (PRD F21 v1.178, Figma 81A):
+ * The confirm strip's head line, the dispatcher's sidebar line and its notification (PRD F21 v1.198, Figma 81A):
  * `想开 N 个会话`, with a leader's `wavi adopt` requests `想开 N 个会话 · 接管 M 个`, only those `想接管 M 个会话`.
  */
 export function confirmHead(starts: number, adopts: number): string {
-  if (adopts === 0) return `想开 ${starts} 个会话`
-  return starts === 0 ? `想接管 ${adopts} 个会话` : `想开 ${starts} 个会话 · 接管 ${adopts} 个`
+  const m = pick(M)
+  if (adopts === 0) return m.wantsToOpen(starts)
+  return starts === 0 ? m.wantsToAdopt(adopts) : m.wantsToOpenAndAdopt(starts, adopts)
 }
 
 // --- the 送进去 send's two extra checks (PRD F21 覆盖 · 复用发消息的链路) -------------------------------------------
@@ -970,7 +1098,7 @@ export const DISPATCH_IPC = {
   reply: 'dispatch:reply',
   /** invoke(DeliverRequest) → DeliverResult: put a message into a session through its agent's own channel */
   deliver: 'dispatch:deliver',
-  /** invoke() → LeaderCheck: what on this machine keeps an agent from being a leader (PRD F21 v1.178) */
+  /** invoke() → LeaderCheck: what on this machine keeps an agent from being a leader (PRD F21 v1.198) */
   leaderCheck: 'dispatch:leader-check'
 } as const
 
@@ -1036,7 +1164,7 @@ export interface PendingRun extends PendingBase {
 }
 
 /**
- * A leader's `wavi adopt` waiting for 开始 (PRD F21 v1.178 · 接管): `childId` is the user's session it takes over, as
+ * A leader's `wavi adopt` waiting for 开始 (PRD F21 v1.198 · 接管): `childId` is the user's session it takes over, as
  * it was when asked (its agent, title and branch, for the strip); no worktree is made.
  */
 export interface PendingAdopt extends PendingBase {

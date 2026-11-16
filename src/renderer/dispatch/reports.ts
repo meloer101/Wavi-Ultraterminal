@@ -64,7 +64,7 @@ export function finishGoesToDispatcher(id: SessionId): boolean {
 }
 
 /**
- * A leader's turn that a delivered report woke ends quietly, like a child's (PRD F21 v1.178 · 交给用户): read already,
+ * A leader's turn that a delivered report woke ends quietly, like a child's (PRD F21 v1.198 · 交给用户): read already,
  * no notification, badge or ⌘J. Not when the user submitted a line in its terminal since, nor for a turn that began
  * before the report went in (the user's own, which read the report on the way).
  */
@@ -215,7 +215,7 @@ export function startReports(): () => void {
   })
   const offEvents = window.tr.agent.onEvent(({ sessionId, event }) => {
     if (event.type !== 'stop' || !event.message) return
-    // A leader reads any session of its project whole (PRD F21 v1.178 · 看), not only the ones it dispatched.
+    // A leader reads any session of its project whole (PRD F21 v1.198 · 看), not only the ones it dispatched.
     const place = placeOf(sessionId)
     if (place && (place.session.dispatchedBy || leaderOfProject(place.project.id) !== null)) setMessage(sessionId, event.message)
   })

@@ -117,7 +117,7 @@ describe('StatusController', () => {
     expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBeUndefined()
   })
 
-  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.178)', () => {
+  it('says whether a session waits for a permission or an answer, and nothing for a Wavi ask (PRD F21 v1.198)', () => {
     const waiting = () => h.sessions.find((s) => s.id === 'b')?.waitingFor
     h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
     expect(waiting()).toBeUndefined()
@@ -357,7 +357,7 @@ describe('Wavi’s own asks (PRD F21)', () => {
     expect(h.badges.at(-1)).toBe(0)
   })
 
-  it('marks which of its asks is shown, so a tell is told apart without comparing labels (PRD F21 v1.178)', () => {
+  it('marks which of its asks is shown, so a tell is told apart without comparing labels (PRD F21 v1.198)', () => {
     const h = harness([session('a'), session('b')], 'a')
     const ask = () => h.sessions.find((s) => s.id === 'b')?.waviAsk
     expect(ask()).toBeUndefined()

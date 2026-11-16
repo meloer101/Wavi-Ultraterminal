@@ -5,6 +5,7 @@ import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
 import { QuietTimer } from '@shared/quiet-timer'
 import type { AgentKind, SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
 import { forgetSetup, handleScriptMarker, takeSetup } from '../scripts/setup-runs'
 import { loadLiveSessions, takeReattach } from './live-sessions'
@@ -26,7 +27,25 @@ function dim(text: string): string {
 }
 
 /** Said in the terminal when the agent's CLI is not on the login shell's PATH (the shell prompt follows). */
-const installHint = (kind: CliAgent): string => `[没有找到 ${AGENT_SPECS[kind].binary} 命令 · 安装：${AGENT_SPECS[kind].install}]`
+// Wavi's own lines in the terminal (not the agent's output) follow the interface language.
+const M = defineMessages({
+  zh: {
+    install: (binary: string, install: string) => `[没有找到 ${binary} 命令 · 安装：${install}]`,
+    exited: (code: number | string) => `[进程已退出，退出码 ${code}]`,
+    cwdMissing: (path: string) => `[项目目录不存在：${path}]`,
+    spawnFailed: (message: string) => `[无法启动终端：${message}]`,
+    restarted: '[终端进程已重启]'
+  },
+  en: {
+    install: (binary: string, install: string) => `[${binary} command not found · install: ${install}]`,
+    exited: (code: number | string) => `[Process exited with code ${code}]`,
+    cwdMissing: (path: string) => `[Project folder not found: ${path}]`,
+    spawnFailed: (message: string) => `[Terminal couldn't start: ${message}]`,
+    restarted: '[Terminal process restarted]'
+  }
+})
+
+const installHint = (kind: CliAgent): string => pick(M).install(AGENT_SPECS[kind].binary, AGENT_SPECS[kind].install)
 
 export class SessionTerminal {
   readonly surface = new XtermSurface()
@@ -142,7 +161,7 @@ export class SessionTerminal {
     this.cleanups.push(
       pty.onExit(id, ({ exitCode }) => {
         this.exited = true
-        this.surface.write(dim(`[进程已退出，退出码 ${exitCode}]`))
+        this.surface.write(dim(pick(M).exited(exitCode)))
       }),
       () => input.dispose(),
       () => resize.dispose(),
@@ -190,7 +209,7 @@ export class SessionTerminal {
     this.dirty = true
     if (result.exit) {
       this.exited = true
-      this.surface.write(dim(`[进程已退出，退出码 ${result.exit.exitCode}]`))
+      this.surface.write(dim(pick(M).exited(result.exit.exitCode)))
       return true
     }
     this.listen()
@@ -213,7 +232,7 @@ export class SessionTerminal {
     // A dispatched session's first launch carries its task on the command line (PRD F21); a resume never does.
     const dispatched = resumeAgentSessionId ? undefined : takeDispatchLaunch(id)
     const child = useWorkspace.getState().sessions.some((s) => s.id === id && s.dispatchedBy !== undefined)
-    // A project's leader runs without changing files, every launch (PRD F21 v1.178).
+    // A project's leader runs without changing files, every launch (PRD F21 v1.198).
     const leader = isLeader(useWorkspace.getState(), id)
     try {
       await pty.spawn({
@@ -234,7 +253,7 @@ export class SessionTerminal {
       if (script === 'setup') forgetSetup(id)
       this.exited = true
       const issue = issueFromSpawnError(error)
-      this.surface.write(dim(issue.kind === 'cwd-missing' ? `[项目目录不存在：${issue.path}]` : `[无法启动终端：${issue.kind === 'spawn-failed' ? issue.message : String(error)}]`))
+      this.surface.write(dim(issue.kind === 'cwd-missing' ? pick(M).cwdMissing(issue.path) : pick(M).spawnFailed(issue.kind === 'spawn-failed' ? issue.message : String(error))))
       // The status moves to exited (sidebar, header).
       reportLaunchIssue(id, issue)
       return false
@@ -258,7 +277,7 @@ export class SessionTerminal {
     this.queuedInput = []
     // The dead process may have left the alternate screen, mouse reporting etc. switched on.
     this.surface.write('\x1b[?1049l\x1b[!p')
-    this.surface.write(dim('[终端进程已重启]'))
+    this.surface.write(dim(pick(M).restarted))
     // A terminal that reattached keeps that output listener: the new process's chunks count from 0 again. One that
     // reattached to an exited process never wired its input, resize and exit listeners.
     this.passAllOutput?.()

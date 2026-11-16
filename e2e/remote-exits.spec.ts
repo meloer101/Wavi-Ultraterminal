@@ -1,10 +1,11 @@
 // Git · 变更's exits and 归档 from the phone (PRD F22, Figma 45I / 45J) through the real path: a stand-in phone
-// (src/main/remote/test-phone.ts) asks which exits a worktree has, starts 合并到 main, sees the agent's commit message
-// arrive with the session list, edits it, goes ahead, and the branch is squashed into main with the edited message;
-// then it archives the worktree. Same repository as merge-chain.spec.ts (no remote, so 合并到 main is the only exit).
+// (src/main/remote/test-phone.ts) asks which exits a worktree has (a move only the Mac runs, 提交, shows blocked with
+// where it runs), starts 合并 (the branch is squashed into the local main, titled after the session, nothing written),
+// then 推送 of main to origin, then archives the worktree. origin is a local bare repository, not GitHub, so 合并 is
+// the only exit.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +13,6 @@ import type { PhoneEvent, RemoteExits, RemoteSession, RemoteStatus } from '../sr
 import { pairPhone, TestPhone } from '../src/main/remote/test-phone'
 import { fakeHookClaude } from './fake-hook-claude'
 import { launchApp, setWindowSize } from './launch'
-import { agentWrites, promptedPath } from './ship'
 
 const WITHIN = { timeout: 30_000 }
 
@@ -34,6 +34,7 @@ test.describe('手机 · Git 出口', () => {
   const fake = fakeHookClaude('tr-e2e-remote-exits-')
   const project = join(fake.root, 'demo')
   const clean = join(fake.root, 'wt-clean')
+  const bare = join(fake.root, 'origin.git')
   let agent: ReturnType<typeof fake.folder>
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd }).toString()
@@ -53,6 +54,9 @@ test.describe('手机 · Git 出口', () => {
     git(project, 'init', '-q', '-b', 'main')
     git(project, 'add', '.')
     git(project, 'commit', '-q', '-m', 'init')
+    git(fake.root, 'init', '-q', '--bare', '-b', 'main', bare)
+    git(project, 'remote', 'add', 'origin', bare)
+    git(project, 'push', '-q', '-u', 'origin', 'main')
     git(project, 'worktree', 'add', '-q', '-b', 'jacob/clean', clean)
     git(project, 'config', 'branch.jacob/clean.base', 'main')
     agent = fake.folder('wt-clean')
@@ -101,46 +105,46 @@ test.describe('手机 · Git 出口', () => {
     await app?.close().catch(() => {})
   })
 
-  test('the phone gets the exits Git · 变更 would offer', async () => {
-    await expect
-      .poll(async () => {
-        const answer = await phone.request({ type: 'exits', session: 's-clean' }, 30_000)
-        return answer.ok ? (answer.data as RemoteExits).primary : answer
-      }, WITHIN)
-      .toEqual({ kind: 'main', label: '合并到 main', blocker: null })
+  const exitsNow = async (): Promise<RemoteExits | string> => {
     const answer = await phone.request({ type: 'exits', session: 's-clean' }, 30_000)
-    expect(answer.ok && (answer.data as RemoteExits)).toMatchObject({ secondary: null, pr: null, base: 'main' })
+    return answer.ok ? (answer.data as RemoteExits) : 'error'
+  }
+  const primaryNow = async () => {
+    const exits = await exitsNow()
+    return typeof exits === 'string' ? exits : exits.primary
+  }
+
+  test('the phone gets the exits Git · 变更 would offer; 提交, which only the Mac runs, shows blocked with where it runs', async () => {
+    // A file to commit: 提交 is the primary, the exit beside it still runs from the phone.
+    writeFileSync(join(clean, 'draft.ts'), 'export const draft = 1\n')
+    await expect.poll(async () => (await primaryNow()) as unknown, WITHIN).toMatchObject({ kind: 'commit', label: '提交', blocker: expect.stringContaining('在 Mac 上提交') })
+    expect(await exitsNow()).toMatchObject({ secondary: { kind: 'main', label: '合并', blocker: null } })
+    rmSync(join(clean, 'draft.ts'))
+    await expect.poll(primaryNow, WITHIN).toEqual({ kind: 'main', label: '合并', blocker: null })
+    expect(await exitsNow()).toMatchObject({ secondary: null, pr: null, base: 'main' })
   })
 
-  test('合并到 main from the phone: the agent writes, the phone edits and goes ahead, main gets the edited message', async () => {
+  test('合并 from the phone: nothing to write or edit, main gets one squash commit titled after the session, nothing pushed; 推送 is next', async () => {
+    const before = git(project, 'rev-parse', 'main').trim()
     expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'start', exit: 'main' } }, 30_000)).toMatchObject({ ok: true })
-    const writing = await shipped((s) => s.ship?.stage === 'writing')
-    expect(writing?.ship).toMatchObject({ kind: 'main', title: '合并到 main', steps: expect.arrayContaining([expect.objectContaining({ id: 'write', state: 'working' })]) })
-    // Nothing to go ahead with yet, nothing to edit, and no second run.
-    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'submit' } })).toMatchObject({ ok: false })
-    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'edit', texts: { commit: 'too early' } } })).toMatchObject({ ok: false })
-    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'start', exit: 'main' } }, 30_000)).toMatchObject({ ok: false })
-
-    const file = await promptedPath(agent, 'wt-clean', 'commit')
-    agentWrites(agent, file, '导航吸顶\n\n- 导航滚动时吸在顶部\n')
-    const glance = await shipped((s) => s.ship?.stage === 'glance')
-    expect(glance?.ship).toMatchObject({ fields: ['commit'], submitLabel: '合并并推送', submitBlocker: null, texts: { commit: '导航吸顶\n\n- 导航滚动时吸在顶部' } })
-
-    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'edit', texts: { commit: '导航吸顶（手机上改过）' } } })).toMatchObject({ ok: true })
-    await shipped((s) => s.ship?.texts.commit === '导航吸顶（手机上改过）')
-    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'submit' } })).toMatchObject({ ok: true })
-
     const done = await shipped((s) => s.ship === undefined && /已合并到 main/.test(s.shipNotice ?? ''))
     expect(done?.shipNotice).toMatch(/已合并到 main · [0-9a-f]{7}/)
-    expect(git(project, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶（手机上改过）')
+    // Nothing waited for a glance: there is nothing to go ahead with.
+    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'submit' } })).toMatchObject({ ok: false })
+    expect(git(project, 'rev-list', '--count', `${before}..main`).trim()).toBe('1')
+    expect(git(project, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- Make nav sticky')
     expect(existsSync(join(project, 'nav.ts'))).toBe(true)
-    // Nothing left to ship.
-    await expect
-      .poll(async () => {
-        const answer = await phone.request({ type: 'exits', session: 's-clean' }, 30_000)
-        return answer.ok ? (answer.data as RemoteExits).primary : 'error'
-      }, WITHIN)
-      .toBeNull()
+    // Local only: origin still has the old main.
+    expect(git(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(before)
+    await expect.poll(primaryNow, WITHIN).toEqual({ kind: 'push-base', label: '推送', blocker: null })
+  })
+
+  test('推送 from the phone: main goes to origin, and nothing is left to ship', async () => {
+    expect(await phone.request({ type: 'ship', session: 's-clean', action: { do: 'start', exit: 'push-base' } }, 30_000)).toMatchObject({ ok: true })
+    const done = await shipped((s) => s.ship === undefined && /已推送 main/.test(s.shipNotice ?? ''))
+    expect(done?.shipNotice).toMatch(/已推送 main · [0-9a-f]{7}/)
+    expect(git(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(git(project, 'rev-parse', 'main').trim())
+    await expect.poll(primaryNow, WITHIN).toBeNull()
   })
 
   test('归档 from the phone folds the worktree away and keeps its folder', async () => {

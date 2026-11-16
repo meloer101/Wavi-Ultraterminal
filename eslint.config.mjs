@@ -35,6 +35,18 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules
   },
   {
+    // Interface language (Figma 89): Chinese in app code only inside defineMessages({ zh, en }) (shared/i18n.ts), so
+    // every string has its English twin. Tests may assert either language.
+    files: ['src/main/**/*.{ts,tsx}', 'src/renderer/**/*.{ts,tsx}', 'src/shared/**/*.{ts,tsx}', 'src/preload/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', ...['Literal[raw', 'TemplateElement[value.raw', 'JSXText[value'].map((node) => ({
+        selector: `${node}=/[\\u3000-\\u303f\\u3400-\\u9fff\\uff00-\\uffef]/]:not(CallExpression[callee.name="defineMessages"] *)`,
+        message: 'Chinese text belongs in a defineMessages({ zh, en }) table (src/shared/i18n.ts).'
+      }))]
+    }
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
     }

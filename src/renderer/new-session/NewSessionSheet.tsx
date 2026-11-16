@@ -1,11 +1,13 @@
 // 新建会话 (PRD F4, Figma 15 Section 170:7853): one row per choice, each with a default, so ⌘↵ alone starts a session.
 // 项目 · 工作目录 (新 worktree / 当前目录, remembered per project) · 基于 · 智能体 · 高级 (分支名 · 文件夹 · 准备).
-// No task description: the user types the first message in the terminal. Text appears only when something is limited
-// or wrong (15E, 15F). Glass material from PRD §5; solid under "reduce transparency".
+// No task description: the user types the first message in the terminal — except when 看板 · GitHub hands an issue or
+// PR over (Figma 77E): then the project is fixed, a 任务 row holds the first message (editable), the branch is named
+// after the item and 创建并发送 sends it. Text appears only when something is limited or wrong (15E, 15F). Glass
+// material from PRD §5; solid under "reduce transparency".
 // 智能体 (Figma 24A, PRD F4 v1.68): a pop-up menu — 已安装 (Claude Code and Codex always, the other CLIs when found, each
 // with its version) and 其他 (终端); remembered per project; the hint says how many are not installed. Several agents
 // on one task start from a session instead (同任务多解, attempts/SameTaskSheet).
-// 作为 leader (PRD F21 v1.178, Figma 81C / 81C′): a toggle under 项目 while 设置 · 派活 · leader 会话 is on and the project
+// 作为 leader (PRD F21 v1.198, Figma 81C / 81C′): a toggle under 项目 while 设置 · 派活 · leader 会话 is on and the project
 // has no leader. On, the session opens in the main checkout (当前目录, 基于 dimmed), CLI only, with no 高级; the agent
 // menu lists the agents that can lead, one that cannot here dimmed with `<version> · <reason>` on its right.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
@@ -21,15 +23,22 @@ import {
 } from '@shared/new-session'
 import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
 import { canLead, leaderBlock, type LeaderCheck } from '@shared/dispatch'
+import { promptOnCommandLine } from '@shared/agent-launch'
+import { itemBranch } from '@shared/github-board'
+import type { SessionId } from '@shared/types'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import type { AgentKind, ProjectId, SessionUi } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
 import { leaderOf } from '../state/workspace-model'
+import { setLaunch } from '../dispatch/store'
+import { submitPrompt, whenAgentReady } from '../session-io'
 import { runCreatePlan } from './creation'
 import { binaryInstalled, branchProblemText, folderFor, isElsewhere, listedAgents, planCreate, prepareText, selectedBase, tilde, uiRow, type UiRow } from './model'
-import { closeNewSessionSheet, useNewSessionSheet } from './sheet-store'
+import { closeNewSessionSheet, useNewSessionSheet, type SheetTask } from './sheet-store'
 import { SheetMenu, type SheetMenuSection } from './SheetMenu'
 import styles from './NewSessionSheet.module.css'
 
@@ -48,9 +57,102 @@ const UIS: ReadonlyArray<{ value: SessionUi; label: string }> = [
   { value: 'cli', label: 'CLI' }
 ]
 
-const WORKDIRS: ReadonlyArray<{ value: Workdir; label: string }> = [
-  { value: 'worktree', label: '新 worktree' },
-  { value: 'current', label: '当前目录' }
+const M = defineMessages({
+  zh: {
+    newWorktree: '新 worktree',
+    currentDir: '当前目录',
+    missing: '没装',
+    terminal: '终端',
+    installed: '已安装',
+    others: '其他',
+    localBranches: '本地分支',
+    inWorktree: '已在 worktree 里',
+    projectDefault: '项目默认',
+    remoteBranches: '远程分支',
+    title: '新建会话',
+    project: '项目',
+    workdir: '工作目录',
+    base: '基于',
+    elsewhere: (path: string) => `已在 worktree 里：会在 ${path} 里再开一个会话`,
+    currentBranch: (branch: string) => `${branch}（当前分支）`,
+    noBranch: '没有分支',
+    agent: '智能体',
+    ui: '界面',
+    adapter: 'GUI 适配器',
+    adapterNeeded: (binary: string) => `GUI 要先装 ${binary}`,
+    copied: '已复制',
+    copyInstall: '复制安装命令',
+    task: '任务',
+    advanced: '高级',
+    branchName: '分支名',
+    folder: '文件夹',
+    prepare: '准备',
+    nothingToPrepare: '没有 .worktreeinclude 要复制的文件，也没有 setup 脚本',
+    prepareToggle: '准备：复制被忽略的文件、运行 setup 脚本',
+    cancel: '取消',
+    createAndSend: '创建并发送',
+    create: '创建',
+    noProjects: '没有项目',
+    searchAgents: '搜索智能体',
+    noAgents: '没有匹配的智能体',
+    agentHintMissing: (n: number) => `还有 ${n} 家没装：在设置 · 智能体里看怎么装 · 按项目记住上次的选择`,
+    agentHint: '按项目记住上次的选择',
+    asLeader: '作为 leader',
+    searchBranches: '搜索分支',
+    elsewhereHint: '已在 worktree 里的分支：会改为在那个 worktree 里再开一个会话',
+    unreadable: '读不出这个文件夹的 git 状态，只能在当前目录里开',
+    notRepo: '这个文件夹不是 git 仓库，只能在当前目录里开'
+  },
+  en: {
+    newWorktree: 'New worktree',
+    currentDir: 'Current folder',
+    missing: 'Not installed',
+    terminal: 'Terminal',
+    installed: 'Installed',
+    others: 'Other',
+    localBranches: 'Local branches',
+    inWorktree: 'In a worktree',
+    projectDefault: 'Project default',
+    remoteBranches: 'Remote branches',
+    title: 'New session',
+    project: 'Project',
+    workdir: 'Folder',
+    base: 'Based on',
+    elsewhere: (path: string) => `Already in a worktree: another session opens in ${path}`,
+    currentBranch: (branch: string) => `${branch} (current branch)`,
+    noBranch: 'No branches',
+    agent: 'Agent',
+    ui: 'Interface',
+    adapter: 'GUI adapter',
+    adapterNeeded: (binary: string) => `GUI needs ${binary} first`,
+    copied: 'Copied',
+    copyInstall: 'Copy install command',
+    task: 'Task',
+    advanced: 'Advanced',
+    branchName: 'Branch name',
+    folder: 'Folder',
+    prepare: 'Prepare',
+    nothingToPrepare: 'No .worktreeinclude files to copy and no setup script',
+    prepareToggle: 'Prepare: copy ignored files, run the setup script',
+    cancel: 'Cancel',
+    createAndSend: 'Create and send',
+    create: 'Create',
+    noProjects: 'No projects',
+    searchAgents: 'Search agents',
+    noAgents: 'No matching agents',
+    agentHintMissing: (n: number) => `${n} more not installed: see Settings · Agents for how to install · remembered per project`,
+    agentHint: 'Remembered per project',
+    asLeader: 'As leader',
+    searchBranches: 'Search branches',
+    elsewhereHint: 'Branches already in a worktree: another session opens in that worktree instead',
+    unreadable: "Couldn't read this folder's git state; it can only open in the current folder",
+    notRepo: 'This folder is not a git repository; it can only open in the current folder'
+  }
+})
+
+const workdirs = (m: (typeof M)['zh']): ReadonlyArray<{ value: Workdir; label: string }> => [
+  { value: 'worktree', label: m.newWorktree },
+  { value: 'current', label: m.currentDir }
 ]
 
 /** A project's git state as main read it; 'error' when it could not be read at all. */
@@ -63,7 +165,11 @@ export function NewSessionSheet() {
 }
 
 function Sheet() {
+  const m = useMessages(M)
   const projects = useWorkspace((s) => s.projects)
+  // Read once: a sheet opened from 看板 · GitHub keeps its item while it is open.
+  const [task] = useState<SheetTask | null>(() => useNewSessionSheet.getState().task)
+  const [taskText, setTaskText] = useState(() => task?.prompt ?? '')
   const remembered = useWorkspace((s) => s.newSessionWorkdir)
   const [projectId, setProjectId] = useState<ProjectId | null>(() => useNewSessionSheet.getState().projectId ?? projects[0]?.id ?? null)
   const project = projects.find((p) => p.id === projectId) ?? null
@@ -135,17 +241,23 @@ function Sheet() {
   }, [])
 
   // A generated name per project, made once its branches are known (and kept while the sheet is open).
-  const generated = useMemo(
-    () => (info?.repo ? generateBranchName(info.prefix, new Set(info.branches.filter((b) => !b.remote).map((b) => b.name))) : ''),
-    [info]
-  )
+  // A PR whose branch is already here: checked out in a worktree, the session opens there; otherwise the new branch gets
+  // the item's name and still starts at, and tracks, the PR head (WorktreeCreateRequest.startAt).
+  const localPrBranch = task?.branch && info ? (info.branches.find((b) => !b.remote && b.name === task.branch) ?? null) : null
+  const generated = useMemo(() => {
+    if (!info?.repo) return ''
+    const taken = new Set(info.branches.filter((b) => !b.remote).map((b) => b.name))
+    if (task) return task.branch && !taken.has(task.branch) ? task.branch : itemBranch(info.prefix, task.branchFrom.kind, task.branchFrom.number, task.branchFrom.title, taken)
+    return generateBranchName(info.prefix, taken)
+  }, [info, task])
 
-  const offerLeader = leaderSetting && projectLeader === null
+  // A sheet that hands a GitHub item to a new session (`task`) makes a worktree session, not a leader.
+  const offerLeader = leaderSetting && projectLeader === null && task === null
   const leader = offerLeader && leaderOn
   // A leader runs in the main checkout as an agent that can lead here: the chosen one, else the first that can.
   const leaderKind = leaderBlock(kind, 'cli', leaderCheck) === null ? kind : (LEADER_KINDS.find((id) => leaderBlock(id, 'cli', leaderCheck) === null) ?? null)
-  const workdir: Workdir = notRepo || leader ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
-  const base = baseChoice ?? (info ? defaultBase(info) : null)
+  const workdir: Workdir = notRepo || leader ? 'current' : (workdirChoice ?? (task ? 'worktree' : initialWorkdir(remembered, projectId ?? '', true)))
+  const base = baseChoice ?? (isElsewhere(localPrBranch) ? localPrBranch.name : task?.base) ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
   const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
   const form = { workdir, base, branch, prepare }
@@ -170,6 +282,8 @@ function Sheet() {
     setUiChoice(null)
   }
 
+  const sends = task !== null && kind !== 'shell' && taskText.trim() !== ''
+
   const create = (): void => {
     if (leader) {
       if (!project || !leaderKind) return
@@ -180,8 +294,11 @@ function Sheet() {
     }
     if (!project || !result?.plan) return
     closeNewSessionSheet(false)
+    // A PR's worktree starts at the PR head main fetched; the chosen base stays what it merges into.
+    const plan = task?.startAt && result.plan.type === 'worktree' ? { ...result.plan, request: { ...result.plan.request, startAt: task.startAt } } : result.plan
     // A choice made before the git state arrived still counts; only a folder known not to be a repo is not remembered.
-    runCreatePlan(project.id, result.plan, kind, workdir, !notRepo, ui?.value ?? 'cli', ui?.forced ?? false)
+    const id = runCreatePlan(project.id, plan, kind, workdir, !notRepo, ui?.value ?? 'cli', ui?.forced ?? false)
+    if (id && task) handTask(id, task, kind, ui?.value ?? 'cli', sends ? taskText : null)
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -215,7 +332,7 @@ function Sheet() {
       const matches = (label: string): boolean => q === '' || label.toLowerCase().includes(q)
       const check = (value: AgentKind) => (value === shownKind ? <Check {...ICON} /> : null)
       const version = (id: AgentKind): string | undefined =>
-        id !== 'shell' && found && found[id] === false ? '没装' : id !== 'shell' ? (versions[id] ?? undefined) : undefined
+        id !== 'shell' && found && found[id] === false ? m.missing : id !== 'shell' ? (versions[id] ?? undefined) : undefined
       if (leader) {
         return [
           {
@@ -235,13 +352,13 @@ function Sheet() {
           icon: check(id),
           meta: version(id)
         }))
-      const others = [{ value: 'shell', label: '终端', icon: check('shell') }].filter((item) => matches(item.label))
+      const others = [{ value: 'shell', label: m.terminal, icon: check('shell') }].filter((item) => matches(item.label))
       return [
-        { title: '已安装', items: installed },
-        { title: '其他', items: others }
+        { title: m.installed, items: installed },
+        { title: m.others, items: others }
       ]
     },
-    [found, versions, shownKind, leader, leaderCheck]
+    [found, versions, shownKind, leader, leaderCheck, m]
   )
   const missingAgents = found ? CLI_AGENTS.filter((id) => !found[id]).length : 0
 
@@ -260,18 +377,18 @@ function Sheet() {
         name === base ? <Check {...ICON} /> : remote ? <Globe {...ICON} /> : other ? <GitFork {...ICON} /> : <GitBranch {...ICON} />
       return [
         {
-          title: '本地分支',
+          title: m.localBranches,
           items: groups.local.map((b) => ({
             value: b.name,
             label: b.name,
             icon: icon(b.name, false, isElsewhere(b)),
-            meta: isElsewhere(b) ? '已在 worktree 里' : b.name === info.defaultBranch ? '项目默认' : undefined
+            meta: isElsewhere(b) ? m.inWorktree : b.name === info.defaultBranch ? m.projectDefault : undefined
           }))
         },
-        { title: '远程分支', items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, true, false) })) }
+        { title: m.remoteBranches, items: groups.remote.map((b) => ({ value: b.name, label: b.name, icon: icon(b.name, true, false) })) }
       ]
     },
-    [info, base]
+    [info, base, m]
   )
 
   const hasElsewhere = info?.branches.some(isElsewhere) ?? false
@@ -293,50 +410,52 @@ function Sheet() {
       >
         <header className={styles.context}>
           <h2 id={titleId} className={styles.title}>
-            新建会话
+            {m.title}
           </h2>
+          {task && <span className={styles.subtitle}>{task.title}</span>}
         </header>
 
         <div className={styles.fields}>
-          <Field label="项目">
+          <Field label={m.project}>
             <SelectButton
-              label="项目"
+              label={m.project}
               value={project?.name ?? '—'}
+              disabled={task !== null}
               expanded={menu?.kind === 'project'}
               onClick={(anchor) => toggleMenu('project', anchor)}
             />
           </Field>
 
           {offerLeader && (
-            <div className={styles.field} role="group" aria-label="作为 leader">
+            <div className={styles.field} role="group" aria-label={m.asLeader}>
               <span className={styles.labelSpacer} />
               <span className={styles.leader}>
-                <Toggle checked={leaderOn} onChange={setLeaderOn} label="作为 leader" />
+                <Toggle checked={leaderOn} onChange={setLeaderOn} label={m.asLeader} />
                 <span className={styles.leaderText} aria-hidden>
-                  作为 leader
+                  {m.asLeader}
                 </span>
               </span>
             </div>
           )}
 
-          <Field label="工作目录" note={notRepo ? notRepoText(loaded) : null}>
+          <Field label={m.workdir} note={notRepo ? notRepoText(loaded) : null}>
             <Segmented
-              label="工作目录"
+              label={m.workdir}
               value={workdir}
-              options={WORKDIRS.map((o) => ({ ...o, disabled: o.value === 'worktree' && (notRepo || leader) }))}
+              options={workdirs(m).map((o) => ({ ...o, disabled: o.value === 'worktree' && (notRepo || leader) }))}
               onChange={setWorkdirChoice}
             />
           </Field>
 
           {!notRepo && (
             <Field
-              label="基于"
+              label={m.base}
               disabled={workdir === 'current'}
-              note={elsewhere ? `已在 worktree 里：会在 ${tilde(elsewhere.worktreePath, home)} 里再开一个会话` : null}
+              note={elsewhere ? m.elsewhere(tilde(elsewhere.worktreePath, home)) : null}
             >
               <SelectButton
-                label="基于"
-                value={workdir === 'current' ? `${info?.currentBranch ?? 'HEAD'}（当前分支）` : (base ?? (info ? '没有分支' : '…'))}
+                label={m.base}
+                value={workdir === 'current' ? m.currentBranch(info?.currentBranch ?? 'HEAD') : (base ?? (info ? m.noBranch : '…'))}
                 disabled={workdir === 'current' || !info}
                 expanded={menu?.kind === 'base'}
                 onClick={(anchor) => toggleMenu('base', anchor)}
@@ -344,14 +463,14 @@ function Sheet() {
             </Field>
           )}
 
-          <Field label="智能体">
-            <SelectButton label="智能体" value={agentName(shownKind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
+          <Field label={m.agent}>
+            <SelectButton label={m.agent} value={agentName(shownKind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
           </Field>
 
           {ui && (
-            <Field label="界面">
+            <Field label={m.ui}>
               <Segmented
-                label="界面"
+                label={m.ui}
                 value={ui.value}
                 options={UIS.map((o) => (o.value === 'gui' ? { ...o, disabled: ui.guiDisabled, title: ui.guiTitle } : o))}
                 onChange={setUiChoice}
@@ -360,9 +479,9 @@ function Sheet() {
           )}
 
           {ui?.adapter && (
-            <div className={styles.adapter} role="group" aria-label="GUI 适配器">
+            <div className={styles.adapter} role="group" aria-label={m.adapter}>
               <span className={styles.labelSpacer} />
-              <span className={styles.adapterText}>GUI 要先装 {ui.adapter.binary}</span>
+              <span className={styles.adapterText}>{m.adapterNeeded(ui.adapter.binary)}</span>
               <button
                 type="button"
                 className={styles.adapterCopy}
@@ -374,9 +493,22 @@ function Sheet() {
                     .catch(() => {})
                 }}
               >
-                {copiedInstall ? '已复制' : '复制安装命令'}
+                {copiedInstall ? m.copied : m.copyInstall}
               </button>
             </div>
+          )}
+
+          {task && (
+            <Field label={m.task}>
+              <textarea
+                className={styles.task}
+                aria-label={m.task}
+                value={taskText}
+                spellCheck={false}
+                rows={9}
+                onChange={(event) => setTaskText(event.currentTarget.value)}
+              />
+            </Field>
           )}
 
           {showAdvanced && (
@@ -387,7 +519,7 @@ function Sheet() {
               onClick={() => setAdvanced(!advancedOpen)}
               disabled={branchProblem !== null}
             >
-              <span className={styles.label}>高级</span>
+              <span className={styles.label}>{m.advanced}</span>
               {!advancedOpen && <span className={styles.advancedBranch}>{branch}</span>}
               <span className={styles.spacer} />
               {advancedOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
@@ -397,29 +529,29 @@ function Sheet() {
           {showAdvanced && advancedOpen && (
             <>
               <Field
-                label="分支名"
+                label={m.branchName}
                 error={branchProblemText(branchProblem, branch)}
               >
                 <input
                   className={styles.input}
                   data-invalid={branchProblem !== null}
                   aria-invalid={branchProblem !== null}
-                  aria-label="分支名"
+                  aria-label={m.branchName}
                   value={branch}
                   spellCheck={false}
                   autoComplete="off"
                   onChange={(event) => setBranchInput(event.currentTarget.value)}
                 />
               </Field>
-              <Field label="文件夹">
+              <Field label={m.folder}>
                 <span className={styles.path} title={folderPath}>
                   {tilde(folderPath, home)}
                 </span>
               </Field>
-              <Field label="准备">
+              <Field label={m.prepare}>
                 <div className={styles.prep}>
-                  <span className={styles.prepText}>{prepText ?? '没有 .worktreeinclude 要复制的文件，也没有 setup 脚本'}</span>
-                  {prepText && <Toggle checked={prepare} onChange={setPrepareChoice} label="准备：复制被忽略的文件、运行 setup 脚本" />}
+                  <span className={styles.prepText}>{prepText ?? m.nothingToPrepare}</span>
+                  {prepText && <Toggle checked={prepare} onChange={setPrepareChoice} label={m.prepareToggle} />}
                 </div>
               </Field>
             </>
@@ -428,10 +560,10 @@ function Sheet() {
 
         <footer className={styles.footer}>
           <button type="button" className={styles.cancel} onClick={() => closeNewSessionSheet(true)}>
-            取消
+            {m.cancel}
           </button>
           <button type="button" className={styles.primary} disabled={!canCreate} onClick={create}>
-            创建
+            {sends ? m.createAndSend : m.create}
             <span className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>
@@ -440,10 +572,10 @@ function Sheet() {
       {menu?.kind === 'project' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="项目"
+          label={m.project}
           sections={projectSections}
           selected={projectId}
-          empty="没有项目"
+          empty={m.noProjects}
           onPick={(id) => {
             chooseProject(id)
             closeMenu(true)
@@ -454,13 +586,13 @@ function Sheet() {
       {menu?.kind === 'agent' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="智能体"
+          label={m.agent}
           sections={agentSections}
           selected={shownKind}
-          {...(leader ? {} : { search: '搜索智能体' })}
-          empty="没有匹配的智能体"
+          {...(leader ? {} : { search: m.searchAgents })}
+          empty={m.noAgents}
           align="selected"
-          hint={leader ? null : missingAgents > 0 ? `还有 ${missingAgents} 家没装：在设置 · 智能体里看怎么装 · 按项目记住上次的选择` : '按项目记住上次的选择'}
+          hint={leader ? null : missingAgents > 0 ? m.agentHintMissing(missingAgents) : m.agentHint}
           onPick={(value) => {
             if (!isKindChoice(value)) return
             setKind(value)
@@ -473,11 +605,11 @@ function Sheet() {
       {menu?.kind === 'base' && (
         <SheetMenu
           anchor={menu.anchor}
-          label="基于"
+          label={m.base}
           sections={branchSections}
           selected={base}
-          search="搜索分支"
-          hint={hasElsewhere ? '已在 worktree 里的分支：会改为在那个 worktree 里再开一个会话' : null}
+          search={m.searchBranches}
+          hint={hasElsewhere ? m.elsewhereHint : null}
           onPick={(name) => {
             setBaseChoice(name)
             closeMenu(true)
@@ -489,8 +621,25 @@ function Sheet() {
   )
 }
 
+/**
+ * The new session takes the item's title and link, and its first message: on the CLI's command line or the GUI's
+ * launch where the agent has one, else typed in once the agent is ready (as 一题多解 does).
+ */
+function handTask(id: SessionId, task: SheetTask, kind: AgentKind, ui: SessionUi, text: string | null): void {
+  useWorkspace.getState().patchSession(id, { title: task.title, titleSource: 'prompt', github: task.link })
+  if (text === null || kind === 'shell') return
+  if (ui === 'gui' || promptOnCommandLine(kind)) {
+    setLaunch(id, { initialPrompt: text })
+    return
+  }
+  void whenAgentReady(id)
+    .then(() => submitPrompt(id, text))
+    .catch((error: unknown) => console.error('[new-session] the task did not reach the agent:', error))
+}
+
 function notRepoText(loaded: LoadedInfo | undefined): string {
-  return loaded === 'error' ? '读不出这个文件夹的 git 状态，只能在当前目录里开' : '这个文件夹不是 git 仓库，只能在当前目录里开'
+  const m = pick(M)
+  return loaded === 'error' ? m.unreadable : m.notRepo
 }
 
 export function Field({

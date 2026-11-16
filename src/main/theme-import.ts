@@ -4,13 +4,32 @@ import { IPC, type ThemeImportOutcome } from '@shared/ipc'
 import { hostWindowFor } from './app-windows'
 import { updateSettings } from './settings'
 import { readThemeFile, themeStartFolder, type ThemeFileFailure } from './theme-file'
+import { defineMessages, pick } from '@shared/i18n'
 
-const FAILURE_TEXT: Record<ThemeFileFailure, string> = {
-  unsupported: '这不是 Ghostty 或 iTerm 的主题文件。',
-  incomplete: '文件里缺少背景色、前景色，或 16 色调色板里的某几个颜色。',
-  'too-large': '文件太大，不像是主题文件。',
-  unreadable: '读不了这个文件。'
-}
+const M = defineMessages<{ failure: Record<ThemeFileFailure, string>; import: string; cantImport: string; ok: string }>({
+  zh: {
+    failure: {
+      unsupported: '这不是 Ghostty 或 iTerm 的主题文件。',
+      incomplete: '文件里缺少背景色、前景色，或 16 色调色板里的某几个颜色。',
+      'too-large': '文件太大，不像是主题文件。',
+      unreadable: '读不了这个文件。'
+    },
+    import: '导入',
+    cantImport: '无法导入这个主题',
+    ok: '好'
+  },
+  en: {
+    failure: {
+      unsupported: "This isn't a Ghostty or iTerm theme file.",
+      incomplete: 'The file is missing the background, the foreground, or some of the 16 palette colors.',
+      'too-large': "The file is too large to be a theme file.",
+      unreadable: "Can't read this file."
+    },
+    import: 'Import',
+    cantImport: "Can't import this theme",
+    ok: 'OK'
+  }
+})
 
 export function registerThemeImportHandler(): void {
   ipcMain.handle(IPC.settingsImportTheme, async (event): Promise<ThemeImportOutcome> => {
@@ -18,7 +37,7 @@ export function registerThemeImportHandler(): void {
     const defaultPath = themeStartFolder()
     const options = {
       properties: ['openFile', 'treatPackageAsDirectory'] as Array<'openFile' | 'treatPackageAsDirectory'>,
-      buttonLabel: '导入',
+      buttonLabel: pick(M).import,
       ...(defaultPath ? { defaultPath } : {})
     }
     const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
@@ -27,7 +46,8 @@ export function registerThemeImportHandler(): void {
 
     const result = await readThemeFile(path)
     if (!result.ok) {
-      const box = { type: 'warning' as const, message: '无法导入这个主题', detail: FAILURE_TEXT[result.reason], buttons: ['好'] }
+      const m = pick(M)
+      const box = { type: 'warning' as const, message: m.cantImport, detail: m.failure[result.reason], buttons: [m.ok] }
       if (win) await dialog.showMessageBox(win, box)
       else await dialog.showMessageBox(box)
       return { status: 'failed' }

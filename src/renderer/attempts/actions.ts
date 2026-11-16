@@ -6,6 +6,7 @@
 // message there (PRD §6.9). The user asked for exactly this by pressing the button (§2).
 import { attemptBrief, groupOfSession, memberTitle, remainingMembers, type AttemptGroup, type AttemptMemberPlan } from '@shared/attempt-groups'
 import { promptOnCommandLine } from '@shared/agent-launch'
+import { defineMessages, pick } from '@shared/i18n'
 import type { ProjectId, SessionId } from '@shared/types'
 import { archiveTargetFor, archiveWorktree } from '../archive/actions'
 import { setLaunch } from '../dispatch/store'
@@ -16,6 +17,28 @@ import { enterSession, showCompare, useOverviewStore } from '../overview/store'
 import { submitPrompt, whenAgentReady } from '../session-io'
 import { addAttemptGroup, newGroupId, setMemberLaunch, useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
+
+const M = defineMessages({
+  zh: {
+    notSent: '没能创建 worktree，没有发送',
+    confirm: (n: number) => `归档同任务多解剩下的 ${n} 份？`,
+    listSep: '、',
+    detail: (branches: string) => `${branches}\n停止它们的 agent，存下工作区（含未提交的改动）后从列表里收起；可以在跳转（⌘K）的历史里恢复。`,
+    archive: (n: number) => `归档 ${n} 份`,
+    cancel: '取消',
+    failure: (branch: string, message: string) => `${branch}：${message}`
+  },
+  en: {
+    notSent: "Couldn't create the worktree; nothing was sent",
+    confirm: (n: number) => (n === 1 ? 'Archive the 1 remaining try?' : `Archive the ${n} remaining tries?`),
+    listSep: ', ',
+    detail: (branches: string) =>
+      `${branches}\nStops their agents, saves the working tree (uncommitted changes included) and folds them out of the list; restore them from History in Jump to (⌘K).`,
+    archive: (n: number) => (n === 1 ? 'Archive 1' : `Archive ${n}`),
+    cancel: 'Cancel',
+    failure: (branch: string, message: string) => `${branch}: ${message}`
+  }
+})
 
 /** A new worktree's agent may first ask to trust the folder; the user answers in its terminal meanwhile. */
 const READY_TIMEOUT_MS = 5 * 60_000
@@ -69,7 +92,7 @@ export function runAttemptPlan(
     for (const [i, id] of ids.entries()) {
       const member = placed[i]!
       const created = await createWorktreeFor(id, member.kind, member.request)
-      if (!created) setMemberLaunch(id, { phase: 'failed', message: '没能创建 worktree，没有发送' })
+      if (!created) setMemberLaunch(id, { phase: 'failed', message: pick(M).notSent })
       else if (promptOnCommandLine(member.kind)) setMemberLaunch(id, { phase: 'sent' })
       else void deliver(id, briefFor(group, parent.title, member.request.branch))
     }
@@ -147,11 +170,12 @@ export function remainingBranches(group: AttemptGroup): Array<{ id: SessionId; b
 export async function archiveRemaining(group: AttemptGroup): Promise<{ confirmed: boolean; failures: string[] }> {
   const left = remainingBranches(group)
   if (left.length === 0) return { confirmed: false, failures: [] }
+  const t = pick(M)
   const ok = await window.tr.ui.confirm({
-    message: `归档同任务多解剩下的 ${left.length} 份？`,
-    detail: `${left.map((m) => m.branch).join('、')}\n停止它们的 agent，存下工作区（含未提交的改动）后从列表里收起；可以在跳转（⌘K）的历史里恢复。`.slice(0, 480),
-    confirmLabel: `归档 ${left.length} 份`,
-    cancelLabel: '取消'
+    message: t.confirm(left.length),
+    detail: t.detail(left.map((m) => m.branch).join(t.listSep)).slice(0, 480),
+    confirmLabel: t.archive(left.length),
+    cancelLabel: t.cancel
   })
   if (!ok) return { confirmed: false, failures: [] }
   const failures: string[] = []
@@ -160,7 +184,7 @@ export async function archiveRemaining(group: AttemptGroup): Promise<{ confirmed
     const target = session ? archiveTargetFor(session.worktreeId) : null
     if (!target) continue
     const result = await archiveWorktree(target, { ignoreScriptFailure: true }).catch((error: unknown) => ({ ok: false as const, message: message(error) }))
-    if (!result.ok) failures.push(`${branch}：${result.message}`)
+    if (!result.ok) failures.push(t.failure(branch, result.message))
   }
   return { confirmed: true, failures }
 }

@@ -16,7 +16,9 @@ import { forgetGuiSessions, requestComposerFocus } from '../gui/store'
 import { windowOf } from '../app-shell/windows-runtime'
 import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-motion'
 import { HEADER_HEIGHT } from '../app-shell/layout'
+import { PaneStrips } from '../lifecycle/PaneStrips'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
+import { useLang } from '../ui/i18n'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal, setTerminalShown } from './registry'
@@ -25,7 +27,7 @@ import { closeTerminalSearch } from './search-store'
 import { TerminalSearch } from './TerminalSearch'
 import styles from './TerminalArea.module.css'
 
-/** Where a shown terminal's card goes: its pane, header row included (Figma 55). */
+/** Where a shown terminal's pane goes: its card, header row included (Figma 55), and the session's strips under it (Figma 80). */
 export type PanePlacement = Rect
 
 interface PaneProps {
@@ -158,6 +160,8 @@ export function useTerminalHost(
 
 const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  // Memo'd: the strips and search bar inside follow the interface language.
+  useLang()
   // The overview may show this terminal in its own host for a while (borrow.ts).
   const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
   const placed = rect !== undefined
@@ -176,18 +180,21 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
   }, [everActive, held, sessionId, borrowedHost])
 
   return (
-    <div
-      className={styles.pane}
-      data-active={active}
-      data-shown={placed}
-      data-session-id={sessionId}
-      style={place(rect)}
-      onClick={() => getSurface(sessionId)?.focus()}
-      // The keyboard went into this pane's terminal (a click): its session becomes the active one (PRD F20).
-      onFocus={() => useWorkspace.getState().focusPane(sessionId)}
-    >
-      <div ref={hostRef} className={styles.host} />
-      <HeaderBlur />
+    <div className={styles.slot} data-shown={placed} data-pane-box style={place(rect)}>
+      <div
+        className={styles.pane}
+        data-active={active}
+        data-glass-card=""
+        data-shown={placed}
+        data-session-id={sessionId}
+        onClick={() => getSurface(sessionId)?.focus()}
+        // The keyboard went into this pane's terminal (a click): its session becomes the active one (PRD F20).
+        onFocus={() => useWorkspace.getState().focusPane(sessionId)}
+      >
+        <div ref={hostRef} className={styles.host} />
+        <HeaderBlur />
+      </div>
+      {placed && <PaneStrips sessionId={sessionId} active={active} />}
     </div>
   )
 }, samePaneProps)
@@ -453,17 +460,20 @@ function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: Pan
     return borrowTerminal(sessionId, host)
   }, [sessionId])
   return (
-    <div
-      className={styles.pane}
-      data-active={active}
-      data-shown
-      data-session-id={sessionId}
-      style={place(rect)}
-      onClick={() => getSurface(sessionId)?.focus()}
-      onFocus={() => useWorkspace.getState().focusPane(sessionId)}
-    >
-      <div ref={hostRef} className={styles.host} />
-      <HeaderBlur />
+    <div className={styles.slot} data-shown data-pane-box style={place(rect)}>
+      <div
+        className={styles.pane}
+        data-active={active}
+        data-glass-card=""
+        data-shown
+        data-session-id={sessionId}
+        onClick={() => getSurface(sessionId)?.focus()}
+        onFocus={() => useWorkspace.getState().focusPane(sessionId)}
+      >
+        <div ref={hostRef} className={styles.host} />
+        <HeaderBlur />
+      </div>
+      <PaneStrips sessionId={sessionId} active={active} />
     </div>
   )
 }

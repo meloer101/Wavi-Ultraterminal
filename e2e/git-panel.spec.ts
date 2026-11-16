@@ -181,10 +181,12 @@ test.describe('F17 right panel · Git', () => {
     await files.locator('[data-path="src/app.ts"] button[aria-expanded]').click()
     await expect(files.locator('[data-owner="uncommitted:src/app.ts"][data-kind="add"]')).toHaveCount(2)
     await expect(files.locator('[data-owner="uncommitted:src/app.ts"][data-kind="del"]')).toHaveCount(1)
-    // The main checkout on its base has nothing to merge (合入链路 v2): the state line says so, no exit is offered.
+    // The main checkout on its base has no branch to merge (path ①): the state line says so; its ticked files are
+    // committed right there (提交, the primary), and no exit is offered.
     await expect(panel().getByTestId('chain-headline')).toContainText('项目主目录检出的是基线分支')
-    await expect(panel().getByRole('button', { name: /合并到/ })).toHaveCount(0)
-    await expect(panel().getByRole('button', { name: '创建 PR' })).toHaveCount(0)
+    await expect(panel().getByRole('button', { name: /^提交/ })).toBeEnabled()
+    await expect(panel().getByRole('button', { name: /^合并( |$)/ })).toHaveCount(0)
+    await expect(panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
     await panel().getByRole('tab', { name: '图谱' }).click()
   })
 
@@ -203,7 +205,8 @@ test.describe('F17 right panel · Git', () => {
     await expect(files.locator('[data-group="committed"]')).toHaveCount(1)
     await files.locator('[data-path="src/mobile-nav.ts"] button[aria-expanded]').click()
     await expect(files.locator('[data-owner="committed:src/mobile-nav.ts"][data-kind="add"]')).toHaveCount(9)
-    await expect(panel().getByRole('button', { name: /合并到 main/ })).toBeVisible()
+    // No remote: 合并 (into the local main) is the only exit.
+    await expect(panel().getByRole('button', { name: /^合并( |$)/ })).toBeVisible()
     await shoot('changes')
   })
 

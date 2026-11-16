@@ -3,11 +3,49 @@
 // acts. The agent fixes and commits but never pushes: after its turn Wavi checks the brakes and pushes.
 import { brakeLabel } from '@shared/auto-fix-brakes'
 import type { FixRun, StopDecision } from '@shared/auto-fix-brakes'
+import { defineMessages, pick } from '@shared/i18n'
 import type { SavedFixRun } from '@shared/saved-runs'
 
 export type { FixRun, FixScope, StopDecision } from '@shared/auto-fix-brakes'
 import { checksLabel, type ChecksSummary, type MergeMethod, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
+
+const M = defineMessages({
+  zh: {
+    conflict: '和基线冲突',
+    checksRunning: (passed: number, total: number, pending: number) => `检查 ${passed}/${total} · ${pending} 项在跑`,
+    failsOnBase: (base: string) => `${base} 上也失败`,
+    comments: (count: number) => `${count} 条评论没解决`,
+    reviewRequired: '需要审批',
+    changesRequested: '要求修改',
+    askLine: '自动修复先停：要在这个分支修吗？',
+    askFact: '自动修复先停',
+    askQuestion: '要在这个分支修吗？',
+    fixing: (attempt: number, name: string) => `第 ${attempt} 次 · ${name} 在修`,
+    pushing: (attempt: number) => `第 ${attempt} 次 · 正在推送`,
+    waitIdle: (name: string) => `等 ${name} 空闲`,
+    waitCi: (attempt: number) => `第 ${attempt} 次 · 等 CI`,
+    queued: '排队中',
+    autoMerge: (method: string) => `检查通过后由 GitHub 合并（${method}）`
+  },
+  en: {
+    conflict: 'Conflicts with base',
+    checksRunning: (passed: number, total: number, pending: number) => `Checks ${passed}/${total} · ${pending} running`,
+    failsOnBase: (base: string) => `fails on ${base} too`,
+    comments: (count: number) => (count === 1 ? '1 unresolved comment' : `${count} unresolved comments`),
+    reviewRequired: 'Review required',
+    changesRequested: 'Changes requested',
+    askLine: 'Auto-fix paused: fix it on this branch?',
+    askFact: 'Auto-fix paused',
+    askQuestion: 'Fix it on this branch?',
+    fixing: (attempt: number, name: string) => `Attempt ${attempt} · ${name} fixing`,
+    pushing: (attempt: number) => `Attempt ${attempt} · pushing`,
+    waitIdle: (name: string) => `Waiting for ${name} to be idle`,
+    waitCi: (attempt: number) => `Attempt ${attempt} · waiting for CI`,
+    queued: 'In merge queue',
+    autoMerge: (method: string) => `GitHub merges once checks pass (${method})`
+  }
+})
 
 /**
  * One PR's (number > 0) or one worktree's base push's (number 0) automation in this window. The switches and counts are
@@ -180,7 +218,7 @@ export type BaseFixDecision =
   | { kind: 'stop'; reason: string }
 
 /**
- * The same for the base after 合并到 main 并推送: its CI failed. Sends once per commit + failing checks, waits while the
+ * The same for the base after 推送 of the base: its CI failed. Sends once per commit + failing checks, waits while the
  * agent is busy or while the CI still shows the commit before Wavi's last pushed fix, and stops after `max` sends.
  */
 export function baseFixDecision(state: PrAutomation, input: { ci: BaseCi | undefined; agentIdle: boolean; max: number }): BaseFixDecision {
@@ -228,7 +266,9 @@ export function fixNote(text: string | null, maxLines = 3, maxChars = 240): stri
 }
 
 /** The PR line's fact for GitHub's merge state dirty. */
-export const PR_CONFLICT_FACT = '和基线冲突'
+export function prConflictFact(): string {
+  return pick(M).conflict
+}
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
 
@@ -240,7 +280,7 @@ export function mergeWhenGreenOn(status: Pick<PrStatus, 'pr'>): boolean {
 
 /** "检查 2/3 · 1 项在跑", "检查通过 3/3", "2 项检查失败：test、lint", "没有检查" (Figma 29I). */
 export function prChecksText(checks: ChecksSummary): string {
-  return checks.state === 'pending' ? `检查 ${checks.passed}/${checks.total} · ${checks.pending} 项在跑` : checksLabel(checks)
+  return checks.state === 'pending' ? pick(M).checksRunning(checks.passed, checks.total, checks.pending) : checksLabel(checks)
 }
 
 /**
@@ -254,18 +294,19 @@ export function prLineParts(
   comments: number,
   base?: { name: string; checks: readonly string[] }
 ): { parts: string[]; checks: number } {
+  const m = pick(M)
   const live = pr.state === 'open' || pr.state === 'draft'
   const parts = [`PR #${pr.number}`, stateLabel]
   if (!live) return { parts, checks: -1 }
   parts.push(prChecksText(pr.checks))
   const failing = pr.checks.state === 'failing' ? pr.checks.failing.map((c) => c.name) : []
-  if (base && failing.length > 0 && failing.every((name) => base.checks.includes(name))) parts.push(`${base.name} 上也失败`)
-  if (comments > 0) parts.push(`${comments} 条评论没解决`)
+  if (base && failing.length > 0 && failing.every((name) => base.checks.includes(name))) parts.push(m.failsOnBase(base.name))
+  if (comments > 0) parts.push(m.comments(comments))
   const details = pr.details
   if (details) {
-    if (details.reviewDecision === 'review-required') parts.push('需要审批')
-    else if (details.reviewDecision === 'changes-requested') parts.push('要求修改')
-    if (details.mergeState === 'dirty') parts.push(PR_CONFLICT_FACT)
+    if (details.reviewDecision === 'review-required') parts.push(m.reviewRequired)
+    else if (details.reviewDecision === 'changes-requested') parts.push(m.changesRequested)
+    if (details.mergeState === 'dirty') parts.push(m.conflict)
   }
   return { parts, checks: 2 }
 }
@@ -283,7 +324,8 @@ export function prHeadline(
 ): { headline: string; facts: string[] } {
   const { parts, checks } = prLineParts(pr, stateLabel, comments, base)
   if (checks < 0 || pr.checks.state === 'none') return { headline: stateLabel, facts: parts.slice(checks < 0 ? 2 : 3) }
-  const failsOnBase = base ? parts[checks + 1] === `${base.name} 上也失败` : false
+  // The parts were just built in the current language: the same words mark the part.
+  const failsOnBase = base ? parts[checks + 1] === pick(M).failsOnBase(base.name) : false
   const end = checks + (failsOnBase ? 2 : 1)
   return { headline: parts.slice(checks, end).join(' · '), facts: [...(pr.state === 'draft' ? [stateLabel] : []), ...parts.slice(end)] }
 }
@@ -301,7 +343,7 @@ export function baseBrokenChecks(state: PrAutomation | undefined): string[] {
 
 /** The stopped row's words (Figma 29G / 29J): the brake's reason, or for the base failing already the question its buttons answer. */
 export function stopLineText(decision: StopDecision, attempts?: number): string {
-  return decision.kind === 'ask' ? '自动修复先停：要在这个分支修吗？' : brakeLabel(decision, attempts)
+  return decision.kind === 'ask' ? pick(M).askLine : brakeLabel(decision, attempts)
 }
 
 /**
@@ -309,7 +351,7 @@ export function stopLineText(decision: StopDecision, attempts?: number): string 
  * whose reason is the question) and the words on the decision surface next to the answers.
  */
 export function stopParts(decision: StopDecision, attempts?: number): { fact: string | null; question: string } {
-  return decision.kind === 'ask' ? { fact: '自动修复先停', question: '要在这个分支修吗？' } : { fact: null, question: brakeLabel(decision, attempts) }
+  return decision.kind === 'ask' ? { fact: pick(M).askFact, question: pick(M).askQuestion } : { fact: null, question: brakeLabel(decision, attempts) }
 }
 
 export interface AgentWords {
@@ -323,8 +365,8 @@ export interface AgentWords {
 
 /** What the run in flight says, shared by the PR and base rows; null when no run is going. */
 function runText(state: PrAutomation, name: string): string | null {
-  if (state.run?.kind === 'fixing') return `第 ${state.attempts} 次 · ${name} 在修`
-  if (state.run?.kind === 'pushing') return `第 ${state.attempts} 次 · 正在推送`
+  if (state.run?.kind === 'fixing') return pick(M).fixing(state.attempts, name)
+  if (state.run?.kind === 'pushing') return pick(M).pushing(state.attempts)
   return null
 }
 
@@ -341,12 +383,12 @@ export function automationText(state: PrAutomation | undefined, status: Pick<PrS
   if (state?.autoFix && pr) {
     const running = runText(state, name)
     if (running) parts.push(running)
-    else if (agent.wants && !agent.idle) parts.push(`等 ${name} 空闲`)
-    else if (state.attempts > 0) parts.push(`第 ${state.attempts} 次 · 等 CI`)
+    else if (agent.wants && !agent.idle) parts.push(pick(M).waitIdle(name))
+    else if (state.attempts > 0) parts.push(pick(M).waitCi(state.attempts))
   }
   const details = pr?.details
-  if (details?.inMergeQueue) parts.push('排队中')
-  else if (details?.autoMerge) parts.push(`检查通过后由 GitHub 合并（${METHOD_LABEL[details.autoMerge]}）`)
+  if (details?.inMergeQueue) parts.push(pick(M).queued)
+  else if (details?.autoMerge) parts.push(pick(M).autoMerge(METHOD_LABEL[details.autoMerge]))
   else if (state?.mergeNote) return { text: state.mergeNote, tone: 'attention' }
   return { text: parts.join(' · '), tone: 'muted' }
 }
@@ -359,7 +401,7 @@ export function baseAutomationText(state: PrAutomation | undefined, agent: Agent
   if (!state.autoFix) return { text: '', tone: 'muted' }
   const running = runText(state, name)
   if (running) return { text: running, tone: 'muted' }
-  if (agent.wants && !agent.idle) return { text: `等 ${name} 空闲`, tone: 'muted' }
-  if (state.attempts > 0) return { text: `第 ${state.attempts} 次 · 等 CI`, tone: 'muted' }
+  if (agent.wants && !agent.idle) return { text: pick(M).waitIdle(name), tone: 'muted' }
+  if (state.attempts > 0) return { text: pick(M).waitCi(state.attempts), tone: 'muted' }
   return { text: '', tone: 'muted' }
 }

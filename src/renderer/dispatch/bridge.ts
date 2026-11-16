@@ -39,7 +39,7 @@ export function startDispatchBridge(): () => void {
   })
   // 同任务多解's members report through the same channels (attempts/report.ts).
   const offAttempts = startAttemptReports()
-  // A leader's `wavi tell` is answered when the user sends a line in its terminal (PRD F21 v1.178 · 交给用户).
+  // A leader's `wavi tell` is answered when the user sends a line in its terminal (PRD F21 v1.198 · 交给用户).
   const offSubmits = onUserSubmit((id) => setTell(id, null))
   // A leader closed or no longer the leader (its project's `leaderSessions` entry gone or changed) leaves nothing behind.
   const offLeaders = useWorkspace.subscribe((s, prev) => {

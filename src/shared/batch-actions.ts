@@ -1,8 +1,58 @@
-// 总览批量操作 (PRD F9 v1.59): sessions picked with ⌘ / ⇧ in the overview get the same message, are stopped or are
+// 看板批量操作 (PRD F9 v1.59): sessions picked with ⌘ / ⇧ in the overview get the same message, are stopped or are
 // closed together. Pure: which picked sessions each action reaches and why the others are skipped, the bar's button
 // labels and the confirmation that names what will be sent and to whom (PRD §2 — nothing is sent before it).
+import { defineMessages, pick } from './i18n'
 import type { ConfirmOptions } from './lifecycle'
 import type { AgentKind, AgentPhase, SessionId, SessionStatus } from './types'
+
+const M = defineMessages({
+  zh: {
+    notAgent: '终端不是 agent',
+    exited: '已退出',
+    notRunning: '没在运行',
+    sendTo: (n: number) => (n > 0 ? `发送给 ${n} 个…` : '发送给 0 个'),
+    stopN: (n: number) => `停止 ${n} 个`,
+    closeN: (n: number) => `关闭 ${n} 个`,
+    reasonTitles: (reason: string, titles: readonly string[]) => `${reason}（${titles.join('、')}）`,
+    skipped: (n: number, parts: readonly string[]) => `跳过 ${n} 个：${parts.join('；')}`,
+    recipients: (action: BatchAction, titles: readonly string[]) => `${action === 'send' ? '发给' : action === 'stop' ? '停止' : '关闭'}：${titles.join('、')}`,
+    sendMessage: (n: number) => `把这段话发给 ${n} 个会话并按回车？`,
+    sendQuota: '每个会话各算一轮，用你自己的额度。',
+    sendConfirm: (n: number) => `发送给 ${n} 个`,
+    cancel: '取消',
+    stopMessage: (n: number) => `停止 ${n} 个会话正在做的这一轮？`,
+    stopDetail: '向每个 agent 发送一次 Esc，和在终端里按 Esc 一样；会话和对话都还在。',
+    closeMessage: (n: number) => `关闭 ${n} 个会话？`,
+    closeActive: (n: number) => `其中 ${n} 个正在运行或等你处理，关闭会中断它们。`,
+    closeKeeps: 'worktree 和分支都留着。',
+    result: (action: BatchAction, done: number) => `${action === 'send' ? '已发送给' : action === 'stop' ? '已停止' : '已关闭'} ${done} 个`,
+    failed: (head: string, action: BatchAction, failures: ReadonlyArray<{ title: string; message: string }>) =>
+      `${head}，${failures.length} 个${action === 'send' ? '没发出去' : action === 'stop' ? '没停下' : '没关掉'}：${failures.map((f) => `${f.title}（${f.message}）`).join('；')}`
+  },
+  en: {
+    notAgent: 'Terminal, not an agent',
+    exited: 'Exited',
+    notRunning: 'Not running',
+    sendTo: (n: number) => (n > 0 ? `Send to ${n}…` : 'Send to 0'),
+    stopN: (n: number) => `Stop ${n}`,
+    closeN: (n: number) => `Close ${n}`,
+    reasonTitles: (reason: string, titles: readonly string[]) => `${reason} (${titles.join(', ')})`,
+    skipped: (n: number, parts: readonly string[]) => `Skipping ${n}: ${parts.join('; ')}`,
+    recipients: (action: BatchAction, titles: readonly string[]) => `${action === 'send' ? 'To' : action === 'stop' ? 'Stop' : 'Close'}: ${titles.join(', ')}`,
+    sendMessage: (n: number) => (n === 1 ? 'Send this to 1 session and press Return?' : `Send this to ${n} sessions and press Return?`),
+    sendQuota: 'Each session counts as a turn, on your own usage.',
+    sendConfirm: (n: number) => `Send to ${n}`,
+    cancel: 'Cancel',
+    stopMessage: (n: number) => (n === 1 ? "Stop 1 session's current turn?" : `Stop the current turn of ${n} sessions?`),
+    stopDetail: 'Sends Esc to each agent once, the same as pressing Esc in the terminal; the sessions and their conversations stay.',
+    closeMessage: (n: number) => (n === 1 ? 'Close 1 session?' : `Close ${n} sessions?`),
+    closeActive: (n: number) => `${n} of them ${n === 1 ? 'is' : 'are'} running or need${n === 1 ? 's' : ''} you; closing interrupts ${n === 1 ? 'it' : 'them'}.`,
+    closeKeeps: 'Worktrees and branches stay.',
+    result: (action: BatchAction, done: number) => `${action === 'send' ? 'Sent to' : action === 'stop' ? 'Stopped' : 'Closed'} ${done}`,
+    failed: (head: string, action: BatchAction, failures: ReadonlyArray<{ title: string; message: string }>) =>
+      `${head}; ${failures.length} ${action === 'send' ? 'not sent' : action === 'stop' ? 'not stopped' : 'not closed'}: ${failures.map((f) => `${f.title} (${f.message})`).join('; ')}`
+  }
+})
 
 export type BatchAction = 'send' | 'stop' | 'close'
 
@@ -31,13 +81,14 @@ const exited = (c: BatchCandidate): boolean => c.status === 'exited' || c.phase 
 
 /** Why `action` does not reach this session, or null when it does. */
 function skipReason(action: BatchAction, c: BatchCandidate): string | null {
+  const m = pick(M)
   switch (action) {
     case 'send':
-      if (!isAgent(c)) return '终端不是 agent'
-      return exited(c) ? '已退出' : null
+      if (!isAgent(c)) return m.notAgent
+      return exited(c) ? m.exited : null
     case 'stop':
-      if (!isAgent(c)) return '终端不是 agent'
-      return c.status === 'running' ? null : '没在运行'
+      if (!isAgent(c)) return m.notAgent
+      return c.status === 'running' ? null : m.notRunning
     case 'close':
       return null
   }
@@ -56,13 +107,14 @@ export function batchPlan(action: BatchAction, candidates: readonly BatchCandida
 
 /** The bar's buttons: what they do and to how many (0 = disabled). */
 export function batchButtonLabel(action: BatchAction, count: number): string {
+  const m = pick(M)
   switch (action) {
     case 'send':
-      return count > 0 ? `发送给 ${count} 个…` : '发送给 0 个'
+      return m.sendTo(count)
     case 'stop':
-      return `停止 ${count} 个`
+      return m.stopN(count)
     case 'close':
-      return `关闭 ${count} 个`
+      return m.closeN(count)
   }
 }
 
@@ -71,13 +123,14 @@ export function skippedText(plan: BatchPlan): string | null {
   if (plan.skipped.length === 0) return null
   const byReason = new Map<string, string[]>()
   for (const { candidate, reason } of plan.skipped) byReason.set(reason, [...(byReason.get(reason) ?? []), candidate.title])
-  const parts = [...byReason].map(([reason, titles]) => `${reason}（${titles.join('、')}）`)
-  return `跳过 ${plan.skipped.length} 个：${parts.join('；')}`
+  const m = pick(M)
+  const parts = [...byReason].map(([reason, titles]) => m.reasonTitles(reason, titles))
+  return m.skipped(plan.skipped.length, parts)
 }
 
 /** `发给：登录页、登录页 2、修复测试` — the recipients by name, as the bar and the confirmation list them. */
 export function recipientsLine(plan: BatchPlan): string {
-  return `${plan.action === 'send' ? '发给' : plan.action === 'stop' ? '停止' : '关闭'}：${plan.targets.map((t) => t.title).join('、')}`
+  return pick(M).recipients(plan.action, plan.targets.map((t) => t.title))
 }
 
 function preview(text: string): string {
@@ -99,32 +152,29 @@ export function batchConfirmation(plan: BatchPlan, text = ''): ConfirmOptions | 
   if (n === 0) return null
   const skipped = skippedText(plan)
   const lines = (...parts: Array<string | null>): string => clip(parts.filter((p): p is string => p !== null).join('\n'))
+  const m = pick(M)
   switch (plan.action) {
     case 'send':
       return {
-        message: clip(`把这段话发给 ${n} 个会话并按回车？`),
-        detail: lines(`“${preview(text)}”`, '', recipientsLine(plan), '每个会话各算一轮，用你自己的额度。', skipped),
-        confirmLabel: `发送给 ${n} 个`,
-        cancelLabel: '取消'
+        message: clip(m.sendMessage(n)),
+        detail: lines(`“${preview(text)}”`, '', recipientsLine(plan), m.sendQuota, skipped),
+        confirmLabel: m.sendConfirm(n),
+        cancelLabel: m.cancel
       }
     case 'stop':
       return {
-        message: `停止 ${n} 个会话正在做的这一轮？`,
-        detail: lines('向每个 agent 发送一次 Esc，和在终端里按 Esc 一样；会话和对话都还在。', recipientsLine(plan), skipped),
-        confirmLabel: `停止 ${n} 个`,
-        cancelLabel: '取消'
+        message: m.stopMessage(n),
+        detail: lines(m.stopDetail, recipientsLine(plan), skipped),
+        confirmLabel: m.stopN(n),
+        cancelLabel: m.cancel
       }
     case 'close': {
       const active = plan.targets.filter((t) => t.status === 'running' || t.status === 'needs_you').length
       return {
-        message: `关闭 ${n} 个会话？`,
-        detail: lines(
-          active > 0 ? `其中 ${active} 个正在运行或等你处理，关闭会中断它们。` : null,
-          'worktree 和分支都留着。',
-          recipientsLine(plan)
-        ),
-        confirmLabel: `关闭 ${n} 个`,
-        cancelLabel: '取消',
+        message: m.closeMessage(n),
+        detail: lines(active > 0 ? m.closeActive(active) : null, m.closeKeeps, recipientsLine(plan)),
+        confirmLabel: m.closeN(n),
+        cancelLabel: m.cancel,
         destructive: true
       }
     }
@@ -133,11 +183,10 @@ export function batchConfirmation(plan: BatchPlan, text = ''): ConfirmOptions | 
 
 /** After the action: `已发送给 3 个` / `已发送给 2 个，1 个没发出去：修复登录（终端里有确认框…）`. */
 export function batchResultText(action: BatchAction, done: number, failures: ReadonlyArray<{ title: string; message: string }>): string {
-  const verb = action === 'send' ? '已发送给' : action === 'stop' ? '已停止' : '已关闭'
-  const head = `${verb} ${done} 个`
+  const m = pick(M)
+  const head = m.result(action, done)
   if (failures.length === 0) return head
-  const what = action === 'send' ? '没发出去' : action === 'stop' ? '没停下' : '没关掉'
-  return `${head}，${failures.length} 个${what}：${failures.map((f) => `${f.title}（${f.message}）`).join('；')}`
+  return m.failed(head, action, failures)
 }
 
 /** ⇧-click: the ids between the anchor and the clicked one, in drawn order (just the clicked one without an anchor). */

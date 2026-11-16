@@ -49,6 +49,7 @@ export const SIM_SCREEN = {
   idle: '╭──────────╮\n│ ❯        │\n╰──────────╯\n  ? for shortcuts',
   busy: '✻ Working… (12s · esc to interrupt)\n╭──────────╮\n│ ❯        │\n╰──────────╯',
   dialog: 'Bash command\n  pnpm test\nDo you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel',
+  // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
   question: '☐ 用哪个库？\n❯ 1. zod\n  2. valibot\n\nEnter to select · Esc to cancel',
   codexIdle: '›',
   codexBusy: '• Working (3s • esc to interrupt)\n›',
@@ -281,6 +282,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
     }
     if (!cancelled()) {
       yield { sleep: between(200, 2_000) }
+      // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
       hook('SubagentStop', { agent_id: agentId, agent_type: 'general-purpose', stop_hook_active: false, last_assistant_message: '完成' })
     }
     done()
@@ -317,10 +319,12 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
     mainBusy = true
     errorShown = false
     frame++
+    // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
     if (claude) hook('UserPromptSubmit', { prompt: system ? '<task-notification>' : '改一下', ...(system ? { source: 'system' } : {}) })
     else {
       if (!codexStarted) hook('SessionStart', { source: 'startup' })
       codexStarted = true
+      // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
       hook('UserPromptSubmit', { prompt: '改一下' })
     }
     show(system ? 'woken by a background agent' : 'prompt')
@@ -334,6 +338,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
         if ((yield* parallelAsks()) === 'aborted') return
       } else if (claude && r < 0.09) {
         features.add('question')
+        // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
         const q = call('AskUserQuestion', { questions: [{ question: '用哪个库？', header: '库', multiSelect: false, options: [{ label: 'zod' }, { label: 'valibot' }] }] })
         hook('PreToolUse', q)
         hook('PermissionRequest', request(q))
@@ -342,6 +347,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
         hook('PostToolUse', { ...q, tool_response: { answers: { 用哪个库: 'zod' } } })
       } else if (claude && r < 0.11) {
         features.add('plan')
+        // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
         const p = call('ExitPlanMode', { plan: '1. 改 a\n2. 改 b' })
         hook('PreToolUse', p)
         hook('PermissionRequest', request(p))
@@ -351,15 +357,18 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
       } else if (claude && r < 0.19) {
         // Foreground Task: subagents in parallel; the main thread waits for all of them.
         features.add('subagents')
+        // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
         const task = call('Task', { description: '并行调查', prompt: '…', subagent_type: 'general-purpose' })
         hook('PreToolUse', task)
         let running = between(1, 3)
         for (let k = running; k > 0; k--) resume(subagent(`agent-${seed}-${agentNo++}`, between(1, 4), true, () => (running -= 1)))
         while (running > 0 && live()) yield { sleep: 250 }
         if (!live()) return
+        // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
         hook('PostToolUse', { ...task, tool_response: { content: [{ type: 'text', text: '完成' }] } })
       } else if (claude && r < 0.23) {
         features.add('background-agent')
+        // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
         const task = call('Task', { description: '后台检查', prompt: '…', subagent_type: 'general-purpose', run_in_background: true })
         hook('PreToolUse', task)
         yield { sleep: between(30, 200) }
@@ -402,6 +411,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
       // A failed model request: Codex sends nothing at all.
       features.add('failed-request')
     } else {
+      // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
       hook('Stop', { stop_hook_active: false, last_assistant_message: '改好了。', ...(claude ? { background_tasks: [], session_crons: [] } : {}) })
     }
     mainBusy = false
@@ -413,6 +423,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
   /** Agent teams: a teammate asks the idle lead for permission (no PermissionRequest in the lead; PRD §6.6). */
   function* teammate(name: string): Actor {
     features.add('team')
+    // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
     hook('TaskCreated', { task_id: `t${callNo}`, task_subject: '复查', task_description: '…', teammate_name: name, team_name: 'sim' })
     yield { sleep: between(2_000, 20_000) }
     if (mainBusy) return
@@ -420,6 +431,7 @@ export function simulateSession(seed: number, options: SimOptions): SimScript {
     yield { ask: { kind: 'permission', decision: chance(0.85) ? 'approve' : 'deny', main: false } }
     yield { sleep: between(1_000, 10_000) }
     hook('TeammateIdle', { teammate_name: name, team_name: 'sim' })
+    // eslint-disable-next-line no-restricted-syntax -- simulated agent and user text (agent output), not UI
     hook('TaskCompleted', { task_id: `t${callNo}`, task_subject: '复查', teammate_name: name, team_name: 'sim' })
   }
 

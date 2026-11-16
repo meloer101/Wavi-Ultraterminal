@@ -41,7 +41,7 @@ struct NewSessionView: View {
         Picker("项目", selection: $project) {
           ForEach(model.sessions.projects) { Text($0.name).tag(Optional($0.id)) }
         }
-        if let error { Notice(tone: .danger, message: "没有建成：\(error)").listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
+        if let error { Notice(tone: .danger, message: String(localized: "没有建成：\(error)")).listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
         if let loadError { Text(loadError).foregroundStyle(Color.noticeDanger) }
         if let data {
           Section {
@@ -51,7 +51,7 @@ struct NewSessionView: View {
             }
             .pickerStyle(.segmented)
             .disabled(!data.info.repo)
-            if !data.info.repo { LabeledContent("工作目录", value: "不是 git 仓库，只能在当前目录") }
+            if !data.info.repo { LabeledContent("工作目录", value: String(localized: "不是 git 仓库，只能在当前目录")) }
             if workdir == "worktree" {
               Picker("基于", selection: $base) {
                 let local = data.info.branches.filter { !$0.remote }
@@ -121,7 +121,7 @@ struct NewSessionView: View {
     if models == nil {
       LabeledContent("模型") { Spinner(color: .textSecondary) }.accessibilityLabel("正在读取模型")
     } else if let models, models.models.isEmpty, models.gui == true {
-      LabeledContent("模型", value: "默认")
+      LabeledContent("模型", value: String(localized: "默认"))
     } else if let models, !models.models.isEmpty {
       LabeledContent("模型") {
         Menu {
@@ -131,7 +131,7 @@ struct NewSessionView: View {
           }
         } label: {
           HStack(spacing: 8) {
-            Text(models.models.first { $0.value == pickedModel }?.label ?? "默认")
+            Text(models.models.first { $0.value == pickedModel }?.label ?? String(localized: "默认"))
             Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)).foregroundStyle(Color.textSecondary)
           }
           .foregroundStyle(Color.textPrimary)
@@ -147,8 +147,8 @@ struct NewSessionView: View {
 
   /// Empty or already a local branch; anything else git refuses comes back from the Mac.
   private func branchProblem(_ data: Info) -> String? {
-    if branch.trimmingCharacters(in: .whitespaces).isEmpty { return "要填分支名" }
-    return data.info.branches.contains { !$0.remote && $0.name == branch } ? "已经有这个分支" : nil
+    if branch.trimmingCharacters(in: .whitespaces).isEmpty { return String(localized: "要填分支名") }
+    return data.info.branches.contains { !$0.remote && $0.name == branch } ? String(localized: "已经有这个分支") : nil
   }
 
   private func load() async {
@@ -157,7 +157,7 @@ struct NewSessionView: View {
     loadError = nil
     let result = await model.call(.newSessionInfo(project: project))
     guard let next = result.decode(Info.self) else {
-      loadError = result.error ?? "没有读到这个项目"
+      loadError = result.error ?? String(localized: "没有读到这个项目")
       return
     }
     data = next

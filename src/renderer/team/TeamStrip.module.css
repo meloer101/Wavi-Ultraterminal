@@ -1,0 +1,253 @@
+/*
+ * Figma 83′C / 83″B TeamStrip: under the lead's terminal like the other strips (DispatchStrip's card). The head is one
+ * row of 28; open, lanes of 46 — a 210 column of who (glyph · name · model / what now), then the time axis, now at
+ * its right edge. More than six lanes scroll; the axis labels stay below them.
+ */
+.strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  -webkit-app-region: no-drag;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  color: var(--text-primary);
+}
+
+.title {
+  font: var(--text-body-strong);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.count svg {
+  width: 12px;
+  height: 12px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.ask {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--status-attention);
+}
+
+.button {
+  flex: none;
+  height: 20px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font: var(--text-caption);
+  cursor: default;
+}
+
+.button:hover {
+  background: var(--bg-selected);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.lanes {
+  /* The who column (Figma 83″B): glyph · name · model over what now. */
+  --who-width: 210px;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--space-8);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: var(--who-width) minmax(0, 1fr);
+  column-gap: var(--space-20);
+  max-height: calc(6 * 46px);
+  overflow-y: auto;
+}
+
+.names {
+  display: flex;
+  flex-direction: column;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 46px;
+  min-width: 0;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 18px;
+  min-width: 0;
+}
+
+.glyph {
+  display: flex;
+  flex: none;
+}
+
+.glyph svg {
+  width: 12px;
+  height: 12px;
+}
+
+.name {
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.progress {
+  overflow: hidden;
+  padding-left: calc(var(--space-12) + var(--space-6));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.progress[data-attention='true'] {
+  color: var(--status-attention);
+}
+
+.axis {
+  position: relative;
+  min-width: 0;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.baseline {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+.now {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.bar {
+  fill: var(--text-secondary);
+}
+
+.bar[data-kind='working'] {
+  fill: var(--status-working);
+}
+
+.bar[data-kind='asking'] {
+  fill: var(--status-attention);
+}
+
+.arrow {
+  fill: var(--text-secondary);
+  stroke: var(--text-secondary);
+}
+
+.arrow path {
+  fill: none;
+  stroke-width: 1;
+}
+
+.arrow circle {
+  stroke: none;
+}
+
+.arrow[data-latest='true'] {
+  fill: var(--text-primary);
+  stroke: var(--text-primary);
+}
+
+.label {
+  position: absolute;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.label[data-latest='true'] {
+  color: var(--text-primary);
+}
+
+.ticks {
+  position: relative;
+  height: 16px;
+  margin-top: var(--space-4);
+  margin-left: calc(var(--who-width) + var(--space-20));
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.ticks > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.ticks > span[data-edge='start'] {
+  transform: none;
+}
+
+.ticks > span[data-edge='end'] {
+  transform: translateX(-100%);
+}

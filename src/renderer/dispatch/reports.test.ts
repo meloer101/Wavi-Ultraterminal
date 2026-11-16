@@ -26,7 +26,7 @@ vi.mock('../conflict-radar/store', () => ({ markFor: () => null, useRadar: { get
 
 const session = (id: string, over: Partial<Session> = {}): Session => ({ id, worktreeId: 'w1', kind: 'claude', title: id, status: 'running', startedAt: 1, lastActivityAt: 1, ...over })
 
-describe('a leader’s turn that a report woke (PRD F21 v1.178 · 交给用户)', () => {
+describe('a leader’s turn that a report woke (PRD F21 v1.198 · 交给用户)', () => {
   beforeEach(() => {
     leaderSessions = { p1: 'lead' }
     forgetTyping('lead')
@@ -68,7 +68,7 @@ describe('a leader’s turn that a report woke (PRD F21 v1.178 · 交给用户)'
   })
 })
 
-describe('last messages (PRD F21 v1.178 · 看)', () => {
+describe('last messages (PRD F21 v1.198 · 看)', () => {
   let emit: ((envelope: AgentEventEnvelope) => void) | null = null
   beforeEach(() => {
     vi.stubGlobal('window', { setTimeout, clearTimeout, tr: { agent: { onEvent: (listener: (e: AgentEventEnvelope) => void) => ((emit = listener), () => {}) } } })
@@ -89,7 +89,7 @@ describe('last messages (PRD F21 v1.178 · 看)', () => {
   })
 })
 
-describe('when a report woke a leader (PRD F21 v1.178 · 交给用户)', () => {
+describe('when a report woke a leader (PRD F21 v1.198 · 交给用户)', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()

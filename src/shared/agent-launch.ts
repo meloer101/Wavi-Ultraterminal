@@ -50,7 +50,7 @@ export interface AgentLaunchOptions {
   model?: string
   /**
    * A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming, and
-   * when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.178).
+   * when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.198).
    */
   permission?: CliPermission
   /**

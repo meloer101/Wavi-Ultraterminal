@@ -6,6 +6,7 @@ import type { AgentMarker } from '@shared/agent-launch'
 import { askKindOf, healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
 import { needsAttention, STATUS_LABEL } from '@shared/session-status'
 import type { AgentPhase, Session, SessionId, SessionStatus, WaviAskKind } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 
 export interface StatusPatch {
   status: SessionStatus
@@ -78,12 +79,14 @@ export const OVERVIEW_TAG = 'overview'
 /** Turns that finish within this window share one notification (PRD F10). */
 export const DONE_COALESCE_MS = 1_000
 
-/** Statuses that interrupt the user when they are not already looking. */
-const NOTIFY_BODY: Partial<Record<SessionStatus, string>> = {
-  needs_you: STATUS_LABEL.needs_you,
-  error: STATUS_LABEL.error,
-  done_unread: STATUS_LABEL.done_unread
-}
+/** Statuses that interrupt the user when they are not already looking; the label is read when it is shown. */
+const NOTIFY_STATUSES: ReadonlySet<SessionStatus> = new Set(['needs_you', 'error', 'done_unread'])
+const notifyBody = (status: SessionStatus): string | undefined => (NOTIFY_STATUSES.has(status) ? STATUS_LABEL[status] : undefined)
+
+const M = defineMessages({
+  zh: { done: (n: number) => `${n} 个会话已完成`, listSep: '、' },
+  en: { done: (n: number) => `${n} sessions done`, listSep: ', ' }
+})
 
 export class StatusController {
   private readonly states = new Map<SessionId, SessionState>()
@@ -362,7 +365,7 @@ export class StatusController {
   }
 
   private maybeNotify(id: SessionId, state: SessionState): void {
-    if (!NOTIFY_BODY[state.status]) return
+    if (!notifyBody(state.status)) return
     // Never interrupt for the session the user is looking at.
     if (this.isLookedAt(id)) return
     if (state.status !== 'done_unread') {
@@ -385,7 +388,8 @@ export class StatusController {
       return
     }
     const titles = ids.map((id) => this.titleOf(id))
-    this.deps.notify({ title: `${ids.length} 个会话已完成`, body: titles.join('、'), tag: OVERVIEW_TAG })
+    const m = pick(M)
+    this.deps.notify({ title: m.done(ids.length), body: titles.join(m.listSep), tag: OVERVIEW_TAG })
   }
 
   private isLookedAt(id: SessionId): boolean {
@@ -401,7 +405,7 @@ export class StatusController {
 
   /** Body: the question or command being asked, the error, or the last reply. */
   private single(id: SessionId, state: SessionState): { title: string; body: string; tag: string } {
-    const label = NOTIFY_BODY[state.status] ?? ''
+    const label = notifyBody(state.status) ?? ''
     const detail = state.status === 'done_unread' ? state.lastReply : state.currentAction
     return { title: this.titleOf(id), body: detail ? `${label} · ${detail}` : label, tag: id }
   }

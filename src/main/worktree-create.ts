@@ -24,6 +24,12 @@ import { gitText, NO_OPTIONAL_LOCKS, pushEnv } from './git/run'
 import { readRepoSettings } from './repo-scripts'
 import { isProjectRoot } from './workspace-store'
 import { isInside, normalizeRelative } from './worktree-files'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { baseNotSaved: (base: string, why: string) => `没能记下基线分支 ${base}：${why}`, configFailed: 'git config 失败' },
+  en: { baseNotSaved: (base: string, why: string) => `Couldn't record the base branch ${base}: ${why}`, configFailed: 'git config failed' }
+})
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 15_000
@@ -199,6 +205,24 @@ async function startPoint(top: string, base: string): Promise<string | null> {
   return (await refExists(top, `refs/remotes/${base}`)) ? `refs/remotes/${base}` : null
 }
 
+/**
+ * A branch started at `refs/remotes/<remote>/<head>` (a same-repository PR's head) tracks it — under its own name, or
+ * another when that one was taken locally — so 推送 updates the PR and F16 finds the PR. Any other start (a fork's PR
+ * head) gets no upstream. A failure is logged: the branch is still there, and 推送 asks before its first push as for
+ * any branch without one.
+ */
+async function trackPrHead(top: string, branch: string, startAt: string): Promise<void> {
+  if (!startAt.startsWith('refs/remotes/')) return
+  const tracked = startAt.slice('refs/remotes/'.length)
+  const remotes = (await orEmpty(git(top, ['remote']))).split('\n').map((r) => r.trim()).filter(Boolean)
+  // The longest remote name that prefixes it (a remote may itself contain `/`).
+  const remote = remotes.filter((r) => tracked.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0]
+  if (!remote) return
+  await git(top, ['branch', `--set-upstream-to=${tracked}`, '--', branch]).catch((error: unknown) =>
+    console.error(`[worktree-create] upstream of ${branch} not set to ${tracked}:`, errorText(error))
+  )
+}
+
 /** Copies the `.worktreeinclude` files into the new worktree (copy-on-write clones on APFS). Returns how many failed. */
 async function copyIncluded(top: string, target: string): Promise<number> {
   let failures = 0
@@ -273,7 +297,8 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
   if (await exists(path)) return { ok: false, reason: 'folder-exists' }
 
   const fetchFailed = await fetchRemotes(top, request.base)
-  const start = await startPoint(top, request.base)
+  // 看板 · GitHub: a PR's head is where the branch starts; `base` stays what it merges into.
+  const start = request.startAt ? ((await refExists(top, request.startAt)) ? request.startAt : null) : await startPoint(top, request.base)
   if (!start) return { ok: false, reason: 'base-missing' }
   await mkdir(dir, { recursive: true })
   try {
@@ -281,10 +306,11 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
   } catch (error) {
     return { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
   }
+  if (request.startAt) await trackPrHead(top, request.branch, request.startAt)
   // The Worktree view and the merge compare against this (PRD F17 / F4); without it they fall back on the main branch.
   const baseNotSaved = await git(top, ['config', `branch.${request.branch}.base`, request.base]).then(
     () => null,
-    (error: unknown) => `没能记下基线分支 ${request.base}：${errorText(error) || 'git config 失败'}`
+    (error: unknown) => pick(M).baseNotSaved(request.base, errorText(error) || pick(M).configFailed)
   )
   if (baseNotSaved) console.error(`[worktree-create] branch.${request.branch}.base not written:`, baseNotSaved)
   const copyFailures = request.prepare ? await copyIncluded(top, path) : 0

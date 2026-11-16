@@ -18,6 +18,27 @@ import {
   type ScheduleFire,
   type ScheduleRun
 } from '@shared/schedule'
+import { defineMessages, pick } from '@shared/i18n'
+
+// Run reasons are written into schedules.json as display text (never parsed back).
+const M = defineMessages({
+  zh: {
+    reopened: '窗口重新打开，没发出',
+    neverEnded: '这一轮一直没结束',
+    noAnswer: '窗口没有响应',
+    missed: '错过了',
+    precheckCouldNotRun: (why: string) => `前置检查没能运行：${why}`,
+    precheckFailed: '前置检查没过'
+  },
+  en: {
+    reopened: 'The window reopened; not sent',
+    neverEnded: 'This turn never ended',
+    noAnswer: "The window didn't respond",
+    missed: 'Missed',
+    precheckCouldNotRun: (why: string) => `The pre-check couldn't run: ${why}`,
+    precheckFailed: 'The pre-check failed'
+  }
+})
 
 /** A window that took a fire answers within this, or the run fails. */
 export const FIRE_TIMEOUT_MS = 2 * 60 * 1000
@@ -162,7 +183,7 @@ export class Scheduler {
     this.batch(() => {
       for (const s of this.schedules) {
         const waiting = s.runs.filter((r) => r.outcome === 'running')
-        for (const r of waiting) this.replace(recordRun(this.get(s.id) ?? s, { ...r, at: this.deps.now(), outcome: 'skipped', reason: '窗口重新打开，没发出' }))
+        for (const r of waiting) this.replace(recordRun(this.get(s.id) ?? s, { ...r, at: this.deps.now(), outcome: 'skipped', reason: pick(M).reopened }))
       }
     })
   }
@@ -186,7 +207,7 @@ export class Scheduler {
     const now = this.deps.now()
     for (const s of this.schedules) {
       const stale = s.runs.find((r) => r.outcome === 'running' && now - r.at > RUNNING_TIMEOUT_MS)
-      if (stale) this.replace(recordRun(s, { ...stale, at: now, outcome: 'skipped', reason: '这一轮一直没结束' }))
+      if (stale) this.replace(recordRun(s, { ...stale, at: now, outcome: 'skipped', reason: pick(M).neverEnded }))
     }
     const live = this.schedules.filter((s) => !expired(s, now))
     if (live.length !== this.schedules.length) this.commit(live)
@@ -197,7 +218,7 @@ export class Scheduler {
         if (flight.firedAt === undefined) this.hand(schedule, { planned: flight.planned, caughtUp: false, manual: flight.manual })
         else if (now - flight.firedAt > FIRE_TIMEOUT_MS) {
           this.inFlight.delete(schedule.id)
-          this.replace(recordRun(schedule, { planned: flight.planned, at: now, outcome: 'failed', reason: '窗口没有响应', ...(flight.manual ? { manual: true } : {}) }))
+          this.replace(recordRun(schedule, { planned: flight.planned, at: now, outcome: 'failed', reason: pick(M).noAnswer, ...(flight.manual ? { manual: true } : {}) }))
         }
         continue
       }
@@ -208,7 +229,7 @@ export class Scheduler {
         continue
       }
       if (due.type === 'missed') {
-        this.replace(recordRun(schedule, { planned: due.planned, at: now, outcome: 'skipped', reason: '错过了' }))
+        this.replace(recordRun(schedule, { planned: due.planned, at: now, outcome: 'skipped', reason: pick(M).missed }))
         continue
       }
       this.inFlight.set(schedule.id, { planned: due.planned, manual: false })
@@ -226,7 +247,7 @@ export class Scheduler {
       try {
         result = await this.deps.precheck(action.projectId, action.precheck, `schedule:${schedule.id}`)
       } catch (error) {
-        result = { error: `前置检查没能运行：${error instanceof Error ? error.message : String(error)}`.slice(0, 200) }
+        result = { error: pick(M).precheckCouldNotRun(error instanceof Error ? error.message : String(error)).slice(0, 200) }
       } finally {
         this.pendingPrecheck.delete(schedule.id)
       }
@@ -237,7 +258,7 @@ export class Scheduler {
         const run: ScheduleRun =
           'error' in result
             ? { planned, at: this.deps.now(), outcome: 'failed', reason: result.error }
-            : { planned, at: this.deps.now(), outcome: 'skipped', reason: '前置检查没过' }
+            : { planned, at: this.deps.now(), outcome: 'skipped', reason: pick(M).precheckFailed }
         this.replace(recordRun(current, caughtUp ? { ...run, caughtUp: true } : run))
         return
       }

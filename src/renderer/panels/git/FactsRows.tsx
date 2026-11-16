@@ -5,8 +5,15 @@ import { useEffect, useRef, useState } from 'react'
 import type { PrTarget } from '@shared/pull-requests'
 import { riskLabel, type RiskMarker } from '@shared/risk-markers'
 import type { TurnCheckView } from '@shared/turn-checks'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { checksRow } from './facts-model'
 import ci from './CiRows.module.css'
+
+const M = defineMessages({
+  zh: { facts: '这次改动的事实' },
+  en: { facts: 'Facts about this change' }
+})
 /** The change list moves in bursts while the agent works: ask for the markers once it settles. */
 const DEBOUNCE_MS = 1000
 
@@ -53,11 +60,12 @@ export function FactsLine({
   /** What the agent wrote about its last fix (fix.md), for the tooltip. */
   note?: string | null
 }) {
+  const m = useMessages(M)
   const parts = [...(checks ? [checksRow(checks).text] : []), ...risks.map(riskLabel), ...more]
   if (parts.length === 0) return null
   const text = parts.join(' · ')
   return (
-    <p className={ci.facts} data-testid="facts" aria-label="这次改动的事实" title={note ? `${text}\n${note}` : text}>
+    <p className={ci.facts} data-testid="facts" aria-label={m.facts} title={note ? `${text}\n${note}` : text}>
       {text}
     </p>
   )

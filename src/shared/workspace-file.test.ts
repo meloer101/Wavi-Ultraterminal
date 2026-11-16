@@ -32,7 +32,7 @@ describe('sanitizeWorkspaceFile', () => {
     for (const key of ['fixRuns', 'shipRuns', 'dispatch']) expect(plain).not.toHaveProperty(key)
   })
 
-  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.178)', () => {
+  it('keeps each project’s leader only while it is an agent session in that project (PRD F21 v1.198)', () => {
     const raw = {
       ...structuredClone(valid),
       projects: [...valid.projects, { id: 'p2', name: 'other', rootPath: '/code/other' }],
@@ -46,7 +46,7 @@ describe('sanitizeWorkspaceFile', () => {
     }
   })
 
-  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.178)', () => {
+  it('drops a leader whose session cannot lead: a GUI session or an agent not measured as leader (PRD F21 v1.198)', () => {
     const sessions = [
       ...valid.sessions,
       { id: 's3', worktreeId: 'w1', kind: 'gemini', title: 'Gemini', startedAt: 150, lastActivityAt: 150 },
@@ -59,7 +59,7 @@ describe('sanitizeWorkspaceFile', () => {
     }
   })
 
-  it('drops a leader that reports to a dispatcher, as setLeader refuses one, and keeps a top-level one (PRD F21 v1.178)', () => {
+  it('drops a leader that reports to a dispatcher, as setLeader refuses one, and keeps a top-level one (PRD F21 v1.198)', () => {
     const sessions = [...valid.sessions, { id: 's3', worktreeId: 'w1', kind: 'codex', title: 'Codex', startedAt: 150, lastActivityAt: 150, dispatchedBy: 's1' }]
     const dispatched = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions, leaderSessions: { p1: 's3' } }, 0)!
     expect(dispatched.sessions.find((s) => s.id === 's3')?.dispatchedBy).toBe('s1')
@@ -212,6 +212,23 @@ describe('sanitizeWorkspaceFile', () => {
       0
     ) as WorkspaceFile
     expect(file.sessions.map((s) => s.agentSessionId)).toEqual([undefined, undefined, '0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000', undefined])
+  })
+
+  it('keeps the GitHub item an agent session was started on (看板 · GitHub), dropping malformed ones', () => {
+    const link = { repo: 'github.com/acme/web', kind: 'issue', number: 139 }
+    const file = sanitizeWorkspaceFile(
+      {
+        ...valid,
+        sessions: [
+          { id: 'a', worktreeId: 'w1', kind: 'claude', title: '#139', github: link },
+          { id: 'b', worktreeId: 'w1', kind: 'shell', title: 't', github: link },
+          { id: 'c', worktreeId: 'w1', kind: 'codex', title: 't', github: { ...link, number: '139' } }
+        ],
+        drafts: {}
+      },
+      0
+    ) as WorkspaceFile
+    expect(file.sessions.map((s) => s.github)).toEqual([link, undefined, undefined])
   })
 
   it("keeps the Run button's terminal marker on shell sessions only (PRD F4)", () => {

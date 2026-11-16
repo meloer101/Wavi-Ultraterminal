@@ -427,6 +427,26 @@ describe('创建 PR', () => {
     expect(git(project, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
   })
 
+  it('pushes only the tip the review read: a commit made since is refused as stale, nothing pushed or created', async () => {
+    for (const pushed of [false, true]) {
+      const { root, wt, bare } = setup()
+      if (pushed) git(wt, 'push', '-q', '-u', 'origin', 'feat')
+      const reviewed = git(wt, 'rev-parse', 'HEAD').trim()
+      const remoteBefore = git(bare, 'for-each-ref', '--format=%(objectname)', 'refs/heads/feat').trim()
+      commit(wt, 'late.txt', 'l\n', 'Landed during the review')
+      expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true, expect: reviewed })).toMatchObject({ ok: false, reason: 'blocked', stale: true, step: 'push' })
+      expect(git(bare, 'for-each-ref', '--format=%(objectname)', 'refs/heads/feat').trim()).toBe(remoteBefore)
+      expect(ghCalls('pr create')).toHaveLength(0)
+      writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+      const tip = git(wt, 'rev-parse', 'HEAD').trim()
+      expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true, expect: tip })).toMatchObject({ ok: true, number: 7 })
+      expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(tip)
+      for (const name of readdirSync(ghDir)) rmSync(join(ghDir, name), { force: true })
+    }
+    const { root, wt } = setup()
+    expect(await createPullRequest({ root, worktree: wt, title: 't', expect: 'HEAD' })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
   it('refuses the base branch, a branch with nothing new, a missing gh and bad input', async () => {
     const { root, wt } = setup()
     expect(await createPullRequest({ root, worktree: root, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '这是基线分支本身，没有可以提 PR 的改动' })
@@ -680,10 +700,17 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     expect(git(wt, 'rev-parse', 'HEAD').trim()).toBe(head)
   })
 
-  it('refuses the base branch, a detached HEAD, conflicts, files with no changes and bad input', async () => {
-    const { root, wt } = setup()
+  // 提交 in the project's main checkout: the base branch takes a commit like any branch.
+  it('commits on the base branch in the main checkout', async () => {
+    const { root } = setup()
     writeFileSync(join(root, 'a.txt'), 'a2\n')
-    expect(await commitWorktree({ root, worktree: root, message: 'x', paths: ['a.txt'] })).toMatchObject({ ok: false, message: '这是基线分支本身：在会话的 worktree 里提交' })
+    const result = await commitWorktree({ root, worktree: root, message: 'docs: a', paths: ['a.txt'] })
+    expect(result).toEqual({ ok: true, commit: git(root, 'rev-parse', '--short', 'HEAD').trim(), subject: 'docs: a' })
+    expect(git(root, 'status', '--porcelain=v1').trim()).toBe('')
+  })
+
+  it('refuses a detached HEAD, conflicts, files with no changes and bad input', async () => {
+    const { root, wt } = setup()
     expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['nothing.txt'] })).toMatchObject({ ok: false, message: '勾选的文件已经没有改动了' })
     for (const bad of [{ message: '  \n', paths: ['b.txt'] }, { message: 'x', paths: [] }, { message: 'x', paths: ['../a.txt'] }, { message: 'x', paths: ['/etc/hosts'] }]) {
       expect(await commitWorktree({ root, worktree: wt, ...bad })).toMatchObject({ ok: false, message: '请求无效' })
@@ -761,7 +788,8 @@ describe('catching up the base after a merge (v1.65)', () => {
     expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
     expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: false })
 
-    commit(other, 'more.txt', 'x\n', 'Another merge')
+    // The fast-forward would change a.txt, which the checkout has edited.
+    commit(other, 'a.txt', 'merged edit\n', 'Another merge')
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'local edit\n')
     const before = git(root, 'rev-parse', 'main').trim()
@@ -979,6 +1007,17 @@ describe('status · a merged PR (合入链路 v2)', () => {
     commit(wt, 'after.txt', 'a\n', 'After the merge')
     expect((await checkWorktree(wt))?.local).toEqual({ head: git(wt, 'rev-parse', 'HEAD').trim(), remoteAhead: false })
     expect(ghCalls('pr list')[0]).toContain('--json=number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,headRefOid,statusCheckRollup')
+    unwatch(w)
+  })
+
+  it('carries the local head for a PR closed without a merge too (归档 only while the branch is still at its head)', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ state: 'CLOSED', headRefOid: head }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'closed', headOid: head }, local: { head, remoteAhead: false } })
     unwatch(w)
   })
 })

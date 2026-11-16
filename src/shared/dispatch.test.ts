@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { withLang } from './i18n'
 import { CLI_AGENTS } from './agents'
 import { agentArgv } from './agent-launch'
 import {
@@ -311,6 +312,24 @@ describe('reading Wavi’s own words back (the GUI draws them, Figma 68′)', ()
     expect(parseNoticeText(noticeText('timeout', []))?.outcome).toBe('timeout')
     expect(parseNoticeText(started.replace('[Wavi 派活]', '[Wavi 派活报告]'))).toBeNull()
   })
+  it('reads its own words back in English, and Chinese saved before while the interface is English', () => {
+    const zhReport = reportText([report({ message: 'Fixed it.' })])
+    const zhNotice = noticeText('declined', [{ id: 's-9', agent: 'grok', title: 'Review', branch: '' }])
+    withLang('en', () => {
+      // An agent's own line in parentheses stays; Wavi's hint does not.
+      const long = 'x'.repeat(5000)
+      const text = reportText([report({ message: `(no tests changed)\n${long}` })])
+      const [one] = parseReportText(text) ?? []
+      expect(one?.event).toBe('done')
+      expect(one?.title).toBe('Fix login')
+      expect(one?.excerpt.startsWith('(no tests changed)')).toBe(true)
+      expect(one?.excerpt).not.toMatch(/read all of it|read it with/)
+      const started = noticeText('started', [{ id: 's-9', agent: 'grok', title: 'Review', branch: '' }])
+      expect(parseNoticeText(started)).toEqual({ outcome: 'started', ids: ['s-9'], titles: ['Review'] })
+      expect(parseReportText(zhReport)?.[0]?.excerpt).toBe('Fixed it.')
+      expect(parseNoticeText(zhNotice)?.outcome).toBe('declined')
+    })
+  })
 })
 
 describe('report queue', () => {
@@ -370,7 +389,7 @@ describe('the rest', () => {
   })
 })
 
-describe('leader session (PRD F21 v1.178)', () => {
+describe('leader session (PRD F21 v1.198)', () => {
   const command = (...argv: string[]) => {
     const args = parseWaviArgv(argv)
     return args.kind === 'command' ? parseWaviCommand(args.command) : args

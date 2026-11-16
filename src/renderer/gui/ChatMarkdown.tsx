@@ -6,10 +6,17 @@ import { memo, type MouseEvent } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { openLink } from '../state/link-actions'
 import { CopyButton } from './CopyButton'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: { copyCode: '复制代码' },
+  en: { copyCode: 'Copy code' }
+})
 
 const REMARK = [remarkGfm]
 const REHYPE = [rehypeSanitize]
@@ -22,6 +29,7 @@ function hastText(node: unknown): string {
 }
 
 export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, className }: { sessionId: SessionId; text: string; className?: string }) {
+  const m = useMessages(M)
   const components: Components = {
     a: ({ href, children }) => (
       <a
@@ -38,7 +46,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, classN
     pre: ({ node, children }) => (
       <div className={styles.codeWrap}>
         <pre>{children}</pre>
-        <CopyButton text={() => hastText(node).replace(/\n$/, '')} label="复制代码" className={styles.cornerCopy} />
+        <CopyButton text={() => hastText(node).replace(/\n$/, '')} label={m.copyCode} className={styles.cornerCopy} />
       </div>
     )
   }

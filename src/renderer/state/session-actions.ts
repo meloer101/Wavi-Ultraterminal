@@ -7,6 +7,7 @@ import {
   removeProjectMenuLabel
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
 import { hereChoice, hereMenu } from '../new-session/model'
 import { closeNewSessionSheet, installedAgents, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
@@ -20,6 +21,33 @@ import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
 import { leaderOf, newProjectAgent, projectOfSession } from './workspace-model'
+
+const M = defineMessages({
+  zh: {
+    newSession: '新建会话…',
+    newLeader: '新建 leader…',
+    openInNewWindow: '在新窗口中打开',
+    revealInFinder: '在 Finder 中显示',
+    copyPath: '复制路径',
+    moveToNewWindow: '移到新窗口',
+    closeSession: '关闭会话',
+    archiveWorktree: '归档 worktree…',
+    rename: '重命名…',
+    sameTask: '同任务多解…'
+  },
+  en: {
+    newSession: 'New session…',
+    newLeader: 'New leader…',
+    openInNewWindow: 'Open in new window',
+    revealInFinder: 'Show in Finder',
+    copyPath: 'Copy path',
+    moveToNewWindow: 'Move to new window',
+    closeSession: 'Close session',
+    archiveWorktree: 'Archive worktree…',
+    rename: 'Rename…',
+    sameTask: 'Same task, several tries…'
+  }
+})
 
 /**
  * Opens a folder as a project: a known one selects its latest session (or starts `kind` when it has none),
@@ -84,14 +112,15 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   if (!project) return
   const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
   const sessionCount = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).length
-  // PRD F21 v1.178, Figma 81E: while 设置 · 派活 · leader 会话 is on, a project without a leader offers one.
+  // PRD F21 v1.198, Figma 81E: while 设置 · 派活 · leader 会话 is on, a project without a leader offers one.
   const offerLeader = leaderOf(state, projectId) === null && (await window.tr.settings.get().then((s) => s.dispatch.leader).catch(() => false))
+  const m = pick(M)
   const entries: MenuEntry[] = [
-    { type: 'item', id: 'new', label: '新建会话…', accelerator: 'CmdOrCtrl+N' },
-    ...(offerLeader ? [{ type: 'item', id: 'new-leader', label: '新建 leader…' } as const] : []),
-    { type: 'item', id: 'window', label: '在新窗口中打开' },
-    { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
-    { type: 'item', id: 'copy-path', label: '复制路径' },
+    { type: 'item', id: 'new', label: m.newSession, accelerator: 'CmdOrCtrl+N' },
+    ...(offerLeader ? [{ type: 'item', id: 'new-leader', label: m.newLeader } as const] : []),
+    { type: 'item', id: 'window', label: m.openInNewWindow },
+    { type: 'item', id: 'reveal', label: m.revealInFinder },
+    { type: 'item', id: 'copy-path', label: m.copyPath },
     { type: 'item', id: 'remove', label: removeProjectMenuLabel(sessionCount) }
   ]
   const choice = await popupMenu(entries, anchor)
@@ -99,7 +128,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   else if (choice === 'copy-path') void navigator.clipboard.writeText(project.rootPath).catch(() => {})
   else if (choice === 'remove') await removeProjectInteractive(projectId)
   else if (choice === 'new') openNewSessionSheet(projectId)
-  else if (choice === 'new-leader') openNewSessionSheet(projectId, { leader: true })
+  else if (choice === 'new-leader') openNewSessionSheet(projectId, null, { leader: true })
   else if (choice === 'window') openProjectInNewWindow(projectId)
 }
 
@@ -151,13 +180,14 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
   const worktree = state.worktrees.find((w) => w.id === session?.worktreeId)
+  const m = pick(M)
   const entries: MenuEntry[] = [
-    { type: 'item', id: 'window', label: '移到新窗口' },
-    { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
+    { type: 'item', id: 'window', label: m.moveToNewWindow },
+    { type: 'item', id: 'close', label: m.closeSession, accelerator: 'CmdOrCtrl+W' }
   ]
   if (worktree) {
     entries.push(hereMenu(await installedAgents(), 'here:'))
-    if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
+    if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: m.archiveWorktree })
   }
   const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
@@ -185,13 +215,14 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
   const session = state.sessions.find((s) => s.id === sessionId)
   if (!session) return null
   const path = state.worktrees.find((w) => w.id === session.worktreeId)?.path
+  const m = pick(M)
   const entries: MenuEntry[] = [
-    { type: 'item', id: 'rename', label: '重命名…' },
-    { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
-    { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
-    { type: 'item', id: 'same-task', label: '同任务多解…', accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
-    { type: 'item', id: 'window', label: '移到新窗口' },
-    { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
+    { type: 'item', id: 'rename', label: m.rename },
+    { type: 'item', id: 'reveal', label: m.revealInFinder, enabled: path !== undefined },
+    { type: 'item', id: 'copy-path', label: m.copyPath, enabled: path !== undefined },
+    { type: 'item', id: 'same-task', label: m.sameTask, accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
+    { type: 'item', id: 'window', label: m.moveToNewWindow },
+    { type: 'item', id: 'close', label: m.closeSession, accelerator: 'CmdOrCtrl+W' }
   ]
   const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'

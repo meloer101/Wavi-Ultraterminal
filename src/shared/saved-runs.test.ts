@@ -40,15 +40,11 @@ describe('sanitizeFixRuns', () => {
 
 const shipState: ShipState = {
   kind: 'main',
-  title: '合并到 main 并推送',
+  title: '合并到 main',
   agent: 'Claude',
-  steps: [
-    { id: 'write', label: 'Claude 写提交说明', state: 'done' },
-    { id: 'merge', label: '合并到 main · Squash', state: 'working' },
-    { id: 'push', label: '推送 origin/main', state: 'pending' }
-  ],
+  steps: [{ id: 'merge', label: '合并到 main', state: 'working' }],
   stage: 'running',
-  texts: { commit: 'feat: x', title: '', body: '', draft: false },
+  texts: { commit: '', title: '', body: '', draft: false },
   error: null,
   failedIn: null
 }
@@ -73,8 +69,44 @@ const shipRun: SavedShipRun = {
 describe('sanitizeShipRuns', () => {
   it('keeps a run of a worktree that exists, as it was', () => {
     expect(sanitizeShipRuns([shipRun, { ...shipRun, ctx: { ...shipRun.ctx, worktree: '/code/gone' } }], worktrees)).toEqual([shipRun])
-    const failed = { ...shipRun, merged: 'abc1234', state: { ...shipState, error: { step: 'push', message: 'offline', pushRefused: true }, failedIn: 'running' } }
+    const failed = { ...shipRun, merged: 'abc1234', state: { ...shipState, error: { step: 'merge', message: 'offline' }, failedIn: 'running' } }
     expect(sanitizeShipRuns([failed], worktrees)).toEqual([failed])
+  })
+
+  // 合并 is local only: a 合并 run saved with a push step was a merge and push of an older build — dropped;
+  // 推送 of the base comes back.
+  it('drops a 合并 run saved with a push step, and keeps 推送 of the base', () => {
+    const steps = [
+      { id: 'write', label: 'Claude 写提交说明', state: 'done' },
+      { id: 'merge', label: '合并到 main · Squash', state: 'done' },
+      { id: 'push', label: '推送 origin/main', state: 'failed' }
+    ]
+    const bundled = { ...shipRun, merged: 'abc1234', state: { ...shipState, title: '合并到 main 并推送', steps, error: { step: 'push', message: 'offline' }, failedIn: 'running' } }
+    expect(sanitizeShipRuns([bundled], worktrees)).toEqual([])
+    const pushBase = {
+      ...shipRun,
+      kind: 'push-base',
+      state: { ...shipState, kind: 'push-base', title: '推送 main', steps: [{ id: 'push', label: '推送 origin/main', state: 'failed' }], error: { step: 'push', message: 'main 受保护', pushRefused: true }, failedIn: 'running' }
+    }
+    expect(sanitizeShipRuns([pushBase], worktrees)).toEqual([pushBase])
+  })
+
+  it('keeps a push the pre-push review stopped (a P0 / P1), with its pull-first step', () => {
+    const steps = [
+      { id: 'sync', label: '拉取 origin/main', state: 'done' },
+      { id: 'review', label: 'Codex 审阅 2 个提交', state: 'failed' },
+      { id: 'push', label: '推送 origin/main', state: 'pending' }
+    ]
+    const stopped = {
+      ...shipRun,
+      kind: 'push-base',
+      state: { ...shipState, kind: 'push-base', title: '推送 main', stage: 'writing', steps, error: { step: 'review', message: '1 个 P1，没有推送', reviewStop: true }, failedIn: 'writing' }
+    }
+    expect(sanitizeShipRuns([stopped], worktrees)).toEqual([stopped])
+    // Anything but true is not a stop.
+    const odd = { ...stopped, state: { ...stopped.state, error: { ...stopped.state.error, reviewStop: 'yes' } } }
+    const { reviewStop: _gone, ...plain } = stopped.state.error
+    expect(sanitizeShipRuns([odd], worktrees)).toEqual([{ ...stopped, state: { ...stopped.state, error: plain } }])
   })
 
   it('keeps 合入链路 v2 runs (提交 / 同步 / 拉取), the merge method and a classified failure with its hand-off', () => {
@@ -114,6 +146,20 @@ describe('sanitizeShipRuns', () => {
       expect(sanitizeShipRuns([run], worktrees)).toEqual([run])
     }
     expect(GIT_FAILURE_KINDS).toContain('identity')
+  })
+
+  // The exits no longer commit: a saved exit run that would still commit is dropped; 提交's own run is kept.
+  it('drops an exit run saved with a 提交 step', () => {
+    const steps = [
+      { id: 'write', label: 'Claude 写提交说明', state: 'done' },
+      { id: 'commit', label: '提交', state: 'working' },
+      { id: 'push', label: '推送 feat', state: 'pending' }
+    ]
+    for (const kind of ['main', 'pr', 'push-pr'] as const) {
+      expect(sanitizeShipRuns([{ ...shipRun, kind, state: { ...shipState, kind, steps } }], worktrees)).toEqual([])
+    }
+    const commit = { ...shipRun, kind: 'commit', state: { ...shipState, kind: 'commit', steps: steps.slice(0, 2) } }
+    expect(sanitizeShipRuns([commit], worktrees)).toEqual([commit])
   })
 
   it('drops a run whose state is not one the block can draw', () => {
@@ -167,7 +213,7 @@ describe('sanitizeSavedDispatch', () => {
     expect(sanitizeSavedDispatch({ confirms: [odd] }, sessions)?.confirms).toEqual([pending])
   })
 
-  it('keeps a leader’s adopt request with only what it shows and does (PRD F21 v1.178)', () => {
+  it('keeps a leader’s adopt request with only what it shows and does (PRD F21 v1.198)', () => {
     expect(sanitizeSavedDispatch({ confirms: [adoptPending] }, sessions)?.confirms).toEqual([adoptPending])
     expect(sanitizeSavedDispatch({ confirms: [{ ...adoptPending, agent: 'nope' }] }, sessions)).toBeNull()
     expect(sanitizeSavedDispatch({ confirms: [{ ...adoptPending, task: 7 }] }, sessions)).toBeNull()

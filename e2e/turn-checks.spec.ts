@@ -140,7 +140,7 @@ test.describe('turn checks', () => {
     await panel.getByRole('tab', { name: /^变更/ }).click()
     await expect(panel.getByTestId('facts')).toContainText('这一轮跑过：测试 ✓ · lint ✗ · 类型 未跑', WITHIN)
     // Information only: the agent's own checks never block 合并.
-    await expect(panel.getByRole('button', { name: /^合并到 main( |$)/ })).toBeEnabled(WITHIN)
+    await expect(panel.getByRole('button', { name: /^合并( |$)/ })).toBeEnabled(WITHIN)
     await shoot('facts-row')
   })
 

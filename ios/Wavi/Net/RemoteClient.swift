@@ -85,7 +85,7 @@ final class RemoteClient {
     }
     let probed = socket
     Task {
-      if await request(.snapshot, timeout: 5).error == "超时" { probed?.close() }
+      if case .timedOut = await request(.snapshot, timeout: 5) { probed?.close() }
     }
   }
 
@@ -106,7 +106,7 @@ final class RemoteClient {
   }
 
   func request(_ command: PhoneCommand, timeout: Double = Link.requestSeconds) async -> RemoteResult {
-    guard let socket, var cipher else { return .failed("没有连上 Mac") }
+    guard let socket, var cipher else { return .failed(String(localized: "没有连上 Mac")) }
     let id = nextId
     nextId += 1
     var fields = command.fields
@@ -121,13 +121,13 @@ final class RemoteClient {
         Task { @MainActor in
           guard let self, self.waiting[id] != nil else { return }
           if failed {
-            self.finish(id, .failed("和 Mac 的连接断了"))
+            self.finish(id, .failed(String(localized: "和 Mac 的连接断了")))
             return
           }
           // The time allowed for the answer starts once the frame is on its way (photos take a while to send).
           self.timers[id] = Task {
             try? await Task.sleep(for: .seconds(timeout))
-            if !Task.isCancelled { self.finish(id, .failed("超时")) }
+            if !Task.isCancelled { self.finish(id, .timedOut) }
           }
         }
       }
@@ -145,7 +145,7 @@ final class RemoteClient {
     socket?.close()
     socket = nil
     cipher = nil
-    for id in Array(waiting.keys) { finish(id, .failed("和 Mac 的连接断了")) }
+    for id in Array(waiting.keys) { finish(id, .failed(String(localized: "和 Mac 的连接断了"))) }
   }
 
   private func schedule() {
@@ -183,7 +183,7 @@ final class RemoteClient {
         socket.close()
         return
       }
-      try await socket.send(text: Link.text(["t": "hello", "device": pairing.device]))
+      try await socket.send(text: Link.text(["t": "hello", "device": pairing.device, "lang": AppLanguage.current.rawValue]))
       let challenge = try await Link.nextText(socket)
       guard let serverNonce = (challenge["nonce"] as? String).flatMap({ WaviCrypto.fromB64u($0, count: 16) }) else {
         throw Refused(reason: challenge["error"] as? String ?? "")
@@ -310,7 +310,7 @@ final class RemoteClient {
     self.cipher = cipher
     if case .number(let re)? = json["re"] {
       if json["ok"] == .bool(true) { finish(Int(re), .ok(json["data"])) }
-      else { finish(Int(re), .failed(json["error"]?.string ?? "没有成功")) }
+      else { finish(Int(re), .failed(json["error"]?.string ?? String(localized: "没有成功"))) }
       return true
     }
     let data = json["data"] ?? .null

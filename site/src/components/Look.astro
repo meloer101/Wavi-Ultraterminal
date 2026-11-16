@@ -1,0 +1,27 @@
+---
+/* One look: an app screenshot with "Look 0n" and its caption underneath. On phones a tap opens it full screen. */
+import type { ImageMetadata } from 'astro'
+import { Image } from 'astro:assets'
+import { imageSizes } from '../book-layout'
+import type { Look } from '../i18n'
+
+interface Props {
+  src: ImageMetadata
+  look: Look
+  n: number
+  word: string
+  /** "full" spans both pages (1088 wide on a spread), "half" sits on one page (600 wide). */
+  size: 'full' | 'half'
+  eager?: boolean
+}
+const { src, look, n, word, size, eager = false } = Astro.props
+const sizes = imageSizes(size === 'full' ? 76 : 42)
+---
+
+<figure class={`look look-${size}`}>
+  <Image src={src} alt={look.alt} widths={[700, 1100, 1600, 2400]} sizes={sizes} loading={eager ? 'eager' : 'lazy'} fetchpriority={eager ? 'high' : 'auto'} data-zoomable />
+  <figcaption>
+    <span class="look-n">{word} {String(n).padStart(2, '0')}</span>
+    <span class="look-cap">{look.caption}</span>
+  </figcaption>
+</figure>

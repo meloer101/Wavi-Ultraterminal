@@ -1,6 +1,7 @@
 // Pure overview model (PRD F9, Figma 11 v2): every session across projects, grouped by what it
-// needs from the user. The list and the board draw the same groups, so the two views never disagree.
+// needs from the user: the columns of 看板 · 进度.
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
+import { defineMessages, localized, pick } from '@shared/i18n'
 import { sessionTime } from '../sidebar/format-elapsed'
 import { glyphStatus, phaseLine } from '../lifecycle/present'
 
@@ -10,14 +11,33 @@ export type OverviewGroupKey = SessionStatus
 /** Most pressing first: answer, fix, review, watch, ignore. */
 export const GROUP_ORDER: readonly OverviewGroupKey[] = ['needs_you', 'error', 'done_unread', 'running', 'idle', 'exited']
 
-export const GROUP_LABEL: Record<OverviewGroupKey, string> = {
-  needs_you: '等你处理',
-  error: '出错',
-  done_unread: '待审阅',
-  running: '运行中',
-  idle: '空闲',
-  exited: '已退出'
-}
+export const GROUP_LABEL: Record<OverviewGroupKey, string> = localized(
+  defineMessages({
+    zh: { needs_you: '等你处理', error: '出错', done_unread: '待审阅', running: '运行中', idle: '空闲', exited: '已退出' },
+    en: { needs_you: 'Needs you', error: 'Error', done_unread: 'To review', running: 'Running', idle: 'Idle', exited: 'Exited' }
+  })
+)
+
+const M = defineMessages({
+  zh: {
+    starting: '启动中',
+    notStarted: '未启动',
+    status: { needs_you: '等你处理', done_unread: '已完成', error: '出错', running: '运行中', idle: '空闲', exited: '已退出' } as Record<SessionStatus, string>,
+    shell: (path: string) => `终端 · ${path}`,
+    sessions: (n: number) => `${n} 个会话`,
+    needYou: (n: number) => `${n} 个需要你`,
+    answer: '等你回答'
+  },
+  en: {
+    starting: 'Starting',
+    notStarted: 'Not started',
+    status: { needs_you: 'Needs you', done_unread: 'Done', error: 'Error', running: 'Running', idle: 'Idle', exited: 'Exited' },
+    shell: (path: string) => `Terminal · ${path}`,
+    sessions: (n: number) => (n === 1 ? '1 session' : `${n} sessions`),
+    needYou: (n: number) => (n === 1 ? '1 needs you' : `${n} need you`),
+    answer: 'Needs an answer'
+  }
+})
 
 /** Color is only for the two states that pull the user in; everything else stays neutral. */
 export type OverviewTone = 'attention' | 'error' | 'plain'
@@ -61,22 +81,10 @@ export interface OverviewInput {
 }
 
 function statusLabel(session: Session, status: SessionStatus): string {
-  if (session.phase === 'starting') return '启动中'
-  if (session.phase === 'not-started') return '未启动'
-  switch (status) {
-    case 'needs_you':
-      return '等你处理'
-    case 'done_unread':
-      return '已完成'
-    case 'error':
-      return '出错'
-    case 'running':
-      return '运行中'
-    case 'idle':
-      return '空闲'
-    case 'exited':
-      return '已退出'
-  }
+  const m = pick(M)
+  if (session.phase === 'starting') return m.starting
+  if (session.phase === 'not-started') return m.notStarted
+  return m.status[status]
 }
 
 /** What it is doing or asking: the status track writes "等你确认：运行 …" into currentAction while it waits. */
@@ -85,7 +93,7 @@ function summaryOf(session: Session, worktree: Worktree | undefined): string {
   if (phase) return phase
   if (session.currentAction) return session.currentAction
   if ((session.status === 'idle' || session.status === 'done_unread') && session.lastReply) return session.lastReply
-  if (session.kind === 'shell' && worktree) return `终端 · ${worktree.path}`
+  if (session.kind === 'shell' && worktree) return pick(M).shell(worktree.path)
   return ''
 }
 
@@ -128,7 +136,7 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
   return {
     session,
     status,
-    statusLabel: toldNow(session) ? '等你回答' : statusLabel(session, status),
+    statusLabel: toldNow(session) ? pick(M).answer : statusLabel(session, status),
     tone: toneOf(status),
     card: cardOf(status),
     title: session.title,
@@ -151,7 +159,9 @@ export function parseFilter(filter: string | undefined): FilterTokens {
   for (const raw of (filter ?? '').toLowerCase().split(/\s+/)) {
     if (raw === '') continue
     const [prefix, rest] = [raw.slice(0, 2), raw.slice(2)]
+    // eslint-disable-next-line no-restricted-syntax -- full-width colon typed by a Chinese input method
     if ((prefix === 'p:' || prefix === 'p：') && rest) tokens.project.push(rest)
+    // eslint-disable-next-line no-restricted-syntax -- full-width colon typed by a Chinese input method
     else if ((prefix === 's:' || prefix === 's：') && rest) tokens.status.push(rest)
     else tokens.text.push(raw)
   }
@@ -197,7 +207,8 @@ export function buildOverview({ projects, worktrees, sessions, now, filter }: Ov
 
 /** Header line: "6 个会话 · 4 个需要你". */
 export function overviewSummary(sessions: readonly Pick<Session, 'status'>[], attention: number): string {
-  return attention > 0 ? `${sessions.length} 个会话 · ${attention} 个需要你` : `${sessions.length} 个会话`
+  const m = pick(M)
+  return attention > 0 ? `${m.sessions(sessions.length)} · ${m.needYou(attention)}` : m.sessions(sessions.length)
 }
 
 /** Session ids in drawn order (collapsed groups skipped) — ↑/↓ targets. */
@@ -213,11 +224,4 @@ export function moveSelection(ids: readonly SessionId[], current: SessionId | nu
   return ids[Math.min(ids.length - 1, Math.max(0, at + direction))] ?? null
 }
 
-/** The in-place terminal in the list: 420 by default, draggable between 240 and 70% of the window. */
-export const TRAY_HEIGHT = { initial: 420, min: 240, maxShare: 0.7 } as const
-
-export function clampTrayHeight(height: number, viewportHeight: number): number {
-  const max = Math.max(TRAY_HEIGHT.min, Math.floor(viewportHeight * TRAY_HEIGHT.maxShare))
-  return Math.round(Math.min(max, Math.max(TRAY_HEIGHT.min, height)))
-}
 

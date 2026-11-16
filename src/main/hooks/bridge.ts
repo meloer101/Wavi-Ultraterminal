@@ -96,6 +96,8 @@ export class HookBridge {
       subagents?: HookObserver
       /** Follows Claude's hooks to read its workflow runs (ultracode, ./workflows.ts). */
       workflows?: HookObserver
+      /** Follows Claude's hooks to report its agent team (./teams.ts); needs each hook's time. */
+      teams?: { observe(sessionId: string, agent: HookAgent, event: string, payload: unknown, at: number): void; forget(sessionId: string): void }
       /** A folder's package.json scripts, so `npm run check` counts as what it runs (./package-scripts.ts). */
       scripts?: ScriptsLookup
     } = {}
@@ -162,6 +164,7 @@ export class HookBridge {
     this.options.transcripts?.forget(sessionId)
     this.options.subagents?.forget(sessionId)
     this.options.workflows?.forget(sessionId)
+    this.options.teams?.forget(sessionId)
     this.meta.delete(sessionId)
     this.agents.delete(sessionId)
     this.sessions.delete(sessionId)
@@ -310,6 +313,7 @@ export class HookBridge {
     this.options.workflows?.observe(sessionId, agent, event, request.payload)
     this.agents.set(sessionId, agent)
     const at = request.receivedAt ?? this.now()
+    this.options.teams?.observe(sessionId, agent, event, request.payload, at)
     // Sent by the shim after an agent started by hand in a plain terminal ended (Codex has no SessionEnd of its own).
     if (event === AGENT_EXIT_EVENT) {
       this.setTodos(sessionId, agent, at, [])

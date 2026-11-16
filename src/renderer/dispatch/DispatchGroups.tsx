@@ -4,6 +4,7 @@
 import { useMemo } from 'react'
 import { Split } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
+import { defineMessages } from '@shared/i18n'
 import type { Session } from '@shared/types'
 import { glyphStatus } from '../lifecycle/present'
 import { GROUP_LABEL } from '../overview/model'
@@ -12,8 +13,24 @@ import enterStyles from '../overview/EnterButton.module.css'
 import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { useMessages } from '../ui/i18n'
 import styles from '../attempts/AttemptGroups.module.css'
 import local from './DispatchGroups.module.css'
+
+const M = defineMessages({
+  zh: {
+    heading: '派出的会话',
+    goTo: (title: string) => `前往「${title}」`,
+    compareTitle: '在浮层里并排看这几个会话的终端',
+    compare: '比较'
+  },
+  en: {
+    heading: 'Dispatched sessions',
+    goTo: (title: string) => `Go to “${title}”`,
+    compareTitle: 'Show these sessions’ terminals side by side in an overlay',
+    compare: 'Compare'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
@@ -23,6 +40,7 @@ interface Group {
 }
 
 export function DispatchGroups() {
+  const m = useMessages(M)
   const { sessions, worktrees } = useWorkspace(useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees })))
   const attempts = useAttemptGroups((s) => s.groups)
   const groups = useMemo((): Group[] => {
@@ -36,9 +54,9 @@ export function DispatchGroups() {
   }, [sessions, worktrees, attempts])
   if (groups.length === 0) return null
   return (
-    <section className={styles.section} aria-label="派出的会话" data-testid="dispatch-groups">
+    <section className={styles.section} aria-label={m.heading} data-testid="dispatch-groups">
       <div className={styles.header}>
-        <h2>派出的会话</h2>
+        <h2>{m.heading}</h2>
         <span className={styles.count}>{groups.length}</span>
       </div>
       {groups.map((g) => (
@@ -46,7 +64,7 @@ export function DispatchGroups() {
           <span className={`${styles.icon} ${local.icon}`}>
             <Split {...ICON} />
           </span>
-          <button type="button" className={`${styles.task} ${local.link}`} title={`前往「${g.parent.title}」`} onClick={() => enterSession(g.parent.id)}>
+          <button type="button" className={`${styles.task} ${local.link}`} title={m.goTo(g.parent.title)} onClick={() => enterSession(g.parent.id)}>
             {g.parent.title}
           </button>
           <span className={styles.members}>
@@ -74,10 +92,10 @@ export function DispatchGroups() {
             <button
               type="button"
               className={enterStyles.enter}
-              title="在浮层里并排看这几个会话的终端"
+              title={m.compareTitle}
               onClick={() => showCompare(`dispatch:${g.parent.id}`, g.children.slice(0, 4).map((c) => c.id))}
             >
-              比较
+              {m.compare}
             </button>
           )}
         </div>

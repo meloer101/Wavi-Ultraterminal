@@ -155,7 +155,7 @@ interface WorkspaceState extends WorkspaceData {
   /** Starts a session in the project and selects it; null if the project is gone. `ui` 'gui': a GUI session (PRD F23). */
   addSession(projectId: ProjectId, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
-   * 作为 leader / 新建… (PRD F21 v1.178 · 开): starts a session in the project's main checkout as its leader and
+   * 作为 leader / 新建… (PRD F21 v1.198 · 开): starts a session in the project's main checkout as its leader and
    * selects it, in one change (its first launch already runs as a leader). Null when the project is gone, already has
    * a leader, or the agent cannot lead (`canLead`).
    */
@@ -226,6 +226,7 @@ export type SessionPatch = Partial<
     | 'dispatchBase'
     | 'dispatchModel'
     | 'scheduledBy'
+    | 'github'
     | 'guiPermission'
     | 'guiPlan'
   >

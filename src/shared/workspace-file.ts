@@ -10,7 +10,8 @@ import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeReviewMarks, type ViewedMarks } from './review-progress'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
-import type { AgentKind, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
+import { parseGitHubLink } from './github-board'
+import type { AgentKind, GitHubLink, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
 import { isScheduleId } from './schedule'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedDispatch, type SavedFixRun, type SavedShipRun } from './saved-runs'
@@ -78,6 +79,8 @@ export interface PersistedSession {
   dispatchModel?: string
   /** The 定时任务 run that opened it (PRD F24). */
   scheduledBy?: ScheduledBy
+  /** The issue or PR it was started on (看板 · GitHub). */
+  github?: GitHubLink
 }
 
 /** A saved 定时任务 origin (PRD F24), or null. */
@@ -165,7 +168,7 @@ export interface WorkspaceFile {
   /** Dispatch's waiting 开始 and reports on their way (saved-runs.ts); only sessions that exist. Absent when none. */
   dispatch?: SavedDispatch
   /**
-   * Each project's leader session (PRD F21 v1.178), by project id: an agent session (not a plain terminal) in one of that
+   * Each project's leader session (PRD F21 v1.198), by project id: an agent session (not a plain terminal) in one of that
    * project's worktrees. At most one per project. Absent when none.
    */
   leaderSessions?: Record<string, string>
@@ -270,7 +273,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
                 ...(isString(s.dispatchModel) && MODEL_NAME.test(s.dispatchModel) ? { dispatchModel: s.dispatchModel } : {})
               }
             : {}),
-          ...(s.kind !== 'shell' && scheduledBy(s.scheduledBy) ? { scheduledBy: scheduledBy(s.scheduledBy) as NonNullable<PersistedSession['scheduledBy']> } : {})
+          ...(s.kind !== 'shell' && scheduledBy(s.scheduledBy) ? { scheduledBy: scheduledBy(s.scheduledBy) as NonNullable<PersistedSession['scheduledBy']> } : {}),
+          ...(s.kind !== 'shell' && parseGitHubLink(s.github) ? { github: parseGitHubLink(s.github) as GitHubLink } : {})
         }
       })
   )
@@ -394,7 +398,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
 /**
  * A leader whose session is gone, is in another project's worktree, cannot lead (`canLead`: a plain terminal, a GUI
  * session, an agent not measured as leader) or reports to a dispatcher (`dispatchedBy`: a leader is a top-level
- * session, as workspace-model `setLeader` has it) is dropped (PRD F21 v1.178 · 存盘).
+ * session, as workspace-model `setLeader` has it) is dropped (PRD F21 v1.198 · 存盘).
  */
 export function sanitizeLeaders(
   raw: unknown,

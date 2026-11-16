@@ -4,6 +4,7 @@ import { hasOwnAdapter } from '@shared/agents'
 import { confirmLabels, tellLabel } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId, WaviAskKind } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
@@ -17,6 +18,11 @@ import { dropConfirmsOf } from '../dispatch/handler'
 import { finishGoesToDispatcher, leaderTurnQuiet } from '../dispatch/reports'
 import { useDispatch } from '../dispatch/store'
 import { scheduleRequestCounts, useScheduleRequests } from '../schedules/agent-requests'
+
+const M = defineMessages({
+  zh: { schedules: (n: number) => `想建 ${n} 个定时任务` },
+  en: { schedules: (n: number) => (n === 1 ? 'Wants to create 1 scheduled task' : `Wants to create ${n} scheduled tasks`) }
+})
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
@@ -76,7 +82,7 @@ export function startStatusBridge(): () => void {
     // PRD F21: the dispatcher's agent is gone, so its requests to start sessions go too.
     onWaviAskAbandoned: (id) => dropConfirmsOf(id),
     // PRD F21 回报: a dispatched session's finished turn that goes to its dispatcher as a report is read already.
-    // PRD F21 v1.178: so is a leader's turn that a report woke, unless the user spoke there since.
+    // PRD F21 v1.198: so is a leader's turn that a report woke, unless the user spoke there since.
     finishReported: (id) => finishGoesToDispatcher(id) || leaderTurnQuiet(id)
   })
 
@@ -232,8 +238,8 @@ export function startStatusBridge(): () => void {
   const applyConfirms = (): void => {
     const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1, adopt: c.kind === 'adopt' })))
     const asks = new Map<string, { label: string; kind: WaviAskKind }>([...labels].map(([id, label]) => [id, { label, kind: 'confirm' as const }]))
-    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!asks.has(id)) asks.set(id, { label: `想建 ${n} 个定时任务`, kind: 'schedule' })
-    // PRD F21 v1.178: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
+    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!asks.has(id)) asks.set(id, { label: pick(M).schedules(n), kind: 'schedule' })
+    // PRD F21 v1.198: a leader's `wavi tell` is the user's to answer too, after what it asked Wavi to confirm.
     for (const [id, text] of Object.entries(useDispatch.getState().tells)) if (text && !asks.has(id)) asks.set(id, { label: tellLabel(text), kind: 'tell' })
     for (const id of new Set([...asking, ...asks.keys()])) {
       const ask = asks.get(id)

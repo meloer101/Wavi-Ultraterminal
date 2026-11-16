@@ -4,6 +4,8 @@
 import { Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { SessionId, Worktree } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { getSurface, getXtermSurface, setTerminalShown } from '../../terminal/registry'
 import { terminalHostClass, useTerminalHost } from '../../terminal/TerminalArea'
 import { IconButton } from '../../ui/IconButton'
@@ -12,7 +14,13 @@ import { closeTab, openTab, openWorktreeTabs } from './actions'
 import { selectTab, usePanelTerminals } from './store'
 import styles from './TerminalView.module.css'
 
+const M = defineMessages({
+  zh: { terminal: '终端', newTerminal: '新建终端', closeTerminal: '关闭终端' },
+  en: { terminal: 'Terminal', newTerminal: 'New terminal', closeTerminal: 'Close terminal' }
+})
+
 export function TerminalView({ worktree }: { worktree: Worktree }) {
+  const m = useMessages(M)
   const { id: worktreeId, path } = worktree
   const ids = usePanelTerminals((s) => s.worktrees[worktreeId]?.ids)
   const active = usePanelTerminals((s) => s.worktrees[worktreeId]?.active ?? null)
@@ -35,19 +43,19 @@ export function TerminalView({ worktree }: { worktree: Worktree }) {
 
   return (
     <>
-      <PaneHeader title="终端" context={worktree.branch}>
-        <IconButton label="新建终端" onClick={() => setFocusId(openTab({ id: worktreeId, path }))}>
+      <PaneHeader title={m.terminal} context={worktree.branch}>
+        <IconButton label={m.newTerminal} onClick={() => setFocusId(openTab({ id: worktreeId, path }))}>
           <Plus size={16} strokeWidth={1.75} />
         </IconButton>
       </PaneHeader>
       {ids && ids.length > 1 && (
-        <div className={styles.tabs} role="tablist" aria-label="终端">
+        <div className={styles.tabs} role="tablist" aria-label={m.terminal}>
           {ids.map((id) => (
             <div key={id} className={styles.tab} data-active={id === active}>
               <button type="button" role="tab" aria-selected={id === active} className={styles.label} onClick={() => pick(id)}>
                 {titles[id] ?? window.tr.shellName}
               </button>
-              <button type="button" className={styles.close} aria-label="关闭终端" title="关闭终端" onClick={() => closeTab(id)}>
+              <button type="button" className={styles.close} aria-label={m.closeTerminal} title={m.closeTerminal} onClick={() => closeTab(id)}>
                 <X size={12} strokeWidth={1.75} />
               </button>
             </div>

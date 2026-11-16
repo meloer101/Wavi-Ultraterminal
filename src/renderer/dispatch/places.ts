@@ -21,7 +21,7 @@ export function placeOf(id: SessionId): Place | null {
   return session && worktree && project ? { session, worktree, project } : null
 }
 
-/** The project's leader session (PRD F21 v1.178), or null: workspace-model's `leaderOf` on the live workspace. */
+/** The project's leader session (PRD F21 v1.198), or null: workspace-model's `leaderOf` on the live workspace. */
 export function leaderOfProject(projectId: string): SessionId | null {
   return leaderOf(useWorkspace.getState(), projectId)
 }

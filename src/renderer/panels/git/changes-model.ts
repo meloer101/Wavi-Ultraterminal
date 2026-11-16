@@ -7,11 +7,15 @@ import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ShipOperation } from '@shared/ship'
 import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
+import { defineMessages, pick } from '@shared/i18n'
 
 import { changeKey, fileStamp, toggleViewed, type ChangeGroup, type ReviewFile, type ViewedMarks } from '@shared/review-progress'
 
 /** Moved to src/shared/review-progress.ts (已看 marks key rows the same way); kept here for the panel's imports. */
 export { changeKey, type ChangeGroup }
+
+/** The accessible name of 变更's file list; reveal.ts finds the list by it. */
+export const changedFilesLabel = (): string => pick(M).changedFiles
 
 /** Files with more changed lines than this are not diffed in the panel (open them in an editor instead). */
 export const MAX_DIFF_LINES = 20_000
@@ -111,11 +115,46 @@ export type ChangeItem =
   /** `open`: offer to open the file in the default editor. */
   | { kind: 'note'; key: string; text: string; open?: string }
 
-const NO_DIFF_TEXT: Record<NoDiffReason, string> = {
-  nested: '嵌套的 git 仓库，不显示 diff',
-  large: '文件太大，用编辑器打开',
-  binary: '二进制文件，不显示 diff'
-}
+const M = defineMessages({
+  zh: {
+    noDiff: {
+      nested: '嵌套的 git 仓库，不显示 diff',
+      large: '文件太大，用编辑器打开',
+      binary: '二进制文件，不显示 diff'
+    } as Record<NoDiffReason, string>,
+    readingDiff: '正在读取 diff…',
+    diffError: '无法读取 diff',
+    noTextChanges: '没有文本改动',
+    moreLines: (n: number) => `还有 ${n} 行没有显示`,
+    files: (n: number) => `${n} 个文件`,
+    ticked: (n: number) => ` · 勾选 ${n} 个`,
+    uncommitted: '未提交',
+    untrackedOmitted: (n: number) => `还有 ${n} 个未跟踪文件没有列出`,
+    committed: '已提交',
+    commitsVs: (ahead: number, base: string) => `${ahead} 个提交 · 对比 ${base}`,
+    noBase: '没有可对比的基线分支',
+    changedFiles: '改动的文件'
+  },
+  en: {
+    noDiff: {
+      nested: 'Nested git repository, no diff shown',
+      large: 'File too large, open it in an editor',
+      binary: 'Binary file, no diff shown'
+    },
+    readingDiff: 'Reading diff…',
+    diffError: "Can't read the diff",
+    noTextChanges: 'No text changes',
+    moreLines: (n: number) => `${n} more ${n === 1 ? 'line' : 'lines'} not shown`,
+    files: (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`,
+    ticked: (n: number) => ` · ${n} ticked`,
+    uncommitted: 'Uncommitted',
+    untrackedOmitted: (n: number) => `${n} more untracked ${n === 1 ? 'file' : 'files'} not listed`,
+    committed: 'Committed',
+    commitsVs: (ahead: number, base: string) => `${ahead} ${ahead === 1 ? 'commit' : 'commits'} · vs ${base}`,
+    noBase: 'No base branch to compare with',
+    changedFiles: 'Changed files'
+  }
+})
 
 /** The line a comment on this diff row is anchored to; null for hunk headers. */
 export function rowAnchor(row: DiffRow): { side: CommentSide; line: number } | null {
@@ -176,6 +215,7 @@ export function changeItems(
   /** 已看 marks and the 未看 filter; null: no marks (every row unviewed). */
   review: ReviewView | null = null
 ): ChangeItem[] {
+  const m = pick(M)
   const split = layout === 'split' ? ({ split: true } as const) : {}
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
@@ -192,14 +232,14 @@ export function changeItems(
       if (!open) continue
       const reason = noDiffReason(change)
       if (reason) {
-        items.push({ kind: 'note', key, text: NO_DIFF_TEXT[reason], ...(reason === 'large' ? { open: change.path } : {}) })
+        items.push({ kind: 'note', key, text: m.noDiff[reason], ...(reason === 'large' ? { open: change.path } : {}) })
         continue
       }
       const diff = diffs[key]
-      if (!diff || diff.kind === 'loading') items.push({ kind: 'note', key, text: '正在读取 diff…' })
-      else if (diff.kind === 'error') items.push({ kind: 'note', key, text: '无法读取 diff' })
-      else if (diff.binary) items.push({ kind: 'note', key, text: NO_DIFF_TEXT.binary })
-      else if (diff.rows.length === 0) items.push({ kind: 'note', key, text: '没有文本改动' })
+      if (!diff || diff.kind === 'loading') items.push({ kind: 'note', key, text: m.readingDiff })
+      else if (diff.kind === 'error') items.push({ kind: 'note', key, text: m.diffError })
+      else if (diff.binary) items.push({ kind: 'note', key, text: m.noDiff.binary })
+      else if (diff.rows.length === 0) items.push({ kind: 'note', key, text: m.noTextChanges })
       else {
         const placed = new Set<string>()
         let draftPlaced = false
@@ -232,7 +272,7 @@ export function changeItems(
         // Comments whose line is no longer in the diff (the file changed since) still count; they go last.
         for (const comment of own) if (!placed.has(comment.id)) commentItem(comment)
         if (draftHere && !draftPlaced) items.push({ kind: 'editor', key, ...split })
-        if (diff.truncated > 0) items.push({ kind: 'note', key, text: `还有 ${diff.truncated} 行没有显示`, open: change.path })
+        if (diff.truncated > 0) items.push({ kind: 'note', key, text: m.moreLines(diff.truncated), open: change.path })
       }
     }
   }
@@ -240,17 +280,17 @@ export function changeItems(
   const count = changes.uncommitted.length + changes.untrackedOmitted
   if (count > 0) {
     const ticked = unticked ? tickedPaths(changes.uncommitted, unticked).length : count
-    const meta = `${count} 个文件${unticked && ticked < count ? ` · 勾选 ${ticked} 个` : ''}`
-    items.push({ kind: 'group', title: '未提交', meta, ...(unticked ? { group: 'uncommitted' as const } : {}) })
+    const meta = `${m.files(count)}${unticked && ticked < count ? m.ticked(ticked) : ''}`
+    items.push({ kind: 'group', title: m.uncommitted, meta, ...(unticked ? { group: 'uncommitted' as const } : {}) })
   }
   files('uncommitted', changes.uncommitted)
   if (changes.untrackedOmitted > 0) {
-    items.push({ kind: 'note', key: 'untracked-omitted', text: `还有 ${changes.untrackedOmitted} 个未跟踪文件没有列出` })
+    items.push({ kind: 'note', key: 'untracked-omitted', text: m.untrackedOmitted(changes.untrackedOmitted) })
   }
   items.push({
     kind: 'group',
-    title: '已提交',
-    meta: changes.base ? `${changes.ahead} 个提交 · 对比 ${changes.base}` : '没有可对比的基线分支'
+    title: m.committed,
+    meta: changes.base ? m.commitsVs(changes.ahead, changes.base) : m.noBase
   })
   files('committed', changes.committed)
   return items

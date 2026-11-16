@@ -4,6 +4,12 @@ import { anchorOf, formatAccelerator, isActionable, originToward, placeMenu, ste
 import { closeMenu, useMenu } from './menu'
 import { useWindowScope } from '../state/window-scope'
 import styles from './MenuHost.module.css'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { menu: '菜单', missing: (label: string) => `${label}，没装` },
+  en: { menu: 'Menu', missing: (label: string) => `${label}, not installed` }
+})
 
 /**
  * The open context / dropdown menu (ui/menu.ts). No Figma frame: built from the settings select's list
@@ -41,7 +47,7 @@ function MenuLayer({ entries, placement, win }: { entries: MenuEntry[]; placemen
       window.removeEventListener('resize', dismiss)
     }
   }, [win])
-  return <MenuPanel entries={entries} placement={placement} label="菜单" takeFocus />
+  return <MenuPanel entries={entries} placement={placement} label={pick(M).menu} takeFocus />
 }
 
 interface PanelProps {
@@ -165,7 +171,7 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         data-index={index}
         data-active={index === active}
         data-muted={entry.type === 'item' && entry.muted ? true : undefined}
-        aria-label={entry.type === 'item' && entry.muted ? `${entry.label}，没装` : undefined}
+        aria-label={entry.type === 'item' && entry.muted ? pick(M).missing(entry.label) : undefined}
         aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
         aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
         aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}
