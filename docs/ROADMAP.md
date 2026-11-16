@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-16：GUI 对话的七处可视化（PRD v1.199，Figma 90）：文件引用可点和悬停看行、网页搜索结果和网页标题、代码块和 diff 着色（新依赖 lowlight）、测试结果、依赖栈帧折叠、「↓ 回到最新」、Claude 会话的回退（对话 / 代码 / 两者）和改过的消息切换版本。e2e `gui-session.spec.ts` 加 4 个；回退文件用真 Claude（Haiku）实测过 `rewind_files`，界面里只用假 Claude 测过。
 - 2026-11-15：看板浮层里的 GUI 会话显示它的聊天（可以直接回复），不再是一块空终端（PRD F9 / F23）。`overview/BorrowedTerminal.tsx` 对 GUI 会话画 `ChatPane`；e2e `gui-session.spec.ts`（同时把侧栏入口的名字从「总览」改成「看板」）。
 - 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
 - 2026-11-15：设置 · 额度 统计去掉多余的线：四个数字之间不再有竖线，只靠留白分开；还没有记录的月份 / 日期不再画空框，只留下面的标签；柱状图去掉中间那条参考线和它的刻度，只留顶线和底线（热力图的空格子没动；Figma 69″ 未同步）。
@@ -364,7 +365,9 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
-- [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
+- [x] 回退 agent 改过的文件：Claude 用 `rewind_files`（v1.199，Figma 90G）
+- [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；Codex、Pi、ACP 的回退
+- [ ] v1.199 没测 / 没做：真 Claude 在 Wavi 里回退一次（只有假 Claude 的 e2e 和命令行实测）；`--resume` 之后旧消息的文件回退；Codex 的搜索结果列表（app-server 只给搜索词）、ACP 的 `resource_link`；版本切换只看一层（旧版本里再改过的消息不能再切）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
 - [ ] 没做：总览浮层里 GUI 会话不显示聊天；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上（手机打开也算看到，v1.161）；ACP agent 的状态事件 agent 字段暂报 `opencode`

@@ -313,6 +313,52 @@ test.describe('F23 GUI session (Claude)', () => {
     await bash.click()
   })
 
+  test('file references, web results, colored code, test results and folded frames (Figma 90A–90E)', async () => {
+    await send('show visuals')
+    const theme = (t: 'dark' | 'light') =>
+      page.evaluate((x) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: x } }), t)
+    // 90A: an existing file named in the reply is a link; resting on it shows its first lines.
+    const link = feed().getByTestId('gui-file-ref').filter({ hasText: 'README.md:1' }).first()
+    await expect(link).toBeVisible(WITHIN)
+    await expect(feed().getByTestId('gui-file-ref')).toHaveCount(3)
+    await link.hover()
+    const card = page.getByTestId('gui-file-card')
+    await expect(card).toContainText('# demo', WITHIN)
+    await page.screenshot({ path: join(SHOTS, 'file-card-dark.png') })
+    await page.mouse.move(5, 5)
+    await expect(card).toHaveCount(0, WITHIN)
+    // 90C: the code block is colored by its language.
+    await expect(feed().locator('pre [data-hl="keyword"]').first()).toHaveText('export')
+    // 90B: the search lists what it found; the fetched page is named by the title the search found.
+    const group = feed().getByTestId('gui-tool-group').last()
+    await group.getByRole('button').first().click()
+    const search = feed().getByRole('button', { name: /搜索网页\s*safari samesite lax.*2 个结果/ })
+    await search.click()
+    await expect(feed().getByTestId('gui-search-results').getByRole('link')).toHaveCount(2)
+    await expect(feed().getByRole('button', { name: /读取\s*Tracking Prevention in WebKit\s*webkit\.org/ })).toBeVisible()
+    // 90D: the test run says what failed and passed, and opens to the failure.
+    const tests = feed().getByRole('button', { name: /运行\s*pnpm vitest run server\/auth.*1 失败\s*11 通过\s*1\.80s/ })
+    await expect(tests).toBeVisible()
+    await tests.click()
+    const results = feed().getByTestId('gui-test-results')
+    await expect(results).toContainText('refresh › renews from the cookie when expired')
+    await expect(results.getByTestId('gui-file-ref')).toHaveText('README.md:1:3')
+    // 90E: a frame in the project is a link, the frames in dependencies fold into one row.
+    await feed().getByRole('button', { name: /运行\s*pnpm dev/ }).click()
+    await expect(feed().getByTestId('gui-folded-frames')).toHaveText('依赖里的 2 帧')
+    await expect(feed().locator('pre').filter({ hasText: 'readToken' }).getByTestId('gui-file-ref')).toHaveText('README.md:1:3')
+    for (const t of ['dark', 'light'] as const) {
+      await theme(t)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', t)
+      await page.screenshot({ path: join(SHOTS, `visuals-${t}.png`) })
+    }
+    await theme('dark')
+    // 90A′: a click opens the file in the 文件 view.
+    await link.click()
+    await expect(page.getByTestId('file-preview')).toBeVisible(WITHIN)
+    await page.screenshot({ path: join(SHOTS, 'file-ref-opened.png') })
+  })
+
   test('the current task list sits above the composer and its row opens to it (Figma 59J)', async () => {
     await send('make tasks')
     const card = page.getByTestId('gui-todos')
@@ -699,6 +745,34 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(launched.args[at + 1]).toMatch(/^assistant-/)
   })
 
+  test('an edited message shows ‹ 2 / 2 ›; the earlier version is drawn in its place (Figma 90G′)', async () => {
+    const versions = feed().getByTestId('gui-version-switch')
+    await expect(versions).toHaveText(/2 \/ 2/, WITHIN)
+    await versions.getByRole('button', { name: '上一个版本' }).click()
+    await expect(feed().getByText('Hello: second one')).toBeVisible()
+    await expect(feed().getByTestId('gui-version-switch')).toHaveText(/1 \/ 2/)
+    await page.screenshot({ path: join(SHOTS, 'versions.png') })
+    await feed().getByTestId('gui-version-switch').getByRole('button', { name: '下一个版本' }).click()
+    await expect(feed().getByText('Hello: second one')).toHaveCount(0)
+  })
+
+  test('回退 takes the conversation back and puts the message in the composer (Figma 90G)', async () => {
+    await send('rewind me')
+    await expect(feed().getByText('Hello: rewind me')).toBeVisible(WITHIN)
+    const target = feed()
+      .locator('[data-item]')
+      .filter({ has: page.getByText('rewind me', { exact: true }) })
+    await target.hover()
+    await target.getByTestId('gui-rewind').click()
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem')).toHaveText([/回退对话和代码\s*1 个文件/, '只回退对话', /只回退代码\s*1 个文件/], WITHIN)
+    await page.screenshot({ path: join(SHOTS, 'rewind-menu.png') })
+    await menu.getByRole('menuitem', { name: '只回退对话' }).click()
+    await expect(feed().getByText('Hello: rewind me')).toHaveCount(0, WITHIN)
+    await expect(input()).toHaveText('rewind me')
+    await input().fill('')
+  })
+
   test('scrolled up, the view stays; sending a message brings it back to the end', async () => {
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await feed().evaluate((el) => new Promise((done) => requestAnimationFrame(() => done(el.scrollTop))))
@@ -717,6 +791,19 @@ test.describe('F23 GUI session (Claude)', () => {
       return Math.round(gap)
     })
     expect(room).toBe(120)
+  })
+
+  test('scrolled up while the reply streams, 「↓ 回到最新」 brings the view back (Figma 90F′)', async () => {
+    await send('slow answer')
+    await expect.poll(() => feed().evaluate((el) => el.textContent?.includes('Hello...') ?? false), WITHIN).toBe(true)
+    await feed().evaluate((el) => el.scrollTo(0, 0))
+    const jump = page.getByTestId('gui-jump-to-latest')
+    await expect(jump).toBeVisible(WITHIN)
+    await page.screenshot({ path: join(SHOTS, 'jump-to-latest.png') })
+    await jump.click()
+    await expect(jump).toHaveCount(0, WITHIN)
+    await expect.poll(() => feed().evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 48), WITHIN).toBe(true)
+    await composer().getByRole('button', { name: '停止' }).click()
   })
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {

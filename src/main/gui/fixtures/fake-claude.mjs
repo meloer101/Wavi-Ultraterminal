@@ -2,7 +2,8 @@
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
 // "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
 // replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted); "colors"
-// runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
+// runs a command with colored output; "visuals" searches the web, fetches a page, runs a failing vitest and a crashing
+// dev server and names files in its reply (Figma 90); "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
 // `can_use_tool` for an Edit; "subagent" runs an Agent whose own messages (`parent_tool_use_id`) come before its result,
 // which comes 1.5 s later; "dispatch" runs two `wavi run cursor … --ui cli` in its own shell (the real wavi on PATH),
 // each a Bash call with what it printed; "workflow" asks `can_use_tool` for a Workflow (ultracode, PRD F25) and, once
@@ -103,6 +104,57 @@ function reply(text) {
     const colored = '\x1b[32m✓\x1b[39m server/auth/login.test.ts \x1b[2m(8 tests)\x1b[22m\n\x1b[31m✗ server/auth/refresh.test.ts > rotates the token\x1b[39m\n\x1b[1mTests\x1b[22m  \x1b[91m1 failed\x1b[39m | \x1b[92m8 passed\x1b[39m'
     out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu3', content: colored, is_error: true }] }, session_id: SESSION, parent_tool_use_id: null })
     const markdown = '## 测试结果\n\n1 个失败：刷新接口还在读 `localStorage`。\n\n- 登录改成 Set-Cookie\n- 删掉 `session.ts` 里的 localStorage\n\n```ts\nres.cookie(\'session\', token, { httpOnly: true })\n```\n\n---\n\n| 文件 | 结果 |\n| --- | --- |\n| login.test.ts | 通过 |\n| refresh.test.ts | 失败 |'
+    return finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: markdown }] }, session_id: SESSION, parent_tool_use_id: null })
+  }
+  if (text.includes('visuals')) {
+    // Figma 90A–90E: a web search and fetch, a failing vitest run, a crash with a stack, and a reply naming files.
+    const call = (name, input) => {
+      const id = `tu-v-${++tools}`
+      out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] }, session_id: SESSION, parent_tool_use_id: null })
+      return id
+    }
+    const result = (id, content, extra = {}) => out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content, ...extra }] }, session_id: SESSION, parent_tool_use_id: null })
+    const links = [
+      { title: 'Tracking Prevention in WebKit', url: 'https://webkit.org/tracking-prevention/' },
+      { title: 'SameSite cookies explained', url: 'https://web.dev/samesite-cookies-explained/' }
+    ]
+    const summary = 'Safari sends Lax cookies on top-level GET navigations only.'
+    const search = call('WebSearch', { query: 'safari samesite lax' })
+    out({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: search, content: `Web search results for query: "safari samesite lax"\n\nLinks: ${JSON.stringify(links)}\n\n${summary}` }] },
+      session_id: SESSION,
+      parent_tool_use_id: null,
+      tool_use_result: { query: 'safari samesite lax', results: [{ tool_use_id: 'srv-1', content: links }, summary] }
+    })
+    result(call('WebFetch', { url: links[0].url, prompt: 'What does ITP do to Lax cookies?' }), 'Full third-party cookie blocking applies to every cross-site request.')
+    const vitest = [
+      ' FAIL  server/auth/refresh.test.ts > refresh > renews from the cookie when expired',
+      'AssertionError: expected 401 to be 200 // Object.is equality',
+      '',
+      '- Expected',
+      '+ Received',
+      '',
+      '- 200',
+      '+ 401',
+      '',
+      ' ❯ README.md:1:3',
+      '',
+      ' Test Files  1 failed | 3 passed (4)',
+      '      Tests  1 failed | 11 passed (12)',
+      '   Duration  1.80s (transform 40ms)'
+    ].join('\n')
+    result(call('Bash', { command: 'pnpm vitest run server/auth' }), vitest, { is_error: true })
+    const crash = [
+      '> demo@0.1.0 dev',
+      "TypeError: Cannot read properties of undefined (reading 'getItem')",
+      '    at readToken (README.md:1:3)',
+      '    at a (/repo/node_modules/h3/dist/index.mjs:10:2)',
+      '    at b (/repo/node_modules/h3/dist/index.mjs:20:4)',
+      'Node.js v22.11.0'
+    ].join('\n')
+    result(call('Bash', { command: 'pnpm dev' }), crash, { is_error: true })
+    const markdown = '原因在 `README.md:1`，另见 README.md 和[说明](README.md#L1)；Safari 的做法见 [WebKit](https://webkit.org/tracking-prevention/)。\n\n```ts\nexport const token: string = readToken() // TODO\n```'
     return finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: markdown }] }, session_id: SESSION, parent_tool_use_id: null })
   }
   if (text.includes('subagent')) {

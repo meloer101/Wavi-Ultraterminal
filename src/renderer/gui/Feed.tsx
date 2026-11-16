@@ -221,6 +221,15 @@ export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, wait
   const editing = editingAt >= 0 ? editingId : null
   const startEdit = useCallback((id: string) => setEditingId(id), [])
   const cancelEdit = useCallback(() => setEditingId(null), [])
+  // A sent edit is done with: the message may come back (an earlier version, Figma 90G′) and must not reopen as a box.
+  const saveEdit = useCallback(
+    async (id: string, text: string): Promise<string | null> => {
+      const reason = await onEdit(id, text)
+      if (reason === null) setEditingId(null)
+      return reason
+    },
+    [onEdit]
+  )
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
@@ -287,10 +296,10 @@ export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, wait
               faded={editingAt >= 0 && i > editingAt}
               editable={canEdit && !busy && !block.item.id.startsWith('pending-') && !readOnly.has(block.item.id)}
               {...(chat.switches.has(block.item.id) ? { branch: chat.switches.get(block.item.id)!, onSwitch: switchVersion } : {})}
-              editing={editing === block.item.id}
+              editing={editing === block.item.id && !readOnly.has(block.item.id)}
               onStartEdit={startEdit}
               onCancel={cancelEdit}
-              onSave={onEdit}
+              onSave={saveEdit}
               {...(onRewind ? { onRewind } : {})}
             />
           ) : (
