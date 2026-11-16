@@ -31,6 +31,7 @@ const M = defineMessages({
     copyPath: '复制路径',
     moveToNewWindow: '移到新窗口',
     closeSession: '关闭会话',
+    closeSessions: (n: number) => `关闭 ${n} 个会话`,
     archiveWorktree: '归档 worktree…',
     rename: '重命名…',
     sameTask: '同任务多解…'
@@ -42,6 +43,7 @@ const M = defineMessages({
     copyPath: 'Copy path',
     moveToNewWindow: 'Move to new window',
     closeSession: 'Close session',
+    closeSessions: (n: number) => `Close ${n} sessions`,
     archiveWorktree: 'Archive worktree…',
     rename: 'Rename…',
     sameTask: 'Same task, several tries…'
@@ -138,7 +140,7 @@ export async function closeSessionInteractive(sessionId: SessionId): Promise<boo
 
 /**
  * Closes the sessions picked in the sidebar (⇧ / ⌘ click) after one confirmation that names how many and how many of
- * them are running or waiting (the overview's 关闭 N 个). Resolves to whether they were closed.
+ * them are running or waiting (as the board's batch close does). Resolves to whether they were closed.
  */
 export async function closeSessionsInteractive(ids: readonly SessionId[]): Promise<boolean> {
   const sessions = useWorkspace.getState().sessions
@@ -154,7 +156,7 @@ export async function closeSessionsInteractive(ids: readonly SessionId[]): Promi
 
 /** Right-click on one of several sessions picked in the sidebar. */
 export async function openPickedSessionsMenu(ids: readonly SessionId[], anchor: MenuAnchor): Promise<boolean> {
-  const choice = await popupMenu([{ type: 'item', id: 'close', label: `关闭 ${ids.length} 个会话` }], anchor)
+  const choice = await popupMenu([{ type: 'item', id: 'close', label: pick(M).closeSessions(ids.length) }], anchor)
   return choice === 'close' && closeSessionsInteractive(ids)
 }
 
