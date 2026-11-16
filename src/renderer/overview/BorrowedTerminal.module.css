@@ -38,21 +38,13 @@
   box-shadow: 0 0 0 100vmax var(--term-cli-bg);
 }
 
-/* A GUI session's chat card fills the host; the overlay window already gives it its edge and corners. */
+/* A GUI session's chat (GuiCard bare) fills the host; the overlay window gives it its edge and corners. */
 .chatHost {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.chat.chat {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.chat.chat::before {
-  content: none;
-}
 
 .held {
   margin: 0;

@@ -4,9 +4,10 @@
 import { useEffect, useRef } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { Session } from '@shared/types'
-import { ChatPane } from '../gui/ChatPane'
-import chatStyles from '../gui/Chat.module.css'
+import { GuiCard } from '../gui/GuiPane'
+import { useGuiSessions } from '../gui/store'
 import { useWorkspace } from '../state/workspace'
+import { useWorktreeCreations } from '../new-session/creation'
 import { useMessages } from '../ui/i18n'
 import { borrowTerminal } from '../terminal/borrow'
 import { useLiveSessions } from '../terminal/live-sessions'
@@ -25,9 +26,13 @@ export function BorrowedTerminal({ session, variant }: { session: Session; varia
   const m = useMessages(M)
   const hostRef = useRef<HTMLDivElement>(null)
   const live = useLiveSessions((s) => s.live[session.id] !== undefined)
-  // Restored from disk and not started: there is no process to show until the session is entered.
-  const held = session.phase === 'not-started' && !live
   const gui = session.ui === 'gui'
+  // A GUI session's chat is drawn once main has opened it; until then (restored and not started, its worktree still
+  // being made, or simply not opened in any window) the overlay says so rather than offer a composer that goes nowhere.
+  const opened = useGuiSessions((s) => s.states[session.id] !== undefined)
+  const makingWorktree = useWorktreeCreations((s) => s.held[session.id] !== undefined)
+  // A terminal restored from disk and not started has no process to show until the session is entered.
+  const held = gui ? session.phase === 'not-started' || makingWorktree || !opened : session.phase === 'not-started' && !live
   const cwd = useWorkspace((s) => s.worktrees.find((w) => w.id === session.worktreeId)?.path) ?? window.tr.homeDir
 
   useEffect(() => {
@@ -41,9 +46,7 @@ export function BorrowedTerminal({ session, variant }: { session: Session; varia
     return (
       // Keys typed in the chat are the session's, as in a terminal (Enter sends, Esc interrupts).
       <div className={styles.chatHost} data-variant={variant} data-overview-terminal="">
-        <div className={`${chatStyles.pane} ${styles.chat}`} data-shown data-session-id={session.id}>
-          <ChatPane sessionId={session.id} agent={session.kind} cwd={cwd} active />
-        </div>
+        <GuiCard sessionId={session.id} agent={session.kind} cwd={cwd} active rect={undefined} bare />
       </div>
     )
   }
