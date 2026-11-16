@@ -6,7 +6,7 @@
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
@@ -23,6 +23,8 @@ import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEdit
 import { CopyButton } from './CopyButton'
 import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
+import { outputRuns, refPieces } from './file-refs'
+import { FileRef, RefSession } from './FileRef'
 import { TodoList } from './Todos'
 import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
@@ -66,7 +68,8 @@ const M = defineMessages({
     failed: (count: number) => `${count} 个失败`,
     waiting: '等你确认',
     copyOutput: '复制输出',
-    thinking: '思考中'
+    thinking: '思考中',
+    dependencyFrames: (count: number) => `依赖里的 ${count} 帧`
   },
   en: {
     pictures: 'Pictures',
@@ -77,7 +80,8 @@ const M = defineMessages({
     failed: (count: number) => `${count} failed`,
     waiting: 'Needs you',
     copyOutput: 'Copy output',
-    thinking: 'Thinking'
+    thinking: 'Thinking',
+    dependencyFrames: (count: number) => `${count} frames in dependencies`
   }
 })
 
@@ -215,6 +219,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
   }, [blocks, live, follow])
 
   return (
+    <RefSession.Provider value={sessionId}>
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
         {blocks.map((block, i) =>
@@ -253,6 +258,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
         )}
       </div>
     </div>
+    </RefSession.Provider>
   )
 }
 
@@ -659,10 +665,11 @@ function Elapsed({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
 
 /**
  * What a command printed, in its colors (the --term-* ones), under `$ <command>` when the agent gave its whole text
- * (Figma 59J); the copy button copies the text alone.
+ * (Figma 59J); the copy button copies the text alone. Figma 90E: file locations in it are links (FileRef), and two or
+ * more stack frames in dependencies in a row fold into one row that opens them.
  */
 function Output({ raw, command }: { raw: string; command?: string }) {
-  const spans = useMemo(() => ansiSpans(raw), [raw])
+  const runs = useMemo(() => outputRuns(raw), [raw])
   return (
     <pre className={styles.output}>
       {command !== undefined && (
@@ -671,16 +678,53 @@ function Output({ raw, command }: { raw: string; command?: string }) {
           {raw ? '\n' : ''}
         </span>
       )}
-      {spans.map((span, i) =>
-        span.fg || span.bold || span.dim ? (
+      {runs.map((run, i) => (
+        <Fragment key={i}>
+          {i > 0 && '\n'}
+          {run.kind === 'frames' ? <FoldedFrames text={run.text} count={run.count} /> : <OutputText raw={run.text} />}
+        </Fragment>
+      ))}
+    </pre>
+  )
+}
+
+/** Output text in its colors, its file locations as links. */
+const OutputText = memo(function OutputText({ raw }: { raw: string }) {
+  const spans = useMemo(() => ansiSpans(raw), [raw])
+  return (
+    <>
+      {spans.map((span, i) => {
+        const text = refPieces(span.text).map((piece, j) =>
+          typeof piece === 'string' ? (
+            piece
+          ) : (
+            <FileRef key={j} target={piece.target}>
+              {piece.text}
+            </FileRef>
+          )
+        )
+        return span.fg || span.bold || span.dim ? (
           <span key={i} className={styles.ansi} data-fg={span.fg} data-bold={span.bold} data-dim={span.dim}>
-            {span.text}
+            {text}
           </span>
         ) : (
-          span.text
+          <Fragment key={i}>{text}</Fragment>
         )
-      )}
-    </pre>
+      })}
+    </>
+  )
+})
+
+/** Figma 90E: 「› node_modules 里的 7 帧」; opened, the frames themselves. */
+function FoldedFrames({ text, count }: { text: string; count: number }) {
+  const m = useMessages(M)
+  const [open, setOpen] = useState(false)
+  if (open) return <OutputText raw={text} />
+  return (
+    <button type="button" className={styles.foldedFrames} onClick={() => setOpen(true)} data-testid="gui-folded-frames">
+      <ChevronRight {...ICON} className={styles.rowChevron} />
+      {m.dependencyFrames(count)}
+    </button>
   )
 }
 

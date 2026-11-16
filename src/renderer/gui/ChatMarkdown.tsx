@@ -2,7 +2,7 @@
 // view's preview (panels/files/MarkdownView), at the chat's reading size. Raw HTML is not rendered (the sanitize
 // schema drops what would run); a link opens in the built-in browser, ⌘-click in the system one. A code block has a
 // copy button in its corner on hover (Figma 54B).
-import { Fragment, memo, useMemo, type MouseEvent, type ReactNode } from 'react'
+import { Fragment, memo, useMemo, type MouseEvent } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
@@ -10,6 +10,8 @@ import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { openLink } from '../state/link-actions'
 import { CopyButton } from './CopyButton'
+import { codeRef, hrefRef, rehypeFileRefs, spanRef } from './file-refs'
+import { FileRef, RefSession } from './FileRef'
 import { highlightLines } from './highlight'
 import { Tokens } from './Highlighted'
 import { useMessages } from '../ui/i18n'
@@ -21,7 +23,8 @@ const M = defineMessages({
 })
 
 const REMARK = [remarkGfm]
-const REHYPE = [rehypeSanitize]
+// Paths in prose become file links after sanitizing (the plugin's spans are Wavi's, not the text's).
+const REHYPE = [rehypeSanitize, rehypeFileRefs]
 
 /** A Markdown (hast) node's text: a code block's source. */
 function hastText(node: unknown): string {
@@ -39,11 +42,17 @@ function languageOf(pre: unknown): string | undefined {
 }
 
 /** Figma 90C: a fenced block colored by its language; as written when none is given or known. */
-function CodeBlock({ node, children }: { node: unknown; children: ReactNode }) {
+function CodeBlock({ node }: { node: unknown }) {
   const language = languageOf(node)
   const code = hastText(node).replace(/\n$/, '')
   const lines = useMemo(() => (language ? highlightLines(code, language) : null), [code, language])
-  if (!lines) return <pre>{children}</pre>
+  // Not through the `code` component: a block is never a file link.
+  if (!lines)
+    return (
+      <pre>
+        <code>{code}</code>
+      </pre>
+    )
   return (
     <pre>
       <code>
@@ -61,30 +70,47 @@ function CodeBlock({ node, children }: { node: unknown; children: ReactNode }) {
 export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, className }: { sessionId: SessionId; text: string; className?: string }) {
   const m = useMessages(M)
   const components: Components = {
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        title={href}
-        onClick={(e: MouseEvent<HTMLAnchorElement>) => {
-          e.preventDefault()
-          if (href && /^https?:\/\//i.test(href)) openLink(sessionId, href, e.metaKey ? 'external' : 'internal')
-        }}
-      >
-        {children}
-      </a>
-    ),
-    pre: ({ node, children }) => (
+    a: ({ href, children }) => {
+      // Figma 90A: a link to a file of the session (Codex and Claude in an IDE write them so).
+      const file = href ? hrefRef(href) : null
+      if (file) return <FileRef target={file}>{children}</FileRef>
+      return (
+        <a
+          href={href}
+          title={href}
+          onClick={(e: MouseEvent<HTMLAnchorElement>) => {
+            e.preventDefault()
+            if (href && /^https?:\/\//i.test(href)) openLink(sessionId, href, e.metaKey ? 'external' : 'internal')
+          }}
+        >
+          {children}
+        </a>
+      )
+    },
+    // Inline code (blocks draw their own): a path and nothing else is a file link.
+    code: ({ node, className: codeClass, children }) => {
+      const file = codeClass ? null : codeRef(hastText(node))
+      const code = <code className={codeClass}>{children}</code>
+      return file ? <FileRef target={file}>{code}</FileRef> : code
+    },
+    span: ({ node: _node, children, ...props }) => {
+      const file = spanRef(props)
+      return file ? <FileRef target={file}>{children}</FileRef> : <span {...props}>{children}</span>
+    },
+    pre: ({ node }) => (
       <div className={styles.codeWrap}>
-        <CodeBlock node={node}>{children}</CodeBlock>
+        <CodeBlock node={node} />
         <CopyButton text={() => hastText(node).replace(/\n$/, '')} label={m.copyCode} className={styles.cornerCopy} />
       </div>
     )
   }
   return (
-    <div className={[styles.markdown, className].filter(Boolean).join(' ')}>
-      <Markdown remarkPlugins={REMARK} rehypePlugins={REHYPE} components={components}>
-        {text}
-      </Markdown>
-    </div>
+    <RefSession.Provider value={sessionId}>
+      <div className={[styles.markdown, className].filter(Boolean).join(' ')}>
+        <Markdown remarkPlugins={REMARK} rehypePlugins={REHYPE} components={components}>
+          {text}
+        </Markdown>
+      </div>
+    </RefSession.Provider>
   )
 })
