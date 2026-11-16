@@ -1,10 +1,19 @@
 // One file's change as the chat draws it (PRD F23, Figma 59J / 59I): a 1px border/subtle frame, the added and removed
 // lines tinted, hunks apart by a ⋯ line; with its path · +N −M on a header row where the file is not named next to it
 // (a change to several files, a permission card). Used by the feed's tool rows (Feed) and the permission card (Cards).
+import { useMemo } from 'react'
 import type { FileDiff } from '@shared/transcript-chat'
+import { highlightLines, languageOfPath } from './highlight'
+import { Tokens } from './Highlighted'
 import styles from './Chat.module.css'
 
 export function DiffBlock({ diff, header, className }: { diff: FileDiff; header: boolean; className?: string }) {
+  // Figma 90C: each hunk colored by the file's language, as one block (a comment or string over several lines reads
+  // right); a hunk that cannot be colored stays plain.
+  const colored = useMemo(() => {
+    const language = languageOfPath(diff.path)
+    return diff.hunks.map((hunk) => (language ? highlightLines(hunk.lines.map((line) => line.slice(1)).join('\n'), language) : null))
+  }, [diff])
   return (
     <div className={className ? `${styles.fileBlock} ${className}` : styles.fileBlock} data-testid="gui-diff">
       {header && (
@@ -25,7 +34,7 @@ export function DiffBlock({ diff, header, className }: { diff: FileDiff; header:
                 {hunk.lines.map((line, i) => (
                   <span key={i} className={styles.diffLine} data-kind={line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}>
                     <span className={styles.diffSign}>{line[0] === '+' || line[0] === '-' ? line[0] : ' '}</span>
-                    {line.slice(1)}
+                    {colored[h]?.[i] ? <Tokens tokens={colored[h][i]} /> : line.slice(1)}
                     {'\n'}
                   </span>
                 ))}

@@ -545,6 +545,35 @@
   opacity: 0.6;
 }
 
+/* Figma 90C: code colored by scope (highlight.ts) with the terminal theme's colors; other scopes keep the text's. */
+.hl:is([data-hl='keyword'], [data-hl='selector-tag'], [data-hl='literal']) {
+  color: var(--term-violet);
+}
+
+.hl:is([data-hl='string'], [data-hl='regexp'], [data-hl='symbol'], [data-hl='char'], [data-hl='addition']) {
+  color: var(--term-green);
+}
+
+.hl:is([data-hl='number'], [data-hl='attr'], [data-hl='attribute']) {
+  color: var(--term-yellow);
+}
+
+.hl:is([data-hl='title'], [data-hl='section'], [data-hl='name'], [data-hl='selector-id'], [data-hl='selector-class']) {
+  color: var(--term-blue);
+}
+
+.hl:is([data-hl='type'], [data-hl='built_in'], [data-hl='tag'], [data-hl='property']) {
+  color: var(--term-cyan);
+}
+
+.hl:is([data-hl='comment'], [data-hl='quote'], [data-hl='doctag'], [data-hl='meta']) {
+  color: var(--term-dim);
+}
+
+.hl[data-hl='deletion'] {
+  color: var(--term-red);
+}
+
 .fileBlocks {
   display: flex;
   flex-direction: column;
