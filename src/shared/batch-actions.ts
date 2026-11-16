@@ -25,6 +25,8 @@ const M = defineMessages({
     closeMessage: (n: number) => `关闭 ${n} 个会话？`,
     closeActive: (n: number) => `其中 ${n} 个正在运行或等你处理，关闭会中断它们。`,
     closeKeeps: 'worktree 和分支都留着。',
+    closeDropsSnapshots: (n: number) => `其中 ${n} 个是只读快照，快照的 worktree 会一起删掉；其余的 worktree 和分支都留着。`,
+    ok: '好',
     result: (action: BatchAction, done: number) => `${action === 'send' ? '已发送给' : action === 'stop' ? '已停止' : '已关闭'} ${done} 个`,
     failed: (head: string, action: BatchAction, failures: ReadonlyArray<{ title: string; message: string }>) =>
       `${head}，${failures.length} 个${action === 'send' ? '没发出去' : action === 'stop' ? '没停下' : '没关掉'}：${failures.map((f) => `${f.title}（${f.message}）`).join('；')}`
@@ -48,6 +50,11 @@ const M = defineMessages({
     closeMessage: (n: number) => (n === 1 ? 'Close 1 session?' : `Close ${n} sessions?`),
     closeActive: (n: number) => `${n} of them ${n === 1 ? 'is' : 'are'} running or need${n === 1 ? 's' : ''} you; closing interrupts ${n === 1 ? 'it' : 'them'}.`,
     closeKeeps: 'Worktrees and branches stay.',
+    closeDropsSnapshots: (n: number) =>
+      n === 1
+        ? '1 of them is a read-only snapshot; its worktree is deleted with it. Other worktrees and branches stay.'
+        : `${n} of them are read-only snapshots; their worktrees are deleted with them. Other worktrees and branches stay.`,
+    ok: 'OK',
     result: (action: BatchAction, done: number) => `${action === 'send' ? 'Sent to' : action === 'stop' ? 'Stopped' : 'Closed'} ${done}`,
     failed: (head: string, action: BatchAction, failures: ReadonlyArray<{ title: string; message: string }>) =>
       `${head}; ${failures.length} ${action === 'send' ? 'not sent' : action === 'stop' ? 'not stopped' : 'not closed'}: ${failures.map((f) => `${f.title} (${f.message})`).join('; ')}`
@@ -147,7 +154,11 @@ const clip = (text: string): string => {
  * The confirmation before anything happens; null when the action reaches no session. Sending says the message and
  * every recipient, and that each one spends a turn of the user's own quota.
  */
-export function batchConfirmation(plan: BatchPlan, text = ''): ConfirmOptions | null {
+/**
+ * The confirmation for `plan`. `snapshots`: how many read-only snapshot worktrees the close also deletes (the sidebar's
+ * close takes a snapshot's worktree with its last session, PRD F21); the board's close deletes none.
+ */
+export function batchConfirmation(plan: BatchPlan, text = '', snapshots = 0): ConfirmOptions | null {
   const n = plan.targets.length
   if (n === 0) return null
   const skipped = skippedText(plan)
@@ -172,13 +183,18 @@ export function batchConfirmation(plan: BatchPlan, text = ''): ConfirmOptions | 
       const active = plan.targets.filter((t) => t.status === 'running' || t.status === 'needs_you').length
       return {
         message: m.closeMessage(n),
-        detail: lines(active > 0 ? m.closeActive(active) : null, m.closeKeeps, recipientsLine(plan)),
+        detail: lines(active > 0 ? m.closeActive(active) : null, snapshots > 0 ? m.closeDropsSnapshots(snapshots) : m.closeKeeps, recipientsLine(plan)),
         confirmLabel: m.closeN(n),
         cancelLabel: m.cancel,
         destructive: true
       }
     }
   }
+}
+
+/** The sheet after a batch where some targets failed: the result line and one button. */
+export function batchFailureNotice(action: BatchAction, done: number, failures: ReadonlyArray<{ title: string; message: string }>): ConfirmOptions {
+  return { message: batchResultText(action, done, failures), confirmLabel: pick(M).ok }
 }
 
 /** After the action: `已发送给 3 个` / `已发送给 2 个，1 个没发出去：修复登录（终端里有确认框…）`. */

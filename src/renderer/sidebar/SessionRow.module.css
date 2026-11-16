@@ -111,6 +111,12 @@
   background: transparent;
 }
 
+/* Picked with ⇧ / ⌘ click to close several at once: the selected tint, also on the row the user is in. */
+.row[data-picked='true'],
+.row[data-picked='true']:hover {
+  background: var(--bg-selected);
+}
+
 /* Being dragged into the terminal area (PRD F20 · Figma 21D): the row steps back. */
 .row[data-dragged='true'] {
   opacity: 0.4;
