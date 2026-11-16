@@ -95,11 +95,20 @@ export type ChatItem =
       todos?: ChatTodo[]
       /** How long a subagent ran (Claude Agent / Task `totalDurationMs`, a Codex collab call's start to end). */
       ms?: number
+      /** A web search's results, in order (Claude WebSearch; Figma 90B): http(s) only, at most CHAT_LIMITS.links. */
+      links?: ChatLink[]
     }
   | { kind: 'system'; id: string; at: number; text: string }
   | { kind: 'unknown'; id: string; at: number; type: string }
 
+/** A page a web search found. */
+export interface ChatLink {
+  title: string
+  url: string
+}
+
 export const CHAT_LIMITS = {
+  links: 20,
   text: 20_000,
   thinking: 4_000,
   output: 2_000,
@@ -367,6 +376,30 @@ function outputOf(result: Rec | undefined, block: Rec): string | undefined {
 }
 
 /**
+ * A Claude WebSearch's results: the record's `results` (`{ title, url }` lists between the summaries), or, without
+ * one, the `Links: [...]` line of the result text; http(s) only, titles clipped. Undefined when it found none.
+ */
+function webLinksOf(result: Rec | undefined, block: Rec): ChatLink[] | undefined {
+  let raw: unknown[] = []
+  if (result && Array.isArray(result.results)) raw = result.results.flatMap((r) => (isRec(r) && Array.isArray(r.content) ? r.content : []))
+  else {
+    const line = /^Links: (\[.*\])$/m.exec(textOfContent(block.content))?.[1]
+    try {
+      const parsed: unknown = line ? JSON.parse(line) : []
+      if (Array.isArray(parsed)) raw = parsed
+    } catch {
+      // Not the shape it was: no links, the output is still there.
+    }
+  }
+  const links = raw.flatMap((r): ChatLink[] => {
+    const url = isRec(r) ? str(r.url) : undefined
+    if (!url || !/^https?:\/\//i.test(url) || url.length > 2048) return []
+    return [{ title: clip(str((r as Rec).title)?.trim() || url, CHAT_LIMITS.arg), url }]
+  })
+  return links.length > 0 ? links.slice(0, CHAT_LIMITS.links) : undefined
+}
+
+/**
  * Claude records a slash command as a message of tags (a user line for skills and prompt commands, a `local_command`
  * system line for `/model`, `/login` …); show `/clear`, not the markup. What it printed is `localOutput`'s.
  */
@@ -530,12 +563,14 @@ function claudeParser(now: () => number, keep: KeepImage | undefined): ChatParse
           const output = outputOf(result, block)
           const diff = item.name === 'Edit' || item.name === 'MultiEdit' || item.name === 'Write' ? diffOf(result, cwd) : undefined
           const ms = (item.name === 'Agent' || item.name === 'Task') && typeof result?.totalDurationMs === 'number' ? result.totalDurationMs : undefined
+          const links = item.name === 'WebSearch' ? webLinksOf(result, block) : undefined
           items[index!] = {
             ...item,
             state: block.is_error === true ? 'error' : 'ok',
             ...(output ? { output } : {}),
             ...(diff ? { diff } : {}),
-            ...(ms !== undefined ? { ms } : {})
+            ...(ms !== undefined ? { ms } : {}),
+            ...(links ? { links } : {})
           }
           changed.push(index!)
         }

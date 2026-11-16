@@ -448,7 +448,8 @@ export function thinkingLabel(ms: number | undefined): string {
 }
 
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
-const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite', 'Plan'])
+// A web search's results are listed when it is opened (Figma 90B), not summed up by its first line.
+const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite', 'Plan', 'WebSearch'])
 
 /** A tool row's icon, by name; Feed draws it (the model stays free of React). */
 export type ToolIcon = 'file-text' | 'file-plus' | 'pencil' | 'terminal' | 'square' | 'search' | 'folder-search' | 'globe' | 'bot' | 'list-todo' | 'sparkles' | 'clipboard-list' | 'trash' | 'move-right' | 'brain' | 'toggle' | 'wrench'
@@ -548,7 +549,7 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ...(removed > 0 ? { removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
-    expandable: !!item.diff || !!output?.trim() || hidden || !!item.todos?.length,
+    expandable: !!item.diff || !!output?.trim() || hidden || !!item.todos?.length || !!item.links?.length,
     ...(output !== undefined ? { output } : {}),
     ...(item.input ? { command: item.input } : {}),
     ...(item.state === 'error' && item.exit !== undefined && item.exit !== 0 ? { exit: item.exit } : {})

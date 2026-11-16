@@ -2068,3 +2068,110 @@
   text-align: right;
   user-select: none;
 }
+
+/* --- Figma 90B: web pages --- */
+
+/* A fetched page's title on its row, in the subagent task's weight; its site follows in the target's style. */
+.pageTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「5 个结果」 at a search row's end. */
+.toolMeta {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-step);
+  color: var(--text-tertiary);
+}
+
+/* A search's results right of a line, as under a subagent's row: title · site, ↗ on the row under the pointer. */
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: var(--space-4) 0 0 var(--subagent-rail);
+  padding: 0 0 0 var(--space-8);
+  border-left: 1px solid var(--border-subtle);
+  list-style: none;
+}
+
+.searchResult {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.searchResult:hover {
+  background: var(--bg-hover);
+}
+
+.searchResult:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.searchTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchSite {
+  flex: 1 0 auto;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+}
+
+.searchOpen {
+  flex: none;
+  color: var(--text-secondary);
+  opacity: 0;
+}
+
+.searchResult:hover .searchOpen,
+.searchResult:focus-visible .searchOpen {
+  opacity: 1;
+}
+
+/* A web link's card: site, title, URL. */
+.webCard {
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-12);
+}
+
+.webSite {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--type-code);
+  color: var(--text-tertiary);
+}
+
+.webTitle {
+  font: var(--type-step);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.webUrl {
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

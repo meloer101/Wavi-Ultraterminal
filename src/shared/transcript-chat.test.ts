@@ -109,6 +109,23 @@ describe('Claude transcript → chat', () => {
     expect(tool.diff?.hunks[0]?.lines.length).toBe(CHAT_LIMITS.diffLines)
   })
 
+  it('keeps a web search’s results as links, from the record or from the result’s Links line (Figma 90B)', () => {
+    const links = [
+      { title: 'Tracking Prevention in WebKit', url: 'https://webkit.org/tracking-prevention/' },
+      { title: 'SameSite cookies explained', url: 'https://web.dev/samesite-cookies-explained/' }
+    ]
+    const text = `Web search results for query: "safari samesite"\n\nLinks: ${JSON.stringify([...links, { title: 'x', url: 'javascript:alert(1)' }])}\n\nSummary…`
+    const call = (id: string) => line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id, name: 'WebSearch', input: { query: 'safari samesite' } }] } })
+    const items = parse([
+      call('w1'),
+      line({ type: 'user', toolUseResult: { query: 'safari samesite', results: [{ tool_use_id: 's', content: links }, 'Summary…'] }, message: { content: [{ type: 'tool_result', tool_use_id: 'w1', content: text }] } }),
+      call('w2'),
+      line({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'w2', content: text }] } })
+    ])
+    expect(toolAt(items, 0).links).toEqual(links)
+    expect(toolAt(items, 1).links).toEqual(links)
+  })
+
   it('marks a failed tool and keeps the end of a long output', () => {
     const long = 'a'.repeat(5000) + 'END'
     const items = parse([

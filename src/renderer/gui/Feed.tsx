@@ -6,7 +6,7 @@
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
@@ -25,6 +25,8 @@ import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
 import { outputRuns, refPieces } from './file-refs'
 import { FileRef, RefSession } from './FileRef'
+import { PageTitles, SearchResults } from './WebLink'
+import { pageTitles, shortUrl, siteOf } from './web-links'
 import { TodoList } from './Todos'
 import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
@@ -69,7 +71,8 @@ const M = defineMessages({
     waiting: '等你确认',
     copyOutput: '复制输出',
     thinking: '思考中',
-    dependencyFrames: (count: number) => `依赖里的 ${count} 帧`
+    dependencyFrames: (count: number) => `依赖里的 ${count} 帧`,
+    results: (count: number) => `${count} 个结果`
   },
   en: {
     pictures: 'Pictures',
@@ -81,7 +84,8 @@ const M = defineMessages({
     waiting: 'Needs you',
     copyOutput: 'Copy output',
     thinking: 'Thinking',
-    dependencyFrames: (count: number) => `${count} frames in dependencies`
+    dependencyFrames: (count: number) => `${count} frames in dependencies`,
+    results: (count: number) => (count === 1 ? '1 result' : `${count} results`)
   }
 })
 
@@ -176,6 +180,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
   // Figma 68′: the turn's wavi run calls as one graph.
   const dispatch = useMemo(() => dispatchRows(items), [items])
+  // Figma 90B: a fetched page or a link named by the title a search found.
+  const titles = useMemo(() => pageTitles(items), [items])
   const [editingId, setEditingId] = useState<string | null>(null)
   // The message being edited, while it is still there (an edit sent replaces the conversation after it).
   const editingAt = editingId === null ? -1 : blocks.findIndex((b) => b.kind === 'item' && b.item.id === editingId)
@@ -220,6 +226,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
 
   return (
     <RefSession.Provider value={sessionId}>
+    <PageTitles.Provider value={titles}>
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
         {blocks.map((block, i) =>
@@ -258,6 +265,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
         )}
       </div>
     </div>
+    </PageTitles.Provider>
     </RefSession.Provider>
   )
 }
@@ -534,6 +542,9 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   )
 }
 
+/** Calls that read one web page (Claude WebFetch, an ACP agent's fetch). */
+const isFetch = (name: string): boolean => name === 'WebFetch' || name === 'Fetch'
+
 const NO_NESTED: ReadonlyMap<string, readonly NestedItem[]> = new Map()
 const NO_CHILDREN: readonly NestedItem[] = []
 
@@ -561,6 +572,9 @@ function Tool({
   const files = item.files ?? (item.diff ? [item.diff] : [])
   const hasChildren = children.length > 0
   const expandable = view.expandable || hasChildren
+  // Figma 90B: a fetched page by its title (when a search found it) and site, not its whole URL.
+  const titles = useContext(PageTitles)
+  const fetched = isFetch(item.name) && /^https?:\/\//i.test(item.arg) ? { title: titles.get(item.arg) ?? shortUrl(item.arg), site: titles.has(item.arg) ? siteOf(item.arg) : '' } : null
   return (
     <div className={styles.tool} data-subagent={subagent || undefined}>
       <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
@@ -568,13 +582,21 @@ function Tool({
         <span className={styles.toolVerb} title={view.name}>
           {view.verb}
         </span>
-        <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        {fetched ? (
+          <>
+            <span className={styles.pageTitle}>{fetched.title}</span>
+            <span className={styles.toolArg}>{fetched.site}</span>
+          </>
+        ) : (
+          <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        )}
         {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>{m.waiting}</span>}
         {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
         {subagent && <Elapsed item={item} />}
+        {item.links && item.links.length > 0 && <span className={styles.toolMeta}>{m.results(item.links.length)}</span>}
       </button>
       {hasChildren ? (
         open && (
@@ -602,11 +624,13 @@ function Tool({
 /** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
 function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
   const m = useMessages(M)
+  const sessionId = useContext(RefSession)
   return (
     <>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
       {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
-      {open && !item.todos && (files.length > 0 || view.output || view.command) && (
+      {open && item.links && item.links.length > 0 && sessionId && <SearchResults sessionId={sessionId} links={item.links} />}
+      {open && !item.todos && !item.links?.length && (files.length > 0 || view.output || view.command) && (
         <div className={styles.codeWrap}>
           {files.length > 0 ? (
             <div className={styles.fileBlocks}>

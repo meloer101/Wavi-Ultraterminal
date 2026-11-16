@@ -2,18 +2,18 @@
 // view's preview (panels/files/MarkdownView), at the chat's reading size. Raw HTML is not rendered (the sanitize
 // schema drops what would run); a link opens in the built-in browser, ⌘-click in the system one. A code block has a
 // copy button in its corner on hover (Figma 54B).
-import { Fragment, memo, useMemo, type MouseEvent } from 'react'
+import { Fragment, memo, useMemo } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
-import { openLink } from '../state/link-actions'
 import { CopyButton } from './CopyButton'
 import { codeRef, hrefRef, rehypeFileRefs, spanRef } from './file-refs'
 import { FileRef, RefSession } from './FileRef'
 import { highlightLines } from './highlight'
 import { Tokens } from './Highlighted'
+import { WebLink } from './WebLink'
 import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
 
@@ -74,18 +74,9 @@ export const ChatMarkdown = memo(function ChatMarkdown({ sessionId, text, classN
       // Figma 90A: a link to a file of the session (Codex and Claude in an IDE write them so).
       const file = href ? hrefRef(href) : null
       if (file) return <FileRef target={file}>{children}</FileRef>
-      return (
-        <a
-          href={href}
-          title={href}
-          onClick={(e: MouseEvent<HTMLAnchorElement>) => {
-            e.preventDefault()
-            if (href && /^https?:\/\//i.test(href)) openLink(sessionId, href, e.metaKey ? 'external' : 'internal')
-          }}
-        >
-          {children}
-        </a>
-      )
+      // Figma 90B: a web link, its site and title on rest.
+      if (href && /^https?:\/\//i.test(href)) return <WebLink sessionId={sessionId} href={href}>{children}</WebLink>
+      return <a title={href}>{children}</a>
     },
     // Inline code (blocks draw their own): a path and nothing else is a file link.
     code: ({ node, className: codeClass, children }) => {
