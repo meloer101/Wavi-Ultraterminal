@@ -209,3 +209,76 @@ test('the sidebar grouping is kept across restarts', async () => {
   await expect(page.getByRole('menu').getByRole('menuitemradio', { name: '状态' })).toHaveAttribute('aria-checked', 'true')
   await app.close()
 })
+
+interface DialogHook {
+  requests: { message: string; detail?: string; confirmLabel: string; destructive?: boolean }[]
+  answer: boolean
+}
+
+test('⇧ / ⌘ click picks several sessions and they close together after one confirmation (issue #6)', async () => {
+  const app = await launchApp()
+  const page = await app.firstWindow()
+  await page.addInitScript(() => {
+    ;(globalThis as unknown as { __TR_E2E__: boolean }).__TR_E2E__ = true
+  })
+  await page.reload()
+  const sidebar = page.locator('[data-region="sidebar"]')
+  const rows = sidebar.locator('[role="button"][data-session-id]')
+  const picked = sidebar.locator('[data-picked="true"]')
+  await expect(rows.nth(5)).toBeVisible()
+  const order = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.sessionId ?? ''))
+  const requests = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: DialogHook }).__trDialogs.requests)
+  const answer = (value: boolean) =>
+    app.evaluate((_electron, v) => {
+      ;(globalThis as unknown as { __trDialogs: DialogHook }).__trDialogs.answer = v
+    }, value)
+  const ids = () =>
+    page.evaluate(() =>
+      (globalThis as unknown as { __trWorkspace: { getState(): { sessions: { id: string }[] } } }).__trWorkspace.getState().sessions.map((s) => s.id)
+    )
+  const row = (i: number) => sidebar.locator(`[role="button"][data-session-id="${order[i]}"]`)
+  // Rows 2–4 run from the end of acme-web into terminal-reborn.
+  await expect(sidebar.locator(`section[aria-label="acme-web"] [data-session-id="${order[2]}"]`)).toHaveCount(1)
+  await expect(sidebar.locator(`section[aria-label="terminal-reborn"] [data-session-id="${order[4]}"]`)).toHaveCount(1)
+
+  // A click selects one; ⇧ click picks it, the clicked one and every row between, across projects, in drawn order.
+  await row(2).click()
+  await row(4).click({ modifiers: ['Shift'] })
+  await expect(picked).toHaveCount(3)
+  // ⌘ click toggles one more; Esc drops the picks; a plain click starts over.
+  await row(5).click({ modifiers: ['Meta'] })
+  await expect(picked).toHaveCount(4)
+  await row(5).click({ modifiers: ['Meta'] })
+  await expect(picked).toHaveCount(3)
+  await page.keyboard.press('Escape')
+  await expect(picked).toHaveCount(0)
+  await row(2).click()
+  await row(4).click({ modifiers: ['Shift'] })
+  await expect(picked).toHaveCount(3)
+  for (const theme of ['light', 'dark'] as const) {
+    await page.locator('html').evaluate((html, t) => html.setAttribute('data-theme', t), theme)
+    await sidebar.screenshot({ path: `test-results/sidebar-picked-${theme}.png` })
+  }
+
+  // Right-clicking a picked row offers to close them all; cancelling the one confirmation keeps every one.
+  await answer(false)
+  await row(3).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '关闭 3 个会话' }).click()
+  await expect.poll(async () => (await requests()).length).toBe(1)
+  const [request] = await requests()
+  expect(request?.message).toBe('关闭 3 个会话？')
+  expect(request?.confirmLabel).toBe('关闭 3 个')
+  expect(request?.destructive).toBe(true)
+  expect(await ids()).toEqual(expect.arrayContaining(order.slice(2, 5)))
+  await expect(picked).toHaveCount(3)
+
+  // ⌫ in the list closes them after confirming, once for all three.
+  await answer(true)
+  await row(3).focus()
+  await page.keyboard.press('Backspace')
+  await expect.poll(async () => (await ids()).filter((id) => order.slice(2, 5).includes(id))).toEqual([])
+  expect((await requests()).length).toBe(2)
+  expect(await ids()).toContain(order[5])
+  await expect(picked).toHaveCount(0)
+  await app.close()
+})

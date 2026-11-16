@@ -6,6 +6,7 @@ import {
   removeProjectConfirmation,
   removeProjectMenuLabel
 } from '@shared/lifecycle'
+import { batchConfirmation, batchFailureNotice, batchPlan } from '@shared/batch-actions'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
 import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
@@ -30,6 +31,7 @@ const M = defineMessages({
     copyPath: '复制路径',
     moveToNewWindow: '移到新窗口',
     closeSession: '关闭会话',
+    closeSessions: (n: number) => `关闭 ${n} 个会话`,
     archiveWorktree: '归档 worktree…',
     rename: '重命名…',
     sameTask: '同任务多解…'
@@ -41,6 +43,7 @@ const M = defineMessages({
     copyPath: 'Copy path',
     moveToNewWindow: 'Move to new window',
     closeSession: 'Close session',
+    closeSessions: (n: number) => `Close ${n} sessions`,
     archiveWorktree: 'Archive worktree…',
     rename: 'Rename…',
     sameTask: 'Same task, several tries…'
@@ -132,7 +135,50 @@ export async function closeSessionInteractive(sessionId: SessionId): Promise<boo
   if (!session) return false
   const prompt = closeSessionConfirmation(session.title, session.status)
   if (prompt && !(await window.tr.ui.confirm(prompt))) return false
+  return closeSessionNow(sessionId)
+}
+
+/**
+ * Closes the sessions picked in the sidebar (⇧ / ⌘ click) after one confirmation that names how many and how many of
+ * them are running or waiting (as the board's batch close does). Resolves to whether they were closed.
+ */
+export async function closeSessionsInteractive(ids: readonly SessionId[]): Promise<boolean> {
+  const sessions = useWorkspace.getState().sessions
+  const candidates = ids
+    .flatMap((id) => sessions.filter((s) => s.id === id))
+    .map(({ id, kind, title, status, phase }) => ({ id, kind, title, status, ...(phase ? { phase } : {}) }))
+  // A snapshot worktree all of whose sessions are being closed goes with them (closeSessionNow); the sheet says so.
+  const closing = new Set(candidates.map((c) => c.id))
+  const snapshotTrees = new Set(sessions.filter((s) => closing.has(s.id) && s.dispatchBase === 'snapshot').map((s) => s.worktreeId))
+  const dropped = [...snapshotTrees].filter((wt) => sessions.every((s) => s.worktreeId !== wt || closing.has(s.id))).length
+  const prompt = batchConfirmation(batchPlan('close', candidates), '', dropped)
+  if (!prompt || !(await window.tr.ui.confirm(prompt))) return false
+  // One at a time: the last session of a snapshot worktree takes the worktree with it. One that fails does not stop
+  // the rest; the failures are named at the end.
+  const failures: Array<{ title: string; message: string }> = []
+  let done = 0
+  for (const { id, title } of candidates) {
+    try {
+      await closeSessionNow(id)
+      done++
+    } catch (error) {
+      failures.push({ title, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  if (failures.length > 0) await window.tr.ui.confirm(batchFailureNotice('close', done, failures))
+  return failures.length === 0
+}
+
+/** Right-click on one of several sessions picked in the sidebar. */
+export async function openPickedSessionsMenu(ids: readonly SessionId[], anchor: MenuAnchor): Promise<boolean> {
+  const choice = await popupMenu([{ type: 'item', id: 'close', label: pick(M).closeSessions(ids.length) }], anchor)
+  return choice === 'close' && closeSessionsInteractive(ids)
+}
+
+async function closeSessionNow(sessionId: SessionId): Promise<boolean> {
   const state = useWorkspace.getState()
+  const session = state.sessions.find((s) => s.id === sessionId)
+  if (!session) return false
   const worktree = state.worktrees.find((w) => w.id === session.worktreeId)
   const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
   // A read-only snapshot of a dispatcher's working tree (PRD F21 --base snapshot) goes with its last session.
