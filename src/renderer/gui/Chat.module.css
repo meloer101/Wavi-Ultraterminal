@@ -2286,3 +2286,42 @@ button.testHead:hover {
 .testMessage [data-kind='received'] {
   color: var(--diff-del-fg);
 }
+
+/* --- Figma 90F′: jump to latest --- */
+
+/* The feed and what floats over its foot. */
+.feedFrame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+/* 「↓ 回到最新」 centered 12 above the composer, on the menus' surface. */
+.jumpToLatest {
+  position: absolute;
+  bottom: var(--space-12);
+  left: 50%;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 28px;
+  padding: 0 var(--space-12) 0 var(--space-8);
+  border: 0;
+  border-radius: 14px;
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
+  font: var(--type-step);
+  color: var(--text-primary);
+  translate: -50% 0;
+  cursor: pointer;
+  animation: pop-in var(--duration-pop) var(--ease-out);
+}
+
+.jumpToLatest:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

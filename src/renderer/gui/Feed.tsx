@@ -8,7 +8,7 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
@@ -76,7 +76,8 @@ const M = defineMessages({
     dependencyFrames: (count: number) => `依赖里的 ${count} 帧`,
     results: (count: number) => `${count} 个结果`,
     testsFailed: (count: number) => `${count} 失败`,
-    testsPassed: (count: number) => `${count} 通过`
+    testsPassed: (count: number) => `${count} 通过`,
+    jumpToLatest: '回到最新'
   },
   en: {
     pictures: 'Pictures',
@@ -91,7 +92,8 @@ const M = defineMessages({
     dependencyFrames: (count: number) => `${count} frames in dependencies`,
     results: (count: number) => (count === 1 ? '1 result' : `${count} results`),
     testsFailed: (count: number) => `${count} failed`,
-    testsPassed: (count: number) => `${count} passed`
+    testsPassed: (count: number) => `${count} passed`,
+    jumpToLatest: 'Jump to latest'
   }
 })
 
@@ -197,6 +199,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
+  // Figma 90F′: the user scrolled up and something new came below.
+  const [behind, setBehind] = useState(false)
   // The blocks last drawn, to tell a message the user just sent.
   const seen = useRef<FeedBlock[] | null>(null)
 
@@ -213,6 +217,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
     if (!scroller || !content) return
     const onScroll = (): void => {
       stuck.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX
+      if (stuck.current) setBehind(false)
     }
     const observer = new ResizeObserver(follow)
     observer.observe(content)
@@ -227,12 +232,23 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
   useLayoutEffect(() => {
     if (sentMessage(seen.current, blocks)) stuck.current = true
     seen.current = blocks
+    if (!stuck.current) setBehind(true)
     follow()
   }, [blocks, live, follow])
+
+  const jumpToLatest = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    stuck.current = true
+    setBehind(false)
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: instant ? 'auto' : 'smooth' })
+  }, [])
 
   return (
     <RefSession.Provider value={sessionId}>
     <PageTitles.Provider value={titles}>
+    <div className={styles.feedFrame}>
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
         {blocks.map((block, i) =>
@@ -271,8 +287,21 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
         )}
       </div>
     </div>
+    {behind && <JumpToLatest onJump={jumpToLatest} />}
+    </div>
     </PageTitles.Provider>
     </RefSession.Provider>
+  )
+}
+
+/** Figma 90F′: 「↓ 回到最新」 over the foot of the feed; it never takes the composer's focus. */
+function JumpToLatest({ onJump }: { onJump(): void }) {
+  const m = useMessages(M)
+  return (
+    <button type="button" className={styles.jumpToLatest} onPointerDown={(e) => e.preventDefault()} onClick={onJump} data-testid="gui-jump-to-latest">
+      <ArrowDown {...ICON} />
+      {m.jumpToLatest}
+    </button>
   )
 }
 
