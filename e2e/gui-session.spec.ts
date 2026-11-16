@@ -112,7 +112,7 @@ test.describe('F23 GUI session (Claude)', () => {
     const hole = await baseHoles()
     expect(Math.abs(hole.dx)).toBeLessThan(1)
     expect(Math.abs(hole.dy)).toBeLessThan(1)
-    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^看板/ }).click()
     await expect.poll(baseAlpha).toBeCloseTo(0.6)
     await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
     await expect(chat()).toBeVisible(WITHIN)
