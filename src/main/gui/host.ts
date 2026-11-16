@@ -409,8 +409,10 @@ class GuiSession<O extends GuiOwner> {
       }
       // Later driver items follow a history put in with `reset`.
       if (event.type === 'reset') this.indexes.clear()
-      this.state = applyGuiEvent(this.state, event)
-      out.push(event)
+      // A turn's start, once, here: every view of the session counts from it (Figma 91).
+      const stamped = event.type === 'busy' && event.busy && event.at === undefined && !this.state.busy ? { ...event, at: Date.now() } : event
+      this.state = applyGuiEvent(this.state, stamped)
+      out.push(stamped)
     }
     if (out.length === 0) return
     if (this.synthStatus) this.status(this.tracker.events(out))

@@ -173,6 +173,8 @@ const isStep = (item: ChatItem): item is StepItem => item.kind === 'tool' || ite
 
 /** Tools that run a subagent: Claude's Agent / Task, a Codex collab call (codex-app-server.ts). */
 export const isSubagentTool = (name: string): boolean => name === 'Agent' || name === 'Task' || name === 'Subagent'
+/** Claude's Workflow call (PRD F25): drawn as its run's card. */
+export const isWorkflowTool = (name: string): boolean => name === 'Workflow'
 
 /**
  * The feed's blocks. A subagent's items (`parent`) go under their Agent row wherever that row is in the list (it may
@@ -401,6 +403,43 @@ export function turnEnds(blocks: readonly FeedBlock[], ongoing: boolean): Map<st
 export function liveStartsTurn(blocks: readonly FeedBlock[]): boolean {
   const last = blocks[blocks.length - 1]
   return !last || (last.kind === 'item' && last.item.kind === 'user')
+}
+
+/**
+ * Figma 91: the run row at the end of a running turn — from the moment the message is sent until the turn ends, what
+ * the agent does now and how long the turn has run. The step running now (`tool`) is drawn in it rather than as a row
+ * of its own, except a subagent or a workflow, which open where they are (the row reads 思考中 then); a subagent's
+ * own calls stay under their row. Away while the agent writes (the caret shows it), while a card waits for the user and
+ * when no turn runs.
+ */
+export interface RunRow {
+  tool: Extract<ChatItem, { kind: 'tool' }> | null
+  since: number
+}
+
+export function runRowOf(state: Pick<GuiState, 'live' | 'busy' | 'busySince'> & { items: readonly ChatItem[]; prompts: readonly GuiPrompt[] }): RunRow | null {
+  if (!state.busy || state.prompts.length > 0 || state.live?.kind === 'text') return null
+  let last: ChatItem | undefined
+  let sent = 0
+  for (let i = state.items.length - 1; i >= 0; i--) {
+    const item = state.items[i]!
+    if (item.kind === 'user') {
+      sent = item.at
+      break
+    }
+    if (!last && !('parent' in item && item.parent !== undefined)) last = item
+  }
+  const tool = last?.kind === 'tool' && last.state === 'running' && !isSubagentTool(last.name) && !isWorkflowTool(last.name) ? last : null
+  return { tool, since: state.busySince ?? sent }
+}
+
+/** Figma 91D: how long a turn has run — tenths under a minute (`4.3s`), then `1m 05s`, then `1h 02m`. */
+export function runClock(ms: number): string {
+  const t = Math.max(0, ms)
+  if (t < 60_000) return `${(Math.floor(t / 100) / 10).toFixed(1)}s`
+  const s = Math.floor(t / 1000)
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`
 }
 
 /**
