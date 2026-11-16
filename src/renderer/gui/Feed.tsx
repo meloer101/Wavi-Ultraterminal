@@ -35,6 +35,7 @@ import {
   feedBlocks,
   groupView,
   isSubagentTool,
+  isWorkflowTool,
   liveStartsTurn,
   runClock,
   sentMessage,
@@ -158,7 +159,7 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   if (block.kind !== 'steps') return ''
   const parts: string[] = []
   for (const item of block.items) {
-    if (item.kind !== 'tool' || item.name !== 'Workflow') continue
+    if (item.kind !== 'tool' || !isWorkflowTool(item.name)) continue
     const run = slot.byTool.get(item.id)
     if (run) parts.push(runShape(run))
     if (item.id === waitingTool && slot.ask) parts.push(`ask:${slot.ask.id}:${slot.ask.pending}`)
@@ -295,7 +296,7 @@ const Block = memo(
               you stay out, and the calls the graph draws are not there to split a run. */}
           {stepParts(
             block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
-            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && item.name === 'Workflow')
+            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && isWorkflowTool(item.name))
           ).map((part) => {
             if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
             const { item } = part
@@ -303,7 +304,7 @@ const Block = memo(
             if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
             if (row?.kind === 'merged') return null
             // Figma 74: a Workflow call is its run's card — the ask before it runs, then the run.
-            if (item.kind === 'tool' && item.name === 'Workflow') {
+            if (item.kind === 'tool' && isWorkflowTool(item.name)) {
               const run = workflow.byTool.get(item.id)
               const ask = item.id === waitingTool ? workflow.ask : null
               if (run || ask) return <WorkflowCard key={item.id} {...(run ? { run } : {})} {...(ask ? { ask } : {})} {...(workflow.onStop ? { onStop: workflow.onStop } : {})} />

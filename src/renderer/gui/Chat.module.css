@@ -173,11 +173,7 @@
   padding-top: max(0px, (var(--avatar) - var(--chat-line)) / 2);
 }
 
-.agentTurn[data-start]:has(> .steps) {
-  padding-top: max(0px, (var(--avatar) - var(--line-step)) / 2);
-}
-
-.agentTurn[data-start]:has(> .runRow) {
+.agentTurn[data-start]:has(> .steps, > .runRow) {
   padding-top: max(0px, (var(--avatar) - var(--line-step)) / 2);
 }
 
@@ -295,8 +291,8 @@
   overflow-wrap: anywhere;
 }
 
-/* 「思考中」 while the agent thinks: the text breathes (T3 Code, Orca keep a live row like it); still under reduced
-   motion. Two spinner turns per breath, on purpose: the app's waiting signs keep one tempo. */
+/* Figma 91: the running turn's last row — what the agent does now (or 思考中) and the turn's clock; no icon, the
+   clock is what moves. */
 .runRow {
   display: flex;
   align-items: center;

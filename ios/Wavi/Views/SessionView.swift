@@ -76,13 +76,12 @@ struct SessionView: View {
           .onAppear { if index == 0 { Task { await model.loadOlder() } } }
         }
         let sending = model.sending[id] ?? []
+        let run = runRow(session: session, turnStart: model.turnStarts[id], sending: sending, lastIsUser: blocks.last.map(isUser) ?? true)
+        // A running turn's row ends its turn, above messages sent meanwhile (they wait on the Mac); a message that
+        // starts a turn has the row under it.
+        if session.status == .running, let run { RunTurn(run: run, agent: session.agent) }
         ForEach(sending) { item in FeedRow(item: item, session: id).opacity(0.6) }
-        if let run = runRow(session: session, sending: sending, lastIsUser: blocks.last.map(isUser) ?? true) {
-          VStack(alignment: .leading, spacing: 8) {
-            if run.startsTurn { AgentAvatar(agent: session.agent) }
-            RunLine(run: run)
-          }
-        }
+        if session.status != .running, let run { RunTurn(run: run, agent: session.agent) }
       }
       .padding(.horizontal, Metric.margin)
       .padding(.vertical, 8)
@@ -120,6 +119,19 @@ struct SessionView: View {
         }
         Composer(session: id, running: session.status == .running)
       }
+    }
+  }
+}
+
+/// The run row with the agent's mark above it when it starts the turn.
+private struct RunTurn: View {
+  let run: RunRow
+  let agent: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      if run.startsTurn { AgentAvatar(agent: agent) }
+      RunLine(run: run)
     }
   }
 }

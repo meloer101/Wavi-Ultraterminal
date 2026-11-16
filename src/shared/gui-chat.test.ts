@@ -1,23 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, composerPickers, emptyGuiState, fastOption, matchCommands, permissionOption, picksOf, planOption, sanitizeGuiPicks, type GuiConfigOption } from './gui-chat'
 
 describe('applyGuiEvent', () => {
   it('notes when a turn starts and keeps it while the turn runs (Figma 91: the run row counts from it)', () => {
-    vi.useFakeTimers()
-    try {
-      vi.setSystemTime(1000)
-      // Folded the way the stores fold a batch: reduce hands the reducer an index as well, which must not count.
-      const s1 = ([{ type: 'busy', busy: true }] as const).reduce(applyGuiEvent, emptyGuiState())
-      expect(s1.busySince).toBe(1000)
-      vi.setSystemTime(5000)
-      expect(applyGuiEvent(s1, { type: 'busy', busy: true }).busySince).toBe(1000)
-      const s2 = applyGuiEvent(s1, { type: 'busy', busy: false })
-      expect(s2.busySince).toBeUndefined()
-      vi.setSystemTime(7000)
-      expect(applyGuiEvent(s2, { type: 'busy', busy: true }).busySince).toBe(7000)
-    } finally {
-      vi.useRealTimers()
-    }
+    // Folded the way the stores fold a batch: reduce hands the reducer an index as well, which must not count.
+    const s1 = ([{ type: 'busy', busy: true, at: 1000 }] as const).reduce(applyGuiEvent, emptyGuiState())
+    expect(s1.busySince).toBe(1000)
+    expect(applyGuiEvent(s1, { type: 'busy', busy: true, at: 5000 }).busySince).toBe(1000)
+    const s2 = applyGuiEvent(s1, { type: 'busy', busy: false })
+    expect(s2.busySince).toBeUndefined()
+    expect(applyGuiEvent(s2, { type: 'busy', busy: true, at: 7000 }).busySince).toBe(7000)
   })
   it('appends and replaces items by index and keeps untouched parts', () => {
     const s0 = emptyGuiState()

@@ -79,17 +79,29 @@ private func session(_ id: String = "s", project: String = "p1", status: Session
   @Test func runRowComesWithTheMessageAndGoesWhenTheTurnEnds() {
     let sent = ChatItem(kind: "user", id: "sending-1", at: 900)
     // Sent from the phone, before the Mac says the turn runs: the agent's mark and 思考中, counted from the send.
-    let fresh = runRow(session: session(status: .idle), sending: [sent], lastIsUser: false)
+    let fresh = runRow(session: session(status: .idle), turnStart: nil, sending: [sent], lastIsUser: false)
     #expect(fresh == RunRow(action: nil, since: 900, startsTurn: true))
-    // Running: what the agent does now, counted from when it started; the mark only right after the user's message.
-    var running = session(status: .running, since: 1000)
-    running = RemoteSession(id: running.id, projectId: running.projectId, title: running.title, agent: running.agent, status: .running,
-      action: "运行 npm test", since: 1000, activity: 0, branch: nil, model: nil, reply: nil, ship: nil, shipNotice: nil)
-    #expect(runRow(session: running, sending: [], lastIsUser: false) == RunRow(action: "运行 npm test", since: 1000, startsTurn: false))
-    #expect(runRow(session: running, sending: [], lastIsUser: true)?.startsTurn == true)
+    // Running: what the agent does now, counted from the turn's start; the mark only right after the user's message,
+    // not under a message the phone sent meanwhile (it waits on the Mac).
+    let running = RemoteSession(id: "s", projectId: "p1", title: "x", agent: "claude", status: .running,
+      action: "运行 npm test", since: 3000, activity: 0, branch: nil, model: nil, reply: nil, ship: nil, shipNotice: nil)
+    #expect(runRow(session: running, turnStart: 1000, sending: [], lastIsUser: false) == RunRow(action: "运行 npm test", since: 1000, startsTurn: false))
+    #expect(runRow(session: running, turnStart: 1000, sending: [sent], lastIsUser: false)?.startsTurn == false)
+    #expect(runRow(session: running, turnStart: nil, sending: [], lastIsUser: true) == RunRow(action: "运行 npm test", since: 3000, startsTurn: true))
+    // No status time from the Mac: its last activity, never the epoch.
+    #expect(runRow(session: session(status: .running, activity: 2500), turnStart: nil, sending: [], lastIsUser: false)?.since == 2500)
     // Waiting on the user (the sheet says so) or not running: none.
-    #expect(runRow(session: session(status: .needsYou, since: 1000), sending: [], lastIsUser: false) == nil)
-    #expect(runRow(session: session(status: .idle), sending: [], lastIsUser: true) == nil)
+    #expect(runRow(session: session(status: .needsYou, since: 1000), turnStart: 1000, sending: [], lastIsUser: false) == nil)
+    #expect(runRow(session: session(status: .idle), turnStart: nil, sending: [], lastIsUser: true) == nil)
+  }
+
+  @Test func turnStartHoldsThroughAnAnswerAndEndsWithTheTurn() {
+    var starts = nextTurnStarts([:], sessions: [session(status: .running, since: 1000)])
+    #expect(starts == ["s": 1000])
+    starts = nextTurnStarts(starts, sessions: [session(status: .needsYou, since: 4000)])
+    starts = nextTurnStarts(starts, sessions: [session(status: .running, since: 6000)])
+    #expect(starts == ["s": 1000])
+    #expect(nextTurnStarts(starts, sessions: [session(status: .doneUnread, since: 9000)]).isEmpty)
   }
 
   @Test func connectionPathsAndLastLine() {

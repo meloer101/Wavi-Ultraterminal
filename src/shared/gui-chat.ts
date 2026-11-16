@@ -255,7 +255,8 @@ export type GuiEvent =
   | { type: 'live'; live: GuiLive | null }
   | { type: 'prompt'; prompt: GuiPrompt }
   | { type: 'prompt-done'; id: string }
-  | { type: 'busy'; busy: boolean }
+  /** `at`: epoch ms the turn started, stamped by main's host, so main, the renderer and the phone share one start. */
+  | { type: 'busy'; busy: boolean; at?: number }
   | { type: 'config'; config: GuiConfigOption[] }
   | { type: 'commands'; commands: GuiCommand[] }
   | { type: 'queued'; queued: GuiState['queued'] }
@@ -365,10 +366,7 @@ export function emptyGuiState(): GuiState {
   return { items: [], live: null, prompts: [], busy: false, config: [], commands: [], queued: [], failure: null }
 }
 
-/**
- * Folds one event into the state. Returns a new state object; unchanged parts keep their identity (cheap renders).
- * Two parameters only, so `events.reduce(applyGuiEvent, state)` stays right; a turn's start is stamped from the clock.
- */
+/** Folds one event into the state. Returns a new state object; unchanged parts keep their identity (cheap renders). */
 export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
   switch (event.type) {
     case 'items': {
@@ -390,7 +388,7 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
       return state.prompts.some((p) => p.id === event.id) ? { ...state, prompts: state.prompts.filter((p) => p.id !== event.id) } : state
     case 'busy':
       // A turn that ends takes its stream and its questions with it.
-      if (event.busy) return state.busy ? state : { ...state, busy: true, busySince: Date.now() }
+      if (event.busy) return state.busy ? state : { ...state, busy: true, ...(event.at !== undefined ? { busySince: event.at } : {}) }
       return { ...state, busy: false, busySince: undefined, live: null, prompts: [] }
     case 'config':
       return { ...state, config: event.config }

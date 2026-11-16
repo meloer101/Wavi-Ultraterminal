@@ -173,6 +173,8 @@ const isStep = (item: ChatItem): item is StepItem => item.kind === 'tool' || ite
 
 /** Tools that run a subagent: Claude's Agent / Task, a Codex collab call (codex-app-server.ts). */
 export const isSubagentTool = (name: string): boolean => name === 'Agent' || name === 'Task' || name === 'Subagent'
+/** Claude's Workflow call (PRD F25): drawn as its run's card. */
+export const isWorkflowTool = (name: string): boolean => name === 'Workflow'
 
 /**
  * The feed's blocks. A subagent's items (`parent`) go under their Agent row wherever that row is in the list (it may
@@ -427,7 +429,7 @@ export function runRowOf(state: Pick<GuiState, 'live' | 'busy' | 'busySince'> & 
     }
     if (!last && !('parent' in item && item.parent !== undefined)) last = item
   }
-  const tool = last?.kind === 'tool' && last.state === 'running' && !isSubagentTool(last.name) && last.name !== 'Workflow' ? last : null
+  const tool = last?.kind === 'tool' && last.state === 'running' && !isSubagentTool(last.name) && !isWorkflowTool(last.name) ? last : null
   return { tool, since: state.busySince ?? sent }
 }
 

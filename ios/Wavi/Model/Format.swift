@@ -70,13 +70,25 @@ struct RunRow: Equatable {
   let startsTurn: Bool
 }
 
-func runRow(session: RemoteSession, sending: [ChatItem], lastIsUser: Bool) -> RunRow? {
-  let startsTurn = !sending.isEmpty || lastIsUser
+/// A running session's row: its turn's start (`turnStart`), the agent's mark only right after the user's message (one
+/// sent from the phone meanwhile waits on the Mac and does not start a turn). Before the Mac says it runs, a message
+/// still sending makes the row, counted from the send.
+func runRow(session: RemoteSession, turnStart: Double?, sending: [ChatItem], lastIsUser: Bool) -> RunRow? {
   if session.status == .running {
-    return RunRow(action: session.action, since: session.since ?? sending.first?.at ?? 0, startsTurn: startsTurn)
+    return RunRow(action: session.action, since: turnStart ?? session.since ?? session.activity, startsTurn: lastIsUser)
   }
   guard session.status != .needsYou, let first = sending.first else { return nil }
   return RunRow(action: nil, since: first.at, startsTurn: true)
+}
+
+/// Each session's turn start: kept while it runs or waits on the user, taken from `since` when a turn begins, dropped
+/// when it ends.
+func nextTurnStarts(_ previous: [String: Double], sessions: [RemoteSession]) -> [String: Double] {
+  var next: [String: Double] = [:]
+  for session in sessions where session.status == .running || session.status == .needsYou {
+    next[session.id] = previous[session.id] ?? session.since ?? session.activity
+  }
+  return next
 }
 
 /// `45s` / `3m` / `2h` / `4d`.
