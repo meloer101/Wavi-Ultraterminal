@@ -112,7 +112,7 @@ test.describe('F23 GUI session (Claude)', () => {
     const hole = await baseHoles()
     expect(Math.abs(hole.dx)).toBeLessThan(1)
     expect(Math.abs(hole.dy)).toBeLessThan(1)
-    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^看板/ }).click()
     await expect.poll(baseAlpha).toBeCloseTo(0.6)
     await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
     await expect(chat()).toBeVisible(WITHIN)
@@ -815,6 +815,35 @@ test.describe('F23 GUI session (Claude)', () => {
       await page.waitForTimeout(300)
       await page.screenshot({ path: join(SHOTS, `chat-${theme}.png`) })
     }
+  })
+
+  test('看板 shows a GUI session’s chat in its overlay, not an empty terminal (PRD F9 / F23)', async () => {
+    const overview = page.locator('[data-region="overview"]')
+    const overlay = page.locator('[data-region="overview-overlay"]')
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview).toBeVisible()
+    await overview.locator('[data-session-id="s1"]').click()
+    const shown = overlay.getByTestId('gui-chat')
+    await expect(shown).toBeVisible(WITHIN)
+    await expect(shown.locator('[data-region="gui-feed"]').getByText('Hello: 你好')).toBeVisible()
+    // ⏎ in the overlay's composer sends the message; it does not enter the session.
+    const box = overlay.getByTestId('gui-composer').getByRole('textbox', { name: '回复' })
+    await box.fill('看板里发的')
+    await box.press('Enter')
+    await expect(shown.locator('[data-region="gui-feed"]').getByText('Hello: 看板里发的')).toBeVisible(WITHIN)
+    await expect(overlay).toBeVisible()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `board-overlay-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await overlay.getByRole('button', { name: '关闭' }).click()
+    await expect(overlay).toBeHidden()
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview).toBeHidden()
+    await expect(chat()).toBeVisible()
   })
 
   test('keeps the conversation across a window reload (same process)', async () => {
