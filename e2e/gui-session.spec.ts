@@ -738,6 +738,41 @@ test.describe('F23 GUI session (Claude)', () => {
     }
   })
 
+  test('the overview shows the chat, not an empty terminal: the board overlay and the list tray (PRD F9)', async () => {
+    const overview = page.locator('[data-region="overview"]')
+    const overlay = page.locator('[data-region="overview-overlay"]')
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview).toBeVisible()
+    await overview.getByRole('radio', { name: '看板' }).click()
+    await overview.locator('[data-session-id="s1"]').click()
+    const shown = overlay.getByTestId('gui-chat')
+    await expect(shown).toBeVisible(WITHIN)
+    await expect(shown.locator('[data-region="gui-feed"]').getByText('Hello: 你好')).toBeVisible()
+    // ⏎ in the overlay's composer sends the message; it does not enter the session.
+    const box = overlay.getByTestId('gui-composer').getByRole('textbox', { name: '回复' })
+    await box.fill('看板里发的')
+    await box.press('Enter')
+    await expect(shown.locator('[data-region="gui-feed"]').getByText('Hello: 看板里发的')).toBeVisible(WITHIN)
+    await expect(overlay).toBeVisible()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `board-overlay-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await overlay.getByRole('button', { name: '关闭' }).click()
+    await expect(overlay).toBeHidden()
+
+    await overview.getByRole('radio', { name: '列表' }).click()
+    await overview.locator('[data-session-id="s1"]').click()
+    await expect(overview.getByTestId('gui-chat').locator('[data-region="gui-feed"]').getByText('Hello: 看板里发的')).toBeVisible(WITHIN)
+    await page.screenshot({ path: join(SHOTS, 'list-tray-dark.png') })
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview).toBeHidden()
+    await expect(chat()).toBeVisible()
+  })
+
   test('keeps the conversation across a window reload (same process)', async () => {
     await page.reload()
     await expect(chat()).toBeVisible(WITHIN)
