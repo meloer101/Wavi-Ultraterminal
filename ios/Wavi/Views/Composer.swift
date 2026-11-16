@@ -50,7 +50,7 @@ struct Composer: View {
   private var capsule: some View {
     HStack(alignment: .bottom, spacing: 2) {
       attach
-      TextField(model.isOpen ? "回复" : "连上 Mac 后才能发送", text: $text, axis: .vertical)
+      TextField(model.isOpen ? String(localized: "回复") : String(localized: "连上 Mac 后才能发送"), text: $text, axis: .vertical)
         .font(.ui(.body))
         .lineLimit(1...6)
         .foregroundStyle(Color.textPrimary)
@@ -94,7 +94,7 @@ struct Composer: View {
     .buttonStyle(.plain)
     .opacity(idle ? 0.3 : 1.0)
     .disabled(idle)
-    .accessibilityLabel(Text(sends ? "发送" : "停止"))
+    .accessibilityLabel(sends ? String(localized: "发送") : String(localized: "停止"))
   }
 
   private var strip: some View {
@@ -139,7 +139,7 @@ struct Composer: View {
       }
       photos.append(Picked(image: redrawn, photo: RemotePhoto(name: "photo-\(Int(Date().timeIntervalSince1970 * 1000))-\(photos.count).jpg", data: jpeg.base64EncodedString())))
     }
-    error = tooBig ? "有一张照片超过 10 MB，没有加上" : nil
+    error = tooBig ? String(localized: "有一张照片超过 10 MB，没有加上") : nil
   }
 
   private func send() {
@@ -156,7 +156,7 @@ struct Composer: View {
       sending = false
       if let failure = result.error {
         model.failedToSend(session, id: pending)
-        error = "没有发出去：\(failure)"
+        error = String(localized: "没有发出去：\(failure)")
         // Back where it was, to send again.
         if text.isEmpty { text = sentText }
         if photos.isEmpty { photos = sentPhotos }

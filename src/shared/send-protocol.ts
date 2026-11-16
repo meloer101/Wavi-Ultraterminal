@@ -3,8 +3,14 @@
 // Pure and synchronous: this file only decides WHAT to write; send-executor.ts performs it.
 
 import { claudeOrCodex, type ClaudeOrCodex } from './agents'
+import { defineMessages, pick } from './i18n'
 import { resumeScreen } from './limit-resume'
 import type { AgentKind } from './types'
+
+const M = defineMessages({
+  zh: { confirmDialog: '终端里有确认框，请先在终端中处理', choiceMenu: '终端里有选择框，请先在终端中处理' },
+  en: { confirmDialog: 'The terminal shows a confirmation; handle it there first', choiceMenu: 'The terminal shows a choice; handle it there first' }
+})
 
 export type SendStep =
   /** Raw bytes to the PTY. */
@@ -270,8 +276,8 @@ export function detectBlockingDialog(screen: string): BlockingDialog | null {
  * The menus stay out of `detectBlockingDialog()`: they are not startup states.
  */
 export function sendRefusal(agent: AgentKind | undefined, screen: string): string | null {
-  if (detectBlockingDialog(screen)) return '终端里有确认框，请先在终端中处理'
+  if (detectBlockingDialog(screen)) return pick(M).confirmDialog
   const own = claudeOrCodex(agent)
-  if (own && resumeScreen(own, screen) === 'dialog') return '终端里有选择框，请先在终端中处理'
+  if (own && resumeScreen(own, screen) === 'dialog') return pick(M).choiceMenu
   return null
 }

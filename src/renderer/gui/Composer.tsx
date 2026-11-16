@@ -16,6 +16,7 @@ import { installedAgents } from '../new-session/sheet-store'
 import { openSettings } from '../settings/SettingsDialog'
 import { useWorkspace } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
+import { Toggle } from '../ui/Toggle'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { ContextButton } from './ContextButton'
 import {
@@ -34,7 +35,54 @@ import {
   type SlashGroup
 } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: {
+    defaultModel: '默认',
+    attachments: '附件',
+    addAttachment: '添加附件',
+    ultracodeOn: 'Ultracode 开着：每个任务都编排多个 agent 并行做',
+    ultracodeOff: 'Ultracode：每个任务都编排多个 agent 并行做',
+    stop: '停止',
+    stopTitle: '停止 ⎋',
+    send: '发送',
+    sendTitle: '发送 ↵',
+    remove: (path: string) => `移除 ${path}`,
+    commands: '命令',
+    mode: '模式',
+    model: '模型',
+    loading: '加载中…',
+    retry: '重试',
+    agents: '智能体',
+    notInstalled: '没装',
+    modelsOf: (agent: string) => `${agent} 的模型`,
+    afterAdapter: (adapter: string) => `装 ${adapter} 后可用`
+  },
+  en: {
+    defaultModel: 'Default',
+    attachments: 'Attachments',
+    addAttachment: 'Add attachment',
+    ultracodeOn: 'Ultracode is on: every task is split across several agents working in parallel',
+    ultracodeOff: 'Ultracode: split every task across several agents working in parallel',
+    stop: 'Stop',
+    stopTitle: 'Stop ⎋',
+    send: 'Send',
+    sendTitle: 'Send ↵',
+    remove: (path: string) => `Remove ${path}`,
+    commands: 'Commands',
+    mode: 'Mode',
+    model: 'Model',
+    loading: 'Loading…',
+    retry: 'Retry',
+    agents: 'Agents',
+    notInstalled: 'Not installed',
+    modelsOf: (agent: string) => `${agent} models`,
+    afterAdapter: (adapter: string) => `Available after installing ${adapter}`
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -63,6 +111,7 @@ interface Props {
 }
 
 export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig, switchable, switchAgent }: Props) {
+  const m = useMessages(M)
   const draft = useGuiSessions((s) => s.drafts[sessionId]) ?? draftOf(sessionId)
   const attachments = useGuiSessions((s) => s.attachments[sessionId]) ?? []
   const focusRequest = useGuiSessions((s) => s.focus[sessionId] ?? 0)
@@ -83,7 +132,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
   const empty = draft.trim() === '' && attachments.length === 0
   const buttons = pickerButtons(config)
   // Before the agent reported its pickers: the model button still names the agent, so it can be switched.
-  const shown: PickerButton[] = buttons.some(isModelButton) || !switchable ? buttons : [{ key: 'model', label: '默认', options: [] }, ...buttons]
+  const shown: PickerButton[] = buttons.some(isModelButton) || !switchable ? buttons : [{ key: 'model', label: m.defaultModel, options: [] }, ...buttons]
   // The model option's own id (an ACP agent names it in its configOptions).
   const modelId = config.find((o) => o.category === 'model')?.id
 
@@ -155,7 +204,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
       {menuOpen && <SlashMenu groups={groups} index={menuIndex} onHover={setMenuIndex} onPick={pick} />}
       <div className={styles.composer} data-testid="gui-composer-box">
         {attachments.length > 0 && (
-          <ul className={styles.attachments} aria-label="附件">
+          <ul className={styles.attachments} aria-label={m.attachments}>
             {attachments.map((path) => (
               <Attachment key={path} path={path} remove={() => removeAttachment(sessionId, path)} />
             ))}
@@ -174,7 +223,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
         </div>
         <div className={styles.controls}>
           {/* The buttons leave the keyboard and the caret in the text. */}
-          <button type="button" className={styles.barIcon} aria-label="添加附件" title="添加附件" onMouseDown={(e) => e.preventDefault()} onClick={attach}>
+          <button type="button" className={styles.barIcon} aria-label={m.addAttachment} title={m.addAttachment} onMouseDown={(e) => e.preventDefault()} onClick={attach}>
             <Plus {...ICON} />
           </button>
           {shown.map((button) =>
@@ -186,11 +235,11 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
                 type="button"
                 className={styles.picker}
                 aria-pressed={button.toggle.on}
-                title={button.toggle.on ? 'Ultracode 开着：每个任务都编排多个 agent 并行做' : 'Ultracode：每个任务都编排多个 agent 并行做'}
+                title={button.toggle.on ? m.ultracodeOn : m.ultracodeOff}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
               >
-                <Workflow {...SMALL} />
+                {switchMark('ultracode', button.toggle.on)}
                 <span>{button.label}</span>
               </button>
             ) : button.toggle ? (
@@ -206,8 +255,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
               >
-                {/* Filled while on (the author, 2026-11-08: from outline to solid). */}
-                <Zap {...SMALL} fill={button.toggle.on ? 'currentColor' : 'none'} />
+                {switchMark('fast', button.toggle.on)}
               </button>
             ) : (
               <button
@@ -224,6 +272,14 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
               >
                 {buttonMark(button, agent)}
                 <span>{button.label}</span>
+                {/* Figma 78B: 快速 (solid ⚡), then Ultracode (workflow), after the 模式 while they are on. */}
+                {button.switches?.map((s) =>
+                  s.on ? (
+                    <span key={s.option.id} className={styles.pickerOn} data-switch={s.option.category} role="img" aria-label={s.option.label}>
+                      {switchMark(s.option.category, true)}
+                    </span>
+                  ) : null
+                )}
                 <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
               </button>
             )
@@ -231,11 +287,11 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
           <span className={styles.spacer} />
           <ContextButton sessionId={sessionId} agent={agent} />
           {busy ? (
-            <button type="button" className={styles.round} aria-label="停止" title="停止 ⎋" onClick={interrupt}>
+            <button type="button" className={styles.round} aria-label={m.stop} title={m.stopTitle} onClick={interrupt}>
               <Square {...ICON} />
             </button>
           ) : (
-            <button type="button" className={styles.round} aria-label="发送" title="发送 ↵" disabled={empty} onClick={submit}>
+            <button type="button" className={styles.round} aria-label={m.send} title={m.sendTitle} disabled={empty} onClick={submit}>
               <ArrowUp {...ICON} />
             </button>
           )}
@@ -280,16 +336,22 @@ function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
   return null
 }
 
+/** 快速's ⚡ (solid while on, the author 2026-11-08) and Ultracode's workflow mark (Figma 74A / 78). */
+function switchMark(category: GuiConfigOption['category'], on: boolean): ReactNode {
+  return category === 'ultracode' ? <Workflow {...SMALL} /> : <Zap {...SMALL} fill={on ? 'currentColor' : 'none'} />
+}
+
 /**
  * 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name.
  * 71A / 71D: the same over a sent message's bubble, without ×.
  */
 export function Attachment({ path, remove }: { path: string; remove?: () => void }) {
+  const m = useMessages(M)
   const [broken, setBroken] = useState(false)
   const url = broken ? null : thumbnailUrl(path)
   const name = path.slice(path.lastIndexOf('/') + 1)
   const button = remove && (
-    <button type="button" className={styles.attachmentRemove} aria-label={`移除 ${path}`} onClick={remove}>
+    <button type="button" className={styles.attachmentRemove} aria-label={m.remove(path)} onClick={remove}>
       <X size={12} strokeWidth={1.75} aria-hidden />
     </button>
   )
@@ -314,12 +376,13 @@ export function Attachment({ path, remove }: { path: string; remove?: () => void
  * hint · description. ↑↓ move, ⏎ / ⇥ pick.
  */
 function SlashMenu({ groups, index, onHover, onPick }: { groups: readonly SlashGroup[]; index: number; onHover(index: number): void; onPick(command: GuiCommand): void }) {
+  const m = useMessages(M)
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [index])
   return (
-    <div ref={listRef} className={`${styles.popover} ${styles.slashMenu}`} role="listbox" aria-label="命令" data-testid="gui-slash-menu">
+    <div ref={listRef} className={`${styles.popover} ${styles.slashMenu}`} role="listbox" aria-label={m.commands} data-testid="gui-slash-menu">
       {groups.map((group) => (
         <div key={group.title} role="group" aria-label={group.title} className={styles.slashGroup} data-testid="gui-slash-group">
           <span className={styles.popoverTitle} aria-hidden>
@@ -372,6 +435,7 @@ interface PickerMenuProps {
  * its mark (65E). Any other option is a list. ✓ on the current choice.
  */
 function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, onAgent, onClose }: PickerMenuProps) {
+  const m = useMessages(M)
   const ref = useRef<HTMLDivElement>(null)
   const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null)
 
@@ -407,7 +471,7 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
   }, [anchor, onClose])
 
   const option = button.options[0]
-  const label = button.mode ? '模式' : option ? pickerSectionTitle(option) : '模型'
+  const label = button.mode ? m.mode : option ? pickerSectionTitle(option) : m.model
   let body: ReactNode
   // 65B: the agents and the hovered one's models, two menus side by side.
   const pair = isModelButton(button) && switchable && agent !== 'shell'
@@ -416,7 +480,7 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
   } else if (button.mode) {
     const mode = button.mode
     body = (
-      <div className={styles.pickerSection} role="menu" aria-label="模式">
+      <div className={styles.pickerSection} role="menu" aria-label={m.mode}>
         {mode.choices.map((c) => {
           const Mark = MODE_ICON[c.value]
           return (
@@ -430,6 +494,19 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
                 onClose()
               }}
             />
+          )
+        })}
+        {/* Figma 78A: 快速 and Ultracode under a hairline, each with its switch; a switch leaves the menu open. */}
+        {button.switches && button.switches.length > 0 && <div className={styles.menuDivider} role="separator" />}
+        {button.switches?.map((s) => {
+          const title = s.option.category === 'ultracode' ? (s.on ? m.ultracodeOn : m.ultracodeOff) : s.hint
+          return (
+            <label key={s.option.id} className={styles.pickerRow} title={title} data-hint={s.hint ? true : undefined}>
+              {switchMark(s.option.category, s.on)}
+              <span className={styles.pickerLabel}>{s.option.label}</span>
+              {/* The switch carries the tooltip too, so it is there when the keyboard lands on it. */}
+              <Toggle checked={s.on} label={s.option.label} title={title} onChange={(on) => onPick(s.option.id, on ? 'on' : 'off')} />
+            </label>
           )
         })}
       </div>
@@ -469,7 +546,7 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
       style={place ?? { visibility: 'hidden' }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
+          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"], [role="switch"]') ?? [])]
           const at = rows.indexOf(e.currentTarget.ownerDocument.activeElement as HTMLElement)
           rows[stepIndex(at, e.key === 'ArrowDown' ? 1 : -1, rows.length)]?.focus()
           e.preventDefault()
@@ -499,6 +576,7 @@ function PickerRow({ checked, mark, label, onClick }: { checked: boolean; mark?:
  * could not say, just its default for an agent that only lists models in a session.
  */
 function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; models: readonly { value: string; label: string }[]; current: string | undefined; onAgent(agent: CliAgent, model: string | undefined): void }) {
+  const m = useMessages(M)
   const [found, setFound] = useState<AgentAvailability | null>(null)
   const [hovered, setHovered] = useState<CliAgent | null>(agent === 'shell' ? null : agent)
   const [asked, setAsked] = useState<Partial<Record<CliAgent, GuiCatalogResult | 'loading'>>>({})
@@ -557,7 +635,7 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
   let body: ReactNode
   if (!hovered) body = null
   else if (listed.length > 0) body = listed.map((v) => <PickerRow key={v.value} checked={v.value === chosen} label={v.label} onClick={() => pick(hovered, v.value)} />)
-  else if (answer === 'loading') body = <span className={styles.popoverTitle} data-testid="gui-agent-models-loading">加载中…</span>
+  else if (answer === 'loading') body = <span className={styles.popoverTitle} data-testid="gui-agent-models-loading">{m.loading}</span>
   else if (answer && !answer.ok && 'reason' in answer)
     body = (
       <>
@@ -571,22 +649,22 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
             probe(hovered)
           }}
         >
-          <span className={styles.pickerLabel}>重试</span>
+          <span className={styles.pickerLabel}>{m.retry}</span>
         </button>
       </>
     )
-  else body = <PickerRow checked={false} label="默认" onClick={() => pick(hovered, undefined)} />
+  else body = <PickerRow checked={false} label={m.defaultModel} onClick={() => pick(hovered, undefined)} />
   const adapterName = needsAdapter ? guiAdapterOf(hovered) : null
 
   return (
     <>
-      <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label="智能体" data-testid="gui-agent-menu">
+      <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={m.agents} data-testid="gui-agent-menu">
         {installed.map(agentRow)}
         {adapter.map(agentRow)}
         {missing.length > 0 && (
           <>
             <span className={styles.menuDivider} role="separator" />
-            <span className={styles.popoverTitle}>没装</span>
+            <span className={styles.popoverTitle}>{m.notInstalled}</span>
             {missing.map((id) => (
               <button key={id} type="button" role="menuitem" className={styles.pickerRow} data-muted onMouseEnter={() => setHovered(null)} onClick={() => openSettings('agents', id)}>
                 <AgentIcon kind={id} size={14} />
@@ -597,9 +675,9 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
         )}
       </div>
       {hovered && (
-        <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={`${agentName(hovered)} 的模型`} data-testid="gui-agent-models">
+        <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={m.modelsOf(agentName(hovered))} data-testid="gui-agent-models">
           {/* Amp without amp-acp: its models, and a pick opens 设置 · 智能体 where the adapter's install command is. */}
-          {adapterName && <span className={styles.popoverTitle}>装 {adapterName} 后可用</span>}
+          {adapterName && <span className={styles.popoverTitle}>{m.afterAdapter(adapterName)}</span>}
           {body}
         </div>
       )}

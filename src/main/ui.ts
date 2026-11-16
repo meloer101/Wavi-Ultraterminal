@@ -4,6 +4,9 @@ import { isAbsolute } from 'node:path'
 import { IPC } from '@shared/ipc'
 import { hostWindowFor } from './app-windows'
 import { secondaryWindowsOf } from './secondary-windows'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({ zh: { openProject: '打开项目', add: '添加' }, en: { openProject: 'Open project', add: 'Add' } })
 
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.slice(0, max) : '')
 
@@ -44,7 +47,7 @@ export function registerUiHandlers(): void {
 
   ipcMain.handle(IPC.uiPickFolder, async (event) => {
     const win = hostWindowFor(event.sender)
-    const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: '打开项目' }
+    const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: pick(M).openProject }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
@@ -58,7 +61,7 @@ export function registerUiHandlers(): void {
       properties: ['openFile', 'openDirectory', 'multiSelections', 'treatPackageAsDirectory'] as Array<
         'openFile' | 'openDirectory' | 'multiSelections' | 'treatPackageAsDirectory'
       >,
-      buttonLabel: '添加',
+      buttonLabel: pick(M).add,
       ...(start ? { defaultPath: start } : {})
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)

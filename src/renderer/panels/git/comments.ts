@@ -2,11 +2,25 @@
 // and leaves Enter to the user (PRD §2: Wavi never spends tokens on its own); the comments are cleared once it is there.
 import { commentPicked, reviewPrompt } from '@shared/review-comments'
 import type { Session, Worktree } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
 import { commentsOf, removeComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
 import { agentSessionFor } from '../merge/model'
+
+const M = defineMessages({
+  zh: {
+    discard: (count: number) => `放弃 ${count} 条评论？`,
+    detail: '还没发给 agent 的评论会被删除。',
+    confirm: '放弃'
+  },
+  en: {
+    discard: (count: number) => `Discard ${count} ${count === 1 ? 'comment' : 'comments'}?`,
+    detail: "Comments not yet sent to the agent will be deleted.",
+    confirm: 'Discard'
+  }
+})
 
 /** The agent session comments go to: the active one when it is in the worktree, else its first agent session. */
 export function commentTarget(worktree: Pick<Worktree, 'projectId' | 'path'>, sessions: readonly Session[], worktrees: readonly Worktree[], activeId: string | null): Session | null {
@@ -40,10 +54,11 @@ export async function discardComments(root: string): Promise<void> {
   const mine = userComments(root)
   const count = mine.length
   if (count === 0) return
+  const m = pick(M)
   const confirmed = await window.tr.ui.confirm({
-    message: `放弃 ${count} 条评论？`,
-    detail: '还没发给 agent 的评论会被删除。',
-    confirmLabel: '放弃',
+    message: m.discard(count),
+    detail: m.detail,
+    confirmLabel: m.confirm,
     destructive: true
   })
   if (confirmed) removeComments(root, new Set(mine.map((c) => c.id)))

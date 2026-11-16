@@ -4,6 +4,8 @@
 .host {
   width: 100%;
   height: 100%;
+  /* Bounds the padding ring below, which would otherwise paint over the bar above the terminal. */
+  overflow: clip;
   background: var(--tr-term-surface, var(--term-bg));
   user-select: text;
   cursor: text;
@@ -21,6 +23,19 @@
 
 .host :global(.xterm-viewport) {
   background: var(--tr-term-surface, var(--term-bg)) !important;
+}
+
+/* The same padding fill as the main area (TerminalArea.module.css), whose rules are scoped to its own host and stay
+   behind when the terminal is borrowed: a translucent terminal paints its cell color into the padding, and a full-screen
+   program's edge color (edge-fill.ts) fills it, so no ring of the board shows round the grid (issue #7). */
+.host :global(.xterm-scrollable-element) {
+  box-shadow: 0 0 0 100vmax var(--tr-term-ring, transparent);
+  overflow: visible !important;
+}
+
+.host :global(.xterm[data-cli-bg]) :global(.xterm-scrollable-element) {
+  background-color: var(--term-cli-bg) !important;
+  box-shadow: 0 0 0 100vmax var(--term-cli-bg);
 }
 
 .held {

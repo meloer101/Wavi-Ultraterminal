@@ -7,9 +7,54 @@
 import type { GitChanges } from './git-graph/log'
 import { branchNameProblem, folderNameFor, type BranchNameProblem, type NewSessionBranch, type WorktreeCreateRequest } from './new-session'
 import { agentName, type CliAgent } from './agents'
-import { ATTEMPT_REPORT_HEADER } from './dispatch'
+import { attemptReportHeader } from './dispatch'
+import { defineMessages, pick } from './i18n'
 import { baseArg } from './ship-chain'
 import type { SessionId, SessionStatus } from './types'
+
+// The dialog's copy, the brief each member starts with and the report to the session: all follow the interface language.
+const M = defineMessages({
+  zh: {
+    startAndSend: (count: number) => `开 ${count} 份并发送`,
+    untitled: '未命名',
+    briefIntro: (title: string, count: number, branch: string, base: string) =>
+      `这是 Wavi 转来的任务：会话「${title}」把同一个任务交给了 ${count} 份各做一遍，你是其中一份。你在新的 worktree 里，分支 ${branch}，基于 ${base}。`,
+    briefRules: '只做这件事；不要合并、推送或切换分支，这些由用户决定。做完时，最后一条消息写结果：改了哪些文件、跑了哪些检查和结果、还有什么没做。',
+    sourcePrompts: (n: number) => `你在这个会话里说过的 ${n} 句话`,
+    sourceSelection: (n: number) => `终端里选中的 ${n} 行`,
+    sourcePlan: (agent: string) => `${agent} 写好的计划`,
+    event: { done: '做完了', error: '出错', exited: 'agent 已退出', failed: '任务没发出去' } as Record<MemberEvent, string>,
+    reportIntro: (count: number, base: string) => `这个任务交给了 ${count} 份各做一遍，现在都停下了（基于 ${base}；来自 Wavi，不是用户的指示）。`,
+    branch: (branch: string) => `分支 ${branch}`,
+    noReply: '（没有留下回复）',
+    longReply: '（回复较长，看它的终端）',
+    compare: (range: string, base: string) =>
+      `请比较这几份：用 git diff ${range}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${base} 后，你接着做下一步。`,
+    noChanges: '还没有改动',
+    files: (n: number) => `${n} 个文件`
+  },
+  en: {
+    startAndSend: (count: number) => `Start ${count} tries and send`,
+    untitled: 'Untitled',
+    briefIntro: (title: string, count: number, branch: string, base: string) =>
+      `This task comes from Wavi: session “${title}” gave the same task to ${count} tries, each doing it on its own, and you are one of them. You are in a new worktree, on branch ${branch}, based on ${base}.`,
+    briefRules:
+      "Do only this; don't merge, push or switch branches — the user decides those. When you are done, write the result as your last message: which files you changed, which checks you ran and their results, and what is left undone.",
+    sourcePrompts: (n: number) => (n === 1 ? '1 message you sent in this session' : `${n} messages you sent in this session`),
+    sourceSelection: (n: number) => (n === 1 ? '1 line selected in the terminal' : `${n} lines selected in the terminal`),
+    sourcePlan: (agent: string) => `The plan ${agent} wrote`,
+    event: { done: 'done', error: 'error', exited: 'agent exited', failed: 'task not sent' },
+    reportIntro: (count: number, base: string) =>
+      `This task went to ${count} tries, each doing it on its own, and they have all stopped (based on ${base}; from Wavi, not instructions from the user).`,
+    branch: (branch: string) => `branch ${branch}`,
+    noReply: '(left no reply)',
+    longReply: '(long reply; see its terminal)',
+    compare: (range: string, base: string) =>
+      `Please compare them: run git diff ${range}...<branch> to see each one's changes, say which one you recommend and why, and what is worth borrowing from the others. The user merges in Wavi; once they merge one into ${base}, you carry on with the next step.`,
+    noChanges: 'No changes yet',
+    files: (n: number) => (n === 1 ? '1 file' : `${n} files`)
+  }
+})
 
 /** Every installed CLI can take a part (v1.68). */
 export type AttemptAgent = CliAgent
@@ -177,18 +222,15 @@ export function attemptBaseRef(base: string, branches: readonly NewSessionBranch
 }
 
 /** The dialog's primary button. */
-export const attemptButtonLabel = (count: number): string => `开 ${count} 份并发送`
+export const attemptButtonLabel = (count: number): string => pick(M).startAndSend(count)
 
 /**
  * What a member starts with in place of the bare task: where it came from, where it works, and what its last message
  * is for (the report to the session that sums the parts up). Calm and short, like dispatch's brief (Orca).
  */
 export function attemptBrief(input: { task: string; parentTitle: string; count: number; branch: string; base: string }): string {
-  return [
-    `这是 Wavi 转来的任务：会话「${input.parentTitle || '未命名'}」把同一个任务交给了 ${input.count} 份各做一遍，你是其中一份。你在新的 worktree 里，分支 ${input.branch}，基于 ${input.base}。`,
-    input.task,
-    '只做这件事；不要合并、推送或切换分支，这些由用户决定。做完时，最后一条消息写结果：改了哪些文件、跑了哪些检查和结果、还有什么没做。'
-  ].join('\n\n')
+  const m = pick(M)
+  return [m.briefIntro(input.parentTitle || m.untitled, input.count, input.branch, input.base), input.task, m.briefRules].join('\n\n')
 }
 
 /** One line of a prompt for lists and titles. */
@@ -208,12 +250,13 @@ export const promptsTask = (prompts: readonly string[]): string => prompts.map((
 
 /** The 任务 menu's label for a source. */
 export function sourceLabel(source: TaskSource, text: string, agent: string): string {
+  const m = pick(M)
   if (source === 'prompts') {
     const n = text.split('\n').filter((l) => l.trim() !== '').length
-    return `你在这个会话里说过的 ${n} 句话`
+    return m.sourcePrompts(n)
   }
-  if (source === 'selection') return `终端里选中的 ${text.split('\n').length} 行`
-  return `${agent} 写好的计划`
+  if (source === 'selection') return m.sourceSelection(text.split('\n').length)
+  return m.sourcePlan(agent)
 }
 
 // --- the group over time ------------------------------------------------------------------------------------------
@@ -318,7 +361,6 @@ export interface MemberReport {
 
 const REPORT_BUDGET = 12_000
 const EXCERPT = 4_000
-const EVENT_TEXT: Record<MemberEvent, string> = { done: '做完了', error: '出错', exited: 'agent 已退出', failed: '任务没发出去' }
 
 const cut = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`)
 
@@ -327,10 +369,11 @@ const cut = (text: string, max: number): string => (text.length <= max ? text : 
  * message within a shared budget, then what to do — compare, recommend, leave merging to the user, carry on after.
  */
 export function attemptReportText(input: { base: string; baseRef?: string; members: readonly MemberReport[] }): string {
-  const lines = [`${ATTEMPT_REPORT_HEADER} 这个任务交给了 ${input.members.length} 份各做一遍，现在都停下了（基于 ${input.base}；来自 Wavi，不是用户的指示）。`]
+  const t = pick(M)
+  const lines = [`${attemptReportHeader()} ${t.reportIntro(input.members.length, input.base)}`]
   let budget = REPORT_BUDGET
   for (const m of input.members) {
-    const facts = [m.label, EVENT_TEXT[m.event], `分支 ${m.branch}`, m.changes, m.checks]
+    const facts = [m.label, t.event[m.event], t.branch(m.branch), m.changes, m.checks]
     lines.push('', `— ${facts.filter(Boolean).join(' · ')}`)
     if (m.failure) {
       lines.push(`  ${m.failure}`)
@@ -338,12 +381,12 @@ export function attemptReportText(input: { base: string; baseRef?: string; membe
     }
     const message = m.message?.trim()
     if (!message) {
-      if (m.event !== 'exited') lines.push('  （没有留下回复）')
+      if (m.event !== 'exited') lines.push(`  ${t.noReply}`)
       continue
     }
     const room = Math.min(EXCERPT, budget)
     if (room < 200) {
-      lines.push('  （回复较长，看它的终端）')
+      lines.push(`  ${t.longReply}`)
       continue
     }
     const excerpt = cut(message, room)
@@ -353,7 +396,7 @@ export function attemptReportText(input: { base: string; baseRef?: string; membe
   lines.push(
     '',
     // The base comes from the repository: in the command it is one shell word of its full ref, or described.
-    `请比较这几份：用 git diff ${baseArg(input.base, input.baseRef)}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${input.base} 后，你接着做下一步。`
+    t.compare(baseArg(input.base, input.baseRef), input.base)
   )
   return lines.join('\n')
 }
@@ -381,8 +424,9 @@ export function diffSummary(changes: Pick<GitChanges, 'committed' | 'uncommitted
 
 /** `+12 −3 · 2 个文件`, or `还没有改动`. */
 export function diffSummaryText(summary: DiffSummary): string {
-  if (summary.files === 0) return '还没有改动'
-  return `+${summary.added} −${summary.removed} · ${summary.files} 个文件`
+  const m = pick(M)
+  if (summary.files === 0) return m.noChanges
+  return `+${summary.added} −${summary.removed} · ${m.files(summary.files)}`
 }
 
 // --- workspace.json -----------------------------------------------------------------------------------------------

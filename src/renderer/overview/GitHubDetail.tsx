@@ -10,6 +10,8 @@ import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import { itemTitle, taskPrompt, type BoardDetail } from '@shared/github-board'
 import { repoArg } from '@shared/pull-requests'
+import { defineMessages, pick } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { formatElapsed } from '../sidebar/format-elapsed'
 import { IconButton } from '../ui/IconButton'
 import { openNewSessionSheet, type SheetTask } from '../new-session/sheet-store'
@@ -19,6 +21,61 @@ import styles from './GitHubBoard.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
+const M = defineMessages({
+  zh: {
+    image: '图片',
+    imageAlt: (alt: string) => `图片：${alt}`,
+    ago: (elapsed: string) => `${elapsed} 前`,
+    openOnGitHub: '在 GitHub 打开',
+    fetchingPr: '正在拉取 PR…',
+    handToAgent: '交给 agent',
+    close: '关闭',
+    loading: '加载中…',
+    draft: '草稿',
+    open: '打开',
+    merged: '已合并',
+    closed: '已关闭',
+    checks: '检查',
+    failedAgo: (ago: string) => `失败 · ${ago}`,
+    running: '进行中',
+    noBody: '*没有正文*',
+    comments: '评论',
+    olderOnGitHub: (n: number) => `更早的 ${n} 条在 GitHub 上`,
+    files: (n: number) => `${n} 个文件`,
+    openedBy: (author: string, ago: string) => `${author} ${ago}创建`,
+    assignedTo: (names: string[]) => `指派给 ${names.join('、')}`,
+    approved: '已批准',
+    changesRequested: '要求修改',
+    notReviewed: '还没有审阅'
+  },
+  en: {
+    image: 'Image',
+    imageAlt: (alt: string) => `Image: ${alt}`,
+    ago: (elapsed: string) => `${elapsed} ago`,
+    openOnGitHub: 'Open on GitHub',
+    fetchingPr: 'Fetching PR…',
+    handToAgent: 'Hand to agent',
+    close: 'Close',
+    loading: 'Loading…',
+    draft: 'Draft',
+    open: 'Open',
+    merged: 'Merged',
+    closed: 'Closed',
+    checks: 'Checks',
+    failedAgo: (ago: string) => `Failed · ${ago}`,
+    running: 'Running',
+    noBody: '*No description*',
+    comments: 'Comments',
+    olderOnGitHub: (n: number) => (n === 1 ? '1 earlier comment on GitHub' : `${n} earlier comments on GitHub`),
+    files: (n: number) => (n === 1 ? '1 file' : `${n} files`),
+    openedBy: (author: string, ago: string) => (ago ? `${author} opened ${ago}` : `Opened by ${author}`),
+    assignedTo: (names: string[]) => `Assigned to ${names.join(', ')}`,
+    approved: 'Approved',
+    changesRequested: 'Changes requested',
+    notReviewed: 'Not reviewed yet'
+  }
+})
+
 const REMARK = [remarkGfm]
 const REHYPE = [rehypeRaw, rehypeSanitize]
 
@@ -49,7 +106,7 @@ const MARKDOWN: Components = {
         external(typeof src === 'string' ? src : undefined)
       }}
     >
-      {alt ? `图片：${alt}` : '图片'}
+      {alt ? pick(M).imageAlt(alt) : pick(M).image}
     </a>
   )
 }
@@ -64,9 +121,10 @@ function GitHubMarkdown({ text }: { text: string }) {
   )
 }
 
-const ago = (ms: number): string => (ms > 0 ? `${formatElapsed(Date.now() - ms)} 前` : '')
+const ago = (ms: number): string => (ms > 0 ? pick(M).ago(formatElapsed(Date.now() - ms)) : '')
 
 export function GitHubDetail({ item }: { item: OpenItem }) {
+  const m = useMessages(M)
   const dialogRef = useRef<HTMLDivElement>(null)
   const [handing, setHanding] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null })
   const result = item.result
@@ -100,18 +158,18 @@ export function GitHubDetail({ item }: { item: OpenItem }) {
           {detail && <span className={styles.repo}>{`${detail.repo.owner}/${detail.repo.name}`}</span>}
           <span className={styles.spacer} />
           {handing.message && <span className={styles.handError}>{handing.message}</span>}
-          <IconButton label="在 GitHub 打开" disabled={!detail?.url} onClick={() => external(detail?.url)}>
+          <IconButton label={m.openOnGitHub} disabled={!detail?.url} onClick={() => external(detail?.url)}>
             <ExternalLink {...ICON} />
           </IconButton>
           <button type="button" className={styles.primary} disabled={!detail || handing.busy} onClick={() => void handOff()}>
-            {handing.busy ? '正在拉取 PR…' : '交给 agent'}
+            {handing.busy ? m.fetchingPr : m.handToAgent}
           </button>
-          <IconButton label="关闭" onClick={closeItem}>
+          <IconButton label={m.close} onClick={closeItem}>
             <X {...ICON} />
           </IconButton>
         </header>
         <div className={styles.dialogBody}>
-          {!result && <p className={styles.state}>加载中…</p>}
+          {!result && <p className={styles.state}>{m.loading}</p>}
           {result && !result.ok && (
             <p className={styles.state} data-tone="error">
               {result.message}
@@ -125,12 +183,13 @@ export function GitHubDetail({ item }: { item: OpenItem }) {
 }
 
 function DetailBody({ detail }: { detail: BoardDetail }) {
+  const m = useMessages(M)
   const pr = detail.pr
   const failing = pr?.checks.filter((c) => c.verdict === 'failed').length ?? 0
   return (
     <>
       <div className={styles.meta}>
-        <span className={styles.metaStrong}>{detail.state === 'open' ? (pr?.draft ? '草稿' : '打开') : detail.state === 'merged' ? '已合并' : '已关闭'}</span>
+        <span className={styles.metaStrong}>{detail.state === 'open' ? (pr?.draft ? m.draft : m.open) : detail.state === 'merged' ? m.merged : m.closed}</span>
         {metaItems(detail).map((item, i) => (
           <Fragment key={i}>
             <span className={styles.sep} aria-hidden>
@@ -141,9 +200,9 @@ function DetailBody({ detail }: { detail: BoardDetail }) {
         ))}
       </div>
       {pr && pr.checks.length > 0 && (
-        <section className={styles.checkList} aria-label="检查">
+        <section className={styles.checkList} aria-label={m.checks}>
           <div className={styles.groupHeader}>
-            <h3>检查</h3>
+            <h3>{m.checks}</h3>
             <span className={styles.count}>{`${pr.checks.length - failing - pr.checks.filter((c) => c.verdict === 'pending').length}/${pr.checks.length}`}</span>
           </div>
           {pr.checks.map((check, i) => (
@@ -151,22 +210,22 @@ function DetailBody({ detail }: { detail: BoardDetail }) {
               {check.verdict === 'passed' ? <Check {...SMALL} /> : check.verdict === 'failed' ? <X {...SMALL} /> : <Circle {...SMALL} />}
               <span className={styles.checkName}>{check.name}</span>
               <span className={styles.checkTime}>
-                {check.verdict === 'failed' ? `失败 · ${ago(check.completedAt ?? 0)}` : check.verdict === 'pending' ? '进行中' : duration(check.startedAt, check.completedAt)}
+                {check.verdict === 'failed' ? m.failedAgo(ago(check.completedAt ?? 0)) : check.verdict === 'pending' ? m.running : duration(check.startedAt, check.completedAt)}
               </span>
             </div>
           ))}
         </section>
       )}
       {(pr?.checks.length ?? 0) > 0 && <hr className={styles.rule} />}
-      <GitHubMarkdown text={detail.body.trim() || '*没有正文*'} />
+      <GitHubMarkdown text={detail.body.trim() || m.noBody} />
       <hr className={styles.rule} />
       <div className={styles.groupHeader}>
-        <h3>评论</h3>
+        <h3>{m.comments}</h3>
         <span className={styles.count}>{detail.commentCount}</span>
       </div>
       {detail.commentCount > detail.comments.length && (
         <button type="button" className={styles.ghost} onClick={() => external(detail.url)}>
-          {`更早的 ${detail.commentCount - detail.comments.length} 条在 GitHub 上`}
+          {m.olderOnGitHub(detail.commentCount - detail.comments.length)}
         </button>
       )}
       {detail.comments.map((c, i) => (
@@ -185,13 +244,14 @@ function DetailBody({ detail }: { detail: BoardDetail }) {
 /** The meta row after the state word (Figma 77′C / 77′D), `·` between the parts. */
 function metaItems(detail: BoardDetail): { text: string; mono?: boolean }[] {
   const pr = detail.pr
+  const m = pick(M)
   const items: { text: string; mono?: boolean }[] = []
   if (pr) {
-    items.push({ text: `${pr.headRef} → ${pr.baseRef}`, mono: true }, { text: `+${pr.additions} −${pr.deletions} · ${pr.changedFiles} 个文件` })
-  } else items.push({ text: `${detail.author} ${ago(detail.createdAt)}创建` })
+    items.push({ text: `${pr.headRef} → ${pr.baseRef}`, mono: true }, { text: `+${pr.additions} −${pr.deletions} · ${m.files(pr.changedFiles)}` })
+  } else items.push({ text: m.openedBy(detail.author, ago(detail.createdAt)) })
   for (const label of detail.labels) items.push({ text: label })
-  if (detail.assignees.length > 0) items.push({ text: `指派给 ${detail.assignees.join('、')}` })
-  if (pr) items.push({ text: pr.review === 'approved' ? '已批准' : pr.review === 'changes-requested' ? '要求修改' : '还没有审阅' })
+  if (detail.assignees.length > 0) items.push({ text: m.assignedTo(detail.assignees) })
+  if (pr) items.push({ text: pr.review === 'approved' ? m.approved : pr.review === 'changes-requested' ? m.changesRequested : m.notReviewed })
   return items
 }
 

@@ -2,6 +2,9 @@
 // launch needs. Claude Code and Codex keep their own launch code (agent-launch.ts); every other CLI is started from
 // its row here: binary, first prompt, resume, model. Each runs its own vendor's model — a CLI pointed at another
 // vendor through an endpoint override is not a separate row (users switch those with CC Switch).
+import { defineMessages, pick as pickMessages } from './i18n'
+
+const M = defineMessages({ zh: { shell: '终端' }, en: { shell: 'Terminal' } })
 
 /** Every agent CLI, in the order 新建会话 lists them. */
 export const CLI_AGENTS = [
@@ -353,5 +356,5 @@ export const hasOwnAdapter = (kind: unknown): kind is ClaudeOrCodex => claudeOrC
 
 /** The name a session of this kind shows ('终端' for a plain shell). */
 export function agentName(kind: CliAgent | 'shell'): string {
-  return kind === 'shell' ? '终端' : AGENT_SPECS[kind].label
+  return kind === 'shell' ? pickMessages(M).shell : AGENT_SPECS[kind].label
 }

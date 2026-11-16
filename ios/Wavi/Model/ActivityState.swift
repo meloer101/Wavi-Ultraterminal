@@ -37,8 +37,10 @@ func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Doub
 
 /// 另有 1 个等你处理 · 2 个运行中; nil when nothing else goes on.
 private func othersLine(waiting: Int, running: Int) -> String? {
-  let parts = [waiting > 0 ? "\(waiting) 个等你处理" : nil, running > 0 ? "\(running) 个运行中" : nil].compactMap { $0 }
-  return parts.isEmpty ? nil : "另有 " + parts.joined(separator: " · ")
+  // English puts "more" after the first number (1 more needs you · 2 running), Chinese 另有 before it: whole phrases.
+  let first = waiting > 0 ? String(localized: "另有 \(waiting) 个等你处理") : running > 0 ? String(localized: "另有 \(running) 个运行中") : nil
+  let second = waiting > 0 && running > 0 ? String(localized: "\(running) 个运行中") : nil
+  return first.map { [$0, second].compactMap { $0 }.joined(separator: " · ") }
 }
 
 private extension ActivityState.Kind {
@@ -85,7 +87,7 @@ private func activityCard(sessions: [RemoteSession], prompts: [RemotePrompt], no
   }
   // Quiet since the last thing any session did.
   if let quiet = sessions.map({ max($0.activity, $0.since ?? 0) }).max(), now - quiet <= ActivityLimits.idleMs {
-    return ActivityState(kind: .idle, session: nil, prompt: nil, title: cut(mac), detail: "\(sessions.count) 个会话", since: date(quiet))
+    return ActivityState(kind: .idle, session: nil, prompt: nil, title: cut(mac), detail: String(localized: "\(sessions.count) 个会话"), since: date(quiet))
   }
   return nil
 }

@@ -171,7 +171,7 @@ export function hadOwnCommits(reflogSubjects: string): boolean {
 
 /**
  * Merged into the base: nothing on HEAD is missing from the base, and the branch made commits of its own. A worktree
- * whose agent has not committed yet has nothing ahead too, but is not merged (「无新提交」).
+ * whose agent has not committed yet has nothing ahead too, but is not merged (no commits of its own).
  */
 export function isMergedInto(ahead: number | null, ownCommits: boolean): boolean {
   return ahead === 0 && ownCommits

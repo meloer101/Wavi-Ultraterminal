@@ -24,7 +24,7 @@ struct WaviLiveActivity: Widget {
           StatusWord(state: state).frame(maxHeight: .infinity).padding(.leading, 6).dark()
         }
         DynamicIslandExpandedRegion(.trailing) {
-          Age(state: state, stale: context.isStale).frame(maxHeight: .infinity).padding(.trailing, 6).dark()
+          Age(state: state, stale: context.isStale, island: true).frame(maxHeight: .infinity).padding(.trailing, 6).dark()
         }
         DynamicIslandExpandedRegion(.bottom) {
           ActivityBody(state: state, island: true, stale: context.isStale).padding(.horizontal, 6).padding(.top, 4).dark()
@@ -91,18 +91,22 @@ private struct Glyph: View {
   }
 }
 
-/// `2分钟`, counting on its own; rounded up, so a prompt that just arrived reads 1分钟 rather than 0. A counting text is
-/// as wide as the widest value it could take, so it gets a width of its own (`12分钟` fits).
+/// `2分钟` / `2 minutes`, counting on its own; rounded up, so a prompt that just arrived reads 1分钟 rather than 0. A
+/// counting text is as wide as the widest value it could take, so it gets a width of its own (`12分钟` fits). The
+/// system's counting format has no short English unit, so English gets room for `12 minutes` and may shrink further.
 private struct Elapsed: View {
   let since: Date
   var width: CGFloat = 48
 
   var body: some View {
+    // Asked for in the app's language. On the iOS 26.3 simulator the system draws the count in the system's language
+    // whatever locale is set here (measured 2026-11-15), so with Settings › Wavi › Language unlike the system's the
+    // unit can be in the other language.
     Text(.currentDate, format: .offset(to: since.addingTimeInterval(-59), allowedFields: [.minute, .hour, .day], maxFieldCount: 1, sign: .never)
-      .locale(Locale(identifier: "zh_Hans_CN")))
+      .locale(Locale(identifier: AppLanguage.current == .zh ? "zh_Hans_CN" : "en_US")))
       .lineLimit(1)
-      .minimumScaleFactor(0.8)
-      .frame(maxWidth: width, alignment: .trailing)
+      .minimumScaleFactor(AppLanguage.current == .zh ? 0.8 : 0.7)
+      .frame(maxWidth: AppLanguage.current == .zh ? width : width + 32, alignment: .trailing)
   }
 }
 
@@ -114,7 +118,7 @@ private struct CompactValue: View {
     Group {
       switch state.kind {
       case .permission, .question: Elapsed(since: state.since, width: 44).font(.ui(.footnote, medium: true))
-      case .running: Text("\(state.runningCount)").font(.mono(.subheadline, medium: true)).foregroundStyle(Color.textPrimary)
+      case .running: Text(verbatim: "\(state.runningCount)").font(.mono(.subheadline, medium: true)).foregroundStyle(Color.textPrimary)
       case .done: Text("完成").font(.ui(.footnote, medium: true))
       case .error: Text("出错").font(.ui(.footnote, medium: true))
       case .idle: Text("空闲").font(.ui(.footnote, medium: true))
@@ -132,27 +136,30 @@ private struct StatusWord: View {
   var body: some View {
     HStack(spacing: 6) {
       Glyph(kind: state.kind)
-      Text(word).font(.ui(.footnote, medium: true)).foregroundStyle(state.kind.color).lineLimit(1)
+      // The island's leading region ends at the camera: English `Needs approval` gets a little smaller there.
+      Text(word).font(.ui(.footnote, medium: true)).foregroundStyle(state.kind.color).lineLimit(1).minimumScaleFactor(0.75)
     }
   }
 
   private var word: String {
     switch state.kind {
-    case .permission: "等你确认"
-    case .question: "等你回答"
-    case .running: "\(state.runningCount) 个运行中"
-    case .done: "完成"
-    case .error: "出错"
-    case .idle: "空闲"
+    case .permission: String(localized: "等你确认")
+    case .question: String(localized: "等你回答")
+    case .running: String(localized: "\(state.runningCount) 个运行中")
+    case .done: String(localized: "完成")
+    case .error: String(localized: "出错")
+    case .idle: String(localized: "空闲")
     }
   }
 }
 
 /// 已等 2分钟 while it waits, how long ago it finished; nothing for the running list (each row has its own). 已过期 once
-/// the phone has not updated it past its stale date (the app was closed or lost the Mac).
+/// the phone has not updated it past its stale date (the app was closed or lost the Mac). On the island English shows
+/// the time alone: `waiting 2 minutes` reaches under the camera (Figma 89′D); the Lock Screen keeps the word (89′E).
 private struct Age: View {
   let state: WaviActivityAttributes.ContentState
   var stale = false
+  var island = false
 
   var body: some View {
     Group {
@@ -160,7 +167,7 @@ private struct Age: View {
         Text("已过期")
       } else if state.kind.waiting {
         HStack(spacing: 4) {
-          Text("已等")
+          if !island || AppLanguage.current == .zh { Text("已等") }
           Elapsed(since: state.since)
         }
       } else if state.kind != .running {
@@ -200,8 +207,9 @@ private struct LockCard: View {
 
   private var footer: String? {
     if stale {
-      let time = state.updated.map { "上次更新 \($0.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))) · " } ?? ""
-      return time + "打开 Wavi 重新连接"
+      guard let updated = state.updated else { return String(localized: "打开 Wavi 重新连接") }
+      let time = updated.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+      return String(localized: "上次更新 \(time) · 打开 Wavi 重新连接")
     }
     return state.others
   }
@@ -268,14 +276,14 @@ private struct ActivityBody: View {
   @ViewBuilder private func buttons(_ prompt: String) -> some View {
     HStack(spacing: 8) {
       if state.kind == .permission {
-        Button(intent: AnswerPermissionIntent(prompt: prompt, decision: "deny")) { label("拒绝", primary: false) }
-        Button(intent: AnswerPermissionIntent(prompt: prompt, decision: "allow-once")) { label("允许", primary: true) }
+        Button(intent: AnswerPermissionIntent(prompt: prompt, decision: "deny")) { label(String(localized: "拒绝"), primary: false) }
+        Button(intent: AnswerPermissionIntent(prompt: prompt, decision: "allow-once")) { label(String(localized: "允许"), primary: true) }
       } else {
         ForEach(state.options, id: \.self) { option in
           Button(intent: AnswerQuestionIntent(prompt: prompt, question: state.detail, option: option)) { label(option, primary: false) }
         }
         if state.more {
-          Link(destination: ActivityLink.url(session: state.session)) { label("更多", primary: false) }
+          Link(destination: ActivityLink.url(session: state.session)) { label(String(localized: "更多"), primary: false) }
         }
       }
     }

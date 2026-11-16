@@ -390,6 +390,11 @@ describe('saved results and ignored findings (PRD F13 v1.63)', () => {
     expect(sanitizeReviewResults('garbage')).toEqual({})
   })
 
+  it('keeps a review the gone 合并前审阅 ran, as one asked for by hand', () => {
+    const store = sanitizeReviewResults({ '/w': { records: [{ ...record('abcdef12'), trigger: 'merge' }, { ...record('abcdef13'), trigger: 'cron' }], dismissed: [] } })
+    expect(store['/w']!.records).toEqual([record('abcdef12')])
+  })
+
   it('counts severities and names the other CLI', () => {
     expect(countSeverities([{ severity: 'P1' }, { severity: 'P1' }, { severity: 'P3' }, {}])).toEqual({ P1: 2, P3: 1 })
     expect(otherAgent('claude')).toBe('codex')

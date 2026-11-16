@@ -36,6 +36,35 @@ describe('全屏背景 (PRD v1.97)', () => {
   })
 })
 
+describe('背景图片 (PRD v1.189)', () => {
+  const name = `${'0f'.repeat(32)}.jpg`
+
+  it('has no picture and no blur by default', () => {
+    expect(DEFAULT_SETTINGS.appearance.backgroundImage).toBe('')
+    expect(DEFAULT_SETTINGS.appearance.backgroundBlur).toBe(0)
+  })
+
+  it('keeps a stored picture’s name and drops anything else, so a path never reaches the protocol', () => {
+    expect(sanitizeSettings({ appearance: { backgroundImage: name } }).appearance.backgroundImage).toBe(name)
+    expect(sanitizeSettings({ appearance: { backgroundImage: '/Users/me/wall.jpg' } }).appearance.backgroundImage).toBe('')
+    expect(sanitizeSettings({ appearance: { backgroundImage: '../settings.json' } }).appearance.backgroundImage).toBe('')
+  })
+
+  it('clamps the blur to 0–100 % in whole percent', () => {
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 0.404 } }).appearance.backgroundBlur).toBe(0.4)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 2 } }).appearance.backgroundBlur).toBe(1)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: -1 } }).appearance.backgroundBlur).toBe(0)
+    expect(sanitizeSettings({ appearance: { backgroundBlur: 'x' } }).appearance.backgroundBlur).toBe(0)
+  })
+
+  it('移除 is a patch to the empty name', () => {
+    const withPicture = sanitizeSettings({ appearance: { backgroundImage: name, backgroundBlur: 0.4 } })
+    const removed = applySettingsPatch(withPicture, { appearance: { backgroundImage: '' } })
+    expect(removed.appearance.backgroundImage).toBe('')
+    expect(removed.appearance.backgroundBlur).toBe(0.4)
+  })
+})
+
 describe('applySettingsPatch', () => {
   it('merges appearance fields and keeps the rest', () => {
     const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { cjkFont: 'Noto Sans SC', fontSize: 14 } })
@@ -59,7 +88,6 @@ describe('applySettingsPatch', () => {
 
   it('keeps code review off unless a real switch is set (PRD F13)', () => {
     expect(DEFAULT_SETTINGS.review).toEqual({
-      beforeMerge: false,
       beforePush: false,
       afterTurnWithCommits: false,
       mode: 'builtin',
@@ -69,8 +97,8 @@ describe('applySettingsPatch', () => {
       model: '',
       codexModel: ''
     })
-    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { beforeMerge: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
-    expect(next.review.beforeMerge).toBe(true)
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { afterTurnWithCommits: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
+    expect(next.review.afterTurnWithCommits).toBe(true)
     expect(next.review.beforePush).toBe(false)
     expect(next.review.mode).toBe('agent-command')
     expect(next.review.model).toBe('haiku')
@@ -78,6 +106,16 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { model: 'not a model', mode: 'nope' } }).review.model).toBe('')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { mode: 'nope' } }).review.mode).toBe('builtin')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
+  })
+
+  it('drops 合并前审阅: a stored one on turns 推送前审阅 on, and it is gone once written back', () => {
+    const migrated = sanitizeSettings({ review: { beforeMerge: true, beforePush: false } }).review
+    expect(migrated.beforePush).toBe(true)
+    expect('beforeMerge' in migrated).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: false } }).review.beforePush).toBe(false)
+    expect(sanitizeSettings({ review: { beforeMerge: false, beforePush: true } }).review.beforePush).toBe(true)
+    // Turned off afterwards: stays off (the old key is not written back).
+    expect(applySettingsPatch(sanitizeSettings({ review: { beforeMerge: true } }), { review: { beforePush: false } }).review.beforePush).toBe(false)
   })
 
   it('picks the other CLI as reviewer only when asked, and moves an old OpenAI model to Codex (PRD F13 v1.63)', () => {

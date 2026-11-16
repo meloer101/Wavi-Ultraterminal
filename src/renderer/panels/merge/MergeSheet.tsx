@@ -1,26 +1,24 @@
 // 合并到 <base> (PRD F4, Figma 05 19:814): the precheck as a short checklist (ahead, behind, conflicts, uncommitted
-// work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
-// worktree, push the base to its remote). With conflicts the only way forward is the worktree's agent: the instructions go into its
-// input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
-import { headlessAgent } from '@shared/agents'
+// work, an upstream the base has not pulled), the `[scripts] test` gate, then 合并. Local only: the same main-process
+// merge as Git · 变更's 合并 (ship.shipToMain) — the base is fast-forwarded to its upstream first, then one squash commit on it, titled after the session; nothing is pushed (推送 of the base is the
+// chain's next move) and the worktree stays. With conflicts the only way forward is the worktree's agent: the
+// instructions go into its input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the
+// new-session sheet (PRD §5).
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
-import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
-import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
+import type { MergePrecheck } from '@shared/git-merge'
+import type { ShipMainResult } from '@shared/ship'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
-import { severityCounts } from '@shared/background-review'
-import { cancelBackgroundReview, loadSavedReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
 import { useRepoScripts } from '../../scripts/run-script'
-import { useSettings } from '../../settings/useSettings'
-import { useReviewComments } from '../../state/review-comments'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
 import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
-import { Checkbox, Line, TestResult, TurnChecks } from './parts'
+import { Line, TestResult, TurnChecks } from './parts'
 import { PrMergeSheet } from './PrMergeSheet'
 import { usePrStatus } from '../../pull-requests/store'
-import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
 import { AfterMerge } from '../../attempts/AfterMerge'
 import { attemptForWorktrees } from '../../attempts/actions'
 import { markGroupMerged } from '../../state/attempt-groups'
@@ -30,12 +28,7 @@ import {
   checkLines,
   conflictPrompt,
   conflictReason,
-  failureText,
-  METHOD_NOTE,
-  methodOptions,
   nothingToMerge,
-  removeBlocker,
-  pushSwitchLabel,
   resultLines,
   testBlocksMerge,
   testLine,
@@ -44,6 +37,49 @@ import {
 } from './model'
 import { closeMergeSheet, useMergeSheet, type MergeTarget } from './store'
 import styles from './MergeSheet.module.css'
+
+const M = defineMessages({
+  zh: {
+    mergeTo: '合并到',
+    mergeInto: (base: string) => `合并到 ${base}`,
+    local: '本地',
+    moved: '分支或基线在检查之后又变了，已重新检查',
+    handOffFailed: (agent: string, error: string) => `没有交给 ${agent}：${error}`,
+    checking: '正在检查…',
+    checkFailed: (message: string) => `没能检查：${message}`,
+    conflictedFiles: '冲突的文件',
+    moreFiles: (count: number) => `还有 ${count} 个文件`,
+    handOffNote: (agent: string) => `说明会放进 ${agent} 的输入行，看过后按回车发送`,
+    resolveInTerminal: '在终端里解决冲突后重新打开',
+    cancel: '取消',
+    close: '关闭',
+    done: '完成',
+    handingOff: (agent: string) => `正在交给 ${agent}…`,
+    handOff: (agent: string) => `交给 ${agent} 解决`,
+    merging: '正在合并…',
+    merge: '合并'
+  },
+  en: {
+    mergeTo: 'Merge into',
+    mergeInto: (base: string) => `Merge into ${base}`,
+    local: 'Local',
+    moved: 'The branch or the base changed after the check; checked again',
+    handOffFailed: (agent: string, error: string) => `Not handed to ${agent}: ${error}`,
+    checking: 'Checking…',
+    checkFailed: (message: string) => `Couldn't check: ${message}`,
+    conflictedFiles: 'Conflicted files',
+    moreFiles: (count: number) => `${count} more ${count === 1 ? 'file' : 'files'}`,
+    handOffNote: (agent: string) => `The instructions go into ${agent}'s input line; press Return to send once you've checked them`,
+    resolveInTerminal: 'Resolve the conflicts in the terminal, then reopen',
+    cancel: 'Cancel',
+    close: 'Close',
+    done: 'Done',
+    handingOff: (agent: string) => `Handing to ${agent}…`,
+    handOff: (agent: string) => `Hand to ${agent}`,
+    merging: 'Merging…',
+    merge: 'Merge'
+  }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** Conflicted files listed in the sheet; the rest are counted. */
@@ -60,17 +96,18 @@ export function MergeSheet() {
  * Without a PR (or without gh) the sheet is the local one, with no switch.
  */
 function Target({ target }: { target: MergeTarget }) {
+  const m = useMessages(M)
   const status = usePrStatus(target.worktreePath)
   const pr = status?.pr
   const live = pr && (pr.state === 'open' || pr.state === 'draft') && pr.details ? pr : null
   const [to, setTo] = useState<'pr' | 'local'>(live ? 'pr' : 'local')
   const choice = live ? (
     <Segmented
-      label="合并到"
+      label={m.mergeTo}
       value={to}
       options={[
         { value: 'pr', label: `GitHub PR #${live.number}` },
-        { value: 'local', label: '本地' }
+        { value: 'local', label: m.local }
       ]}
       onChange={setTo}
     />
@@ -86,10 +123,8 @@ type Phase =
   | { kind: 'done'; check: MergePrecheck; lines: CheckLine[] }
 
 function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: ReactNode }) {
+  const m = useMessages(M)
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
-  const [method, setMethod] = useState<MergeMethod>('squash')
-  const [removeAfter, setRemoveAfter] = useState(true)
-  const [push, setPush] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   // 交给 … 解决 in flight: the agent may have to start first, and the text may be refused while a menu is open.
@@ -109,7 +144,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
   const activeId = useWorkspace((s) => s.activeSessionId)
   const here = sessions.filter((s) => ids.includes(s.worktreeId))
   const agent = agentSessionFor(here, activeId)
-  // 一题多解: read when the sheet opens — removing the worktree after the merge closes its session.
+  // 一题多解: read when the sheet opens.
   const [attemptGroup] = useState(() => attemptForWorktrees(ids))
 
   // The precheck: once when the sheet opens, again after recheck() (the sheet opens in 'checking').
@@ -121,7 +156,6 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       .then((next) => {
         if (!live) return
         setPhase({ kind: 'ready', check: next })
-        if (next.uncommitted !== 0) setMethod((m) => (m === 'rebase' ? 'squash' : m))
       })
       .catch((error: unknown) => live && setPhase({ kind: 'failed-check', message: error instanceof Error ? error.message : String(error) }))
     return () => {
@@ -138,7 +172,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
 
   const ready = phase.kind === 'ready' ? phase.check : null
   const gitMergeable = ready !== null && ready.blocker === null && ready.conflicts.length === 0
-  // Nothing to merge (Figma 30B / 30C): one line saying where the branch stands, then 关闭 — no review, no checks.
+  // Nothing to merge (Figma 30B / 30C): one line saying where the branch stands, then 关闭 — no checks.
   const settled = ready !== null && nothingToMerge(ready)
   const repo = useRepoScripts(target.worktreePath)
   const scriptsKnown = repo !== null
@@ -189,26 +223,6 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
   }, [testing, testScript, testAttempt, target.worktreePath])
 
   const mergeable = gitMergeable && scriptsKnown && !testBlocksMerge(testState, testScript !== undefined)
-  const removeReason = ready ? removeBlocker(ready, here, target.isMain) : null
-  const willRemove = removeAfter && removeReason === null
-  const willPush = push && (ready?.hasOrigin ?? false)
-
-  // Background review (PRD F13): one more checklist line, never a reason not to merge. 合并前 starts it when the
-  // sheet is ready, 推送前 when 推送到 origin is ticked; 先审阅 starts it by hand. Main skips a diff it already reviewed.
-  const { settings, loaded: settingsLoaded } = useSettings()
-  const builtin = settings.review.mode === 'builtin'
-  const reviewAgent = headlessAgent(agent?.kind)
-  const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
-  const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
-  const autoTrigger = !settingsLoaded || !builtin ? null : settings.review.beforeMerge ? 'merge' : settings.review.beforePush && willPush ? 'push' : null
-  const reviewBase = settled ? undefined : ready?.base
-  useEffect(() => loadSavedReview(target.worktreePath), [target.worktreePath])
-  useEffect(() => {
-    if (!autoTrigger || !reviewAgent || !reviewBase) return
-    void startBackgroundReview(target.worktreePath, reviewAgent, autoTrigger, reviewBase).catch(() => {})
-  }, [autoTrigger, reviewAgent, reviewBase, target.worktreePath])
-  const reviewCheck = review ? reviewLine(review, severityCounts((reviewComments ?? []).filter((c) => c.origin === 'review')), reviewAgent ?? undefined) : null
-  const reviewRunning = review?.phase === 'running'
   const checksView = useTurnCheckView(agent?.id)
 
   const merge = async (): Promise<void> => {
@@ -217,56 +231,35 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
     setNote(null)
     setPhase({ kind: 'merging', check: ready })
     const title = here.find((s) => s.id === agent?.id)?.title ?? here[0]?.title
-    let result: MergeResult
+    // The exit's own merge: the base caught up with its upstream, then squashed into — never pushed. Only the tip the
+    // checklist and the test saw is merged.
+    let result: ShipMainResult
     try {
-      result = await window.tr.gitWorktrees.merge({
+      result = await window.tr.ship.shipToMain({
         root: target.root,
         worktree: target.worktreePath,
-        method,
+        message: '',
+        method: 'squash',
+        paths: null,
         head: ready.head,
-        baseHead: ready.baseHead,
-        push: willPush,
-        ...(method === 'squash' && title ? { title } : {})
+        ...(title ? { title } : {})
       })
     } catch (error) {
-      result = { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
+      result = { ok: false, step: 'merge', reason: 'failed', message: error instanceof Error ? error.message : String(error) }
     }
     if (!result.ok) {
-      if (result.reason === 'stale') {
-        setNote('分支或基线在检查之后又变了，已重新检查')
+      // Moved since the check (or the base it caught up with now conflicts): the checklist is read again.
+      if (result.stale || result.reason === 'conflicts') {
+        setNote(m.moved)
         recheck()
         return
       }
-      setFailure(failureText(result, ready))
+      setFailure(result.message)
       setPhase({ kind: 'ready', check: ready })
       return
     }
-    let removal: string | null = null
-    if (willRemove) {
-      try {
-        const removed = await removeWorktreeWithSessions(target.root, target.worktreePath, ids)
-        removal = removed.ok ? 'removed' : removeFailureText(removed)
-      } catch (error) {
-        removal = error instanceof Error ? error.message : String(error)
-      }
-    }
     if (attemptGroup) markGroupMerged(attemptGroup.groupId, attemptGroup.sessionId, ready.branch)
-    const lines = resultLines(result, ready.base, removal, ready.pushRemote ?? undefined)
-    // 设置 · Worktree · 合并后自动归档 (PRD F15): a worktree the merge kept is folded away; its archive script runs
-    // after the usual approval, and a failing one does not stop the archive.
-    if (settings.archive.afterMerge && removal !== 'removed' && !target.isMain && ids[0]) {
-      const archiveTarget = archiveTargetFor(ids[0])
-      const archived = archiveTarget
-        ? await archiveWorktree(archiveTarget, { ignoreScriptFailure: true }).catch((error: unknown) => ({
-            ok: false as const,
-            stage: 'snapshot' as const,
-            message: error instanceof Error ? error.message : String(error)
-          }))
-        : null
-      if (archived?.ok) lines.push({ tone: 'ok', text: '已归档 worktree，可以在跳转（⌘K）的历史里恢复' })
-      else if (archived) lines.push({ tone: 'warn', text: `没有归档：${archived.message}` })
-    }
-    setPhase({ kind: 'done', check: ready, lines })
+    setPhase({ kind: 'done', check: ready, lines: resultLines(result, ready.base) })
   }
 
   // The sheet stays until the text is in the agent's input line: when it cannot go there (a menu is open in the
@@ -283,7 +276,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       await insertIntoTerminal(agent.id, prompt)
     } catch (error) {
       if (mounted.current) {
-        setFailure(`没有交给 ${agentLabel(agent.kind)}：${error instanceof Error ? error.message : String(error)}`)
+        setFailure(m.handOffFailed(agentLabel(agent.kind), error instanceof Error ? error.message : String(error)))
         setHanding(false)
       }
       return
@@ -335,13 +328,13 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
           {targetSwitch ? (
             <div className={styles.titleRow}>
               <h2 id={titleId} className={styles.title}>
-                合并到
+                {m.mergeTo}
               </h2>
               {targetSwitch}
             </div>
           ) : (
             <h2 id={titleId} className={styles.title}>
-              合并到 {shown?.base || '…'}
+              {m.mergeInto(shown?.base || '…')}
             </h2>
           )}
           {shown?.branch && (
@@ -355,26 +348,17 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
         </header>
 
         <div className={styles.checks} aria-live="polite">
-          {phase.kind === 'checking' && <p className={styles.muted}>正在检查…</p>}
-          {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: `没能检查：${phase.message}` }} />}
+          {phase.kind === 'checking' && <p className={styles.muted}>{m.checking}</p>}
+          {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: m.checkFailed(phase.message) }} />}
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
           {phase.kind === 'done' && attemptGroup && <AfterMerge groupId={attemptGroup.groupId} />}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
-          {shown && phase.kind !== 'done' && !settled && reviewCheck && (
-            <Line
-              line={{
-                tone: reviewCheck.tone === 'muted' ? 'warn' : reviewCheck.tone,
-                text: reviewCheck.text,
-                ...(reviewCheck.meta ? { meta: reviewCheck.meta } : {})
-              }}
-            />
-          )}
           {shown && phase.kind !== 'done' && !settled && agent && checksView && <TurnChecks view={checksView} kind={agent.kind} />}
           {shown && phase.kind !== 'done' && testState && (
             <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
           )}
           {conflicts.length > 0 && (
-            <ul className={styles.conflicts} aria-label="冲突的文件">
+            <ul className={styles.conflicts} aria-label={m.conflictedFiles}>
               {conflicts.slice(0, MAX_LISTED_CONFLICTS).map((c) => (
                 <li key={c.path} className={styles.conflict}>
                   <span className={styles.conflictPath}>{c.path}</span>
@@ -382,43 +366,12 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
                 </li>
               ))}
               {conflicts.length > MAX_LISTED_CONFLICTS && (
-                <li className={styles.conflictMore}>还有 {conflicts.length - MAX_LISTED_CONFLICTS} 个文件</li>
+                <li className={styles.conflictMore}>{m.moreFiles(conflicts.length - MAX_LISTED_CONFLICTS)}</li>
               )}
             </ul>
           )}
           {note && <p className={styles.muted}>{note}</p>}
         </div>
-
-        {shown && phase.kind !== 'done' && mergeable && (
-          <div className={styles.options}>
-            <div className={styles.field} role="group" aria-label="合并方式">
-              <span className={styles.label}>合并方式</span>
-              <div className={styles.control}>
-                <Segmented label="合并方式" value={method} options={methodOptions(shown)} onChange={setMethod} />
-                <p className={styles.note}>{shown.uncommitted !== 0 && method !== 'rebase' ? `${METHOD_NOTE[method]}；有未提交的改动时不能 rebase` : METHOD_NOTE[method]}</p>
-              </div>
-            </div>
-            <div className={styles.field}>
-              <span className={styles.label} />
-              <div className={styles.control}>
-                <Checkbox
-                  checked={willRemove}
-                  disabled={removeReason !== null || busy}
-                  onChange={setRemoveAfter}
-                  label="合并后删除 worktree（保留分支）"
-                  note={removeReason ?? (here.length > 0 ? `这里的 ${here.length} 个会话会一起关闭` : null)}
-                />
-                <Checkbox
-                  checked={willPush}
-                  disabled={!shown.hasOrigin || busy}
-                  onChange={setPush}
-                  label={pushSwitchLabel(shown)}
-                  note={shown.hasOrigin ? null : '没有远程仓库'}
-                />
-              </div>
-            </div>
-          </div>
-        )}
 
         {failure && (
           <p className={styles.failure} role="alert">
@@ -430,49 +383,35 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
         <footer className={styles.footer}>
           {conflicts.length > 0 && !shown?.blocker && (
             <span className={styles.footerNote}>
-              {agent ? `说明会放进 ${agentLabel(agent.kind)} 的输入行，看过后按回车发送` : '在终端里解决冲突后重新打开'}
+              {agent ? m.handOffNote(agentLabel(agent.kind)) : m.resolveInTerminal}
             </span>
-          )}
-          {phase.kind === 'ready' && !settled && builtin && reviewAgent && conflicts.length === 0 && (
-            <button
-              type="button"
-              className={styles.cancel}
-              title={reviewRunning ? undefined : `在后台用 ${agentLabel(reviewAgent)} 只读审阅（用你自己的额度），不影响合并`}
-              onClick={() =>
-                reviewRunning
-                  ? cancelBackgroundReview(target.worktreePath)
-                  : void startBackgroundReview(target.worktreePath, reviewAgent, 'manual', ready?.base).catch(() => {})
-              }
-            >
-              {reviewRunning ? '取消审阅' : '先审阅'}
-            </button>
           )}
           <span className={styles.spacer} />
           {phase.kind !== 'done' && !settled && (
             <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeMergeSheet(true)}>
-              取消
+              {m.cancel}
             </button>
           )}
           {settled ? (
             <button type="button" className={styles.close} onClick={() => closeMergeSheet(true)}>
-              关闭
+              {m.close}
               <span className={styles.shortcut}>esc</span>
             </button>
           ) : phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
-              完成
+              {m.done}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           ) : conflicts.length > 0 && !shown?.blocker ? (
             agent && (
               <button type="button" className={styles.primary} disabled={handing} onClick={() => void handToAgent()}>
-                {handing ? `正在交给 ${agentLabel(agent.kind)}…` : `交给 ${agentLabel(agent.kind)} 解决`}
+                {handing ? m.handingOff(agentLabel(agent.kind)) : m.handOff(agentLabel(agent.kind))}
                 <span className={styles.shortcut}>⌘↵</span>
               </button>
             )
           ) : (
             <button type="button" className={styles.primary} disabled={!mergeable || busy} onClick={() => void merge()}>
-              {busy ? '正在合并…' : '合并'}
+              {busy ? m.merging : m.merge}
               <span className={styles.shortcut}>⌘↵</span>
             </button>
           )}

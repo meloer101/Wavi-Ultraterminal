@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PrDetails, PrStatus } from '@shared/pull-requests'
 import { prMergeView } from './pr-model'
+import sheetSource from './PrMergeSheet.tsx?raw'
 
 const head = 'a'.repeat(40)
 const details = (over: Partial<PrDetails> = {}): PrDetails => ({
@@ -66,5 +67,15 @@ describe('合并到 GitHub PR (Figma 22C / 22D)', () => {
     const bare = status()
     bare.pr = { ...bare.pr!, details: undefined }
     expect(prMergeView(bare)).toBeNull()
+  })
+})
+
+// 合并后自动归档 archives once the chain reaches 归档 (pull-requests/auto-archive.ts); the PR merge sheet has no archive
+// switch or archive step of its own, and no 合并前审阅.
+describe('the PR merge sheet', () => {
+  it('neither archives nor starts a review of its own', () => {
+    const source = sheetSource.replace(/^\s*\/\/.*$/gm, '')
+    expect(source).toContain('合并后删除远程分支')
+    expect(source).not.toMatch(/归档|archiveWorktree|afterMerge|beforeMerge|startBackgroundReview/)
   })
 })

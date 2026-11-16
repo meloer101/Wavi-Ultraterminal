@@ -1,14 +1,101 @@
 // The state machine of Git · 变更's Ship block (PRD F16 v1.78, Figma 29C / 29D / 29H; 合入链路 v2, Figma 73D–73F):
-// which steps each run has (the two exits, 推送 to a PR, 提交…, 同步 <base>, 拉取), how they advance, what a failure leaves
+// which steps each run has (the two exits, 推送 of the base, 推送 to a PR, 提交, 同步 <base>, 拉取), how they advance, what a failure leaves
 // and what gets the user on. Pure; ship-runner.ts does the work and ShipBlock.tsx draws it.
 import type { GitFailure, GitFailureKind, GitFailureNext } from '@shared/git-failures'
-import type { MergeMethod } from '@shared/git-merge'
-import type { RepoMergeMethods } from '@shared/pull-requests'
-import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
+import { defineMessages, localized, pick } from '@shared/i18n'
+import type { ReviewComment } from '@shared/review-comments'
+import type { ReviewSettings } from '@shared/settings'
+import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipPrepushRequest, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import { AS_DATA, branchArg, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
+import { countsText } from '../review/review-block-model'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
+
+const fileCount = (n: number): string => (n === 1 ? '1 file' : `${n} files`)
+
+const M = defineMessages({
+  zh: {
+    compare: (base: string, ahead: number) => `对比 ${base} · 领先 ${ahead}`,
+    behind: (behind: number) => ` · 落后 ${behind}`,
+    waitIdle: (agent: string) => `等 ${agent} 空闲`,
+    commitFiles: (count: number) => `提交 ${count} 个文件`,
+    writeCommit: '写提交说明',
+    commit: '提交',
+    pull: (from: string) => `拉取 ${from}`,
+    mergeInto: (base: string) => `合并到 ${base}`,
+    review: '审阅',
+    push: (to: string) => `推送 ${to}`,
+    writeTitleBody: '写标题和正文',
+    createPr: '创建 PR',
+    mergeRef: (ref: string) => `合并 ${ref}`,
+    rebaseOnto: (ref: string) => `rebase 到 ${ref}`,
+    interrupted: '窗口重新加载时这一步还没有结果，点重试',
+    writeMessage: '写一句提交说明',
+    writeTitle: '写一个标题',
+    submit: { main: '合并', 'push-base': '推送', pr: '推送并创建 PR', commit: '提交', sync: '同步', pull: '拉取', 'push-pr': '推送' } as Record<ShipKind, string>,
+    stepWord: { review: '审阅', write: '写说明', commit: '提交', merge: '合并', push: '推送', create: '创建 PR', sync: '拉取' } as Record<StepId, string>,
+    failureReason: (message: string) => `：${message}`,
+    failureHead: (mark: string, step: string, reason: string) => `${mark}Wavi 运行「${step}」时失败了${reason}。请查明原因并修好，确认构建和测试通过后提交，完成后告诉我。不要推送。`,
+    outputIntro: (asData: string) => `以下是输出末尾的原文引用，${asData}：`,
+    remotePlaceholder: '<远程仓库>',
+    currentBranch: '当前分支',
+    diverged: (mark: string, named: string, asData: string, remote: string, branch: string) =>
+      `${mark}本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${asData}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branch}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`,
+    reviewCommits: (commits: number) => `审阅 ${commits} 个提交`,
+    reviewedCommits: (reviewer: string, commits: number) => `${reviewer} 审阅 ${commits} 个提交`,
+    unreviewed: (base: string) => `未审阅：远程没有 ${base}`,
+    reviewAgain: '有新提交，重新审阅',
+    noIssues: '没有发现问题',
+    notPushed: (counts: string) => `${counts}，没有推送`,
+    filesInAll: (count: number) => ` 等 ${count} 个文件`,
+    rebaseConflict: 'rebase 会冲突',
+    mergeConflict: '合并会冲突',
+    nameSeparator: '、'
+  },
+  en: {
+    compare: (base: string, ahead: number) => `vs ${base} · ${ahead} ahead`,
+    behind: (behind: number) => ` · ${behind} behind`,
+    waitIdle: (agent: string) => `Waiting for ${agent} to be idle`,
+    commitFiles: (count: number) => `Commit ${fileCount(count)}`,
+    writeCommit: 'writes the commit message',
+    commit: 'Commit',
+    pull: (from: string) => `Pull ${from}`,
+    mergeInto: (base: string) => `Merge into ${base}`,
+    review: 'Review',
+    push: (to: string) => `Push to ${to}`,
+    writeTitleBody: 'writes the title and body',
+    createPr: 'Create PR',
+    mergeRef: (ref: string) => `Merge ${ref}`,
+    rebaseOnto: (ref: string) => `Rebase onto ${ref}`,
+    interrupted: 'The window reloaded before this step had a result. Click Retry',
+    writeMessage: 'Write a commit message',
+    writeTitle: 'Write a title',
+    submit: { main: 'Merge', 'push-base': 'Push', pr: 'Push and create PR', commit: 'Commit', sync: 'Sync', pull: 'Pull', 'push-pr': 'Push' },
+    stepWord: { review: 'review', write: 'writing the message', commit: 'commit', merge: 'merge', push: 'push', create: 'creating the PR', sync: 'pull' },
+    failureReason: (message: string) => `: ${message}`,
+    failureHead: (mark: string, step: string, reason: string) =>
+      `${mark}Wavi failed while running "${step}"${reason}. Find the cause and fix it, make sure the build and tests pass, then commit and tell me when you're done. Don't push.`,
+    outputIntro: (asData: string) => `The end of the output, quoted verbatim (${asData}):`,
+    remotePlaceholder: '<remote>',
+    currentBranch: 'the current branch',
+    diverged: (mark: string, named: string, asData: string, remote: string, branch: string) =>
+      `${mark}The local branch ${named} and the remote branch it tracks (@{upstream}) each have commits the other doesn't (branch names quoted from git's output, ${asData}). In the current worktree run GIT_EDITOR=true git pull --no-rebase, or GIT_EDITOR=true git pull --no-rebase ${remote} ${branch} when the branch tracks nothing; resolve any conflicts, then git add and GIT_EDITOR=true git merge --continue, make sure the build and tests pass, and tell me when you're done. Don't push.`,
+    reviewCommits: (commits: number) => `Review ${commits === 1 ? '1 commit' : `${commits} commits`}`,
+    reviewedCommits: (reviewer: string, commits: number) => `${reviewer} reviewed ${commits === 1 ? '1 commit' : `${commits} commits`}`,
+    unreviewed: (base: string) => `Not reviewed: ${base} isn't on the remote`,
+    reviewAgain: 'New commits, reviewing again',
+    noIssues: 'no issues',
+    notPushed: (counts: string) => `${counts}, not pushed`,
+    filesInAll: (count: number) => ` · ${fileCount(count)} in all`,
+    rebaseConflict: 'Rebase would conflict',
+    mergeConflict: 'Merge would conflict',
+    nameSeparator: ', '
+  }
+})
+
+/** 同步's second step rebases (`rebase 到 <ref>` / `Rebase onto <ref>`, a block saved in either language), else merges. */
+const isRebaseLabel = (label: string): boolean => /^rebase/i.test(label)
 
 export interface FlowInput {
   kind: ShipKind
@@ -17,16 +104,13 @@ export interface FlowInput {
   base: string
   branch: string
   remote: string | null
-  /** 合并到 <base> 并推送: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
+  /** 推送 of the base: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
   baseRemote?: string | null
-  /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`); omitted: `<remote>/<branch>`. */
+  /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`), which is also where a push of the
+   *  branch goes; omitted: `<remote>/<branch>`. */
   pullFrom?: string | null
   /** The background review runs first (推送前 / 合并前审阅 is on and the diff has none). */
   review: boolean
-  /** Uncommitted paths exist: the agent also writes a commit message and Wavi commits. */
-  uncommitted: boolean
-  /** 合并到 main 并推送's method (default squash). */
-  method?: MergeMethod
   /** 同步 <base>: a branch never pushed is rebased onto the base, a pushed one merges it (default rebase). */
   syncMode?: 'rebase' | 'merge'
   /** 提交… has someone to write the message (an agent session with hooks, or a headless Claude / Codex); false: the
@@ -43,7 +127,7 @@ export const EMPTY_TEXTS: ShipTexts = {
 
 /** `对比 main · 领先 3 · 落后 2`; 落后 only when there is some (Figma 29A). */
 export function compareLine(base: string, ahead: number, behind: number): string {
-  return `对比 ${base} · 领先 ${ahead}${behind > 0 ? ` · 落后 ${behind}` : ''}`
+  return `${pick(M).compare(base, ahead)}${behind > 0 ? pick(M).behind(behind) : ''}`
 }
 
 /** The text of the glyph column: working, done, pending, failed. */
@@ -51,35 +135,24 @@ export function stepGlyph(state: StepState): string {
   return state === 'working' ? '◌' : state === 'done' ? '✓' : state === 'failed' ? '✗' : '○'
 }
 
-export const STEP_GLYPH_NAME: Record<StepState, string> = {
-  working: '进行中',
-  done: '已完成',
-  pending: '等待',
-  failed: '失败'
-}
+export const STEP_GLYPH_NAME: Record<StepState, string> = localized(
+  defineMessages({
+    zh: { working: '进行中', done: '已完成', pending: '等待', failed: '失败' },
+    en: { working: 'In progress', done: 'Done', pending: 'Pending', failed: 'Failed' }
+  })
+)
 
 /** While the agent is busy with something else, the write step says whom it waits for. */
 export function waitNote(agent: string): string {
-  return `等 ${agent} 空闲`
-}
-
-/** How the steps and the merge sheet name a merge method. */
-export const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
-
-/**
- * 合并到 main 并推送's method (合入链路 v2): the repository's default on GitHub when it allows it, else the first method
- * it allows; without GitHub's settings squash (the local merge sheet remembers no method).
- */
-export function exitMethod(methods: RepoMergeMethods | null | undefined): MergeMethod {
-  if (!methods || methods.methods.length === 0) return 'squash'
-  return methods.methods.includes(methods.defaultMethod) ? methods.defaultMethod : methods.methods[0]!
+  return pick(M).waitIdle(agent)
 }
 
 /** 提交…'s title (Figma 73F1): how many ticked files go into the commit. */
-export const commitTitle = (files: number): string => `提交 ${files} 个文件`
+export const commitTitle = (files: number): string => pick(M).commitFiles(files)
 
 export function flowSteps(input: FlowInput): FlowStep[] {
   const { kind, agent, base, branch, remote } = input
+  const m = pick(M)
   const step = (id: StepId, label: string): FlowStep => ({
     id,
     label,
@@ -88,35 +161,37 @@ export function flowSteps(input: FlowInput): FlowStep[] {
   const write = (label: string): FlowStep => step('write', `${agent} ${label}`)
   const steps: FlowStep[] = []
   if (kind === 'commit') {
-    if (input.writer !== false) steps.push(write('写提交说明'))
-    steps.push(step('commit', '提交'))
+    if (input.writer !== false) steps.push(write(m.writeCommit))
+    steps.push(step('commit', m.commit))
     return steps
   }
   if (kind === 'sync') {
-    steps.push(step('sync', `拉取 ${base}`), step('merge', syncStepLabel(input.syncMode ?? 'rebase', base)))
+    steps.push(step('sync', m.pull(base)), step('merge', syncStepLabel(input.syncMode ?? 'rebase', base)))
     return steps
   }
-  if (kind === 'pull') return [step('sync', `拉取 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`)]
-  if (input.review) steps.push(step('review', '审阅'))
-  if (kind === 'main') {
-    // Figma 73E: the commit of the ticked files is a step of its own (main runs it inside the merge call).
-    steps.push(write('写提交说明'))
-    if (input.uncommitted) steps.push(step('commit', '提交'))
+  if (kind === 'pull') return [step('sync', m.pull(input.pullFrom ?? `${remote ?? 'origin'}/${branch}`))]
+  // 合并 is local, a plain action: one squash into the base, titled after the session — no text to write, no review,
+  // no push (推送 of the base is the chain's next run).
+  if (kind === 'main') return [step('merge', m.mergeInto(base))]
+  // The push node: pull first (a step only once it brought something in), the review, the push.
+  if (input.review) steps.push(step('review', m.review))
+  if (kind === 'push-base') {
     const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
-    steps.push(step('merge', `合并到 ${base} · ${METHOD_LABEL[input.method ?? 'squash']}`), step('push', `推送 ${pushTo ?? 'origin'}/${base}`))
-  } else if (kind === 'pr') {
-    steps.push(write('写标题和正文'))
-    if (input.uncommitted) steps.push(step('commit', '提交'))
-    steps.push(step('push', `推送 ${branch}`), step('create', '创建 PR'))
+    return [...steps, step('push', m.push(`${pushTo ?? 'origin'}/${base}`))]
+  }
+  // The exits ship only what is committed: 提交 is a run of its own, never a step of theirs. The push names the remote
+  // branch it goes to.
+  const pushTo = m.push(input.pullFrom ?? `${remote ?? 'origin'}/${branch}`)
+  if (kind === 'pr') {
+    steps.push(write(m.writeTitleBody), step('push', pushTo), step('create', m.createPr))
   } else {
-    if (input.uncommitted) steps.push(write('写提交说明'), step('commit', '提交'))
-    steps.push(step('push', `推送 ${branch}`))
+    steps.push(step('push', pushTo))
   }
   return steps
 }
 
 /** 同步's second step: `rebase 到 <ref>` / `合并 <ref>`. */
-export const syncStepLabel = (mode: 'rebase' | 'merge', ref: string): string => (mode === 'merge' ? `合并 ${ref}` : `rebase 到 ${ref}`)
+export const syncStepLabel = (mode: 'rebase' | 'merge', ref: string): string => (mode === 'merge' ? pick(M).mergeRef(ref) : pick(M).rebaseOnto(ref))
 
 /**
  * 同步's second step named after the ref main used (`origin/main` when the local base could not catch up), by `mode`
@@ -125,14 +200,14 @@ export const syncStepLabel = (mode: 'rebase' | 'merge', ref: string): string => 
 export function syncOnto(state: ShipState, onto: string | undefined, mode?: 'rebase' | 'merge'): ShipState {
   const merge = state.steps.find((s) => s.id === 'merge')
   if (state.kind !== 'sync' || !merge || !onto || oneLine(onto) !== onto) return state
-  return withStep(state, 'merge', { label: syncStepLabel(mode ?? (merge.label.startsWith('rebase') ? 'rebase' : 'merge'), onto) })
+  return withStep(state, 'merge', { label: syncStepLabel(mode ?? (isRebaseLabel(merge.label) ? 'rebase' : 'merge'), onto) })
 }
 
 /** A new ship: the first step is under way. */
 export function startState(input: FlowInput, title: string): ShipState {
   const steps = flowSteps(input)
-  // A push to an open PR with nothing to commit has no text to write: it goes straight to running. 提交… without anyone
-  // to write the message opens on the empty field.
+  // A push to an open PR has no text to write: it goes straight to running. 提交 without anyone to write the message
+  // opens on the empty field.
   const writes = steps.some((s) => s.id === 'write' || s.id === 'review')
   if (!writes && input.kind === 'commit') return { kind: 'commit', title, agent: input.agent, steps, stage: 'glance', texts: EMPTY_TEXTS, error: null, failedIn: null }
   const state: ShipState = {
@@ -182,7 +257,7 @@ export function fail(state: ShipState, error: ShipError): ShipState {
  */
 export function interruptedShip(state: ShipState): ShipState {
   const working = state.steps.find((s) => s.state === 'working')
-  return working ? fail(state, { step: working.id, message: '窗口重新加载时这一步还没有结果，点重试' }) : state
+  return working ? fail(state, { step: working.id, message: pick(M).interrupted }) : state
 }
 
 /** The user declined a confirmation in main: back to the glance, nothing failed. */
@@ -238,28 +313,14 @@ export function setTexts(state: ShipState, patch: Partial<ShipTexts>): ShipState
 
 /** Why the glance cannot go ahead, or null. */
 export function submitBlocker(state: Pick<ShipState, 'kind' | 'texts' | 'steps'>): string | null {
-  const needsCommit = state.kind === 'main' || state.steps.some((s) => s.id === 'commit')
-  if (needsCommit && !commitSubjectOf(state.texts.commit)) return '写一句提交说明'
-  if (state.kind === 'pr' && !state.texts.title.trim()) return '写一个标题'
+  if (state.kind === 'commit' && !commitSubjectOf(state.texts.commit)) return pick(M).writeMessage
+  if (state.kind === 'pr' && !state.texts.title.trim()) return pick(M).writeTitle
   return null
 }
 
 /** The glance's primary button (同步 and 拉取 have no glance). */
 export function submitLabel(kind: ShipKind): string {
-  switch (kind) {
-    case 'main':
-      return '合并并推送'
-    case 'pr':
-      return '推送并创建 PR'
-    case 'commit':
-      return '提交'
-    case 'sync':
-      return '同步'
-    case 'pull':
-      return '拉取'
-    case 'push-pr':
-      return '提交并推送'
-  }
+  return pick(M).submit[kind]
 }
 
 /** A write that failed in 提交…: the step is marked and the empty field is shown, so a typed message still commits. */
@@ -271,11 +332,9 @@ export function writeFailedToGlance(state: ShipState, message: string): ShipStat
 export type GlanceField = 'commit' | 'title' | 'body' | 'base' | 'draft'
 
 export function glanceFields(state: Pick<ShipState, 'kind' | 'steps'>): GlanceField[] {
-  const commit = state.steps.some((s) => s.id === 'commit')
-  if (state.kind === 'main' || state.kind === 'commit') return ['commit']
-  if (state.kind === 'sync' || state.kind === 'pull') return []
-  if (state.kind === 'push-pr') return commit ? ['commit'] : []
-  return [...(commit ? (['commit'] as const) : []), 'title', 'body', 'base', 'draft']
+  if (state.kind === 'commit') return ['commit']
+  if (state.kind === 'pr') return ['title', 'body', 'base', 'draft']
+  return []
 }
 
 export const commitSubjectOf = (text: string): string => text.trim().split('\n')[0]?.trim() ?? ''
@@ -286,12 +345,6 @@ export function formatCommit(text: { subject: string; body: string }): string {
   return body ? `${text.subject.trim()}\n\n${body}` : text.subject.trim()
 }
 
-/** The step a failed shipToMain stopped at: 提交 when the run shows it (older runs commit inside 合并). */
-export function mainFailureStep(step: Extract<ShipMainResult, { ok: false }>['step'], steps: readonly Pick<FlowStep, 'id'>[] = []): StepId {
-  if (step === 'commit' && steps.some((s) => s.id === 'commit')) return 'commit'
-  return step === 'push' ? 'push' : 'merge'
-}
-
 /** 提交… with nobody to write the message (no agent session with hooks, no headless Claude / Codex): the write step
  *  goes and the empty field opens (Figma 73F2). */
 export function withoutWriter(state: ShipState): ShipState {
@@ -300,6 +353,8 @@ export function withoutWriter(state: ShipState): ShipState {
 
 /** `gh pr create` pushes and creates in one call: the message tells which half failed. */
 export function createFailureStep(message: string): StepId {
+  // main's error text, in either language (git's own words are English).
+  // eslint-disable-next-line no-restricted-syntax -- matches main's Chinese error text as well as the English
   return /推送|push|remote|rejected|denied|hook|被拒/i.test(message) ? 'push' : 'create'
 }
 
@@ -325,9 +380,10 @@ export const isExitRun = (kind: ShipKind): boolean => kind === 'main' || kind ==
  * 拉取, 提交…, …), 改为创建 PR, or 交给 <agent>; `retry` for a step Wavi refused before git ran (no failure) or a network
  * error; null: only 取消 (the message says where to go).
  */
-export type FailureWay = { kind: 'chain'; id: ChainActionId } | { kind: 'create-pr' } | { kind: 'handoff' } | { kind: 'retry' } | null
+export type FailureWay = { kind: 'chain'; id: ChainActionId } | { kind: 'create-pr' } | { kind: 'handoff' } | { kind: 'retry' } | { kind: 'review' } | null
 
-export function failureWay(error: Pick<ShipError, 'failure' | 'pushRefused' | 'conflicts' | 'prompt'>): FailureWay {
+export function failureWay(error: Pick<ShipError, 'failure' | 'pushRefused' | 'conflicts' | 'prompt' | 'reviewStop'>): FailureWay {
+  if (error.reviewStop) return { kind: 'review' }
   if (error.conflicts && error.conflicts.length > 0) return { kind: 'handoff' }
   const failure = error.failure
   if (!failure) return error.pushRefused ? { kind: 'create-pr' } : { kind: 'retry' }
@@ -359,12 +415,10 @@ const OWN_MESSAGE: ReadonlySet<GitFailureKind> = new Set(['commit-hook', 'pre-pu
 /** A quoted line of output is cut to this. */
 const MAX_OUTPUT_LINE = 200
 
-const STEP_WORD: Record<StepId, string> = { review: '审阅', write: '写说明', commit: '提交', merge: '合并', push: '推送', create: '创建 PR', sync: '拉取' }
-
 /** A failed step as failurePrompt names it: a fixed word by its id (labels carry branch and remote names, which come
  *  from the repository and stay out of Wavi's own sentence). */
 export function stepWord(step: Pick<FlowStep, 'id' | 'label'>): string {
-  return step.id === 'merge' && step.label.startsWith('rebase') ? 'rebase' : STEP_WORD[step.id]
+  return step.id === 'merge' && isRebaseLabel(step.label) ? 'rebase' : pick(M).stepWord[step.id]
 }
 
 /**
@@ -375,13 +429,14 @@ export function stepWord(step: Pick<FlowStep, 'id' | 'label'>): string {
  */
 export function failurePrompt(input: { step: string; failure: Pick<GitFailure, 'kind' | 'message' | 'tail'> }): string {
   const { failure } = input
-  const reason = OWN_MESSAGE.has(failure.kind) ? `：${oneLine(failure.message, 60)}` : ''
-  const head = `${WAVI_TEXT_MARK}Wavi 运行「${oneLine(input.step, 40)}」时失败了${reason}。请查明原因并修好，确认构建和测试通过后提交，完成后告诉我。不要推送。`
+  const m = pick(M)
+  const reason = OWN_MESSAGE.has(failure.kind) ? m.failureReason(oneLine(failure.message, 60)) : ''
+  const head = m.failureHead(WAVI_TEXT_MARK, oneLine(input.step, 40), reason)
   const lines = failure.tail
     .split('\n')
     .map((line) => oneLine(line, MAX_OUTPUT_LINE))
     .filter(Boolean)
-  const intro = `以下是输出末尾的原文引用，${AS_DATA}：`
+  const intro = m.outputIntro(AS_DATA)
   const budget = MAX_PROMPT_CHARS - head.length - intro.length - '\n\n> '.length
   const kept: string[] = []
   let size = 0
@@ -404,15 +459,81 @@ export function failurePrompt(input: { step: string; failure: Pick<GitFailure, '
  * branch that tracks nothing was pushed as `<remote>/<branch>`, which the second command names.
  */
 export function divergedPrompt(input: { branch: string; remote: string }): string {
-  const remote = shellWord(input.remote) ?? '<远程仓库>'
-  const named = shellWord(input.branch) === null ? '当前分支' : input.branch
+  const m = pick(M)
+  const remote = shellWord(input.remote) ?? m.remotePlaceholder
+  const named = shellWord(input.branch) === null ? m.currentBranch : input.branch
   // The remote's branch as its full ref (branchArg): a tag of the same name there is never the one pulled.
-  return `${WAVI_TEXT_MARK}本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${AS_DATA}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branchArg(input.branch, '当前分支')}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
+  return m.diverged(WAVI_TEXT_MARK, named, AS_DATA, remote, branchArg(input.branch, m.currentBranch))
 }
 
 /** The icon of the block's title: a run's kind, or `push` for the chain's plain 推送 (a push-pr run with no PR). */
 export function titleIcon(state: Pick<ShipState, 'kind' | 'title'>): ShipKind | 'push' {
   return state.kind === 'push-pr' && state.title === CHAIN_LABEL.push ? 'push' : state.kind
+}
+
+// --- the push node: pull first → pre-push review → push ----------------------------------------------------------
+
+/** Who starts a push: the chain (a button, the ⋯ menu, ⌘K, the phone) or 自动修复, whose fixes are never reviewed (its
+ *  brakes ran instead). */
+export type PushOrigin = 'chain' | 'auto-fix'
+
+/** The pull first a run starts with (ShipPrepushRequest's `push`), or null for a run that pushes nothing. */
+export function prepushOf(kind: ShipKind): ShipPrepushRequest['push'] | null {
+  if (kind === 'push-base') return 'base'
+  if (kind === 'push-pr') return 'branch'
+  if (kind === 'pr') return 'new-pr'
+  return null
+}
+
+/** The push node's review runs: a push the chain started, the 推送前审阅 switch on with the built-in reviewer, and a
+ *  headless reviewer for the session's agent. Never for 自动修复. */
+export function prePushReview(input: { origin: PushOrigin; kind: ShipKind; review: Pick<ReviewSettings, 'mode' | 'beforePush'>; reviewer: boolean }): boolean {
+  if (input.origin !== 'chain' || prepushOf(input.kind) === null) return false
+  return input.review.mode === 'builtin' && input.review.beforePush && input.reviewer
+}
+
+export const pullLabel = (from: string): string => pick(M).pull(from)
+
+/** `审阅 3 个提交`, `Codex 审阅 3 个提交` once the reviewer is known. */
+export const reviewLabel = (commits: number, reviewer?: string): string => (reviewer ? pick(M).reviewedCommits(reviewer, commits) : pick(M).reviewCommits(commits))
+
+const pullStep = (from: string, state: StepState): FlowStep => ({ id: 'sync', label: pullLabel(from), state })
+
+/** Pulling first went through: what it brought in shows as a done step before the others; nothing brought in shows
+ *  nothing (a step an earlier try failed at is done). */
+export function pulledFirst(state: ShipState, pulled: { from: string } | null): ShipState {
+  const has = state.steps.some((s) => s.id === 'sync')
+  if (!pulled) return has ? complete(state, 'sync') : state
+  const step = pullStep(pulled.from, 'done')
+  return { ...state, steps: has ? state.steps.map((s) => (s.id === 'sync' ? step : s)) : [step, ...state.steps] }
+}
+
+/** The review step's note when the remote has no `base` to compare the push with: nothing was read, the whole base goes. */
+export const unreviewedNote = (base: string): string => pick(M).unreviewed(base)
+
+/**
+ * Main refused the push as stale: the base or the branch moved since the review read it. The review (when the run has
+ * one) and the push steps wait again, the run stays past its text, and the push node pulls and reviews the new range.
+ */
+export function reviewAgain(state: ShipState): ShipState {
+  const steps = state.steps.map((s): FlowStep => (s.id === 'review' || s.id === 'push' || s.id === 'create' ? { ...s, state: 'pending', note: undefined } : s))
+  const again: ShipState = { ...state, steps, stage: 'running', error: null, failedIn: null }
+  return steps.some((s) => s.id === 'review') ? begin(again, 'review', pick(M).reviewAgain) : again
+}
+
+/** Pulling first failed: the step shows, failed, before the others, which wait again. */
+export function pullFirstFailed(state: ShipState, from: string, error: Omit<ShipError, 'step'>): ShipState {
+  const steps = state.steps.some((s) => s.id === 'sync') ? state.steps : [pullStep(from, 'pending'), ...state.steps]
+  const waiting = steps.map((s): FlowStep => (s.state === 'working' ? { ...s, state: 'pending', note: undefined } : s))
+  return fail({ ...state, steps: waiting }, { ...error, step: 'sync' })
+}
+
+/** What the pre-push review's findings mean for the push: any P0 or P1 stops it (`message`, under the step); P2 / P3
+ *  only say how many (`note`, beside it). */
+export function reviewVerdict(findings: readonly Pick<ReviewComment, 'severity'>[]): { stop: boolean; note: string; message: string } {
+  const counts = countsText(findings)
+  const stop = findings.some((f) => f.severity === 'P0' || f.severity === 'P1')
+  return { stop, note: counts || pick(M).noIssues, message: pick(M).notPushed(counts) }
 }
 
 /**
@@ -425,7 +546,7 @@ export function heldBeforeStart(state: Pick<ShipState, 'kind' | 'error' | 'steps
   const files = error?.conflicts ?? []
   if (state.kind !== 'sync' || !error || error.failure || files.length === 0) return null
   const label = state.steps.find((s) => s.id === error.step)?.label ?? ''
-  return { step: error.step, text: syncConflictText(label.startsWith('rebase') ? 'rebase' : 'merge', files) }
+  return { step: error.step, text: syncConflictText(isRebaseLabel(label) ? 'rebase' : 'merge', files) }
 }
 
 /**
@@ -442,8 +563,9 @@ export function baseNotCaughtUp(state: Pick<ShipState, 'kind' | 'steps'>): { ste
 /** 同步's pre-check found conflicts (Figma 73D2): `rebase 会冲突 · store.ts、DESIGN.md`. */
 export function syncConflictText(mode: 'rebase' | 'merge', files: readonly string[]): string {
   const names = files.slice(0, 3).map((f) => f.split('/').pop() ?? f)
-  const more = files.length > 3 ? ` 等 ${files.length} 个文件` : ''
-  return `${mode === 'rebase' ? 'rebase 会冲突' : '合并会冲突'} · ${names.join('、')}${more}`
+  const m = pick(M)
+  const more = files.length > 3 ? m.filesInAll(files.length) : ''
+  return `${mode === 'rebase' ? m.rebaseConflict : m.mergeConflict} · ${names.join(m.nameSeparator)}${more}`
 }
 
 // --- who can take the message --------------------------------------------------------------------------------------

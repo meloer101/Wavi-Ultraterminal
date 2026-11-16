@@ -21,6 +21,7 @@ import { SettingsDialog } from '../settings/SettingsDialog'
 import { SchedulesDialog } from '../schedules/SchedulesDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
+import { startAutoArchive } from '../pull-requests/auto-archive'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startShipRuns } from '../pull-requests/ship-runner'
 import { startDispatchBridge } from '../dispatch/bridge'
@@ -41,6 +42,7 @@ import { SidebarDrawer } from './SidebarDrawer'
 import { GlassBase } from '../ui/GlassBase'
 import { useMainFullScreen } from './full-screen'
 import styles from './AppShell.module.css'
+import { useLang } from '../ui/i18n'
 
 const subscribeResize = (onChange: () => void) => {
   window.addEventListener('resize', onChange)
@@ -61,6 +63,8 @@ const windowWidth = () => window.innerWidth
  * when not even its minimum width fits (B13, layout.ts). The sidebar and the panel open and close as drawers (drawer-motion).
  */
 export function AppShell() {
+  // A language change re-renders the whole window from here (memo'd components subscribe themselves).
+  useLang()
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const fullScreen = useMainFullScreen()
   const overview = useWorkspace((s) => s.mainView === 'overview')
@@ -99,6 +103,7 @@ export function AppShell() {
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
+  useEffect(() => startAutoArchive(), [])
   useEffect(() => startShipRuns(), [])
   useEffect(() => startDispatchBridge(), [])
   useEffect(() => startRemoteBridge(), [])

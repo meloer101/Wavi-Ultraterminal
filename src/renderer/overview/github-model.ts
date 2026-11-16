@@ -4,6 +4,34 @@ import type { BoardItem, BoardPr, GitHubLink } from '@shared/github-board'
 import { repoArg } from '@shared/pull-requests'
 import type { Project, Session, Worktree } from '@shared/types'
 import type { ProjectLoad } from './github-store'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    projects: (n: number) => `${n} 个项目`,
+    issues: (n: number) => `${n} 个 issue`,
+    prs: (n: number) => `${n} 个 PR`,
+    draft: '草稿',
+    reviewRequested: '待你审阅',
+    approved: '已批准',
+    changesRequested: '要求修改',
+    failing: (n: number) => `${n} 失败`,
+    passing: '检查通过',
+    pending: '检查进行中'
+  },
+  en: {
+    projects: (n: number) => (n === 1 ? '1 project' : `${n} projects`),
+    issues: (n: number) => (n === 1 ? '1 issue' : `${n} issues`),
+    prs: (n: number) => (n === 1 ? '1 PR' : `${n} PRs`),
+    draft: 'Draft',
+    reviewRequested: 'Your review',
+    approved: 'Approved',
+    changesRequested: 'Changes requested',
+    failing: (n: number) => `${n} failing`,
+    passing: 'Checks passed',
+    pending: 'Checks running'
+  }
+})
 
 /** Filter text: every word must match — `#139` / `139` the number, anything else the title, a label or the author. */
 export function matchesFilter(item: BoardItem, filter: string): boolean {
@@ -45,8 +73,9 @@ export function githubSummary(byRoot: Readonly<Record<string, ProjectLoad | unde
     issues += load.list.project.issues.length
     prs += load.list.project.prs.length
   }
-  const projects = `${loads.length} 个项目`
-  return any ? `${projects} · ${issues} 个 issue · ${prs} 个 PR` : loads.length > 0 ? projects : ''
+  const m = pick(M)
+  const projects = m.projects(loads.length)
+  return any ? `${projects} · ${m.issues(issues)} · ${m.prs(prs)}` : loads.length > 0 ? projects : ''
 }
 
 /** Color only for what needs the user (Figma 77′B): 待你审阅 and 要求修改; the rest stays neutral. */
@@ -55,10 +84,11 @@ export type TagTone = 'plain' | 'quiet' | 'attention'
 /** A PR row's words after the title (Figma 77′B): 草稿, then whose review it waits for or what the review said. */
 export function prTags(pr: BoardPr): { text: string; tone: TagTone }[] {
   const tags: { text: string; tone: TagTone }[] = []
-  if (pr.draft) tags.push({ text: '草稿', tone: 'quiet' })
-  if (pr.reviewRequestedFromMe) tags.push({ text: '待你审阅', tone: 'attention' })
-  else if (pr.review === 'approved') tags.push({ text: '已批准', tone: 'plain' })
-  else if (pr.review === 'changes-requested') tags.push({ text: '要求修改', tone: 'attention' })
+  const m = pick(M)
+  if (pr.draft) tags.push({ text: m.draft, tone: 'quiet' })
+  if (pr.reviewRequestedFromMe) tags.push({ text: m.reviewRequested, tone: 'attention' })
+  else if (pr.review === 'approved') tags.push({ text: m.approved, tone: 'plain' })
+  else if (pr.review === 'changes-requested') tags.push({ text: m.changesRequested, tone: 'attention' })
   return tags
 }
 
@@ -66,8 +96,9 @@ export function prTags(pr: BoardPr): { text: string; tone: TagTone }[] {
 export function checksMark(pr: BoardPr): { state: 'passing' | 'failing' | 'pending'; text: string } | null {
   const { checks } = pr
   if (checks.state === 'none') return null
-  if (checks.state === 'failing') return { state: 'failing', text: `${checks.failing.length} 失败` }
-  return { state: checks.state, text: checks.state === 'passing' ? '检查通过' : '检查进行中' }
+  const m = pick(M)
+  if (checks.state === 'failing') return { state: 'failing', text: m.failing(checks.failing.length) }
+  return { state: checks.state, text: checks.state === 'passing' ? m.passing : m.pending }
 }
 
 /** A link's key in linkedSessions' map: the repository without case, the kind and the number. */

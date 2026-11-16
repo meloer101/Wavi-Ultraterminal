@@ -33,7 +33,7 @@
   <img src="docs/assets/readme/hero-light.png" alt="Wavi with six agent sessions in the sidebar. Claude Code asks before overwriting a file, its row in the sidebar turns to waiting, and the git graph on the right shows every worktree branch with its agent's status.">
 </picture>
 
-<p align="center"><sub>A live Claude Code session asks before it overwrites a file. Its row in the sidebar turns to <i>waiting</i>, and the git graph tags every worktree branch with its agent's status. The interface is in Chinese for now.</sub></p>
+<p align="center"><sub>A live Claude Code session asks before it overwrites a file. Its row in the sidebar turns to <i>waiting</i>, and the git graph tags every worktree branch with its agent's status.</sub></p>
 
 ## Why Wavi
 
@@ -155,9 +155,9 @@ No. Everything Wavi needs is passed on the command line for each launch. Run <co
 </details>
 
 <details>
-<summary><b>Why is the interface in Chinese?</b></summary>
+<summary><b>Which languages does the interface come in?</b></summary>
 <br>
-Wavi started with Chinese developers in mind, and the interface is in Chinese for now. The agents, your prompts and your code are unaffected. The website and these docs are in English.
+Wavi's interface is in English and Chinese: it follows your Mac's language, and Settings › Appearance › Language picks one. The agents, your prompts and your code are unaffected.
 </details>
 
 <details>

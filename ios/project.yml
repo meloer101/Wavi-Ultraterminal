@@ -5,6 +5,9 @@ options:
   deploymentTarget:
     iOS: "26.0"
   createIntermediateGroups: true
+  # Chinese is the language the app is written in: the keys of Resources/Localizable.xcstrings are the Chinese strings
+  # of the code, with English beside them. The phone follows iOS's language for the app (Settings › Wavi › Language).
+  developmentLanguage: zh-Hans
 settings:
   base:
     DEVELOPMENT_TEAM: U9XR52C9HW
@@ -13,6 +16,9 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # The compiler lists the code's localizable strings, so Xcode keeps the String Catalogs in step with the code.
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 packages:
   Ristretto255:
     path: Packages/Ristretto255
@@ -31,6 +37,11 @@ targets:
       path: Wavi/Info.plist
       properties:
         CFBundleDisplayName: Wavi
+        # Both, so iOS offers the per-app Language row; the usage descriptions below are translated in
+        # Wavi/App/<lang>.lproj/InfoPlist.strings. A phone in neither language gets English (the development region),
+        # although the catalog's source language is Chinese.
+        CFBundleLocalizations: [zh-Hans, en]
+        CFBundleDevelopmentRegion: en
         CFBundleURLTypes:
           - CFBundleURLName: app.wavi.remote
             CFBundleURLSchemes: [wavi]
@@ -74,6 +85,8 @@ targets:
       path: WaviActivity/Info.plist
       properties:
         CFBundleDisplayName: Wavi
+        CFBundleLocalizations: [zh-Hans, en]
+        CFBundleDevelopmentRegion: en
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         UIAppFonts: [JetBrainsMono_400Regular.ttf, JetBrainsMono_500Medium.ttf]
@@ -104,3 +117,6 @@ schemes:
         WaviTests: [test]
     test:
       targets: [WaviTests]
+      # The tests read the Chinese strings; LocalizationTests reads the English table on its own.
+      language: zh-Hans
+      region: CN

@@ -133,6 +133,25 @@ test('a card opens the session in an overlay that Esc, the scrim and × close', 
   await expect(overlay()).toContainText('terminal-reborn › jacob/graph-layout')
   await expect(overlay().locator('[data-overview-terminal] .xterm')).toHaveCount(1)
   await expect(homePane('s-graph').locator('.xterm')).toHaveCount(0)
+  // Translucent by default (85%): the padding round the grid carries the cells' own color, as in the main area (issue #7).
+  const ring = await overlay()
+    .locator('[data-overview-terminal] .xterm-scrollable-element')
+    .evaluate((el) => {
+      const probe = document.createElement('div')
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--tr-term-ring')
+      document.body.append(probe)
+      const color = getComputedStyle(probe).color
+      probe.remove()
+      return { shadow: getComputedStyle(el).boxShadow, color }
+    })
+  expect(ring.color).not.toBe('rgba(0, 0, 0, 0)')
+  expect(ring.shadow).toContain(ring.color)
+  // Under the translucent terminal the window is glass, not the board: blurred, on the base layer's tint (PRD v1.185).
+  const tile = await overlay()
+    .locator('section[data-pane-id]')
+    .evaluate((el) => ({ filter: getComputedStyle(el).backdropFilter, background: getComputedStyle(el).backgroundColor }))
+  expect(tile.filter).toContain('blur(')
+  expect(tile.background).not.toBe('rgba(0, 0, 0, 0)')
   await shoot('board-overlay')
   await page.keyboard.press('Escape')
   await expect(overlay()).toBeHidden()

@@ -7,6 +7,7 @@ import { registerBrowserHandlers } from './browser'
 import { registerSimulatorHandlers } from './simulator'
 import { registerUserName } from './user-name'
 import { registerAppearanceEffects } from './appearance'
+import { registerBackgroundImage, registerBackgroundScheme } from './background-image'
 import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
@@ -18,6 +19,7 @@ import { selectProfile } from './profile'
 import { ptySessionOwner, registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
 import { registerSettingsHandlers } from './settings'
+import { registerLanguage } from './language'
 import { registerThemeImportHandler } from './theme-import'
 import { registerUiHandlers } from './ui'
 import { registerUpdateHandlers } from './updates'
@@ -45,6 +47,8 @@ import { followSystemProxy, scutilDeps } from './system-proxy'
 // Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
 // installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
 selectProfile()
+// Custom schemes must be registered before app ready.
+registerBackgroundScheme()
 
 // A stray bug must not take every agent down: log and keep running.
 process.on('uncaughtException', (error) => console.error('[main] uncaughtException', error))
@@ -93,8 +97,10 @@ function boot(): void {
   registerTerminalSnapshots()
   registerConfirmHandlers()
   registerSettingsHandlers()
+  registerLanguage(installAppMenu)
   registerThemeImportHandler()
   registerAppearanceEffects()
+  registerBackgroundImage()
   registerFileHandlers()
   registerWorktreeFileHandlers()
   registerGitGraphHandlers()

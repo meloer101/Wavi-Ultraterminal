@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { formatErrorsForAgent, mergePorts, portUrl, type ListeningPort } from '@shared/browser'
 import type { AgentKind, SessionId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { getSurface } from '../../terminal/registry'
@@ -16,6 +18,39 @@ import { usePageSlot } from './page-slot'
 import { listenForBrowser, loadPage, setNotice, useBrowser } from './store'
 import { browserLayout, consoleLine, emptyHint, isOpenPort, portText, sendLabel } from './view-model'
 import styles from './BrowserView.module.css'
+
+const M = defineMessages({
+  zh: {
+    ports: '端口',
+    open: (url: string) => `打开 ${url}`,
+    noPage: '这个会话还没有打开网页',
+    checkServer: '确认服务已经启动，然后点刷新。',
+    page: '网页',
+    back: '后退',
+    reload: '刷新',
+    copy: '复制',
+    paste: '粘贴',
+    inspect: '检查元素',
+    notInserted: '没有放进终端',
+    sendTitle: '把错误放进终端的输入行，确认后按回车发送',
+    inserted: '已放进输入行'
+  },
+  en: {
+    ports: 'Ports',
+    open: (url: string) => `Open ${url}`,
+    noPage: "This session hasn't opened a page yet",
+    checkServer: 'Make sure the server is running, then reload.',
+    page: 'Web page',
+    back: 'Back',
+    reload: 'Reload',
+    copy: 'Copy',
+    paste: 'Paste',
+    inspect: 'Inspect element',
+    notInserted: "Couldn't put it into the terminal",
+    sendTitle: "Put the errors into the terminal's input line; press Return to send once you've checked them",
+    inserted: 'In the input line'
+  }
+})
 
 /** Mirrors MOBILE_WIDTH in main (src/main/browser/host.ts). */
 const MOBILE_WIDTH = 375
@@ -37,6 +72,7 @@ function useWorktreePorts(sessionIds: SessionId[]): ListeningPort[] {
 }
 
 export function BrowserView({ worktree, sessionId, kind }: { worktree: string; sessionId: SessionId; kind: AgentKind }) {
+  const m = useMessages(M)
   const page = useBrowser((s) => s.pages[worktree])
   const notice = useBrowser((s) => s.notices[worktree] ?? null)
   const sessionIds = useWorktreeSessions(sessionId)
@@ -79,15 +115,15 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
         </div>
       ) : (
         layout.ports && (
-          <div className={styles.row} role="group" aria-label="端口">
-            {ports.length > 0 && <span className={styles.rowLabel}>端口</span>}
+          <div className={styles.row} role="group" aria-label={m.ports}>
+            {ports.length > 0 && <span className={styles.rowLabel}>{m.ports}</span>}
             {ports.map((p) => (
               <button
                 key={p.port}
                 type="button"
                 className={styles.port}
                 data-selected={page ? isOpenPort(p, page.url) : false}
-                title={`打开 ${portUrl(p)}`}
+                title={m.open(portUrl(p))}
                 onClick={() => open(p)}
               >
                 {portText(p)}
@@ -100,7 +136,7 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
         {layout.well === 'empty' && (
           <div className={styles.empty} data-testid="browser-empty">
             <Globe size={16} strokeWidth={1.75} aria-hidden />
-            <p className={styles.emptyTitle}>这个会话还没有打开网页</p>
+            <p className={styles.emptyTitle}>{m.noPage}</p>
             <p className={styles.emptyHint}>{emptyHint(ports)}</p>
           </div>
         )}
@@ -108,7 +144,7 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
           <div className={styles.well} data-filled="false">
             <div className={styles.empty} role="status">
               <p className={styles.emptyTitle}>{page.loadError}</p>
-              <p className={styles.emptyHint}>确认服务已经启动，然后点刷新。</p>
+              <p className={styles.emptyHint}>{m.checkServer}</p>
             </div>
           </div>
         )}
@@ -119,7 +155,7 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
               className={styles.page}
               style={mobile ? { width: MOBILE_WIDTH } : undefined}
               data-testid="browser-page"
-              aria-label={page?.title || '网页'}
+              aria-label={page?.title || m.page}
               role="region"
             >
               {snapshot && <img className={styles.snapshot} src={snapshot} alt="" />}
@@ -140,13 +176,14 @@ function usePageContextMenu(worktree: string, slot: RefObject<HTMLDivElement | n
         const rect = slot.current?.getBoundingClientRect()
         if (menu.worktree !== worktree || !rect) return
         const at = { x: menu.x, y: menu.y }
+        const m = pick(M)
         void popupMenu(
           [
-            { type: 'item', id: 'back', label: '后退', enabled: menu.canGoBack, accelerator: 'CmdOrCtrl+[' },
-            { type: 'item', id: 'reload', label: '刷新', accelerator: 'CmdOrCtrl+R' },
-            { type: 'item', id: 'copy', label: '复制', enabled: menu.canCopy, accelerator: 'CmdOrCtrl+C' },
-            { type: 'item', id: 'paste', label: '粘贴', enabled: menu.canPaste, accelerator: 'CmdOrCtrl+V' },
-            { type: 'item', id: 'inspect', label: '检查元素' }
+            { type: 'item', id: 'back', label: m.back, enabled: menu.canGoBack, accelerator: 'CmdOrCtrl+[' },
+            { type: 'item', id: 'reload', label: m.reload, accelerator: 'CmdOrCtrl+R' },
+            { type: 'item', id: 'copy', label: m.copy, enabled: menu.canCopy, accelerator: 'CmdOrCtrl+C' },
+            { type: 'item', id: 'paste', label: m.paste, enabled: menu.canPaste, accelerator: 'CmdOrCtrl+V' },
+            { type: 'item', id: 'inspect', label: m.inspect }
           ],
           { x: rect.left + menu.x, y: rect.top + menu.y }
         ).then((id) => {
@@ -158,6 +195,7 @@ function usePageContextMenu(worktree: string, slot: RefObject<HTMLDivElement | n
 }
 
 function ConsoleRow({ worktree, sessionId, kind }: { worktree: string; sessionId: SessionId; kind: AgentKind }) {
+  const m = useMessages(M)
   const page = useBrowser((s) => s.pages[worktree])
   const [sent, setSent] = useState(false)
   useEffect(() => {
@@ -176,7 +214,7 @@ function ConsoleRow({ worktree, sessionId, kind }: { worktree: string; sessionId
         setSent(true)
         getSurface(sessionId)?.focus()
       },
-      (error: unknown) => setNotice(worktree, error instanceof Error ? error.message : '没有放进终端')
+      (error: unknown) => setNotice(worktree, error instanceof Error ? error.message : m.notInserted)
     )
   }
 
@@ -191,8 +229,8 @@ function ConsoleRow({ worktree, sessionId, kind }: { worktree: string; sessionId
       {line.rest && <span className={styles.consoleRest}>{line.rest}</span>}
       <span className={styles.spacer} />
       {page.console.errors > 0 && (
-        <button type="button" className={styles.ghost} onClick={send} disabled={sent} title="把错误放进终端的输入行，确认后按回车发送">
-          {sent ? '已放进输入行' : sendLabel(kind)}
+        <button type="button" className={styles.ghost} onClick={send} disabled={sent} title={m.sendTitle}>
+          {sent ? m.inserted : sendLabel(kind)}
         </button>
       )}
     </div>

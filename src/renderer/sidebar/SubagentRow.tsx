@@ -1,8 +1,12 @@
 import { memo } from 'react'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
+import { useMessages } from '../ui/i18n'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { sameSubagent, type SubagentRowModel } from './model'
 import styles from './SubagentRow.module.css'
+
+const M = defineMessages({ zh: { pending: '待开始' }, en: { pending: 'Waiting to start' } })
 
 interface Props {
   row: SubagentRowModel
@@ -18,6 +22,7 @@ interface Props {
  */
 export const SubagentRow = memo(
   function SubagentRow({ row, onSelect, onToggle }: Props) {
+    const m = useMessages(M)
     // Figma 74D: a workflow run (state · name · current phase done / all) and its phases hang here like subagents;
     // Figma 83B: so does a session a `wavi run` asked for, until the user answers (a click opens the session that asked);
     // Figma 82′F: and Claude's agent team, a 队伍 · N 人 line and two lines per teammate.
@@ -37,7 +42,7 @@ export const SubagentRow = memo(
           {row.kind !== 'team' && (
             <span className={styles.glyph}>
               {row.kind === 'pending' ? (
-                <span className={styles.pendingGlyph} aria-label="待开始" />
+                <span className={styles.pendingGlyph} aria-label={m.pending} />
               ) : (
                 <StatusGlyph status={row.glyph ?? (row.attention ? 'needs_you' : 'running')} />
               )}

@@ -1,5 +1,6 @@
 import type { SessionStatus } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
+import { useLang } from './i18n'
 import styles from './StatusGlyph.module.css'
 
 /**
@@ -7,6 +8,8 @@ import styles from './StatusGlyph.module.css'
  * own colour: a turning arc, the halo dot (needs you), a check, a warning triangle, a ring, a dash.
  */
 export function StatusGlyph({ status }: { status: SessionStatus }) {
+  // Its label follows the interface language, also inside memo'd rows.
+  useLang()
   return (
     <svg className={styles.glyph} width="14" height="14" viewBox="0 0 14 14" fill="none" role="img" aria-label={STATUS_LABEL[status]}>
       {status === 'running' && (

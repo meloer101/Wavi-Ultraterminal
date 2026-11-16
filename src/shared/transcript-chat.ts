@@ -3,6 +3,30 @@
 // and Codex 0.142–0.166). Neither format is documented, so a line of a type not listed below becomes an `unknown` item
 // instead of breaking the conversation. Pure and incremental: a parser takes lines as they are appended.
 import type { ClaudeOrCodex } from './agents'
+import { defineMessages, pick } from './i18n'
+
+const M = defineMessages({
+  zh: {
+    items: (n: number) => `${n} 项`,
+    taskStatus: { completed: '已完成', failed: '失败', stopped: '已停止', killed: '已停止' } as Readonly<Record<string, string>>,
+    taskEnded: '已结束',
+    namedTask: (name: string, word: string) => `后台任务「${name}」${word}`,
+    task: (word: string) => `后台任务${word}`,
+    interrupted: '已中断',
+    compacted: '对话已压缩',
+    apiError: 'API 出错'
+  },
+  en: {
+    items: (n: number) => (n === 1 ? '1 item' : `${n} items`),
+    taskStatus: { completed: 'completed', failed: 'failed', stopped: 'stopped', killed: 'stopped' },
+    taskEnded: 'ended',
+    namedTask: (name: string, word: string) => `Background task “${name}” ${word}`,
+    task: (word: string) => `Background task ${word}`,
+    interrupted: 'Interrupted',
+    compacted: 'Conversation compacted',
+    apiError: 'API error'
+  }
+})
 
 export interface DiffHunk {
   oldStart: number
@@ -169,7 +193,7 @@ export function toolArg(name: string, input: unknown, cwd?: string): string {
       arg = str(v.description)
       break
     case 'TodoWrite':
-      arg = Array.isArray(v.todos) ? `${v.todos.length} 项` : undefined
+      arg = Array.isArray(v.todos) ? pick(M).items(v.todos.length) : undefined
       break
     default:
       arg = path ? rel(path, cwd) : Object.values(v).find((x): x is string => typeof x === 'string' && x.trim() !== '')
@@ -191,7 +215,7 @@ export function todosOf(raw: unknown): ChatTodo[] {
 }
 
 /** A task list's row target: 「N 项」. */
-export const todosArg = (todos: readonly ChatTodo[]): string => `${todos.length} 项`
+export const todosArg = (todos: readonly ChatTodo[]): string => pick(M).items(todos.length)
 
 /** `mcp__server__tool` → `tool`; everything else as it is. */
 export function toolLabel(name: string): string {
@@ -356,8 +380,6 @@ function commandText(text: string): string | null {
   return null
 }
 
-const TASK_STATUS: Record<string, string> = { completed: '已完成', failed: '失败', stopped: '已停止', killed: '已停止' }
-
 /**
  * Claude Code's report that a background task (agent, command) ended. It is a user line that starts a turn
  * (`origin.kind: task-notification`, `promptSource: system`), but the user did not send it: one system line.
@@ -367,8 +389,9 @@ function taskNotice(text: string): string | null {
   if (!text.startsWith('<task-notification>')) return null
   const status = /<status>([^<]*)<\/status>/.exec(text)?.[1]?.trim() ?? ''
   const name = /"([^"]+)"/.exec(/<summary>([^<]*)<\/summary>/.exec(text)?.[1] ?? '')?.[1]
-  const word = TASK_STATUS[status] ?? '已结束'
-  return name ? `后台任务「${name}」${word}` : `后台任务${word}`
+  const m = pick(M)
+  const word = m.taskStatus[status] ?? m.taskEnded
+  return name ? m.namedTask(name, word) : m.task(word)
 }
 
 /**
@@ -529,7 +552,7 @@ function claudeParser(now: () => number, keep: KeepImage | undefined): ChatParse
       const command = commandText(text)
       // The user typed it: it is their message, like any other prompt.
       if (command !== null) return command ? [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })] : []
-      if (/^\[Request interrupted by user/.test(text)) return [add({ kind: 'system', id: nextId('s'), at, text: '已中断' })]
+      if (/^\[Request interrupted by user/.test(text)) return [add({ kind: 'system', id: nextId('s'), at, text: pick(M).interrupted })]
       if (!text && images === 0) return []
       const attachments = images > 0 ? keptImages(claudeImages(content), keep) : undefined
       return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images, ...(attachments ? { attachments } : {}) })]
@@ -541,9 +564,9 @@ function claudeParser(now: () => number, keep: KeepImage | undefined): ChatParse
     if (type === 'system') {
       const subtype = str(line.subtype) ?? ''
       if (SYSTEM_SKIP.has(subtype)) return []
-      if (subtype === 'compact_boundary') return [add({ kind: 'system', id: nextId('s'), at, text: '对话已压缩' })]
+      if (subtype === 'compact_boundary') return [add({ kind: 'system', id: nextId('s'), at, text: pick(M).compacted })]
       const content = str(line.content)
-      if (subtype === 'api_error') return [add({ kind: 'system', id: nextId('s'), at, text: content ? clip(content, 300) : 'API 出错' })]
+      if (subtype === 'api_error') return [add({ kind: 'system', id: nextId('s'), at, text: content ? clip(content, 300) : pick(M).apiError })]
       if (content && (subtype === 'local_command' || subtype === 'informational' || subtype === 'away_summary')) {
         const output = localOutput(content)
         if (output !== null) return output ? [add({ kind: 'text', id: nextId('t'), at, text: clip(output, CHAT_LIMITS.text) })] : []
@@ -616,7 +639,7 @@ function codexParser(now: () => number, keep: KeepImage | undefined): ChatParser
       return []
     }
     if (line.type === 'event_msg') {
-      if (p.type === 'turn_aborted') return [add({ kind: 'system', id: nextId('s'), at, text: '已中断' })]
+      if (p.type === 'turn_aborted') return [add({ kind: 'system', id: nextId('s'), at, text: pick(M).interrupted })]
       return []
     }
     if (line.type !== 'response_item') return []

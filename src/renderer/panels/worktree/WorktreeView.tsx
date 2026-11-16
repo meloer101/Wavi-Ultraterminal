@@ -1,6 +1,7 @@
-// Worktree view (PRD F17, Figma 13C `149:5973`): every git worktree of the active session's project with the status
-// of its sessions, uncommitted stats and ahead / behind; the selected row expands into details and actions. Merged
-// worktrees without a session sit in 可清理 (one 清理 for all); other session-less ones in 没有会话 (one by one).
+// Worktree view (PRD F17, Figma 85B″): every git worktree of the active session's project, one line each — status,
+// the session's title, agent and branch, then fixed columns: uncommitted, commits of its own, conflict. The selected
+// row adds what the line has no room for (the conflicts and their files) and the actions. Merged worktrees without a
+// session sit in 可清理 (one 全部清理 for all); other session-less ones in 没有会话 (one by one).
 // Refreshes on window focus, when git's worktree / branch files change, every POLL_MS while visible, and — only the
 // worktrees concerned — when their sessions change.
 import { Ellipsis, Plus } from 'lucide-react'
@@ -8,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { ProjectId, Session, WorktreeId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useLang, useMessages } from '../../ui/i18n'
 import { newSessionInProject } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
@@ -20,12 +23,49 @@ import { rebaseWithAgent } from '../../conflict-radar/actions'
 import { radarDetailLines } from '../../conflict-radar/model'
 import { RadarTag } from '../../conflict-radar/RadarTag'
 import { useWorktreeRadarMark } from '../../conflict-radar/store'
-import { useRepoScripts } from '../../scripts/run-script'
+import { AgentIcon } from '../../ui/AgentIcon'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
-import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
+import { buildRows, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
 import { patchRoot, refreshWorktrees, useWorktrees, watchRepo, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
+
+const M = defineMessages({
+  zh: {
+    reading: '正在读取 worktree…',
+    readFailed: '无法读取 worktree',
+    notRepo: '不是 git 仓库',
+    newSession: '新建会话',
+    cleanable: '可清理',
+    cleanAll: '全部清理',
+    noSession: '没有会话',
+    uncommitted: (diff: string) => `未提交 ${diff}`,
+    behind: (base: string, behind: number) => `落后 ${base} ${behind} 个提交`,
+    mergeInto: (base: string) => `合并到 ${base}…`,
+    openFolder: '打开文件夹',
+    rebaseTitle: (agent: string) => `把 rebase 说明放进 ${agent} 的输入行，看过后按回车发送`,
+    handOffFailed: (agent: string, error: string) => `没能交给 ${agent}：${error}`,
+    rebase: '让 agent rebase',
+    more: '更多'
+  },
+  en: {
+    reading: 'Reading worktrees…',
+    readFailed: "Can't read worktrees",
+    notRepo: 'Not a git repository',
+    newSession: 'New session',
+    cleanable: 'Can clean up',
+    cleanAll: 'Clean up all',
+    noSession: 'No session',
+    uncommitted: (diff: string) => `Uncommitted ${diff}`,
+    behind: (base: string, behind: number) => `${behind} ${behind === 1 ? 'commit' : 'commits'} behind ${base}`,
+    mergeInto: (base: string) => `Merge into ${base}…`,
+    openFolder: 'Open folder',
+    rebaseTitle: (agent: string) => `Put the rebase instructions into ${agent}'s input line; press Return to send once you've checked them`,
+    handOffFailed: (agent: string, error: string) => `Couldn't hand off to ${agent}: ${error}`,
+    rebase: 'Let agent rebase',
+    more: 'More'
+  }
+})
 
 /** Session changes (new, closed, status) come in bursts; list once they settle. */
 const SESSION_REFRESH_DELAY_MS = 400
@@ -48,6 +88,9 @@ function sessionKeys(sessions: readonly Session[]): Map<WorktreeId, string> {
 }
 
 export function WorktreeView({ projectId, root, projectName, activeWorktreeId }: Props) {
+  const m = useMessages(M)
+  // The rows' words are picked when they are built: build them again in the other language.
+  const lang = useLang()
   const state = useWorktrees((s) => s.roots[root]) ?? worktreesOf(root)
   const worktrees = useWorkspace(useShallow((s) => s.worktrees.filter((w) => w.projectId === projectId)))
   const sessions = useWorkspace(
@@ -60,7 +103,7 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
   const refresh = useCallback((only?: string[]) => refreshWorktrees(root, knownPaths, only), [root, knownPaths])
   const refreshAll = useCallback(() => refresh(), [refresh])
 
-  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions])
+  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions, lang]) // eslint-disable-line react-hooks/exhaustive-deps
   // The session-change timer below maps worktree ids to rows when it fires, not when it was set.
   const groupsRef = useRef<WorktreeGroups | null>(groups)
   useEffect(() => {
@@ -112,14 +155,14 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
   const rowProps = { projectId, root, refresh: refreshAll }
 
   const empty =
-    state.listing === undefined ? '正在读取 worktree…' : state.listing === null ? (state.failed ? '无法读取 worktree' : '不是 git 仓库') : null
+    state.listing === undefined ? m.reading : state.listing === null ? (state.failed ? m.readFailed : m.notRepo) : null
 
   return (
     <>
       <PaneHeader title="Worktree" context={projectName}>
         <IconButton
-          label="新建会话"
-          title="新建会话 · ⌘N"
+          label={m.newSession}
+          title={`${m.newSession} · ⌘N`}
           aria-haspopup="dialog"
           onClick={() => newSessionInProject(projectId)}
         >
@@ -141,33 +184,33 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
             ))}
           </ul>
           {groups.cleanable.length > 0 && (
-            <section aria-label="可清理">
+            <section aria-label={m.cleanable}>
               <div className={styles.groupHeader}>
-                <h3 className={styles.groupTitle}>可清理</h3>
-                <span className={styles.groupHint}>已合并且没有会话</span>
+                <h3 className={styles.groupTitle}>{m.cleanable}</h3>
+                <span className={styles.groupCount}>{groups.cleanable.length}</span>
                 <button
                   type="button"
                   className={styles.ghost}
                   disabled={state.busy}
                   onClick={() => void cleanUpInteractive(root, groups.cleanable, refreshAll)}
                 >
-                  清理
+                  {m.cleanAll}
                 </button>
               </div>
-              <ul className={styles.list} aria-label="可清理">
+              <ul className={styles.list} aria-label={m.cleanable}>
                 {groups.cleanable.map((row) => (
-                  <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
+                  <Row key={row.key} row={row} selected={row === selected} cleanable {...rowProps} />
                 ))}
               </ul>
             </section>
           )}
           {groups.idle.length > 0 && (
-            <section aria-label="没有会话">
+            <section aria-label={m.noSession}>
               <div className={styles.groupHeader}>
-                <h3 className={styles.groupTitle}>没有会话</h3>
-                <span className={styles.groupHint}>未合并，不会被一键清理</span>
+                <h3 className={styles.groupTitle}>{m.noSession}</h3>
+                <span className={styles.groupCount}>{groups.idle.length}</span>
               </div>
-              <ul className={styles.list} aria-label="没有会话">
+              <ul className={styles.list} aria-label={m.noSession}>
                 {groups.idle.map((row) => (
                   <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
                 ))}
@@ -183,22 +226,31 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
 interface RowProps {
   row: WorktreeRow
   selected: boolean
+  /** In 可清理: the title is quieter. */
+  cleanable?: boolean
   projectId: ProjectId
   root: string
   refresh: () => Promise<void>
 }
 
-/** Figma component WorktreeRow (130:282); the selected one expands into "Details" (149:6262). */
-function Row({ row, selected, projectId, root, refresh }: RowProps) {
+/** One worktree (Figma 85B″): a single line; the selected one expands into its conflicts and the actions. */
+function Row({ row, selected, cleanable = false, projectId, root, refresh }: RowProps) {
+  const m = useMessages(M)
   const { info } = row
-  const scripts = useRepoScripts(selected ? info.path : undefined)
   const radar = useWorktreeRadarMark(root, row.worktreeIds)
   const activeSessionId = useWorkspace((s) => s.activeSessionId)
   const rebaseTarget = radar && wantsRebase(radar.self) ? agentSessionFor(row.sessions, activeSessionId) : null
+  const radarLines = selected && radar ? radarDetailLines(radar) : []
   return (
-    <li className={styles.item} data-selected={selected} data-path={info.path}>
-      <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row, selected)}>
-        <span className={styles.line}>
+    <li className={styles.item} data-selected={selected} data-cleanable={cleanable || undefined} data-path={info.path}>
+      <button
+        type="button"
+        className={styles.row}
+        aria-expanded={selected}
+        title={tildePath(row.openPath, window.tr.homeDir)}
+        onClick={() => selectRow(root, row, selected)}
+      >
+        <span className={styles.glyph}>
           {row.status ? (
             <StatusGlyph status={row.status} />
           ) : (
@@ -206,48 +258,29 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
               <StatusGlyph status="exited" />
             </span>
           )}
-          <span className={styles.name}>{row.name}</span>
-          {row.diff && <span className={styles.mono}>{row.diff}</span>}
-          <span className={styles.mono} title={info.base ? `相对 ${info.base} 领先 ${info.ahead ?? 0}，落后 ${info.behind ?? 0}` : undefined}>
-            {row.sync}
-          </span>
         </span>
-        <span className={styles.meta}>
-          <span className={styles.session}>{row.sessionLine}</span>
-          {radar && <RadarTag mark={radar} />}
-          <span className={styles.path}>{tildePath(row.openPath, window.tr.homeDir)}</span>
+        <span className={styles.title}>{row.title}</span>
+        <span className={styles.where}>
+          {row.agent && <AgentIcon kind={row.agent} size={12} />}
+          {row.where && <span className={styles.whereText}>{row.where}</span>}
         </span>
+        <span className={styles.diff} title={row.diff ? m.uncommitted(row.diff) : undefined}>
+          {row.diff}
+        </span>
+        <span className={styles.ahead} title={info.base && info.behind ? m.behind(info.base, info.behind) : undefined}>
+          {row.ahead}
+        </span>
+        <span className={styles.radar}>{radar && <RadarTag mark={radar} short />}</span>
       </button>
       {selected && (
         <div className={styles.details}>
-          <dl className={styles.kv}>
-            {detailLines(info, scripts?.port ?? null).map((line) => (
-              <div key={line.label} className={styles.kvRow}>
-                <dt className={styles.kvLabel}>{line.label}</dt>
-                <dd className={styles.kvValue} data-mono={line.mono || undefined}>
-                  {line.value}
-                </dd>
-              </div>
-            ))}
-            {radar &&
-              radarDetailLines(radar).map((line, i) => (
-                <div key={`radar-${i}`} className={styles.kvRow} data-testid="radar-detail">
-                  <dt className={styles.kvLabel}>{line.label}</dt>
-                  <dd className={styles.kvValue} title={line.title}>
-                    {line.value}
-                  </dd>
-                </div>
-              ))}
-          </dl>
+          {radarLines.map((line, i) => (
+            <p key={i} className={styles.radarLine} title={line.title} data-testid="radar-detail">
+              <span className={styles.radarText}>{line.text}</span>
+              {line.files && <span className={styles.radarFiles}>{line.files}</span>}
+            </p>
+          ))}
           <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.action}
-              disabled={info.prunable !== null}
-              onClick={() => window.tr.worktree.reveal(row.openPath, '')}
-            >
-              打开文件夹
-            </button>
             {/* No base on the base itself; a feature branch out in the main checkout merges like any other; once merged, nothing to merge. */}
             {info.base && !info.merged && (
               <button
@@ -258,26 +291,34 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
                   openMergeSheet({ projectId, root, worktreePath: info.path, worktreeIds: row.worktreeIds, isMain: info.isMain })
                 }
               >
-                合并到 {info.base}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+                {m.mergeInto(info.base)}<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
               </button>
             )}
+            <button
+              type="button"
+              className={styles.action}
+              disabled={info.prunable !== null}
+              onClick={() => window.tr.worktree.reveal(row.openPath, '')}
+            >
+              {m.openFolder}
+            </button>
             {radar && rebaseTarget && (
               <button
                 type="button"
                 className={styles.action}
-                title={`把 rebase 说明放进 ${agentLabel(rebaseTarget.kind)} 的输入行，看过后按回车发送`}
+                title={m.rebaseTitle(agentLabel(rebaseTarget.kind))}
                 onClick={() =>
                   void rebaseWithAgent(radar.self, rebaseTarget).then((error) => {
-                    if (error) patchRoot(root, { notice: `没能交给 ${agentLabel(rebaseTarget.kind)}：${error}` })
+                    if (error) patchRoot(root, { notice: m.handOffFailed(agentLabel(rebaseTarget.kind), error) })
                   })
                 }
               >
-                让 agent rebase
+                {m.rebase}
               </button>
             )}
             <span className={styles.spacer} />
             <IconButton
-              label="更多"
+              label={m.more}
               aria-haspopup="menu"
               onClick={(e) => void openRowMenu(projectId, root, row, e.currentTarget, refresh)}
             >

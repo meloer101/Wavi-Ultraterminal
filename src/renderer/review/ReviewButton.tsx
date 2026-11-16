@@ -5,15 +5,46 @@
 import { headlessAgent } from '@shared/agents'
 import { useEffect, useState } from 'react'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { agentLabel } from '../panels/merge/model'
 import { useSettings } from '../settings/useSettings'
 import { useWorkspace } from '../state/workspace'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from './background'
 import { requestReview, reviewBlocker, reviewCommand } from './review'
 
+const M = defineMessages({
+  zh: {
+    sendInTerminal: (command: string) => `在终端里发送 ${command}`,
+    sendFailed: (error: string) => `没能发送：${error}`,
+    notSent: '没能发送',
+    sending: '正在发送…',
+    agentReview: '让 agent 审阅',
+    cancelReview: '取消审阅',
+    reviewTitle: (agent: string) => `在后台用 ${agent} 只读审阅全部改动（用你自己的额度），结果显示在变更的顶部`,
+    startFailed: (error: string) => `没能开始：${error}`,
+    notStarted: '没能开始',
+    reviewAll: '审阅全部改动'
+  },
+  en: {
+    sendInTerminal: (command: string) => `Send ${command} in the terminal`,
+    sendFailed: (error: string) => `Couldn't send: ${error}`,
+    notSent: "Couldn't send",
+    sending: 'Sending…',
+    agentReview: 'Let agent review',
+    cancelReview: 'Cancel review',
+    reviewTitle: (agent: string) =>
+      `Review all changes read-only in the background with ${agent} (uses your own usage); the result shows at the top of Changes`,
+    startFailed: (error: string) => `Couldn't start: ${error}`,
+    notStarted: "Couldn't start",
+    reviewAll: 'Review all changes'
+  }
+})
+
 const FAILURE_SHOWN_MS = 4000
 
 export function ReviewButton({ sessionId, className }: { sessionId: SessionId; className?: string }) {
+  const m = useMessages(M)
   const session = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId))
   const worktree = useWorkspace((s) => (session ? s.worktrees.find((w) => w.id === session.worktreeId) : undefined))
   const { settings, loaded } = useSettings()
@@ -37,17 +68,17 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
         type="button"
         className={className}
         disabled={blocker !== null || busy}
-        title={failure ?? blocker ?? `在终端里发送 ${reviewCommand(agent)}`}
+        title={failure ?? blocker ?? m.sendInTerminal(reviewCommand(agent) ?? '')}
         onClick={(event) => {
           event.stopPropagation()
           setBusy(true)
           setFailure(null)
           requestReview(sessionId)
-            .catch((error: unknown) => setFailure(`没能发送：${error instanceof Error ? error.message : String(error)}`))
+            .catch((error: unknown) => setFailure(m.sendFailed(error instanceof Error ? error.message : String(error))))
             .finally(() => setBusy(false))
         }}
       >
-        {failure ? '没能发送' : busy ? '正在发送…' : '让 agent 审阅'}
+        {failure ? m.notSent : busy ? m.sending : m.agentReview}
       </button>
     )
   }
@@ -63,7 +94,7 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
           cancelBackgroundReview(worktree.path)
         }}
       >
-        取消审阅
+        {m.cancelReview}
       </button>
     )
   }
@@ -73,17 +104,17 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
       type="button"
       className={className}
       disabled={busy}
-      title={failure ?? `在后台用 ${agentLabel(agent)} 只读审阅全部改动（用你自己的额度），结果显示在变更的顶部`}
+      title={failure ?? m.reviewTitle(agentLabel(agent))}
       onClick={(event) => {
         event.stopPropagation()
         setBusy(true)
         setFailure(null)
         startBackgroundReview(worktree.path, agent, 'manual', worktree.baseBranch)
-          .catch((error: unknown) => setFailure(`没能开始：${error instanceof Error ? error.message : String(error)}`))
+          .catch((error: unknown) => setFailure(m.startFailed(error instanceof Error ? error.message : String(error))))
           .finally(() => setBusy(false))
       }}
     >
-      {failure ? '没能开始' : '审阅全部改动'}
+      {failure ? m.notStarted : m.reviewAll}
     </button>
   )
 }

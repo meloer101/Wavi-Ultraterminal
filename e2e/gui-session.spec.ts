@@ -579,7 +579,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch (Figma 65E / 65F)', async () => {
+  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch under it (Figma 65E / 78A)', async () => {
     const mode = composer().locator('[data-picker="permission+plan"]')
     await expect(mode).toHaveText('询问', WITHIN)
     await mode.click()
@@ -596,14 +596,23 @@ test.describe('F23 GUI session (Claude)', () => {
     await mode.click()
     await page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio', { name: '接受编辑' }).click()
     await expect(mode).toHaveText('接受编辑')
-    // 快速: Opus says it can answer faster.
-    const fast = composer().getByRole('button', { name: '快速' })
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'none')
+    // 快速 (Figma 78A): Opus says it can answer faster — a switch under the 模式 list; it leaves the menu open.
+    await expect(composer().getByRole('button', { name: '快速' })).toHaveCount(0)
+    const onMark = mode.locator('[data-switch="fast"]')
+    await expect(onMark).toHaveCount(0)
+    await mode.click()
+    const switches = page.getByRole('dialog', { name: '模式' })
+    await expect(switches.getByRole('separator')).toHaveCount(1)
+    const fast = switches.getByRole('switch', { name: '快速' })
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'true')
-    // On, the mark is filled (the author, 2026-11-08).
-    await expect(fast.locator('svg')).toHaveAttribute('fill', 'currentColor')
+    await expect(fast).toHaveAttribute('aria-checked', 'true')
+    await expect(switches).toBeVisible()
+    await page.screenshot({ path: join(SHOTS, 'fast-on-menu-light.png') })
+    await page.keyboard.press('Escape')
+    // 78B: on, a solid ⚡ after the 模式's name (the author, 2026-11-08: from outline to solid).
+    await expect(mode).toHaveText('接受编辑')
+    await expect(onMark.locator('svg')).toHaveAttribute('fill', 'currentColor')
     await page.screenshot({ path: join(SHOTS, 'fast-on-light.png') })
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     // Saved with the session, and on the agent for its next session.
@@ -612,8 +621,11 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect.poll(() => saved().sessions.find((x) => x.id === 's1')?.guiPermission, WITHIN).toBe('accept-edits')
     expect(saved().sessions.find((x) => x.id === 's1')?.guiPlan).toBeFalsy()
     await expect.poll(() => saved().guiPicks?.claude, WITHIN).toMatchObject({ permission: 'accept-edits', fast: true })
+    await mode.click()
     await fast.click()
-    await expect(fast).toHaveAttribute('aria-pressed', 'false')
+    await expect(fast).toHaveAttribute('aria-checked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(onMark).toHaveCount(0)
   })
 
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {
@@ -736,8 +748,9 @@ test.describe('F23 GUI session (Claude)', () => {
     const bubble = feed().locator('[data-item]').last()
     await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
     expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
-    // The column is the composer's (960 for 中) with 40 each side for the pictures (Figma 59J).
-    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1040px')
+    // The column is the composer's (960 for 中) with room each side for a picture and its gap: at 16 / 25 the picture is
+    // a one-line bubble's height, 8 + 25 + 8 = 41, and 41 + 12 = 53 each side.
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1066px')
     // The agent's words start at the composer's left edge, its mark 12 outside; the bubble ends at its right edge, the
     // picture 8 outside.
     await feed().evaluate((el) => el.scrollTo(0, 0))
@@ -752,6 +765,12 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.round(mark!.x + mark!.width + 12)).toBe(Math.round(boxEdge!.x))
     expect(Math.round(sent!.x + sent!.width)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
     expect(Math.round(picture!.x - 8)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
+    // Both pictures are as tall as a one-line bubble; the user's shares its bubble's top, the agent's middle is its
+    // first line's.
+    expect(Math.round(picture!.height)).toBe(41)
+    expect(Math.round(mark!.height)).toBe(41)
+    expect(Math.round(picture!.y)).toBe(Math.round(sent!.y))
+    expect(Math.round(mark!.y + mark!.height / 2)).toBe(Math.round(words!.y + words!.height / 2))
     expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })

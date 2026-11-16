@@ -4,6 +4,26 @@
 // the CLI already deleted are gone), so every view says where each agent starts and never extrapolates.
 import type { CliAgent } from './agents'
 import { WAVI_WORKTREES_DIR } from './git-worktrees'
+import { defineMessages, pick } from './i18n'
+
+// Large token counts: 亿 / 万 in Chinese, B / M / K in English.
+const M = defineMessages({
+  zh: {
+    tokenParts: (n: number): { num: string; unit: string } => {
+      if (n >= 1e8) return { num: (n / 1e8).toFixed(n >= 1e10 ? 0 : n >= 1e9 ? 1 : 2), unit: '亿' }
+      if (n >= 1e4) return { num: Math.round(n / 1e4).toLocaleString('en-US'), unit: '万' }
+      return { num: Math.round(n).toLocaleString('en-US'), unit: '' }
+    }
+  },
+  en: {
+    tokenParts: (n: number): { num: string; unit: string } => {
+      if (n >= 1e9) return { num: (n / 1e9).toFixed(n >= 1e11 ? 0 : n >= 1e10 ? 1 : 2), unit: 'B' }
+      if (n >= 1e6) return { num: (n / 1e6).toFixed(n >= 1e8 ? 0 : n >= 1e7 ? 1 : 2), unit: 'M' }
+      if (n >= 1e4) return { num: Math.round(n / 1e3).toLocaleString('en-US'), unit: 'K' }
+      return { num: Math.round(n).toLocaleString('en-US'), unit: '' }
+    }
+  }
+})
 
 /** Agents whose logs carry per-message token counts and that Wavi reads (others show 暂不支持). */
 export const STATS_AGENTS = ['claude', 'codex', 'opencode', 'pi', 'grok'] as const satisfies readonly CliAgent[]
@@ -347,9 +367,7 @@ export function heatmap(data: UsageDataset, now: number): Heatmap {
 
 /** `4.82 亿` / `3,650 万` / `8,200`, split so the number and the unit can be set apart. */
 export function tokenParts(n: number): { num: string; unit: string } {
-  if (n >= 1e8) return { num: (n / 1e8).toFixed(n >= 1e10 ? 0 : n >= 1e9 ? 1 : 2), unit: '亿' }
-  if (n >= 1e4) return { num: Math.round(n / 1e4).toLocaleString('en-US'), unit: '万' }
-  return { num: Math.round(n).toLocaleString('en-US'), unit: '' }
+  return pick(M).tokenParts(n)
 }
 
 export const formatTokens = (n: number): string => {

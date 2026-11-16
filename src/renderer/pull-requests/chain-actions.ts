@@ -4,9 +4,10 @@
 // otherwise starts the Ship run, opens the sheet, or puts the hand-off into the agent's input line (never pressing Enter).
 import { headlessAgent } from '@shared/agents'
 import type { GitChanges } from '@shared/git-graph/log'
+import { defineMessages, pick } from '@shared/i18n'
 import type { PrStatus } from '@shared/pull-requests'
 import type { ShipPreflight } from '@shared/ship'
-import { agentHandoffPrompt, CHAIN_TEXT, type ChainState } from '@shared/ship-chain'
+import { agentHandoffPrompt, CHAIN_LABEL, CHAIN_TEXT, type ChainState } from '@shared/ship-chain'
 import { checksText, turnCheckView } from '@shared/turn-checks'
 import type { Project, Session, Worktree } from '@shared/types'
 import { openArchiveSheet } from '../archive/store'
@@ -14,7 +15,7 @@ import { useRadar, markFor } from '../conflict-radar/store'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { commentTarget } from '../panels/git/comments'
 import { tickedPaths } from '../panels/git/changes-model'
-import { gitOf, loadChanges } from '../panels/git/store'
+import { gitOf, loadChanges, setTab } from '../panels/git/store'
 import { openMergeSheet, primaryExitOf, targetFor } from '../panels/merge/store'
 import { agentLabel } from '../panels/merge/model'
 import { startBackgroundReview } from '../review/background'
@@ -22,12 +23,31 @@ import { useSessionMeta } from '../session-meta/store'
 import { insertIntoTerminal } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
-import { bumpChain, loadPreflight, useChainStore } from './chain-store'
+import { bumpChain, loadPreflight } from './chain-store'
 import { mergePrBlocker, prRunKind, runOperation, type ChainCommand } from './chain-zone'
 import { exitPlan, shipContextFor, type ExitPlan } from './exit-model'
 import { commitTitle, divergedPrompt } from './ship-flow'
 import { readRemembered, startShip, useShips } from './ship-runner'
 import { setPrNotice, usePullRequests } from './store'
+
+const M = defineMessages({
+  zh: {
+    handFailed: (agent: string, error: string) => `没能交给 ${agent}：${error}`,
+    notNow: '现在不能这样做',
+    reviewFailed: (error: string) => `没能开始审阅：${error}`,
+    notGit: '不是 git 仓库',
+    listSeparator: '、',
+    checksLine: (checks: string) => `这一轮的检查：${checks}`
+  },
+  en: {
+    handFailed: (agent: string, error: string) => `Couldn’t hand to ${agent}: ${error}`,
+    notNow: 'Can’t do that right now',
+    reviewFailed: (error: string) => `Couldn’t start the review: ${error}`,
+    notGit: 'Not a git repository',
+    listSeparator: ', ',
+    checksLine: (checks: string) => `Checks this turn: ${checks}`
+  }
+})
 
 export interface ChainPlace {
   worktree: Worktree
@@ -62,7 +82,7 @@ export interface ChainSources {
 
 export interface ChainPlan {
   plan: ExitPlan
-  /** The chain, with the panel's ticks as its input (an exit commits only ticked files; 提交… needs one). */
+  /** The chain, with the panel's ticks as its input (提交 commits only ticked files and needs one). */
   chain: ChainState
   ticked: string[]
 }
@@ -121,7 +141,7 @@ async function handTo(place: ChainPlace, text: string): Promise<void> {
     await insertIntoTerminal(agent.id, text)
     useWorkspace.getState().requestTerminalFocus()
   } catch (error) {
-    say(place.worktree.path, `没能交给 ${agentLabel(agent.kind)}：${errorText(error)}`)
+    say(place.worktree.path, pick(M).handFailed(agentLabel(agent.kind), errorText(error)))
   }
 }
 
@@ -139,7 +159,7 @@ function blockerOf(chain: ChainState, command: ChainCommand): string | null {
   if (command === 'merge-sheet') return chain.actions.find((a) => a.id === 'main')?.blocker ?? null
   if (command === 'handoff' || command === 'continue' || command === 'abort') {
     const move = [chain.next, chain.second].find((m) => m?.id === command)
-    return move ? move.blocker : '现在不能这样做'
+    return move ? move.blocker : pick(M).notNow
   }
   if (command === 'review' || command === 'open-pr') return null
   return chain.actions.find((a) => a.id === command)?.blocker ?? null
@@ -170,12 +190,12 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
   if (command === 'review') {
     const reviewer = headlessAgent(place.agent?.kind)
     if (!reviewer) return say(path, CHAIN_TEXT.noAgent)
-    await startBackgroundReview(path, reviewer, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, `没能开始审阅：${errorText(error)}`))
+    await startBackgroundReview(path, reviewer, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, pick(M).reviewFailed(errorText(error))))
     return
   }
   if (useShips.getState().byWorktree[path]) return
   const sources = await freshSources(place)
-  if (!sources) return say(path, '不是 git 仓库')
+  if (!sources) return say(path, pick(M).notGit)
   const { plan, chain, ticked } = chainPlanOf(place, sources)
   const blocker = blockerOf(chain, command)
   if (blocker) return say(path, blocker)
@@ -193,7 +213,7 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     }))
     void loadChanges(path)
     bumpChain(path)
-    if (result && !result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(kind, result.files.length) : result.reason === 'blocked' ? result.message : result.files.join('、'))
+    if (result && !result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(kind, result.files.length) : result.reason === 'blocked' ? result.message : result.files.join(pick(M).listSeparator))
     return
   }
   if (command === 'handoff') {
@@ -201,7 +221,8 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     if (text) await handTo(place, text)
     return
   }
-  if (!preflight?.ok) return say(path, preflight?.message ?? CHAIN_TEXT.checking)
+  // 提交 runs without a preflight that answers (the main checkout on its base); the rest need one.
+  if (command !== 'commit' && !preflight?.ok) return say(path, preflight?.message ?? CHAIN_TEXT.checking)
 
   const settings = await window.tr.settings.get()
   const checks = turnCheckView(place.agent ? useSessionMeta.getState().bySession[place.agent.id]?.checks : undefined)
@@ -213,34 +234,46 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     pr: plan.pr,
     agentSession: place.agent?.id ?? null,
     openIn: openIn ?? place.agent?.id ?? null,
-    checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
-    settings: { review: settings.review, pr: settings.pr },
-    ticked
+    checksLine: checks ? pick(M).checksLine(checksText(checks)) : null,
+    settings: { review: settings.review, pr: settings.pr }
   })
   const label = chain.actions.find((a) => a.id === command)?.label ?? ''
-  // The tip the run starts from: the preflight just read (after a reload the run's own commit is told by it).
+  if (command === 'commit') {
+    // The tip it starts from (after a reload the run's own commit is told by it): the preflight's, else the change list's.
+    const tip = preflight?.ok ? preflight.head : sources.changes.head
+    return startShip({ ...ctx, paths: ticked }, 'commit', commitTitle(ticked.length), tip ? { head: tip } : {})
+  }
+  if (!preflight?.ok) return
+  // The tip the run starts from: the preflight just read.
   const head = preflight.head
   switch (command) {
-    case 'commit':
-      return startShip(ctx, 'commit', commitTitle(ticked.length), { head })
     case 'sync':
       return startShip({ ...ctx, paths: null }, 'sync', label, { syncMode: preflight.pushed ? 'merge' : 'rebase', behind: preflight.behindBase, head })
     case 'pull':
       return startShip({ ...ctx, paths: null }, 'pull', label, { head, ...(preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {}) })
     case 'push':
-      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label, { head })
+      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label, { head, ...(preflight.pullFrom ? { pullFrom: preflight.pullFrom } : {}) })
     case 'pr':
       // The chain's open PR (the poll's, else the preflight's number while gh is not ready): a push to it, never 创建 PR.
-      return startShip(ctx, prRunKind(chain), label, { head })
+      return startShip(ctx, prRunKind(chain), label, { head, ...(preflight.pullFrom ? { pullFrom: preflight.pullFrom } : {}) })
     case 'main':
-      return startShip(ctx, 'main', label, { head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) })
+      // 合并: the local squash, straight away; the block's title names the base.
+      return startShip({ ...ctx, paths: null }, 'main', CHAIN_LABEL.mergeTo(chain.base), { head })
+    case 'push-base':
+      // 推送 of the base a local 合并 left ahead (its own run).
+      return startShip({ ...ctx, paths: null, openPr: null }, 'push-base', CHAIN_LABEL.pushBaseTo(chain.base), {
+        head,
+        ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {})
+      })
   }
 }
 
 /**
- * ⇧⌘M (menu command merge-worktree) for the active session's worktree: the primary Git · 变更 registered while it is open
- * there; else, with an open PR (the poll's, or the preflight's number), 合并 PR #N… through the chain (its reason when
- * the PR's details are not read, never the local merge sheet past the PR); else the merge sheet.
+ * ⇧⌘M (menu command merge-worktree) for the active session's worktree: the chain's primary, whatever it is. Git · 变更
+ * registers what it runs while it is open there (chain-zone.ts zoneShortcut). Else the chain is read fresh: 合并 (and a
+ * worktree with no primary, or a stuck one) opens the local merge sheet, as from the Worktree view; the sheets (合并
+ * PR #N…, 归档…) open as they are; any other move opens Git · 变更 on the worktree and runs there, as ⌘K's Git group
+ * does (a blocked one says why there).
  */
 export function mergeShortcut(): void {
   const state = useWorkspace.getState()
@@ -250,9 +283,19 @@ export function mergeShortcut(): void {
   if (!worktree || !project) return
   const exit = primaryExitOf(worktree.path)
   if (exit) return exit()
-  const known = useChainStore.getState().preflights[worktree.path]
-  const pr = usePullRequests.getState().byWorktree[worktree.path]
-  const open = (pr?.pr && (pr.pr.state === 'open' || pr.pr.state === 'draft')) || (known?.ok && known.openPr !== null)
-  if (open) return void runChainCommand(worktree.path, 'merge-pr', session?.id ?? null)
-  openMergeSheet(targetFor(project.rootPath, worktree))
+  void shortcutFromAnywhere(worktree, project, session?.id ?? null)
+}
+
+async function shortcutFromAnywhere(worktree: Worktree, project: Project, sessionId: string | null): Promise<void> {
+  const place = chainPlace(worktree.path)
+  if (!place || useShips.getState().byWorktree[worktree.path]) return
+  const sources = await freshSources(place)
+  const chain = sources ? chainPlanOf(place, sources).chain : null
+  const next = chain?.next ?? null
+  if (!chain || !next || next.id === 'main' || chain.stage === 'stuck') return openMergeSheet(targetFor(project.rootPath, worktree))
+  if (next.id !== 'merge-pr' && next.id !== 'archive') {
+    useWorkspace.getState().setRightPanel('git')
+    setTab(worktree.path, 'changes')
+  }
+  await runChainCommand(worktree.path, next.id, sessionId)
 }

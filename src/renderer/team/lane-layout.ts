@@ -1,6 +1,12 @@
 // Where the team's lanes draw what (Figma 83″B): one lane per member, time left to right with now at the right edge.
 // Positions are percentages of the time axis, so the strip lays them out at any width without measuring.
 import { TEAM_WINDOW_MS, type TeamState } from '@shared/agent-team'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: { now: '现在', ago: (minutes: number) => `${minutes}m 前` },
+  en: { now: 'now', ago: (minutes: number) => `${minutes}m ago` }
+})
 
 /** The axis never spans less than this, so a team that just formed is not drawn as a wall of bars. */
 export const MIN_SPAN_MS = 2 * 60_000
@@ -39,7 +45,7 @@ export interface LaneLayout {
   ticks: LaneTick[]
 }
 
-const minutesAgo = (ms: number): string => (ms < 30_000 ? '现在' : `${Math.max(1, Math.round(ms / 60_000))}m 前`)
+const minutesAgo = (ms: number): string => (ms < 30_000 ? pick(M).now : pick(M).ago(Math.max(1, Math.round(ms / 60_000))))
 
 export function laneLayout(team: TeamState, now: number): LaneLayout {
   const to = now
@@ -72,7 +78,7 @@ export function laneLayout(team: TeamState, now: number): LaneLayout {
   const ticks: LaneTick[] = [
     { left: 0, label: minutesAgo(span) },
     { left: 50, label: minutesAgo(span / 2) },
-    { left: 100, label: '现在' }
+    { left: 100, label: pick(M).now }
   ]
   return { bars, arrows, ticks }
 }

@@ -11,12 +11,101 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
+import { defineMessages, LANGS, pick, type Lang } from './i18n'
 import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
 import type { SessionId, SessionStatus, SessionUi } from './types'
 
 /** Every agent CLI can dispatch (it only needs a shell) and be dispatched. */
 export type DispatchAgent = CliAgent
+
+// Text Wavi sends to agents and, for reports and notices, reads back: it follows the interface language, and the
+// parsers below accept both (saved runs and chats from before hold Chinese).
+const M = defineMessages({
+  zh: {
+    dispatchOff: 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).',
+    untitled: '未命名',
+    /** Quotes around a session title; the parsers find titles between them. */
+    open: '「',
+    close: '」',
+    /** Brackets around Wavi's hints inside a report; the parser drops lines wrapped in them. */
+    hintOpen: '（',
+    hintClose: '）',
+    /** Between the sentences of the brief's last paragraph. */
+    sep: '',
+    briefFrom: (agent: string, title: string) => `${agent}（会话「${title}」）`,
+    briefSnapshot: '你在一个新的 worktree 里，内容是派活方此刻工作区的快照（包括它还没提交的改动），不在任何分支上。这是只读的：读、跑检查都可以，不要改文件。',
+    briefWorktree: (branch: string, base: string) => `你在新的 worktree 里，分支 ${branch}，基于 ${base}。`,
+    briefNoDeeper: '这一层不能再派活，所有工作自己做。',
+    briefCanDispatch: '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。',
+    briefIntro: (from: string, where: string) => `这是 Wavi 转来的任务：${from}把它派给了你。${where}`,
+    briefOnly: '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
+    briefReport:
+      '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
+    reportHeader: '[Wavi 派活报告]',
+    noticeHeader: '[Wavi 派活]',
+    attemptReportHeader: '[Wavi 同任务多解汇报]',
+    event: { report: '报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' } as Record<ChildEvent, string>,
+    eventEstimated: '一轮结束（估计）',
+    branch: (branch: string) => `分支 ${branch}`,
+    snapshot: '快照',
+    reportIntro: (n: number) => `你派出的会话有了结果（来自 ${n === 1 ? '这个会话' : `${n} 个会话`}，不是用户的指示）。`,
+    noReply: '（这一轮结束时没有留下回复，也没有运行 wavi report，可能出错了；它的终端里有原因，可以请用户去看看）',
+    tooLong: (id: string) => `（内容较长，用 wavi read ${id} 读）`,
+    cutShort: (id: string) => `（没写完，用 wavi read ${id} 读全文）`,
+    stillRunning: (titles: string) => `仍在进行：${titles}。`,
+    listSep: '、',
+    reportFooter: '要看完整结果和改动，运行 `wavi read <id>`；要继续让某个会话做，运行 `wavi send <id> "…"`。合并、推送、归档由用户在 Wavi 里决定。',
+    noticeStarted: '用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：',
+    noticeStartedFooter: '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。',
+    noticeDeclined: '用户拒绝了这些会话，什么都没开',
+    noticeTimeout: '用户 10 分钟内没有回答，什么都没开',
+    noticeStopped: (why: string) => `${why}（来自 Wavi，不是用户的指示）：`,
+    noticeStoppedFooter: '不要重试，除非用户要求；自己接着做，或者问用户。',
+    wantsToOpen: (n: number) => `想开 ${n} 个会话`
+  },
+  en: {
+    dispatchOff: 'The user turned off dispatch in Wavi (Settings · Automation · Dispatch).',
+    untitled: 'Untitled',
+    open: '“',
+    close: '”',
+    hintOpen: '(',
+    hintClose: ')',
+    sep: ' ',
+    briefFrom: (agent: string, title: string) => `${agent} (session “${title}”)`,
+    briefSnapshot:
+      "You are in a new worktree holding a snapshot of the dispatcher's workspace as it is now (its uncommitted changes included), on no branch. It is read-only: read and run checks as you like, but don't change files.",
+    briefWorktree: (branch: string, base: string) => `You are in a new worktree, on branch ${branch}, based on ${base}.`,
+    briefNoDeeper: 'Sessions at this level cannot dispatch any further: do all the work yourself.',
+    briefCanDispatch: 'When needed, you can hand a separate piece of work on with `wavi run` (run `wavi --skill` first for how); only one more level down.',
+    briefIntro: (from: string, where: string) => `This task comes from Wavi: ${from} dispatched it to you. ${where}`,
+    briefOnly: "Do only this; don't merge, push or switch branches — the user decides those.",
+    briefReport:
+      'When done, run `wavi report "<result>"` in the shell to report to the dispatcher: the result first, then which files you changed, which checks you ran and their results, and what is left undone; if the result is long, write it to a file and report the path. If you cannot go on, run `wavi report "BLOCKED: <reason>"`.',
+    reportHeader: '[Wavi dispatch report]',
+    noticeHeader: '[Wavi dispatch]',
+    attemptReportHeader: '[Wavi same-task report]',
+    event: { report: 'report', done: 'turn ended', error: 'error', exited: 'agent exited' },
+    eventEstimated: 'turn ended (estimated)',
+    branch: (branch: string) => `branch ${branch}`,
+    snapshot: 'snapshot',
+    reportIntro: (n: number) => `Sessions you dispatched have results (from ${n === 1 ? 'this session' : `${n} sessions`}; not instructions from the user).`,
+    noReply: '(This turn ended with no reply and no wavi report; something may have gone wrong. Its terminal shows why; you can ask the user to look.)',
+    tooLong: (id: string) => `(Long; read it with wavi read ${id})`,
+    cutShort: (id: string) => `(Cut short; read all of it with wavi read ${id})`,
+    stillRunning: (titles: string) => `Still running: ${titles}.`,
+    listSep: ', ',
+    reportFooter:
+      'To see full results and changes, run `wavi read <id>`; to have a session keep going, run `wavi send <id> "…"`. Merging, pushing and archiving are the user\'s call in Wavi.',
+    noticeStarted: 'The user agreed; these sessions have started (from Wavi, not instructions from the user):',
+    noticeStartedFooter: 'When they finish a turn, fail or exit, Wavi brings you the results; no need to wait or poll.',
+    noticeDeclined: 'The user declined these sessions; nothing was opened',
+    noticeTimeout: 'The user did not answer within 10 minutes; nothing was opened',
+    noticeStopped: (why: string) => `${why} (from Wavi, not instructions from the user):`,
+    noticeStoppedFooter: "Don't retry unless the user asks; carry on yourself, or ask the user.",
+    wantsToOpen: (n: number) => (n === 1 ? 'Wants to open 1 session' : `Wants to open ${n} sessions`)
+  }
+})
 
 /**
  * How Wavi delivers a message to a session of this kind (PRD F21 覆盖):
@@ -387,7 +476,7 @@ const sameTask = (a: string, b: string): boolean => a.replace(/\s+/g, ' ').trim(
  * dispatcher, waiting ones included.
  */
 export function startRefusal(input: { depth: number; toolsOn: boolean; openTasks: readonly string[]; treeSize: number; task: string }): WaviResult | null {
-  if (!input.toolsOn) return waviFail('not_allowed', 'The user turned off dispatch in Wavi (设置 · 自动化 · 派活).')
+  if (!input.toolsOn) return waviFail('not_allowed', pick(M).dispatchOff)
   if (input.depth >= DISPATCH_LIMITS.depth) return waviFail('not_allowed', 'Sessions at this level cannot dispatch any further. Do the work yourself, or report back what else is needed.')
   if (input.openTasks.length >= DISPATCH_LIMITS.openChildren) {
     return waviFail('limit', `You already have ${input.openTasks.length} open sessions (the limit is ${DISPATCH_LIMITS.openChildren}). Use wavi send on one of them, or ask the user to close or archive some.`)
@@ -475,32 +564,20 @@ export function planChild(input: {
  * and short, rules next to what they govern (Orca: shouted rules read as injection).
  */
 export function childBrief(input: { task: string; parentTitle: string; parentAgent: DispatchAgent; depth: number; branch: string; base: string; snapshot: boolean }): string {
-  const from = `${agentLabel(input.parentAgent)}（会话「${input.parentTitle || '未命名'}」）`
-  const where = input.snapshot
-    ? `你在一个新的 worktree 里，内容是派活方此刻工作区的快照（包括它还没提交的改动），不在任何分支上。这是只读的：读、跑检查都可以，不要改文件。`
-    : `你在新的 worktree 里，分支 ${input.branch}，基于 ${input.base}。`
-  const onward =
-    input.depth >= DISPATCH_LIMITS.depth
-      ? '这一层不能再派活，所有工作自己做。'
-      : '需要时你也可以用 `wavi run` 把一块独立的工作再派出去（先跑 `wavi --skill` 看用法），只能再派一层。'
-  return [
-    `这是 Wavi 转来的任务：${from}把它派给了你。${where}`,
-    input.task,
-    [
-      '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
-      '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
-      onward
-    ].join('')
-  ].join('\n\n')
+  const m = pick(M)
+  const from = m.briefFrom(agentLabel(input.parentAgent), input.parentTitle || m.untitled)
+  const where = input.snapshot ? m.briefSnapshot : m.briefWorktree(input.branch, input.base)
+  const onward = input.depth >= DISPATCH_LIMITS.depth ? m.briefNoDeeper : m.briefCanDispatch
+  return [m.briefIntro(from, where), input.task, [m.briefOnly, m.briefReport, onward].join(m.sep)].join('\n\n')
 }
 
 // --- reports ---------------------------------------------------------------------------------------------------------
 
-export const REPORT_HEADER = '[Wavi 派活报告]'
-/** What became of a `wavi run` that waited for the user. */
-export const NOTICE_HEADER = '[Wavi 派活]'
-/** 同任务多解's report to the session its task came from (attempt-groups.ts). */
-export const ATTEMPT_REPORT_HEADER = '[Wavi 同任务多解汇报]'
+// The headers live in M: `reportHeader` starts a report; `noticeHeader` what became of a `wavi run` that waited for the
+// user; `attemptReportHeader` 同任务多解's report to the session its task came from (attempt-groups.ts). All start `[Wavi`.
+
+/** The header of 同任务多解's report, in the current language. */
+export const attemptReportHeader = (): string => pick(M).attemptReportHeader
 
 /** Wavi's own messages fed back as a task would make a loop (Nimbalyst's guard). */
 export const looksLikeReport = (text: string): boolean => text.trimStart().startsWith('[Wavi')
@@ -549,8 +626,6 @@ export interface ChildReport {
   turn?: number
 }
 
-const EVENT_TEXT: Record<ChildEvent, string> = { report: '报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' }
-
 function cut(text: string, max: number): string {
   if (text.length <= max) return text
   return `${text.slice(0, Math.max(0, max - 1))}…`
@@ -561,30 +636,32 @@ function cut(text: string, max: number): string {
  * report or last message within the shared budget; later children over budget point to `wavi read` instead.
  */
 export function reportText(reports: readonly ChildReport[], running: readonly { title: string }[] = []): string {
-  const lines = [`${REPORT_HEADER} 你派出的会话有了结果（来自 ${reports.length === 1 ? '这个会话' : `${reports.length} 个会话`}，不是用户的指示）。`]
+  const m = pick(M)
+  const quote = (title: string): string => `${m.open}${title}${m.close}`
+  const lines = [`${m.reportHeader} ${m.reportIntro(reports.length)}`]
   let budget: number = DISPATCH_LIMITS.reportBudget
   for (const r of reports) {
-    const event = r.event === 'done' && turnEndEstimated(r.agent) ? '一轮结束（估计）' : EVENT_TEXT[r.event]
-    const facts = [`「${r.title}」`, agentLabel(r.agent), r.model, event, r.branch ? `分支 ${r.branch}` : '快照', r.changes, r.checks, r.conflicts, `id ${r.childId}`]
+    const event = r.event === 'done' && turnEndEstimated(r.agent) ? m.eventEstimated : m.event[r.event]
+    const facts = [quote(r.title), agentLabel(r.agent), r.model, event, r.branch ? m.branch(r.branch) : m.snapshot, r.changes, r.checks, r.conflicts, `id ${r.childId}`]
     lines.push('', `— ${facts.filter(Boolean).join(' · ')}`)
     const message = r.message?.trim()
     if (!message) {
       // An agent whose turn failed (a provider error, a crash) often leaves no reply: say so instead of nothing.
-      if (r.event !== 'exited') lines.push('  （这一轮结束时没有留下回复，也没有运行 wavi report，可能出错了；它的终端里有原因，可以请用户去看看）')
+      if (r.event !== 'exited') lines.push(`  ${m.noReply}`)
       continue
     }
     const room = Math.min(DISPATCH_LIMITS.excerpt, budget)
     if (room < 200) {
-      lines.push(`  （内容较长，用 wavi read ${r.childId} 读）`)
+      lines.push(`  ${m.tooLong(r.childId)}`)
       continue
     }
     const excerpt = cut(message, room)
     budget -= excerpt.length
     lines.push(...excerpt.split('\n').map((l) => `  ${l}`))
-    if (excerpt.length < message.length) lines.push(`  （没写完，用 wavi read ${r.childId} 读全文）`)
+    if (excerpt.length < message.length) lines.push(`  ${m.cutShort(r.childId)}`)
   }
-  if (running.length > 0) lines.push('', `仍在进行：${running.map((r) => `「${r.title}」`).join('、')}。`)
-  lines.push('', '要看完整结果和改动，运行 `wavi read <id>`；要继续让某个会话做，运行 `wavi send <id> "…"`。合并、推送、归档由用户在 Wavi 里决定。')
+  if (running.length > 0) lines.push('', m.stillRunning(running.map((r) => quote(r.title)).join(m.listSep)))
+  lines.push('', m.reportFooter)
   return lines.join('\n')
 }
 
@@ -597,12 +674,11 @@ export interface StartedChild {
 
 /** What the dispatcher hears once the user answered a waiting `wavi run` (or it timed out). */
 export function noticeText(outcome: 'started' | 'declined' | 'timeout', children: readonly StartedChild[]): string {
-  const rows = children.map((c) => `- id ${c.id} · ${c.agent} · 「${c.title}」 · ${c.branch ? `分支 ${c.branch}` : '快照'}`)
-  if (outcome === 'started') {
-    return [`${NOTICE_HEADER} 用户同意了，下面的会话已经开始（来自 Wavi，不是用户的指示）：`, ...rows, '它们做完一轮、出错或退出时，Wavi 会把结果送来；不用等，也不用轮询。'].join('\n')
-  }
-  const why = outcome === 'declined' ? '用户拒绝了这些会话，什么都没开' : '用户 10 分钟内没有回答，什么都没开'
-  return [`${NOTICE_HEADER} ${why}（来自 Wavi，不是用户的指示）：`, ...rows, '不要重试，除非用户要求；自己接着做，或者问用户。'].join('\n')
+  const m = pick(M)
+  const rows = children.map((c) => `- id ${c.id} · ${c.agent} · ${m.open}${c.title}${m.close} · ${c.branch ? m.branch(c.branch) : m.snapshot}`)
+  if (outcome === 'started') return [`${m.noticeHeader} ${m.noticeStarted}`, ...rows, m.noticeStartedFooter].join('\n')
+  const why = outcome === 'declined' ? m.noticeDeclined : m.noticeTimeout
+  return [`${m.noticeHeader} ${m.noticeStopped(why)}`, ...rows, m.noticeStoppedFooter].join('\n')
 }
 
 // --- reading Wavi's own words back (a GUI dispatcher draws them, Figma 68′) ---------------------------------------
@@ -627,11 +703,29 @@ export interface ParsedReport {
   excerpt: string
 }
 
-const EVENT_OF: Readonly<Record<string, ChildEvent>> = { ...Object.fromEntries(Object.entries(EVENT_TEXT).map(([k, v]) => [v, k as ChildEvent])), '一轮结束（估计）': 'done' }
+// Read back in either language: a chat or saved run from before holds Chinese.
+const EVENT_OF: Readonly<Record<string, ChildEvent>> = Object.fromEntries(
+  LANGS.flatMap((lang) => [...Object.entries(M[lang].event).map(([k, v]) => [v, k as ChildEvent]), [M[lang].eventEstimated, 'done']])
+)
+const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** A title between either language's quotes: one capture group per language, the matching one set. */
+const TITLE = `(?:${LANGS.map((lang) => `${escapeRe(M[lang].open)}(.+?)${escapeRe(M[lang].close)}`).join('|')})`
+const REPORT_HEAD = new RegExp(`^— ${TITLE} · (.+) · id (\\S+)$`)
+/** Wavi's own hint lines in a report (noReply, tooLong, cutShort), with the child's id as any word. */
+const hintOf = (lang: Lang): string[] => {
+  const id = '\u0000'
+  return [M[lang].noReply, M[lang].tooLong(id), M[lang].cutShort(id)].map((hint) => escapeRe(hint).split(id).join('\\S+'))
+}
+// Chinese keeps the old reading (any whole line in full-width brackets); English matches only Wavi's hints, so an
+// agent's own line in ASCII parentheses stays in the excerpt.
+const HINT_LINE = new RegExp(`^(?:${escapeRe(M.zh.hintOpen)}.*${escapeRe(M.zh.hintClose)}|${hintOf('en').join('|')})$`)
+const NOTICE_ROW = new RegExp(`^- id (\\S+) · [^·]+ · ${TITLE}`, 'gm')
+const titleOf = (groups: readonly (string | undefined)[]): string => groups.slice(0, LANGS.length).find((t) => t !== undefined) ?? ''
 
 /** A `reportText` message read back, one entry per child; null for any other text. */
 export function parseReportText(text: string): ParsedReport[] | null {
-  if (!text.trimStart().startsWith(REPORT_HEADER)) return null
+  const start = text.trimStart()
+  if (!LANGS.some((lang) => start.startsWith(M[lang].reportHeader))) return null
   const out: ParsedReport[] = []
   let current: { entry: ParsedReport; lines: string[] } | null = null
   const flush = (): void => {
@@ -639,16 +733,17 @@ export function parseReportText(text: string): ParsedReport[] | null {
     current = null
   }
   for (const line of text.split('\n')) {
-    const head = /^— 「(.+?)」 · (.+) · id (\S+)$/.exec(line)
+    const head = REPORT_HEAD.exec(line)
     if (head) {
       flush()
-      const [agent = '', ...rest] = (head[2] ?? '').split(' · ')
+      const [facts = '', id = ''] = head.slice(1 + LANGS.length)
+      const [agent = '', ...rest] = facts.split(' · ')
       const at = rest.findIndex((f) => f in EVENT_OF)
       const event = EVENT_OF[rest[at] ?? ''] ?? null
-      current = { entry: { childId: head[3] ?? '', title: head[1] ?? '', agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
+      current = { entry: { childId: id, title: titleOf(head.slice(1)), agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
     } else if (current && line.startsWith('  ')) {
       const body = line.slice(2)
-      if (!/^（.*）$/.test(body.trim())) current.lines.push(body)
+      if (!HINT_LINE.test(body.trim())) current.lines.push(body)
     } else if (current && line.trim() === '') flush()
   }
   flush()
@@ -658,10 +753,12 @@ export function parseReportText(text: string): ParsedReport[] | null {
 /** A `noticeText` message read back; null for any other text. */
 export function parseNoticeText(text: string): { outcome: 'started' | 'declined' | 'timeout'; ids: SessionId[]; titles: string[] } | null {
   const first = text.trimStart().split('\n', 1)[0] ?? ''
-  if (!first.startsWith(`${NOTICE_HEADER} `)) return null
-  const outcome = first.includes('已经开始') ? 'started' : first.includes('拒绝') ? 'declined' : 'timeout'
-  const rows = [...text.matchAll(/^- id (\S+) · [^·]+ · 「(.+?)」/gm)]
-  return { outcome, ids: rows.map((m) => m[1] ?? ''), titles: rows.map((m) => m[2] ?? '') }
+  const m = LANGS.map((lang) => M[lang]).find((l) => first.startsWith(`${l.noticeHeader} `))
+  if (!m) return null
+  const said = first.slice(m.noticeHeader.length + 1)
+  const outcome = said.startsWith(m.noticeStarted) ? 'started' : said.startsWith(m.noticeDeclined) ? 'declined' : 'timeout'
+  const rows = [...text.matchAll(NOTICE_ROW)]
+  return { outcome, ids: rows.map((row) => row[1] ?? ''), titles: rows.map((row) => titleOf(row.slice(2))) }
 }
 
 // --- the queue between a child's event and the dispatcher -----------------------------------------------------------
@@ -737,7 +834,8 @@ export function messagePage(message: string, offset = 0): { text: string; nextOf
 export function confirmLabels(confirms: ReadonlyArray<{ parentId: string; count: number }>): Map<string, string> {
   const counts = new Map<string, number>()
   for (const c of confirms) counts.set(c.parentId, (counts.get(c.parentId) ?? 0) + c.count)
-  return new Map([...counts].map(([id, n]) => [id, `想开 ${n} 个会话`]))
+  const m = pick(M)
+  return new Map([...counts].map(([id, n]) => [id, m.wantsToOpen(n)]))
 }
 
 // --- the 送进去 send's two extra checks (PRD F21 覆盖 · 复用发消息的链路) -------------------------------------------

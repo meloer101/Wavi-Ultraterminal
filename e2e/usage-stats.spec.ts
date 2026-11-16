@@ -105,10 +105,10 @@ test.describe('设置 · 额度 statistics', () => {
     await expect(bars.last()).toHaveText('今天')
     await shoot('69-week')
 
-    // 年: months before Codex's first log are empty frames; both agents say where they start.
+    // 年: months before any log are left blank (no bar, no frame); both agents say where they start.
     await dialog.getByRole('tab', { name: '年' }).click()
     await expect(bars).toHaveCount(12)
-    await expect(stats.locator('[data-testid="usage-bar"] [class*="noRecord"]').first()).toBeVisible()
+    await expect(stats.getByTestId('usage-bar').first().locator('[class*="stack"]')).toHaveCount(0)
     await expect(stats.getByText(/^\d+\/\d+ 起$/).first()).toBeVisible()
     await expect(stats.getByTestId('usage-kpis')).toContainText('最长连续')
     const heat = stats.getByTestId('usage-heatmap')

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { submitPrompt } from '../session-io'
 import { startSession } from '../state/session-start'
@@ -8,9 +9,15 @@ import { stopNote } from '@shared/limit-resume'
 import { useLimitStop } from '../limit-resume/store'
 import { useMetaNow } from '../session-meta/MetaChips'
 import { ensureAgentUp } from './agent-up'
-import { CONTINUE_PROMPT, errorNextSteps, fixPrompt, type RetryKind } from './error-next-steps'
+import { useMessages } from '../ui/i18n'
+import { continuePrompt, errorNextSteps, fixPrompt, type RetryKind } from './error-next-steps'
 import { useLaunchIssues } from './launch-issues'
 import styles from './SessionErrorBar.module.css'
+
+const M = defineMessages({
+  zh: { failed: (error: string) => `没能完成：${error}`, retryTurn: '重试这一轮', restart: '重新启动', fix: '让 agent 修复' },
+  en: { failed: (error: string) => `Couldn't finish: ${error}`, retryTurn: 'Retry this turn', restart: 'Restart', fix: 'Ask agent to fix' }
+})
 
 async function askToFix(sessionId: SessionId, summary: string): Promise<void> {
   await ensureAgentUp(sessionId)
@@ -18,7 +25,7 @@ async function askToFix(sessionId: SessionId, summary: string): Promise<void> {
 }
 
 async function retry(sessionId: SessionId, kind: RetryKind): Promise<void> {
-  if (kind === 'continue') await submitPrompt(sessionId, CONTINUE_PROMPT)
+  if (kind === 'continue') await submitPrompt(sessionId, continuePrompt())
   else await startSession(sessionId, { resume: true })
 }
 
@@ -41,6 +48,7 @@ export function SessionErrorBar({ sessionId }: { sessionId: SessionId }) {
 function Bar({ sessionId, summary, canFix, retryKind }: { sessionId: SessionId; summary: string; canFix: boolean; retryKind: RetryKind | null }) {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const m = useMessages(M)
 
   const run = (action: () => Promise<void>): void => {
     setBusy(true)
@@ -58,16 +66,16 @@ function Bar({ sessionId, summary, canFix, retryKind }: { sessionId: SessionId; 
       </span>
       <div className={styles.text}>
         <p className={styles.title}>{summary}</p>
-        {failure && <p className={styles.detail}>没能完成：{failure}</p>}
+        {failure && <p className={styles.detail}>{m.failed(failure)}</p>}
       </div>
       {retryKind && (
         <button type="button" className={styles.secondary} disabled={busy} onClick={() => run(() => retry(sessionId, retryKind))}>
-          {retryKind === 'continue' ? '重试这一轮' : '重新启动'}
+          {retryKind === 'continue' ? m.retryTurn : m.restart}
         </button>
       )}
       {canFix && (
         <button type="button" className={styles.primary} disabled={busy} onClick={() => run(() => askToFix(sessionId, summary))}>
-          让 agent 修复
+          {m.fix}
         </button>
       )}
     </div>

@@ -10,6 +10,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
 import { orderVendors } from '@shared/session-meta'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useLang, useMessages } from '../ui/i18n'
 import { subscribeClock } from '../sidebar/clock'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
@@ -43,8 +45,39 @@ const NONE = new Set<never>()
 /** The sessions picked for a batch action; cards draw a check while any is picked. */
 const Picked = createContext<ReadonlySet<SessionId>>(new Set())
 
-const TABS: ReadonlyArray<{ value: BoardTab; label: string }> = [
-  { value: 'progress', label: '进度' },
+const M = defineMessages({
+  zh: {
+    progress: '进度',
+    showSidebar: '显示侧栏',
+    board: '看板',
+    refresh: '刷新',
+    filterProgress: '过滤  p:项目  s:状态',
+    filterGitHub: '过滤  #编号  标签',
+    filterSessions: '过滤会话',
+    filterItems: '过滤 issue 和 PR',
+    sessions: '会话',
+    noSessions: '还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。',
+    noMatch: (filter: string) => `没有匹配“${filter}”的会话。`,
+    picked: '已选'
+  },
+  en: {
+    progress: 'Progress',
+    showSidebar: 'Show sidebar',
+    board: 'Board',
+    refresh: 'Refresh',
+    filterProgress: 'Filter  p:project  s:status',
+    filterGitHub: 'Filter  #number  label',
+    filterSessions: 'Filter sessions',
+    filterItems: 'Filter issues and PRs',
+    sessions: 'Sessions',
+    noSessions: 'No sessions yet. Open a project, then click ＋ on it in the sidebar to start a session.',
+    noMatch: (filter: string) => `No sessions match “${filter}”.`,
+    picked: 'Selected'
+  }
+})
+
+const tabs = (m: (typeof M)['zh']): ReadonlyArray<{ value: BoardTab; label: string }> => [
+  { value: 'progress', label: m.progress },
   { value: 'github', label: 'GitHub' }
 ]
 
@@ -54,6 +87,9 @@ function useClockNow(): number {
 }
 
 export function Overview() {
+  const m = useMessages(M)
+  // The cards' text (status, time, summary) is built in the memo below: it follows the language.
+  const lang = useLang()
   const { projects, worktrees, sessions, sidebarCollapsed, toggleSidebar, setMainView } = useWorkspace(
     useShallow((s) => ({
       projects: s.projects,
@@ -72,7 +108,8 @@ export function Overview() {
 
   const groups = useMemo(
     () => buildOverview({ projects, worktrees, sessions, now, filter: tab === 'progress' ? filter : '' }),
-    [projects, worktrees, sessions, filter, now, tab]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lang: the cards' text follows the interface language
+    [projects, worktrees, sessions, filter, now, tab, lang]
   )
   const ids = useMemo(() => orderedIds(groups, NONE), [groups])
   // Archived worktrees' sessions are not on 看板 (PRD F15).
@@ -169,18 +206,18 @@ export function Overview() {
       <div className={styles.overview} data-region="overview" data-glass-card="" data-tab={tab} onKeyDown={onKeyDown}>
         <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
           {sidebarCollapsed && (
-            <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
+            <IconButton label={m.showSidebar} title={`${m.showSidebar} · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
               <PanelLeft {...ICON} />
             </IconButton>
           )}
-          <h1 className={styles.title}>看板</h1>
-          <Segmented label="看板" variant="outline" semantics="tab" value={tab} options={TABS} onChange={setTab} />
+          <h1 className={styles.title}>{m.board}</h1>
+          <Segmented label={m.board} variant="outline" semantics="tab" value={tab} options={tabs(m)} onChange={setTab} />
           <span className={styles.summary}>{tab === 'progress' ? overviewSummary(shown, attention) : github.summary}</span>
           <span className={styles.spacer} />
           {tab === 'progress' ? (
             <PlanUsage />
           ) : (
-            <IconButton label="刷新" title="刷新" disabled={github.loading} onClick={() => refreshGitHub(true)}>
+            <IconButton label={m.refresh} title={m.refresh} disabled={github.loading} onClick={() => refreshGitHub(true)}>
               <RefreshCw {...ICON} />
             </IconButton>
           )}
@@ -190,8 +227,8 @@ export function Overview() {
               ref={filterRef}
               type="search"
               value={filter}
-              placeholder={tab === 'progress' ? '过滤  p:项目  s:状态' : '过滤  #编号  标签'}
-              aria-label={tab === 'progress' ? '过滤会话' : '过滤 issue 和 PR'}
+              placeholder={tab === 'progress' ? m.filterProgress : m.filterGitHub}
+              aria-label={tab === 'progress' ? m.filterSessions : m.filterItems}
               onChange={(e) => setFilter(e.target.value)}
             />
           </label>
@@ -207,13 +244,13 @@ export function Overview() {
             data-view="board"
             tabIndex={-1}
             role="listbox"
-            aria-label="会话"
+            aria-label={m.sessions}
             aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
           >
             {sessions.length > 0 && !filter && <AttemptGroups />}
             {sessions.length > 0 && !filter && <DispatchGroups />}
             {sessions.length === 0 ? (
-              <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
+              <p className={styles.empty}>{m.noSessions}</p>
             ) : (
               <div className={styles.board}>
                 {groups.map((g) => (
@@ -221,7 +258,7 @@ export function Overview() {
                 ))}
               </div>
             )}
-            {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
+            {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>{m.noMatch(filter)}</p>}
           </div>
         )}
         {tab === 'progress' && picked.length > 0 && (
@@ -315,8 +352,9 @@ function StatusCard({ row, selected, onClick }: RowProps) {
 
 /** Picked for a batch action: a check (shape, not color), and its place kept empty for the rows not picked. */
 function PickMark({ picked }: { picked: boolean }) {
+  const m = useMessages(M)
   return (
-    <span className={styles.pick} data-testid="pick-mark" title={picked ? '已选' : undefined} aria-label={picked ? '已选' : undefined}>
+    <span className={styles.pick} data-testid="pick-mark" title={picked ? m.picked : undefined} aria-label={picked ? m.picked : undefined}>
       {picked && <Check size={14} strokeWidth={2} aria-hidden />}
     </span>
   )

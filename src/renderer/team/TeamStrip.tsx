@@ -7,11 +7,18 @@ import { ChevronDown, ChevronUp, Users } from 'lucide-react'
 import { memberLine as progress, teamCounts, TEAM_GLYPH as GLYPH, TEAM_LEAD, type TeamState } from '@shared/agent-team'
 import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../ui/i18n'
 import { useSessionMeta } from '../session-meta/store'
 import { getSurface } from '../terminal/registry'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { laneLayout } from './lane-layout'
 import styles from './TeamStrip.module.css'
+
+const M = defineMessages({
+  zh: { team: (n: number) => `队伍 · ${n} 人`, handle: '去处理', collapse: '收起队伍', expand: '展开队伍' },
+  en: { team: (n: number) => (n === 1 ? 'Team · 1 member' : `Team · ${n} members`), handle: 'Go to it', collapse: 'Collapse team', expand: 'Expand team' }
+})
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** Height of one lane, and where its line runs (the name line's centre), in px (Figma 83″B). */
@@ -24,6 +31,7 @@ const TICK_MS = 5_000
 const folded = new Set<SessionId>()
 
 export function TeamStrip({ sessionId }: { sessionId: SessionId }) {
+  const m = useMessages(M)
   const team = useSessionMeta((s) => s.bySession[sessionId]?.team)
   const leadModelId = useSessionMeta((s) => s.bySession[sessionId]?.settings?.model)
   // The session reports its model as an id (`claude-opus-5-5`); lanes name it the way the CLI shows it.
@@ -38,13 +46,13 @@ export function TeamStrip({ sessionId }: { sessionId: SessionId }) {
     redraw()
   }
   const counts = teamCounts(team)
-  const asking = team.members.find((m) => m.state === 'asking')
+  const asking = team.members.find((member) => member.state === 'asking')
   const size = team.members.length - 1
   return (
-    <div className={styles.strip} role="region" aria-label={`队伍 · ${size} 人`} data-testid="team-strip" data-open={open}>
+    <div className={styles.strip} role="region" aria-label={m.team(size)} data-testid="team-strip" data-open={open}>
       <div className={styles.head}>
         <Users {...ICON} />
-        <span className={styles.title}>队伍 · {size} 人</span>
+        <span className={styles.title}>{m.team(size)}</span>
         {(['working', 'asking', 'idle'] as const).map((state) =>
           counts[state] > 0 ? (
             <span key={state} className={styles.count}>
@@ -60,11 +68,11 @@ export function TeamStrip({ sessionId }: { sessionId: SessionId }) {
               {asking.name} {progress(asking)}
             </span>
             <button type="button" className={styles.button} onClick={() => getSurface(sessionId)?.focus()}>
-              去处理
+              {m.handle}
             </button>
           </>
         )}
-        <button type="button" className={styles.toggle} aria-label={open ? '收起队伍' : '展开队伍'} aria-expanded={open} onClick={toggle}>
+        <button type="button" className={styles.toggle} aria-label={open ? m.collapse : m.expand} aria-expanded={open} onClick={toggle}>
           {open ? <ChevronDown {...ICON} /> : <ChevronUp {...ICON} />}
         </button>
       </div>

@@ -80,9 +80,9 @@ vi.mock('@shared/risk-markers', () => ({
   }
 }))
 
-const { detectGh, checkWorktree, pushBranch, watchTargets, unwatch } = await import('./pull-requests')
+const { detectGh, checkWorktree, commitWorktree, pushBranch, watchTargets, unwatch } = await import('./pull-requests')
 const { changes } = await import('./git-graph')
-const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, diffSinceWithCut, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipRisks, shipToMain, syncWorktree } = await import('./ship')
+const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, diffSinceWithCut, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipPrepush, shipRisks, shipToMain, syncWorktree } = await import('./ship')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 Object.assign(process.env, identity, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false' })
@@ -168,13 +168,14 @@ afterEach(() => resetShip())
 afterAll(() => rmSync(base, { recursive: true, force: true }))
 
 describe('preflight', () => {
-  it('refuses folders that are not workspace projects, not their worktrees, or the base itself', async () => {
+  it('refuses folders that are not workspace projects, not their worktrees, or a detached HEAD', async () => {
     const { root, wt } = setup()
     expect(await shipPreflight({ root: join(base, 'elsewhere'), worktree: wt })).toMatchObject({ ok: false })
     expect(await shipPreflight({ root, worktree: join(base, 'nope') })).toMatchObject({ ok: false, message: '不是这个项目的 worktree' })
     expect(await shipPreflight({ root, worktree: 'relative' })).toEqual({ ok: false, message: '请求无效', operation: null })
     expect(await shipPreflight(null)).toEqual({ ok: false, message: '请求无效', operation: null })
-    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: false, message: '这是基线分支本身，没有可以合并的改动' })
+    // The main checkout on its base answers about the base (path ①, the push node).
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: true, onBase: true, base: 'main', branch: 'main' })
     git(wt, 'checkout', '-q', '--detach')
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: false, message: '处于分离 HEAD，没有分支可以合并' })
   })
@@ -196,6 +197,7 @@ describe('preflight', () => {
       merged: false,
       baseAheadOfUpstream: 0,
       baseBehindUpstream: 0,
+      baseUnpushed: 0,
       openPr: null,
       mergeMethods: null,
       head: sha(wt, 'HEAD'),
@@ -353,7 +355,7 @@ describe('shipToMain', () => {
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     writeFileSync(join(wt, 'other.txt'), 'o\n')
     const message = 'feat(nav): sticky header\n\nWhy: it jumped on scroll.'
-    const result = await shipToMain({ root, worktree: wt, message, method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message, method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     if (!result.ok) throw new Error('not shipped')
     expect(git(bare, 'log', '-1', '--format=%B', 'main').trim()).toBe(message)
@@ -372,7 +374,7 @@ describe('shipToMain', () => {
   it('merge: a merge commit with the message git would write, pushed; the agent message only commits the ticked files', async () => {
     const { root, wt, bare } = setup()
     writeFileSync(join(wt, 'new.txt'), 'n\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'merge', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'merge', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '-1', '--format=%s', 'main').trim()).toBe("Merge branch 'feat'")
     expect(git(bare, 'log', '-1', '--format=%P', 'main').trim().split(' ')).toHaveLength(2)
@@ -386,7 +388,7 @@ describe('shipToMain', () => {
     git(root, 'push', '-q', 'origin', 'main')
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     writeFileSync(join(wt, 'other.txt'), 'o\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'rebase', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'rebase', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: new file', 'Make nav sticky', 'main moved on', 'init'])
     expect(sha(root, 'feat')).toBe(sha(bare, 'main'))
@@ -401,7 +403,7 @@ describe('shipToMain', () => {
     commit(wt, 'a.txt', 'one\ntwo\nthree\n', 'feat puts a back')
     commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
     git(root, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null, push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', message: '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」' })
     if (!result.ok && result.failure) expect(result.failure.message).toBe('变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」')
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
@@ -417,7 +419,7 @@ describe('shipToMain', () => {
     const saved = { count: process.env.GIT_CONFIG_COUNT, value: process.env.GIT_CONFIG_VALUE_0 }
     Object.assign(process.env, { GIT_CONFIG_COUNT: '2', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: 'gpg.program', GIT_CONFIG_VALUE_1: gpg })
     try {
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null, push: true })
       expect(result).toMatchObject({ ok: false, step: 'merge', failure: { kind: 'signing', message: '提交签名需要口令', next: null } })
     } finally {
       Object.assign(process.env, { GIT_CONFIG_COUNT: saved.count, GIT_CONFIG_VALUE_0: saved.value })
@@ -429,7 +431,7 @@ describe('shipToMain', () => {
 
   it('without paths and without a message keeps the branch own commit message', async () => {
     const { root, wt, bare } = setup()
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '-1', '--format=%B', 'main').trim()).toBe('Make nav sticky')
   })
@@ -437,17 +439,17 @@ describe('shipToMain', () => {
   it('does not ship a squash-merged branch again: no empty commit on the base', async () => {
     const { root, wt, bare } = setup()
     const head = sha(root, 'feat')
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(first).toMatchObject({ ok: true, pushed: true })
     // The branch moved onto the squash commit: nothing ahead, and its own commit is in the base (merged).
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 0, merged: true })
     const pushed = sha(bare, 'main')
-    const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(again).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
     // A branch that could not be moved (an agent was editing) is told by content (v1.101).
     git(wt, 'reset', '-q', '--keep', head)
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 1, merged: true })
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })).toEqual(again)
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })).toEqual(again)
     expect(sha(root, 'main')).toBe(pushed)
     expect(sha(bare, 'main')).toBe(pushed)
     commit(wt, 'more.txt', 'm\n', 'More')
@@ -456,7 +458,7 @@ describe('shipToMain', () => {
 
   it('merges without pushing when there is no remote', async () => {
     const { root, wt } = setup({ remote: false })
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: false })
     expect(result).not.toHaveProperty('pushError')
     expect(git(root, 'log', '-1', '--format=%s', 'main').trim()).toBe('feat: b')
@@ -468,7 +470,7 @@ describe('shipToMain', () => {
     chmodSync(join(root, '.git', 'hooks', 'pre-commit'), 0o755)
     writeFileSync(join(wt, 'new.txt'), 'n\n')
     const before = sha(root, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: false, step: 'commit', reason: 'failed' })
     expect(result.ok ? '' : result.output).toContain('lint: no semicolons')
     // git does not name the hook that failed, and this one does not either: its own words are the message.
@@ -478,15 +480,15 @@ describe('shipToMain', () => {
 
   it('refuses requests that are not valid', async () => {
     const { root, wt } = setup()
-    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: ['x.txt'] })).toMatchObject({ ok: false, reason: 'failed', message: '请求无效' })
-    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: null })).toMatchObject({ ok: false })
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: ['x.txt'], push: true })).toMatchObject({ ok: false, reason: 'failed', message: '请求无效' })
+    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: null, push: true })).toMatchObject({ ok: false })
     expect(await shipToMain(7)).toMatchObject({ ok: false })
   })
 
   it('blocks with a message when there is nothing to merge', async () => {
     const { root, wt } = setup({ github: false })
     git(wt, 'reset', '-q', '--hard', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     // Its reflog has a commit of its own, now all in main: the merge sheet says the same.
     expect(result).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
   })
@@ -497,7 +499,7 @@ describe('shipToMain', () => {
     commit(root, 'a.txt', 'one\ntwo from main\nthree\n', 'edit a on main')
     git(root, 'push', '-q', 'origin', 'main')
     const before = sha(root, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'conflicts', conflicts: ['a.txt'] })
     expect(sha(root, 'main')).toBe(before)
   })
@@ -507,7 +509,7 @@ describe('shipToMain', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: b', 'upstream work', 'init'])
     expect(existsSync(join(root, 'up.txt'))).toBe(true)
@@ -520,7 +522,7 @@ describe('shipToMain', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: b', 'upstream work', 'init'])
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
@@ -535,7 +537,7 @@ describe('shipToMain', () => {
       git(other, 'push', '-q', 'origin', 'main')
       git(root, 'update-ref', 'refs/heads/main', git(root, 'commit-tree', '-p', 'main', '-m', 'local only', 'main^{tree}').trim())
       const before = sha(root, 'main')
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
       expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'blocked' })
       expect(result.ok ? '' : result.message).toMatch(/^main (落后 origin\/main 1 个提交，没法快进|和 origin\/main 各有对方没有的提交，没法快进)/)
       expect(sha(root, 'main')).toBe(before)
@@ -548,7 +550,7 @@ describe('shipToMain', () => {
     writeFileSync(join(bare, 'hooks', 'pre-receive'), '#!/bin/sh\necho "no pushes today" >&2\nexit 1\n')
     chmodSync(join(bare, 'hooks', 'pre-receive'), 0o755)
     const before = sha(bare, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: false })
     if (!result.ok) throw new Error('not merged')
     expect(result.pushError).toContain('推送到 origin 失败')
@@ -567,7 +569,7 @@ describe('shipToMain', () => {
     const hook = join(bare, 'hooks', 'pre-receive')
     writeFileSync(hook, '#!/bin/sh\necho "no pushes today" >&2\nexit 1\n')
     chmodSync(hook, 0o755)
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!first.ok) throw new Error('not merged')
     expect(first.pushed).toBe(false)
     // Still refused: the merge stays, nothing new is merged.
@@ -583,19 +585,18 @@ describe('shipToMain', () => {
     expect(await pushBaseAgain({ root: join(base, 'elsewhere'), worktree: wt })).toMatchObject({ ok: false, message: '请求无效' })
   })
 
-  it('refuses to push a base that no longer has the merge it kept', async () => {
+  it('refuses to push a base that is no longer at the tip it was asked to push', async () => {
     const { root, wt, bare } = setup()
     const hook = join(bare, 'hooks', 'pre-receive')
     writeFileSync(hook, '#!/bin/sh\nexit 1\n')
     chmodSync(hook, 0o755)
     const before = sha(root, 'main')
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!first.ok) throw new Error('not merged')
     rmSync(hook)
     git(root, 'reset', '-q', '--hard', before)
-    const result = await pushBaseAgain({ root, worktree: wt, commit: first.commit })
-    expect(result).toMatchObject({ ok: false, step: 'push', reason: 'failed' })
-    expect(result.ok ? '' : result.message).toContain(`main 上已经没有这次的合并（${first.commit.slice(0, 7)}）`)
+    const result = await pushBaseAgain({ root, worktree: wt, expect: first.commit })
+    expect(result).toMatchObject({ ok: false, step: 'push', reason: 'failed', stale: true, message: 'main 在审阅之后又变了：没有推送' })
     expect(sha(bare, 'main')).toBe(before)
   })
 
@@ -614,11 +615,11 @@ describe('shipToMain', () => {
     commit(root, 'a.txt', 'one\ntwo from main\nthree\n', 'edit a on main')
     git(root, 'push', '-q', 'origin', 'main')
     writeFileSync(join(wt, 'new.txt'), 'n\n')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: new', method: 'squash', paths: ['new.txt'] })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new', method: 'squash', paths: ['new.txt'], push: true })
     expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'conflicts', committed: true })
     expect(git(wt, 'log', '-1', '--format=%s').trim()).toBe('feat: new')
     // Refused before anything ran: nothing was committed.
-    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: ['new.txt'] })).not.toHaveProperty('committed')
+    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: ['new.txt'], push: true })).not.toHaveProperty('committed')
   })
 
   it('reads the refusal of a protected base through the failure classes', () => {
@@ -637,10 +638,50 @@ describe('shipToMain', () => {
   })
 })
 
+// 合并 is local only: the base is squashed into and left ahead of its upstream; 推送 of the base is its own move.
+describe('合并 · the local merge', () => {
+  it('squashes into the local base with the title and the subjects, pushes nothing and watches no CI', async () => {
+    const { root, wt, bare } = setup()
+    const remoteBefore = sha(bare, 'main')
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, title: '导航吸顶' })
+    expect(result).toMatchObject({ ok: true, pushed: false })
+    expect(result).not.toHaveProperty('pushError')
+    if (!result.ok) throw new Error('not merged')
+    expect(sha(root, 'main')).toBe(result.commit)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- Make nav sticky')
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(baseCi({ root, worktree: wt })).toBeNull()
+    // The base is ahead of its upstream by the merge: the chain's 推送 of the base.
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: 1 })
+    // 推送 of the base sends it and starts watching its CI; then nothing is left unpushed.
+    expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: result.commit, pushed: true })
+    expect(sha(bare, 'main')).toBe(result.commit)
+    expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: result.commit })
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: 0 })
+  })
+
+  it('counts nothing unpushed for a base without an upstream', async () => {
+    const { root, wt } = setup({ remote: false })
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })).toMatchObject({ ok: true, pushed: false })
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, merged: true, baseUnpushed: null })
+  })
+
+  it('refuses as stale when the branch moved past the tip the caller checked', async () => {
+    const { root, wt } = setup()
+    const checked = sha(root, 'feat')
+    commit(wt, 'c.txt', 'c\n', 'more after the check')
+    const before = sha(root, 'main')
+    const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, head: checked })
+    expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'failed', stale: true })
+    expect(sha(root, 'main')).toBe(before)
+    expect(await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null, head: sha(root, 'feat') })).toMatchObject({ ok: true, pushed: false })
+  })
+})
+
 describe('CI of the pushed base commit', () => {
   async function shipped() {
     const made = setup()
-    const result = await shipToMain({ root: made.root, worktree: made.wt, message: 'feat: b', method: 'squash', paths: null })
+    const result = await shipToMain({ root: made.root, worktree: made.wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     if (!result.ok || !result.pushed) throw new Error('not pushed')
     return { ...made, commit: result.commit, target: { root: made.root, worktree: made.wt } }
   }
@@ -715,7 +756,7 @@ describe('CI of the pushed base commit', () => {
     await detectGh(true)
     expect(await baseFailing({ root: plain.root, worktree: plain.wt })).toBeNull()
     // And a push to a repository that is not on GitHub watches nothing.
-    const shippedPlain = await shipToMain({ root: plain.root, worktree: plain.wt, message: 'feat: b', method: 'squash', paths: null })
+    const shippedPlain = await shipToMain({ root: plain.root, worktree: plain.wt, message: 'feat: b', method: 'squash', paths: null, push: true })
     expect(shippedPlain).toMatchObject({ ok: true, pushed: true })
     expect(baseCi({ root: plain.root, worktree: plain.wt })).toBeNull()
   })
@@ -1070,7 +1111,7 @@ describe('同步 <base>', () => {
   it('brings in what the preflight counts against when the local base cannot catch up, so 同步 is never a no-op', async () => {
     const { root, wt, bare } = setup({ github: false })
     const other = cloneOf(bare)
-    commit(other, 'up.txt', 'u\n', 'upstream work')
+    commit(other, 'a.txt', 'one\ntwo\nthree\nupstream\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
     git(root, 'fetch', '-q', 'origin')
     writeFileSync(join(root, 'a.txt'), 'edited in the main checkout\n')
@@ -1083,7 +1124,7 @@ describe('同步 <base>', () => {
     const pushedOne = setup({ github: false })
     git(pushedOne.wt, 'push', '-q', '-u', 'origin', 'feat')
     const elsewhere = cloneOf(pushedOne.bare)
-    commit(elsewhere, 'up.txt', 'u\n', 'upstream work')
+    commit(elsewhere, 'a.txt', 'one\ntwo\nthree\nupstream\n', 'upstream work')
     git(elsewhere, 'push', '-q', 'origin', 'main')
     writeFileSync(join(pushedOne.root, 'a.txt'), 'edited in the main checkout\n')
     expect(await syncWorktree({ root: pushedOne.root, worktree: pushedOne.wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main', ...ORIGIN_MAIN })
@@ -1119,7 +1160,8 @@ describe('同步 <base>', () => {
   it('leaves a base whose checkout has uncommitted changes alone, and says why', async () => {
     const { root, wt, bare } = setup({ github: false })
     const other = cloneOf(bare)
-    commit(other, 'up.txt', 'u\n', 'upstream work')
+    // The fast-forward would change a.txt, which the main checkout has edited.
+    commit(other, 'a.txt', 'one\ntwo\nthree\nupstream\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'edited in the main checkout\n')
     const before = sha(root, 'main')
@@ -1412,7 +1454,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
       git(root, 'push', '-q', '-u', 'upstream', 'main')
       commit(root, 'm.txt', 'm\n', 'main moved on')
       git(root, 'push', '-q', 'upstream', 'main')
-      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method, paths: null })
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method, paths: null, push: true })
       expect(result).toMatchObject({ ok: true, pushed: true })
       if (!result.ok) throw new Error('not shipped')
       expect(sha(bare, 'main')).toBe(result.commit)
@@ -1432,7 +1474,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(root, 'push', '-q', 'myfork', 'main')
     git(wt, 'push', '-q', '-u', 'myfork', 'feat')
     const forkMain = sha(fork, 'main')
-    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })
     expect(result).toMatchObject({ ok: true, pushed: true })
     expect(sha(bare, 'main')).toBe(sha(root, 'main'))
     expect(sha(fork, 'main')).toBe(forkMain)
@@ -1448,7 +1490,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(root, 'push', '-q', 'myfork', 'main')
     git(wt, 'push', '-q', '-u', 'myfork', 'feat')
     const forkMain = sha(fork, 'main')
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({ ok: true, pushed: true })
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })).toMatchObject({ ok: true, pushed: true })
     expect(sha(bare, 'main')).toBe(sha(root, 'main'))
     expect(sha(fork, 'main')).toBe(forkMain)
   })
@@ -1462,7 +1504,7 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     git(other, 'push', '-q', 'origin', 'main')
     execFileSync('git', ['-c', 'rebase.abbreviateCommands=false', 'rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick /edit /'" }, stdio: 'ignore' })
     const before = sha(root, 'refs/heads/main')
-    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })).toMatchObject({
       ok: false,
       step: 'merge',
       reason: 'blocked',
@@ -1481,12 +1523,256 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     const hook = join(bare, 'hooks', 'pre-receive')
     writeFileSync(hook, '#!/bin/sh\nexit 1\n')
     chmodSync(hook, 0o755)
-    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null, push: true })
     expect(first).toMatchObject({ ok: true, pushed: false, pushError: expect.stringMatching(/^推送到 gh 失败/) })
     if (!first.ok) throw new Error('not merged')
     rmSync(hook)
     expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
     expect(sha(bare, 'main')).toBe(first.commit)
     expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: first.commit, url: `https://github.com/acme/widget/commit/${first.commit}/checks` })
+  })
+})
+
+// The push node: every push pulls first (a base with unpushed commits is rebased onto its upstream, never force-pushed),
+// and says what it will send (the pre-push review's range). Path ①: the main checkout on its base pushes the base.
+describe('the push node · pull first', () => {
+  /** The remote's main moves on (another clone pushes `file`), and the local main has one commit of its own. */
+  function aheadAndBehind(options: { conflict?: boolean } = {}): { root: string; wt: string; bare: string; own: string; upstream: string } {
+    const made = setup({ github: false })
+    const other = cloneOf(made.bare)
+    commit(other, options.conflict ? 'a.txt' : 'up.txt', options.conflict ? 'one\nTWO UPSTREAM\nthree\n' : 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    commit(made.root, 'a.txt', options.conflict ? 'one\nTWO LOCAL\nthree\n' : 'one\ntwo\nthree\nfour\n', 'local work on main')
+    return { ...made, own: sha(made.root, 'main'), upstream: sha(other, 'main') }
+  }
+  const subjects = (cwd: string, ref: string) => git(cwd, 'log', '--format=%s', ref).trim().split('\n')
+  const worktreeCount = (root: string) => git(root, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).length
+
+  it('rebases the base\'s unpushed commits onto its upstream in the main checkout, then pushes', async () => {
+    const { root, wt, bare, upstream } = aheadAndBehind()
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'main'))
+    expect(subjects(root, 'main').slice(0, 3)).toEqual(['local work on main', 'upstream work', 'init'])
+    expect(git(root, 'merge-base', '--is-ancestor', upstream, 'main')).toBe('')
+    // Still on main, nothing left over in the main checkout.
+    expect(git(root, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('main')
+    expect(git(root, 'status', '--porcelain')).toBe('')
+  })
+
+  it('rebases the base away from every working tree when nobody has it out, and leaves no worktree behind', async () => {
+    const { root, wt, bare, own } = aheadAndBehind()
+    git(root, 'checkout', '-q', '--detach')
+    const listed = worktreeCount(root)
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'refs/heads/main'))
+    expect(subjects(root, 'refs/heads/main').slice(0, 2)).toEqual(['local work on main', 'upstream work'])
+    // The detached main checkout was not touched; no temporary worktree stays listed.
+    expect(sha(root, 'HEAD')).toBe(own)
+    expect(worktreeCount(root)).toBe(listed)
+  })
+
+  it('aborts a rebase away from the working trees on conflicts: the base and the remote stay as they were', async () => {
+    const { root, wt, bare, own } = aheadAndBehind({ conflict: true })
+    git(root, 'checkout', '-q', '--detach')
+    const remoteBefore = sha(bare, 'main')
+    const listed = worktreeCount(root)
+    const result = await pushBaseAgain({ root, worktree: wt })
+    expect(result).toMatchObject({ ok: false, step: 'push', reason: 'blocked' })
+    expect(result.ok ? '' : result.message).toMatch(/^把 main 的提交变基到 origin\/main 时冲突（a\.txt），已放弃，main 没有变化/)
+    expect(sha(root, 'refs/heads/main')).toBe(own)
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(worktreeCount(root)).toBe(listed)
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toMatchObject({ ok: false, reason: 'blocked', from: 'origin/main' })
+  })
+
+  it('leaves the rebase stopped in the main checkout on conflicts there (rule a takes it), nothing pushed', async () => {
+    const { root, bare } = aheadAndBehind({ conflict: true })
+    const remoteBefore = sha(bare, 'main')
+    const result = await shipPrepush({ root, worktree: root, push: 'base' })
+    expect(result).toMatchObject({ ok: false, reason: 'conflicts', files: ['a.txt'], from: 'origin/main', checkout: realpathSync(root) })
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: false, operation: { kind: 'rebase', unresolved: ['a.txt'] } })
+    git(root, 'rebase', '--abort')
+  })
+
+  it('refuses to rebase a base whose checkout has uncommitted tracked changes', async () => {
+    const { root, wt, own } = aheadAndBehind()
+    writeFileSync(join(root, 'a.txt'), 'dirty\n')
+    const result = await shipPrepush({ root, worktree: wt, push: 'base' })
+    expect(result).toMatchObject({ ok: false, reason: 'blocked', from: 'origin/main' })
+    expect(result.ok ? '' : 'message' in result ? result.message : '').toContain('main 的工作区有未提交的改动')
+    expect(sha(root, 'main')).toBe(own)
+  })
+
+  it('says what a push of the base will send once pulled: the range upstream..base', async () => {
+    const { root, wt } = aheadAndBehind()
+    const result = await shipPrepush({ root, worktree: wt, push: 'base' })
+    expect(result).toMatchObject({ ok: true, pulled: { from: 'origin/main', commits: 1 }, commits: 1 })
+    if (!result.ok) throw new Error('not pulled')
+    expect(result.range).toEqual({ from: sha(root, 'refs/remotes/origin/main'), to: sha(root, 'main') })
+    // Pulled already: nothing more comes in the second time.
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toMatchObject({ ok: true, pulled: null, commits: 1 })
+  })
+
+  it('fast-forwards a pushed branch to its remote branch first, and sends only what the remote lacks', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const other = cloneOf(bare)
+    git(other, 'checkout', '-q', 'feat')
+    commit(other, 'remote.txt', 'r\n', 'pushed from elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    const pulled = await shipPrepush({ root, worktree: wt, push: 'branch' })
+    expect(pulled).toMatchObject({ ok: true, pulled: { from: 'origin/feat', commits: 1 }, range: null, commits: 0 })
+    expect(sha(wt, 'HEAD')).toBe(sha(other, 'feat'))
+    commit(wt, 'mine.txt', 'm\n', 'mine')
+    const next = await shipPrepush({ root, worktree: wt, push: 'branch' })
+    expect(next).toMatchObject({ ok: true, pulled: null, commits: 1, range: { from: sha(other, 'feat'), to: sha(wt, 'HEAD') } })
+    // 创建 PR proposes everything since the base.
+    expect(await shipPrepush({ root, worktree: wt, push: 'new-pr' })).toMatchObject({ ok: true, commits: 3, range: { from: sha(root, 'main'), to: sha(wt, 'HEAD') } })
+  })
+
+  it('never rebases a pushed branch: diverged from its remote branch fails as diverged', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const other = cloneOf(bare)
+    git(other, 'checkout', '-q', 'feat')
+    commit(other, 'remote.txt', 'r\n', 'pushed from elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    commit(wt, 'mine.txt', 'm\n', 'mine')
+    const before = sha(wt, 'HEAD')
+    expect(await shipPrepush({ root, worktree: wt, push: 'branch' })).toMatchObject({ ok: false, reason: 'failed', failure: { kind: 'diverged' }, from: 'origin/feat' })
+    expect(sha(wt, 'HEAD')).toBe(before)
+  })
+
+  it('pushes the base only at the tip the review read: a commit landed since, or a pull that rewrote it, is stale', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    commit(root, 'c.txt', 'c\n', 'reviewed on main')
+    const prepared = await shipPrepush({ root, worktree: wt, push: 'base' })
+    if (!prepared.ok) throw new Error('not prepared')
+    expect(prepared.tip).toBe(sha(root, 'main'))
+    const remoteBefore = sha(bare, 'main')
+    // Another session's 合并 (or the agent's commit) on main while the review read it.
+    commit(root, 'd.txt', 'd\n', 'landed during the review')
+    expect(await pushBaseAgain({ root, worktree: wt, expect: prepared.tip })).toMatchObject({ ok: false, step: 'push', stale: true })
+    expect(sha(bare, 'main')).toBe(remoteBefore)
+    // The upstream moved meanwhile: pulling first rebases the reviewed commits, so they are not the ones reviewed.
+    const again = await shipPrepush({ root, worktree: wt, push: 'base' })
+    if (!again.ok) throw new Error('not prepared')
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    expect(await pushBaseAgain({ root, worktree: wt, expect: again.tip })).toMatchObject({ ok: false, step: 'push', stale: true })
+    expect(sha(bare, 'main')).toBe(sha(other, 'main'))
+    const third = await shipPrepush({ root, worktree: wt, push: 'base' })
+    if (!third.ok) throw new Error('not prepared')
+    expect(await pushBaseAgain({ root, worktree: wt, expect: third.tip })).toMatchObject({ ok: true, pushed: true, commit: third.tip })
+    expect(sha(bare, 'main')).toBe(third.tip)
+    expect(await pushBaseAgain({ root, worktree: wt, expect: 'main' })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
+  it('pushes a branch only at the tip the review read', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    commit(wt, 'c.txt', 'c\n', 'reviewed')
+    const prepared = await shipPrepush({ root, worktree: wt, push: 'branch' })
+    if (!prepared.ok) throw new Error('not prepared')
+    expect(prepared.tip).toBe(sha(wt, 'HEAD'))
+    const remoteBefore = sha(bare, 'feat')
+    commit(wt, 'd.txt', 'd\n', 'the agent committed during the review')
+    expect(await pushBranch({ root, worktree: wt, expect: prepared.tip })).toMatchObject({ ok: false, stale: true })
+    expect(sha(bare, 'feat')).toBe(remoteBefore)
+    expect(await pushBranch({ root, worktree: wt, expect: sha(wt, 'HEAD') })).toMatchObject({ ok: true, outcome: 'pushed' })
+    expect(sha(bare, 'feat')).toBe(sha(wt, 'HEAD'))
+    expect(await pushBranch({ root, worktree: wt, expect: '--force' })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
+  it('says the remote has no base to compare against, instead of nothing new to send', async () => {
+    const { root, wt } = setup({ github: false })
+    git(root, 'branch', '--unset-upstream', 'main')
+    git(root, 'update-ref', '-d', 'refs/remotes/origin/main')
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toEqual({ ok: true, pulled: null, range: null, commits: 0, tip: sha(root, 'main'), remoteMissing: true })
+    // The same-name remote-tracking ref (no upstream) is compared with: nothing new is nothing new.
+    git(root, 'fetch', '-q', 'origin', '+refs/heads/main:refs/remotes/origin/main')
+    expect(await shipPrepush({ root, worktree: wt, push: 'base' })).toEqual({ ok: true, pulled: null, range: null, commits: 0, tip: sha(root, 'main') })
+  })
+
+  it('refuses a request that is not one of the three pushes', async () => {
+    const { root, wt } = setup({ github: false })
+    expect(await shipPrepush({ root, worktree: wt, push: 'force' })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
+    expect(await shipPrepush({ root: join(base, 'elsewhere'), worktree: wt, push: 'base' })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
+  })
+})
+
+// One of Wavi's operations moves a base at a time: 合并, 推送 of the base and its pull first, 提交 on the base.
+describe('the base lock', () => {
+  it('refuses a second operation on the base while a push of it runs, with the reason', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    commit(root, 'c.txt', 'c\n', 'on main')
+    const started = join(base, `push-started-${++counter}`)
+    const hook = join(bare, 'hooks', 'pre-receive')
+    writeFileSync(hook, `#!/bin/sh\ntouch "${started}"\nsleep 2\nexit 0\n`)
+    chmodSync(hook, 0o755)
+    const first = pushBaseAgain({ root, worktree: wt })
+    for (let i = 0; i < 200 && !existsSync(started); i++) await new Promise((r) => setTimeout(r, 25))
+    expect(existsSync(started)).toBe(true)
+    const refusal = '正在合并、推送或提交 main：等它完成再试'
+    expect(await shipPrepush({ root, worktree: root, push: 'base' })).toEqual({ ok: false, reason: 'blocked', message: refusal })
+    expect(await pushBaseAgain({ root, worktree: root })).toMatchObject({ ok: false, step: 'push', reason: 'blocked', message: refusal })
+    writeFileSync(join(root, 'e.txt'), 'e\n')
+    expect(await commitWorktree({ root, worktree: root, message: 'on main too', paths: ['e.txt'] })).toEqual({ ok: false, reason: 'blocked', message: refusal })
+    const wt2 = join(base, `wt-second-${++counter}`)
+    git(root, 'worktree', 'add', '-q', '-b', 'feat2', wt2)
+    git(root, 'config', 'branch.feat2.base', 'main')
+    commit(wt2, 'f.txt', 'f\n', 'second branch')
+    expect(await shipToMain({ root, worktree: wt2, message: '', method: 'squash', paths: null })).toMatchObject({ ok: false, step: 'merge', reason: 'blocked', message: refusal })
+    expect(await first).toMatchObject({ ok: true, pushed: true })
+    // Free again once the push is done; a commit on another branch never needed it.
+    expect(await commitWorktree({ root, worktree: root, message: 'on main too', paths: ['e.txt'] })).toMatchObject({ ok: true })
+  })
+})
+
+describe('path ① · the main checkout on its base', () => {
+  it('answers the preflight on the base: its unpushed commits, where it goes', async () => {
+    const { root } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({
+      ok: true,
+      onBase: true,
+      branch: 'main',
+      base: 'main',
+      ahead: 0,
+      merged: false,
+      baseUnpushed: 1,
+      baseRemote: 'origin',
+      remote: 'origin',
+      pullFrom: 'origin/main',
+      openPr: null
+    })
+    // A linked worktree on the base is no main checkout: still nothing to ship there.
+    const linked = join(base, `wt-base-${++counter}`)
+    git(root, 'checkout', '-q', '--detach')
+    git(root, 'worktree', 'add', '-q', linked, 'main')
+    expect(await shipPreflight({ root, worktree: linked })).toMatchObject({ ok: false, message: '这是基线分支本身，没有可以合并的改动' })
+  })
+
+  it('pushes HEAD of the base from the main checkout and watches its CI keyed by the main checkout', async () => {
+    const { root, bare } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    const head = sha(root, 'main')
+    expect(await pushBaseAgain({ root, worktree: root })).toEqual({ ok: true, commit: head, pushed: true })
+    expect(sha(bare, 'main')).toBe(head)
+    expect(await checkBaseCi(root, true)).toMatchObject({ base: 'main', sha: head, worktree: root })
+    expect(await shipPreflight({ root, worktree: root })).toMatchObject({ ok: true, onBase: true, baseUnpushed: 0 })
+  })
+
+  it('says a refused push of the base is one (the run offers the hand-off there)', async () => {
+    const { root, bare } = setup()
+    commit(root, 'c.txt', 'c\n', 'straight on main')
+    const hook = join(bare, 'hooks', 'pre-receive')
+    writeFileSync(hook, '#!/bin/sh\necho "remote: error: GH006: Protected branch update failed for refs/heads/main." >&2\nexit 1\n')
+    chmodSync(hook, 0o755)
+    expect(await pushBaseAgain({ root, worktree: root })).toMatchObject({ ok: true, pushed: false, pushRefused: true, failure: { kind: 'protected-branch' } })
   })
 })

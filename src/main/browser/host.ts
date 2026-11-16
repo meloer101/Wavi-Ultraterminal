@@ -36,6 +36,32 @@ import { IPC } from '@shared/ipc'
 import { isMenuCommand } from '@shared/shortcuts'
 import { partitionFor, WEB_PARTITION } from './partition'
 import type { RememberedPages } from './remembered'
+import { defineMessages, pick } from '@shared/i18n'
+
+const M = defineMessages({
+  zh: {
+    download: (file: string) => `页面想下载 ${file}，已拦下；需要的话用系统浏览器打开这个页面`,
+    aFile: '一个文件',
+    refused: (host: string) => `${host} 没有响应：没有程序在监听这个端口`,
+    notFound: (host: string) => `找不到 ${host}`,
+    offline: '网络未连接',
+    timedOut: (host: string) => `${host} 连接超时`,
+    failed: (host: string, why: string) => `打不开 ${host}（${why}）`,
+    popupBlocked: '拦下了页面自己打开的新窗口',
+    crashed: '页面崩溃了，点刷新重新载入'
+  },
+  en: {
+    download: (file: string) => `The page tried to download ${file}; blocked. Open the page in your system browser if you need it`,
+    aFile: 'a file',
+    refused: (host: string) => `${host} isn't responding: nothing is listening on this port`,
+    notFound: (host: string) => `Can't find ${host}`,
+    offline: 'No network connection',
+    timedOut: (host: string) => `${host} timed out`,
+    failed: (host: string, why: string) => `Can't open ${host} (${why})`,
+    popupBlocked: 'Blocked a new window the page opened by itself',
+    crashed: 'The page crashed; click Reload to load it again'
+  }
+})
 
 /** Live pages per window; the least recently shown one beyond this is closed (its URL stays remembered). */
 const MAX_PAGES = 4
@@ -84,7 +110,7 @@ function browserSession(worktree: string, scope: PageScope): Session {
   // Nothing is written to disk from a page: say so, and leave it to the user to fetch it elsewhere.
   ses.on('will-download', (event, item, contents) => {
     event.preventDefault()
-    noticeTargets.get(contents)?.(`页面想下载 ${item.getFilename() || '一个文件'}，已拦下；需要的话用系统浏览器打开这个页面`)
+    noticeTargets.get(contents)?.(pick(M).download(item.getFilename() || pick(M).aFile))
   })
   // With a system PAC / WPAD proxy, a fresh session's first request waits seconds for the proxy lookup:
   // resolve once now, so that wait does not land on the first page.
@@ -107,15 +133,15 @@ function loadErrorText(code: number, description: string, url: string): string {
   }
   switch (code) {
     case -102:
-      return `${host} 没有响应：没有程序在监听这个端口`
+      return pick(M).refused(host)
     case -105:
-      return `找不到 ${host}`
+      return pick(M).notFound(host)
     case -106:
-      return '网络未连接'
+      return pick(M).offline
     case -118:
-      return `${host} 连接超时`
+      return pick(M).timedOut(host)
     default:
-      return `打不开 ${host}（${description || code}）`
+      return pick(M).failed(host, description || String(code))
   }
 }
 
@@ -357,7 +383,7 @@ export class BrowserHost {
       else if (decision === 'external') {
         this.lastExternalAt = now
         void shell.openExternal(url)
-      } else this.notify(worktree, '拦下了页面自己打开的新窗口')
+      } else this.notify(worktree, pick(M).popupBlocked)
       return { action: 'deny' }
     })
     contents.on('did-create-window', (child) => this.adoptPopup(page, child))
@@ -434,7 +460,7 @@ export class BrowserHost {
       page.state = { ...page.state, console: addConsoleEntry(page.state.console, entry) }
       if (entry.level === 'error' || entry.level === 'warning') this.emit(page)
     })
-    contents.on('render-process-gone', () => update({ loading: false, loadError: '页面崩溃了，点刷新重新载入' }))
+    contents.on('render-process-gone', () => update({ loading: false, loadError: pick(M).crashed }))
     return page
   }
 

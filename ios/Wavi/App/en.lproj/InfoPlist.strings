@@ -1,0 +1,3 @@
+/* What iOS asks before the app may use the camera or the local network (project.yml has the Chinese). */
+"NSCameraUsageDescription" = "Scan the pairing QR code on your Mac, and take photos to send to agents.";
+"NSLocalNetworkUsageDescription" = "Connect to Wavi on a Mac on the same Wi-Fi.";

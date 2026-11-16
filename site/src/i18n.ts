@@ -1,57 +1,79 @@
 /* Page copy in both languages. English is the default (served at "/"); Chinese lives at "/zh/".
-   Text inside the live product replicas (sidebar, overview, compare panes, graph) is in scripts/data.ts. */
+   The layout is the Figma magazine W9 (spreads at 1440×900, phone pages at 390×844); English copy is W9's word for word. */
 
 export type Lang = 'en' | 'zh'
+
+/** A numbered feature: "(I) Title." plus one line. */
+export type Item = [title: string, body: string]
+/** One look (app screenshot): its index name and its caption. */
+export interface Look {
+  name: string
+  caption: string
+  alt: string
+}
 
 const en = {
   htmlLang: 'en',
   meta: {
     title: 'Wavi — One person, many threads',
-    description: 'Wavi is a macOS coding terminal for people who run several Claude Code and Codex agents at once: each agent works on its own branch, and Wavi only calls you when one needs you. Free, open source, no telemetry.'
+    description: 'Wavi is a macOS coding terminal for people who run several coding agents at once: each agent works on its own branch, and Wavi only calls you when one needs you. Free, open source, no telemetry.'
   },
   skip: 'Skip to content',
-  nav: {
-    home: 'Wavi home',
+  bar: {
+    home: 'Wavi, first page',
+    label: 'Sections',
     status: 'Status',
-    compare: 'Compare',
     merge: 'Merge',
-    github: 'GitHub',
+    wardrobe: 'Wardrobe',
+    ship: 'Ship',
     download: 'Download',
     other: '中文',
-    otherLabel: '切换到中文',
-    navLabel: 'Main'
+    otherLabel: '切换到中文'
   },
-  hero: {
-    crt: 'A row of ten question marks flickering like an old TV: ten agents waiting on you. Click one, or press J, to answer it.',
-    title: 'One person, many threads.',
-    sub: 'A coding terminal for multithreaders and ADHD brains. Enjoy it.',
+  issue: 'Wavi — Collection Nº 1',
+  cover: {
+    kicker: 'Collection Nº 1  ·  Autumn – Winter 2026',
+    title: ['One person,', 'many threads.'],
+    sub: 'A coding terminal for multithreaders and ADHD brains.',
     download: 'Download for macOS',
-    github: 'GitHub ↗',
-    app: { open: 'Open project…', jump: 'Jump to…', overview: 'Overview', settings: 'Settings', graph: 'Graph', changes: 'Changes 3', branches: 'All branches ⌄' }
+    github: 'GitHub'
+  },
+  looks: [
+    { name: 'Session, light', caption: 'Session, light. Glass sidebar, one thread open.', alt: 'Wavi in light mode: a glass sidebar of sessions and one Claude Code session open.' },
+    { name: 'Overview, dark', caption: 'Overview, dark. Eight sessions; only the one waiting on you lights up.', alt: 'Wavi in dark mode: a sidebar of sessions, one marked as waiting, next to a running agent.' },
+    { name: 'Board, dark', caption: 'Board, dark. Every session by status.', alt: 'Wavi’s board in dark mode: session cards in columns by status.' },
+    { name: 'Hand-off, light', caption: 'Hand-off, light. One agent splits the job; three report back.', alt: 'A chat session in Wavi: one agent hands three tasks to other agents, drawn as a branching graph.' },
+    { name: 'Side by side, dark', caption: 'Side by side, dark. Four sessions in one window; one more torn off into its own.', alt: 'Wavi in dark mode with several sessions split side by side and a file tree.' },
+    { name: 'GitHub, light', caption: 'GitHub, light. Every issue and PR, one click from an agent.', alt: 'Wavi’s GitHub board in light mode: issues and pull requests for two projects.' }
+  ] satisfies Look[],
+  index: { label: 'Index', look: 'Look' },
+  collection: {
+    label: 'On the collection',
+    items: [
+      ['Hold every thread.', 'Claude Code, Codex and seventeen more, each on a branch of its own. The one waiting on you lights up.'],
+      ['Wear it your way.', 'Terminal or chat, per session. Glass or solid, your wallpaper, your fonts.'],
+      ['Leave the chores.', 'Commit, push and fix CI in one place. Nothing runs on its own unless you say so.']
+    ] satisfies Item[]
   },
   status: {
-    label: 'Overview: eight sessions grouped by status; only one is waiting on you.',
-    title: 'Overview',
-    sub: '8 sessions · all running',
-    list: 'List',
-    board: 'Board',
-    steps: ['All running.', 'Some done, one stuck.', 'One needs you.'],
-    h2: 'Who’s <em>waiting</em>?<br />You’ll know at a glance.',
-    body: 'Running, done, stuck: each looks different. Only the one waiting on you lights up. Press <kbd>⌘J</kbd> to jump there, answer it, and it keeps going.',
-    notifTitle: 'acme-web · Session cookie migration',
-    notifBody: 'Confirm: pnpm prisma migrate dev',
-    notifTime: 'now'
+    label: 'Status',
+    title: ['Who’s waiting?'],
+    body: 'Running, done, stuck: each looks different. Only the one waiting on you lights up. Press ⌘J to jump there. Group the sidebar by status, or see every project on one board.',
+    still: 'Still — one window lit.'
   },
-  compare: {
-    h2: 'One task,<br />several answers.',
-    lead: 'Hand the same task to several agents at once, Claude Code and Codex mixed. When they finish, line them up: how much changed, whether the tests passed. Merge the best one and archive the rest in one click.',
-    label: 'Compare view: three attempts at the same task side by side, each with its diff size and check results.',
-    head: 'Compare',
-    task: 'Get checkout’s first paint under 2s',
-    base: 'based on main · 3 attempts'
+  ensemble: {
+    label: 'Ensemble',
+    title: ['One task,', 'many hands.'],
+    items: [
+      ['Hand it out.', 'Ask one agent to split the job: Codex builds, Gemini reviews, each reports back.'],
+      ['Line them up.', 'Or give the same task to several agents and line up the diffs and test runs.'],
+      ['Keep the best.', 'Merge one, archive the rest in a single click.'],
+      ['See the whole tree.', 'Subagents, agent teams and workflows each get a row of their own.']
+    ] satisfies Item[]
   },
   merge: {
-    label: 'Git graph: eight branches off main, one agent each. Some are running, some are done and merged, one is waiting for review, one failed to build.',
+    label: 'Merge',
+    title: ['Branch out.', 'Merge in.'],
     steps: [
       ['Start', '⌘N', 'Pick a project, hit Return, and an agent gets to work.'],
       ['Work in parallel', '', 'Each agent gets its own worktree. Nobody steps on anybody.'],
@@ -59,29 +81,53 @@ const en = {
       ['Review', '', 'Read the diff, or have an agent review it first.'],
       ['Merge', '⇧⌘M', 'A trial merge first. No conflicts, straight into main.'],
       ['Wrap up', '', 'The worktree goes, the branch stays.']
-    ] as [string, string, string][]
+    ] satisfies [string, string, string][],
+    still: 'Still — three strands, one braid.'
   },
-  flow: {
-    label: 'Branch out. Merge in.',
-    lines: ['BRANCH OUT.', 'MERGE IN.'],
-    six: [
+  windows: {
+    label: 'Windows',
+    title: ['More screens,', 'more threads.'],
+    items: [
+      ['Split it.', 'Drag a session into the pane. Split, swap, resize.'],
+      ['Tear it off.', 'Drag one out of the window and it becomes a window of its own.'],
+      ['Leave it running.', 'Quit with ⌘Q and reopen tomorrow. Agents keep going, and pick up again when your quota resets.']
+    ] satisfies Item[],
+    still: 'Still — one mirror, three panels.'
+  },
+  wardrobe: {
+    label: 'Wardrobe',
+    title: ['Terminal or chat.', 'Glass or solid.'],
+    items: [
+      ['Per session.', 'Start each session in the terminal or as a chat. Wear both in one window.'],
+      ['Your glass.', 'Liquid Glass or solid, with a picture of your own underneath.'],
+      ['Your type.', 'One font for Latin, one for CJK. Bring a Ghostty or iTerm theme.']
+    ] satisfies Item[],
+    still: 'Still — one rail, two coats.'
+  },
+  ship: {
+    label: 'Ship',
+    title: ['Less git.', 'More building.'],
+    items: [
+      ['Issue in.', 'Hand an issue or a PR to an agent, straight from the board.'],
+      ['One button each.', 'Commit, push, open the PR. The agent writes the message; you press ⌘↵.'],
+      ['CI fails? Fine.', 'The agent fixes it and commits. Wavi checks, then pushes.'],
+      ['Your call.', 'Nothing runs by itself until you switch it on.']
+    ] satisfies Item[],
+    still: 'Still — the last stitch.'
+  },
+  six: {
+    label: 'Six pieces',
+    items: [
       ['Custom looks', 'Make your workspace a pleasure to look at.'],
       ['Auto review', 'Quietly guards every merge while you’re deep in the work.'],
       ['Visual PRs', 'Keeps your head clear across a dozen threads.'],
       ['Auto resume', 'When your quota resets, stalled agents pick up where they left off.'],
       ['Visible conflicts', 'Two agents touching the same code? You’ll know before you merge.'],
-      ['Auto checks', 'Every turn, it remembers which tests ran and whether they passed.']
-    ] as [string, string][],
-    advisory: 'Agent advisory: no telemetry'
+      ['Hands off', 'No account, no telemetry. Your agent config stays yours.']
+    ] satisfies Item[]
   },
-  poster: {
-    heading: 'Download Wavi',
-    mirror: ['BRANCH OUT · MERGE IN', 'NO ACCOUNT · NO TELEMETRY', 'HANDS OFF YOUR CONFIG', 'AGENTS RUN AFTER ⌘Q'],
-    download: 'Download for macOS',
-    github: 'GitHub ↗',
-    advisory: 'Agent advisory: unattended'
-  },
-  footer: { label: 'Footer', github: 'GitHub', releases: 'Releases', roadmap: 'Roadmap', license: 'MIT License' }
+  colophon: 'No account · No telemetry · MIT License',
+  zoom: { close: 'Close' }
 }
 
 type Copy = typeof en
@@ -90,51 +136,64 @@ const zh: Copy = {
   htmlLang: 'zh-CN',
   meta: {
     title: 'Wavi — 一个人，多线程',
-    description: 'Wavi 是给同时跑好几个 Claude Code 和 Codex 的开发者做的 macOS 终端：每个 agent 一条分支，只在需要你时叫你。免费、开源、无遥测。'
+    description: 'Wavi 是给同时跑好几个 coding agent 的开发者做的 macOS 终端：每个 agent 一条分支，只在需要你时叫你。免费、开源、无遥测。'
   },
   skip: '跳到正文',
-  nav: {
-    home: 'Wavi 首页',
-    status: '状态总览',
-    compare: '方案对比',
-    merge: '分支合并',
-    github: 'GitHub',
+  bar: {
+    home: 'Wavi，第一页',
+    label: '栏目',
+    status: '状态',
+    merge: '合并',
+    wardrobe: '衣橱',
+    ship: '交付',
     download: '下载',
     other: 'EN',
-    otherLabel: 'Switch to English',
-    navLabel: '主导航'
+    otherLabel: 'Switch to English'
   },
-  hero: {
-    crt: '一排十个问号，像旧电视的信号一样闪烁：十个在等你的 agent。点一下或按 J，回答一个。',
-    title: '一个人，多线程。',
-    sub: '专为多线程、ADHD 选手打造的 coding terminal，enjoy it。',
+  issue: 'Wavi — 第一辑',
+  cover: {
+    kicker: '第一辑  ·  2026 秋冬',
+    title: ['一个人，', '多线程。'],
+    sub: '专为多线程、ADHD 选手打造的 coding terminal。',
     download: '下载 macOS 版',
-    github: 'GitHub ↗',
-    app: { open: '打开项目…', jump: '跳转到…', overview: '总览', settings: '设置', graph: '图谱', changes: '变更 3', branches: '全部分支 ⌄' }
+    github: 'GitHub'
+  },
+  looks: [
+    { name: '会话，浅色', caption: '会话，浅色。玻璃侧栏，打开一条线程。', alt: '浅色模式的 Wavi：玻璃侧栏里排着会话，打开的是一个 Claude Code 会话。' },
+    { name: '总览，深色', caption: '总览，深色。八个会话，只有等你的那一个亮着。', alt: '深色模式的 Wavi：侧栏里的会话有一个标着在等你，旁边是正在跑的 agent。' },
+    { name: '看板，深色', caption: '看板，深色。所有会话按状态排开。', alt: '深色模式的 Wavi 看板：会话卡片按状态分成几列。' },
+    { name: '派活，浅色', caption: '派活，浅色。一个 agent 拆活，三个回来汇报。', alt: 'Wavi 的聊天会话：一个 agent 把三个任务派给其他 agent，画成分叉的图。' },
+    { name: '并排，深色', caption: '并排，深色。一个窗口四个会话，另一个已经撕成单独的窗口。', alt: '深色模式的 Wavi：几个会话并排分屏，旁边是文件树。' },
+    { name: 'GitHub，浅色', caption: 'GitHub，浅色。每个 issue 和 PR，点一下就交给 agent。', alt: '浅色模式的 Wavi GitHub 看板：两个项目的 issue 和 PR。' }
+  ],
+  index: { label: '目录', look: 'Look' },
+  collection: {
+    label: '关于这一辑',
+    items: [
+      ['抓住每一条线。', 'Claude Code、Codex 和另外十七家，各在各的分支上。等你的那一个会亮起来。'],
+      ['按你的方式穿。', '每个会话自选终端或聊天。玻璃或实色，你的壁纸，你的字体。'],
+      ['杂事交出去。', '提交、推送、修 CI，一处搞定。你不点头，什么都不会自己跑。']
+    ]
   },
   status: {
-    label: '总览：八个会话按状态分组，只有一个在等你处理。',
-    title: '总览',
-    sub: '8 个会话 · 全部在运行',
-    list: '列表',
-    board: '看板',
-    steps: ['都在跑。', '有的做完，有的卡住。', '一个在等你。'],
-    h2: '谁在<em>等你</em>，<br />一眼就知道。',
-    body: '跑着的、做完的、卡住的，各有各的样子。只有在等你的那一个会亮起来。按 <kbd>⌘J</kbd> 跳过去，答完它接着跑。',
-    notifTitle: 'acme-web · Cookie 会话迁移',
-    notifBody: '等你确认：pnpm prisma migrate dev',
-    notifTime: '现在'
+    label: '状态',
+    title: ['谁在等你？'],
+    body: '跑着的、做完的、卡住的，各有各的样子。只有在等你的那一个会亮起来。按 ⌘J 跳过去。侧栏可以按状态分组，也可以在一块看板上看所有项目。',
+    still: '静物 — 一扇亮着的窗。'
   },
-  compare: {
-    h2: '一个问题，<br />几份答案。',
-    lead: '把同一个任务同时交给几个 agent，Claude Code 和 Codex 可以混着用。做完后并排摆开：改了多少、测试过没过，一眼比完，合并最好的那一份，其余的一键归档。',
-    label: '比较浮层：同一个任务的三份结果并排，每份写着改动大小和检查结果。',
-    head: '比较',
-    task: '把结算页首屏降到 2 秒以内',
-    base: '基于 main · 3 份'
+  ensemble: {
+    label: '合奏',
+    title: ['一个任务，', '几双手。'],
+    items: [
+      ['分出去。', '让一个 agent 拆活：Codex 来写，Gemini 来审，各自回来汇报。'],
+      ['摆一排。', '或者把同一个任务交给几个 agent，把 diff 和测试结果并排摆开。'],
+      ['留最好的。', '合并一份，其余一键归档。'],
+      ['看见整棵树。', 'Subagent、agent team 和 workflow 各占一行。']
+    ]
   },
   merge: {
-    label: 'git 图谱：main 之上八条分支，每条由一个 agent 负责，有的在跑、有的做完合并、一条在等你审阅、一条构建失败。',
+    label: '合并',
+    title: ['分出去，', '合回来。'],
     steps: [
       ['开工', '⌘N', '选好项目，回车，一个 agent 就开工了。'],
       ['各干各的', '', '每个 agent 一个 worktree，谁也不碰谁。'],
@@ -142,32 +201,59 @@ const zh: Copy = {
       ['审阅', '', '看 diff，或者让 agent 先自己审一遍。'],
       ['合并', '⇧⌘M', '先试合并，没冲突就合进主干。'],
       ['收尾', '', 'worktree 删掉，分支留着。']
+    ],
+    still: '静物 — 三股，一条辫。'
+  },
+  windows: {
+    label: '窗口',
+    title: ['多一块屏，', '多几条线。'],
+    items: [
+      ['分屏。', '把会话拖进窗格。分屏、交换、调大小。'],
+      ['撕下来。', '把一个会话拖出窗口，它就成了独立的窗口。'],
+      ['让它跑着。', '⌘Q 退出，明天再打开。agent 照常在跑，额度恢复后自己接着干。']
+    ],
+    still: '静物 — 一面镜子，三扇。'
+  },
+  wardrobe: {
+    label: '衣橱',
+    title: ['终端或聊天，', '玻璃或实色。'],
+    items: [
+      ['按会话选。', '每个会话可以开在终端里，也可以开成聊天。一个窗口里两种都能穿。'],
+      ['你的玻璃。', 'Liquid Glass 或实色，底下垫一张你自己的图。'],
+      ['你的字。', '拉丁字母一套字体，中日韩一套。Ghostty 或 iTerm 的主题直接带过来。']
+    ],
+    still: '静物 — 一根衣杆，两件大衣。'
+  },
+  ship: {
+    label: '交付',
+    title: ['少碰 git，', '多做东西。'],
+    items: [
+      ['Issue 进来。', '在看板上直接把 issue 或 PR 交给 agent。'],
+      ['一步一个按钮。', '提交、推送、开 PR。说明由 agent 写，你按 ⌘↵。'],
+      ['CI 挂了？没事。', 'agent 修好并提交，Wavi 检查一遍再推送。'],
+      ['你说了算。', '你不打开，什么都不会自己跑。']
+    ],
+    still: '静物 — 最后一针。'
+  },
+  six: {
+    label: '六件单品',
+    items: [
+      ['定制化外观', '让你的开发工作台更赏心悦目。'],
+      ['自动化审阅', '在高强度开发中替你默默把关。'],
+      ['可视化 PR', '在多线程开发中让你的思路更加清晰。'],
+      ['自动化续跑', '额度一恢复，停下的 agent 自己接着干。'],
+      ['可视化冲突', '两个 agent 改到同一处，合并前就提醒你。'],
+      ['不碰你的配置', '没有账号，没有遥测，你的 agent 配置还是你的。']
     ]
   },
-  flow: {
-    label: '从开工到合进主干',
-    lines: ['从开工', '到合进主干'],
-    six: [
-      ['定制化外观', '让你的开发工作台更赏心悦目'],
-      ['自动化审阅', '在高强度开发中替你默默把关'],
-      ['可视化 PR', '在多线程开发中让你的思路更加清晰'],
-      ['自动化续跑', '额度一恢复，停下的 agent 自己接着干'],
-      ['可视化冲突', '两个 agent 改到同一处，合并前就提醒你'],
-      ['自动化检查', '每一轮测试跑没跑、过没过，替你记得清清楚楚']
-    ],
-    advisory: 'Agent advisory: no telemetry'
-  },
-  poster: {
-    heading: '下载 Wavi',
-    mirror: ['从开工到合进主干', '没有账号，没有遥测', '不碰你的全局配置', '关掉窗口，agent 照跑'],
-    download: '下载 macOS 版',
-    github: 'GitHub ↗',
-    advisory: 'Agent advisory: unattended'
-  },
-  footer: { label: '页脚', github: 'GitHub', releases: '版本记录', roadmap: '路线图', license: 'MIT 许可' }
+  colophon: '没有账号 · 没有遥测 · MIT 许可',
+  zoom: { close: '关闭' }
 }
 
 export const copy: Record<Lang, Copy> = { en, zh }
 
 /** Path of the same page in the other language, relative to the site base. */
 export const otherPath = (lang: Lang): string => (lang === 'en' ? 'zh/' : '')
+
+/** Roman numerals for the numbered features: (I) … (IV) on the pages, i. … vi. in the merge list. */
+export const roman = (n: number): string => ['I', 'II', 'III', 'IV', 'V', 'VI'][n] ?? String(n + 1)

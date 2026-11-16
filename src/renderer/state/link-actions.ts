@@ -1,5 +1,6 @@
 // Links clicked in a session's terminal (PRD F17), like Claude's desktop app: a URL opens in the built-in browser
 // (the page of the session's worktree), a file path in the 文件 view's read-only preview.
+import { defineMessages, pick } from '@shared/i18n'
 import { isPanelTerminalId, parsePanelTerminalId } from '@shared/panel-terminal'
 import type { SessionId } from '@shared/types'
 import { setNotice } from '../panels/browser/store'
@@ -8,6 +9,27 @@ import { showPreview } from '../panels/files/store'
 import { linkTarget, openableUrl, type LinkTarget, type TerminalLink } from '../terminal/links'
 import { popupMenu, type MenuEntry } from '../ui/menu'
 import { useWorkspace } from './workspace'
+
+const M = defineMessages({
+  zh: {
+    openInternal: '在内置浏览器打开',
+    openExternal: '用系统浏览器打开',
+    copyLink: '复制链接',
+    preview: '预览',
+    openInEditor: '用默认编辑器打开',
+    revealInFinder: '在 Finder 中显示',
+    copyPath: '复制路径'
+  },
+  en: {
+    openInternal: 'Open in built-in browser',
+    openExternal: 'Open in system browser',
+    copyLink: 'Copy link',
+    preview: 'Preview',
+    openInEditor: 'Open in default editor',
+    revealInFinder: 'Show in Finder',
+    copyPath: 'Copy path'
+  }
+})
 
 export function handleTerminalLink(sessionId: SessionId, link: TerminalLink): void {
   if (link.kind === 'file') {
@@ -66,9 +88,9 @@ export function openInBrowser(worktree: string, url: string): void {
 
 async function openLinkMenu(sessionId: SessionId, url: string, at: { x: number; y: number }): Promise<void> {
   const entries: MenuEntry[] = [
-    { type: 'item', id: 'internal', label: '在内置浏览器打开' },
-    { type: 'item', id: 'external', label: '用系统浏览器打开' },
-    { type: 'item', id: 'copy', label: '复制链接' }
+    { type: 'item', id: 'internal', label: pick(M).openInternal },
+    { type: 'item', id: 'external', label: pick(M).openExternal },
+    { type: 'item', id: 'copy', label: pick(M).copyLink }
   ]
   const choice = await popupMenu(entries, at)
   if (choice === 'internal' || choice === 'external') openLink(sessionId, url, choice)
@@ -98,10 +120,10 @@ export function openFile(file: FileLink, target: LinkTarget): void {
 
 async function openFileLinkMenu(file: FileLink, at: { x: number; y: number }): Promise<void> {
   const entries: MenuEntry[] = [
-    { type: 'item', id: 'preview', label: '预览' },
-    { type: 'item', id: 'open', label: '用默认编辑器打开' },
-    { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
-    { type: 'item', id: 'copy', label: '复制路径' }
+    { type: 'item', id: 'preview', label: pick(M).preview },
+    { type: 'item', id: 'open', label: pick(M).openInEditor },
+    { type: 'item', id: 'reveal', label: pick(M).revealInFinder },
+    { type: 'item', id: 'copy', label: pick(M).copyPath }
   ]
   const choice = await popupMenu(entries, at)
   if (choice === 'preview') openFile(file, 'internal')

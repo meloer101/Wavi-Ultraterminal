@@ -8,6 +8,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { agentName, type CliAgent } from '@shared/agents'
 import { emptyGuiState, guiCanEdit, type GuiAnswer } from '@shared/gui-chat'
+import { defineMessages } from '@shared/i18n'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 import { useSecondaryWindow } from '../state/window-scope'
@@ -27,11 +28,35 @@ import type { WorkflowRun } from '@shared/workflow-run'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
 import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
+import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'
+
+const M = defineMessages({
+  zh: {
+    stopFailed: (name: string) => `没有停住 workflow「${name}」`,
+    /** 「让我们在 <project> 中开工吧」: the words before and after the project. */
+    welcomeBefore: '让我们在',
+    welcomeAfter: '中开工吧',
+    queued: '排队',
+    edit: '编辑',
+    editQueued: '编辑排队的消息',
+    removeQueued: '删除排队的消息'
+  },
+  en: {
+    stopFailed: (name: string) => `Couldn’t stop workflow “${name}”`,
+    welcomeBefore: 'Let’s get started in',
+    welcomeAfter: '',
+    queued: 'Queued',
+    edit: 'Edit',
+    editQueued: 'Edit queued message',
+    removeQueued: 'Remove queued message'
+  }
+})
 
 const EMPTY = emptyGuiState()
 
 export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }: { sessionId: SessionId; agent: AgentKind; cwd: string; active: boolean }) {
+  const m = useMessages(M)
   const state = useGuiSessions((s) => s.states[sessionId]) ?? EMPTY
   const rootRef = useRef<HTMLDivElement>(null)
   const cardKeys = useRef<CardKeys | null>(null)
@@ -108,10 +133,10 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
         .stopTask(sessionId, run.taskId)
         .catch(() => false)
         .then((ok) => {
-          if (!ok) setSendError(`没有停住 workflow「${run.name}」`)
+          if (!ok) setSendError(m.stopFailed(run.name))
         })
     },
-    [sessionId]
+    [sessionId, m]
   )
 
   const send = useCallback(
@@ -216,7 +241,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
             <AgentIcon kind={agent} size={20} />
           </span>
           <span className={styles.welcomeLine}>
-            让我们在
+            {m.welcomeBefore}
             {projectId ? (
               <ProjectChip choices={choices} current={projectId} onPick={(choice) => void retargetGuiSession(sessionId, { worktreeId: choice.worktreeId })} />
             ) : (
@@ -224,7 +249,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
                 <span className={styles.projectName}>{cwd.slice(cwd.lastIndexOf('/') + 1)}</span>
               </span>
             )}
-            中开工吧
+            {m.welcomeAfter || null}
           </span>
         </div>
       ) : (
@@ -281,6 +306,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
 
 /** 49″C: a message sent while the turn runs. Click to edit (⏎ saves, ⎋ cancels, empty removes); × removes. */
 function QueuedBar({ sessionId, id, text }: { sessionId: SessionId; id: string; text: string }) {
+  const m = useMessages(M)
   const [editing, setEditing] = useState<string | null>(null)
   const save = (value: string): void => {
     setEditing(null)
@@ -288,15 +314,15 @@ function QueuedBar({ sessionId, id, text }: { sessionId: SessionId; id: string; 
   }
   return (
     <div className={styles.queued} data-testid="gui-queued">
-      <span className={styles.queuedLabel}>排队</span>
+      <span className={styles.queuedLabel}>{m.queued}</span>
       {editing === null ? (
-        <button type="button" className={styles.queuedText} title="编辑" onClick={() => setEditing(text)}>
+        <button type="button" className={styles.queuedText} title={m.edit} onClick={() => setEditing(text)}>
           {text}
         </button>
       ) : (
         <input
           className={styles.queuedInput}
-          aria-label="编辑排队的消息"
+          aria-label={m.editQueued}
           value={editing}
           ref={(node) => node?.focus()}
           onChange={(e) => setEditing(e.currentTarget.value)}
@@ -314,7 +340,7 @@ function QueuedBar({ sessionId, id, text }: { sessionId: SessionId; id: string; 
           }}
         />
       )}
-      <button type="button" className={styles.queuedRemove} aria-label="删除排队的消息" onClick={() => void window.tr.gui.editQueued(sessionId, id, '').catch(() => {})}>
+      <button type="button" className={styles.queuedRemove} aria-label={m.removeQueued} onClick={() => void window.tr.gui.editQueued(sessionId, id, '').catch(() => {})}>
         <X size={16} strokeWidth={1.75} aria-hidden />
       </button>
     </div>

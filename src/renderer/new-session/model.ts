@@ -3,6 +3,7 @@
 import { AGENT_SPECS, agentName, CLI_AGENTS, isCliAgent, type CliAgent } from '@shared/agents'
 import { guiAvailability, type GuiAvailability } from '@shared/gui-agents'
 import type { AgentAvailability } from '@shared/ipc'
+import { defineMessages, pick } from '@shared/i18n'
 import type { AgentKind, SessionUi } from '@shared/types'
 import type { MenuEntry } from '../ui/menu-model'
 import {
@@ -15,6 +16,47 @@ import {
   type WorktreeCreateRequest,
   type WorktreeCreateResult
 } from '@shared/new-session'
+
+const M = defineMessages({
+  zh: {
+    branchExists: (name: string) => `分支 ${name} 已经存在。换个名字，或在「基于」里直接选它`,
+    branchInvalid: 'git 不接受这个分支名：不能有空格和 ~ ^ : ? * [ \\，不能以 - 开头',
+    branchEmpty: '分支名不能为空',
+    runSetup: '运行 setup 脚本',
+    listSep: '、',
+    copyMany: (shown: string, count: number) => `复制 ${shown} 等 ${count} 项`,
+    copy: (shown: string) => `复制 ${shown}`,
+    copyAndSetup: (copy: string, setup: string) => `${copy}，${setup}`,
+    failBranchExists: '分支已经存在',
+    failFolderExists: '文件夹已经存在',
+    failBaseMissing: '找不到「基于」的分支',
+    failNotARepo: '项目文件夹不是 git 仓库',
+    failInvalid: '参数无效',
+    failGit: 'git 出错了',
+    newHere: '在此新建会话',
+    installed: '已安装',
+    missing: '没装'
+  },
+  en: {
+    branchExists: (name: string) => `Branch ${name} already exists. Pick another name, or choose it under “Based on”`,
+    branchInvalid: "git won't take this branch name: no spaces or ~ ^ : ? * [ \\, and it can't start with -",
+    branchEmpty: "Branch name can't be empty",
+    runSetup: 'run the setup script',
+    listSep: ', ',
+    copyMany: (shown: string, count: number) => `copy ${shown} and ${count - 2} more`,
+    copy: (shown: string) => `copy ${shown}`,
+    copyAndSetup: (copy: string, setup: string) => `${copy}, ${setup}`,
+    failBranchExists: 'Branch already exists',
+    failFolderExists: 'Folder already exists',
+    failBaseMissing: 'The “Based on” branch was not found',
+    failNotARepo: 'The project folder is not a git repository',
+    failInvalid: 'Invalid arguments',
+    failGit: 'git failed',
+    newHere: 'New session here',
+    installed: 'Installed',
+    missing: 'Not installed'
+  }
+})
 
 export interface SheetForm {
   workdir: Workdir
@@ -77,13 +119,14 @@ export function planCreate(
 
 /** Under the 分支名 field when the name cannot be used (15E); null otherwise. */
 export function branchProblemText(problem: BranchNameProblem | null, name: string): string | null {
+  const m = pick(M)
   switch (problem) {
     case 'exists':
-      return `分支 ${name} 已经存在。换个名字，或在「基于」里直接选它`
+      return m.branchExists(name)
     case 'invalid':
-      return 'git 不接受这个分支名：不能有空格和 ~ ^ : ? * [ \\，不能以 - 开头'
+      return m.branchInvalid
     case 'empty':
-      return '分支名不能为空'
+      return m.branchEmpty
     default:
       return null
   }
@@ -91,11 +134,12 @@ export function branchProblemText(problem: BranchNameProblem | null, name: strin
 
 /** 准备 row: what it would copy and whether it runs the setup script (PRD F4); null when there is nothing to do. */
 export function prepareText(info: Pick<NewSessionInfo, 'includeFiles' | 'includeCount' | 'hasSetup'>): string | null {
-  const setup = info.hasSetup ? '运行 setup 脚本' : null
+  const m = pick(M)
+  const setup = info.hasSetup ? m.runSetup : null
   if (info.includeCount === 0) return setup
-  const shown = info.includeFiles.slice(0, 2).join('、')
-  const copy = info.includeCount > 2 ? `复制 ${shown} 等 ${info.includeCount} 项` : `复制 ${shown}`
-  return setup ? `${copy}，${setup}` : copy
+  const shown = info.includeFiles.slice(0, 2).join(m.listSep)
+  const copy = info.includeCount > 2 ? m.copyMany(shown, info.includeCount) : m.copy(shown)
+  return setup ? m.copyAndSetup(copy, setup) : copy
 }
 
 /** `/Users/x/…` → `~/…` for display. */
@@ -105,19 +149,20 @@ export function tilde(path: string, home: string): string {
 
 /** One line for a session whose worktree could not be created (shown in its error bar). */
 export function createFailureText(result: Exclude<WorktreeCreateResult, { ok: true }>): string {
+  const m = pick(M)
   switch (result.reason) {
     case 'branch-exists':
-      return '分支已经存在'
+      return m.failBranchExists
     case 'folder-exists':
-      return '文件夹已经存在'
+      return m.failFolderExists
     case 'base-missing':
-      return '找不到「基于」的分支'
+      return m.failBaseMissing
     case 'not-a-repo':
-      return '项目文件夹不是 git 仓库'
+      return m.failNotARepo
     case 'invalid':
-      return '参数无效'
+      return m.failInvalid
     case 'git':
-      return result.message?.split('\n').find((line) => line.trim() !== '')?.replace(/^fatal:\s*/, '') ?? 'git 出错了'
+      return result.message?.split('\n').find((line) => line.trim() !== '')?.replace(/^fatal:\s*/, '') ?? m.failGit
   }
 }
 
@@ -167,17 +212,18 @@ export function listedAgents(found: AgentAvailability | null): AgentKind[] {
 export function hereMenu(found: AgentAvailability | null, prefix: string, enabled = true): Extract<MenuEntry, { type: 'submenu' }> {
   const installed = listedAgents(found)
   const missing = CLI_AGENTS.filter((id) => !installed.includes(id))
+  const m = pick(M)
   const start = (kind: AgentKind): MenuEntry => ({ type: 'item', id: `${prefix}${kind}`, label: agentName(kind), ...(enabled ? {} : { enabled: false }) })
   return {
     type: 'submenu',
-    label: '在此新建会话',
+    label: m.newHere,
     items: [
-      { type: 'header', label: '已安装' },
+      { type: 'header', label: m.installed },
       ...installed.map(start),
       ...(missing.length > 0
         ? [
             { type: 'separator' } as const,
-            { type: 'header', label: '没装' } as const,
+            { type: 'header', label: m.missing } as const,
             ...missing.map((id): MenuEntry => ({ type: 'item', id: `${prefix}install:${id}`, label: agentName(id), muted: true }))
           ]
         : [])

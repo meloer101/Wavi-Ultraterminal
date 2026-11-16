@@ -2,7 +2,9 @@
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
 import { headlessAgent, type HeadlessAgent } from './agents'
+import { isBackgroundImageName } from './background-image'
 import { normalizeHex } from './color'
+import { isLanguagePreference, type LanguagePreference } from './i18n'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 import { DEFAULT_REMOTE_PORT } from './remote'
 
@@ -68,6 +70,8 @@ export interface ChatAppearance {
 export type WindowMaterial = 'glass' | 'solid'
 
 export interface AppearanceSettings {
+  /** 语言 · 界面语言 (Figma 89): 跟随系统 resolves in main from the system's preferred languages (shared/i18n.ts). */
+  language: LanguagePreference
   theme: ThemePreference
   fullscreenBackdrop: FullscreenBackdrop
   /** Latin monospace family for the terminal. */
@@ -96,6 +100,14 @@ export interface AppearanceSettings {
    * opaque throughout.
    */
   windowMaterial: WindowMaterial
+  /**
+   * 背景图片 (PRD v1.189, Figma 86): the stored picture's name (`<sha256>.jpg`, shared/background-image.ts), or '' for none.
+   * It is drawn under the base layer of every window on 玻璃 (in place of the desktop, and of the full-screen field); not
+   * under 实色.
+   */
+  backgroundImage: string
+  /** 模糊 of that picture, 0–1. */
+  backgroundBlur: number
 }
 
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
@@ -107,9 +119,8 @@ export interface PortSettings {
 
 /** 设置 · 自动化 · 代码审阅 (PRD F13). Every switch starts off: a review spends the user's own quota. */
 export interface ReviewSettings {
-  /** Open the merge sheet → start a review. The checklist gains a line; the merge is not blocked. */
-  beforeMerge: boolean
-  /** Before Wavi pushes the base to origin. The push is not blocked. */
+  /** The push node reviews what a push sends that the remote lacks (推送 of the base, to a PR, 创建 PR's); a P0 / P1
+   *  stops it before the push. */
   beforePush: boolean
   /** A Stop hook, and this worktree gained a commit during the turn. */
   afterTurnWithCommits: boolean
@@ -127,7 +138,8 @@ export interface ReviewSettings {
 
 /** 设置 · Worktree · 归档 (PRD F15). */
 export interface ArchiveSettings {
-  /** After a merge that kept the worktree, archive it. Off by default. */
+  /** Archive the worktree once its merge chain reaches 归档: its PR merged or closed on GitHub, or a local 合并 pushed
+   *  with the base and that push's CI settled (pull-requests/auto-archive.ts). Off by default. */
   afterMerge: boolean
 }
 
@@ -229,6 +241,7 @@ export interface SettingsPatch {
 export const DEFAULT_SETTINGS: AppSettings = {
   version: 1,
   appearance: {
+    language: 'system',
     theme: 'system',
     fullscreenBackdrop: 'auto',
     latinFont: 'JetBrains Mono Variable',
@@ -243,11 +256,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalOpacity: 0.85,
     screenReader: false,
     chat: { width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 0.85, avatar: '' },
-    windowMaterial: 'glass'
+    windowMaterial: 'glass',
+    backgroundImage: '',
+    backgroundBlur: 0
   },
   ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
   review: {
-    beforeMerge: false,
     beforePush: false,
     afterTurnWithCommits: false,
     mode: 'builtin',
@@ -285,6 +299,7 @@ export const LIMITS = {
   fontName: 120,
   chatFontSize: { min: 12, max: 18 },
   chatOpacity: { min: 0.2, max: 1 },
+  backgroundBlur: { min: 0, max: 1 },
   /** A 256² webp is ~10–40 KB; the cap keeps a stray big image out of settings.json. */
   avatar: 400_000
 } as const
@@ -345,6 +360,7 @@ function appearance(value: unknown): AppearanceSettings {
   const d = DEFAULT_SETTINGS.appearance
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return {
+    language: isLanguagePreference(v.language) ? v.language : d.language,
     theme: v.theme === 'dark' || v.theme === 'light' || v.theme === 'system' ? v.theme : d.theme,
     fullscreenBackdrop:
       v.fullscreenBackdrop === 'auto' || (FULLSCREEN_BACKDROPS as readonly unknown[]).includes(v.fullscreenBackdrop)
@@ -360,7 +376,9 @@ function appearance(value: unknown): AppearanceSettings {
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader,
     chat: chat(v.chat),
-    windowMaterial: windowMaterial(v.windowMaterial)
+    windowMaterial: windowMaterial(v.windowMaterial),
+    backgroundImage: isBackgroundImageName(v.backgroundImage) ? v.backgroundImage : d.backgroundImage,
+    backgroundBlur: percent(num(v.backgroundBlur, d.backgroundBlur, LIMITS.backgroundBlur))
   }
 }
 
@@ -384,8 +402,8 @@ function review(value: unknown): ReviewSettings {
     model = ''
   }
   return {
-    beforeMerge: typeof v.beforeMerge === 'boolean' ? v.beforeMerge : d.beforeMerge,
-    beforePush: typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush,
+    // 合并前审阅 is gone (合并 is local, the review lives in the push node): a stored one on turns 推送前审阅 on.
+    beforePush: v.beforeMerge === true || (typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush),
     afterTurnWithCommits: typeof v.afterTurnWithCommits === 'boolean' ? v.afterTurnWithCommits : d.afterTurnWithCommits,
     mode: v.mode === 'agent-command' ? 'agent-command' : d.mode,
     rules: v.rules === 'custom' ? 'custom' : d.rules,

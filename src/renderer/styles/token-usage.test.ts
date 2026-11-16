@@ -47,7 +47,6 @@ const BASELINE: Record<string, number> = {
   'panels/files/MarkdownView.module.css': 1,
   'panels/git/GitView.module.css': 5,
   'panels/merge/MergeSheet.module.css': 1,
-  'panels/worktree/WorktreeView.module.css': 1,
   'review/ReviewBlock.module.css': 1,
   'session-header/SessionHeader.module.css': 1,
   'session-meta/SessionMeta.module.css': 10,

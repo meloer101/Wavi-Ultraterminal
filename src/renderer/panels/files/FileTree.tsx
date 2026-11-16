@@ -2,6 +2,8 @@
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useId, useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type Ref } from 'react'
 import type { SessionId } from '@shared/types'
+import { defineMessages } from '@shared/i18n'
+import { useMessages } from '../../ui/i18n'
 import { PATHS_DRAG_TYPE } from '../../terminal/attachments'
 import { pointerAnchor } from '../../ui/menu'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'
@@ -11,13 +13,28 @@ import { select, showPreview, toggleDir } from './store'
 import { stepRow, type TreeRow } from './tree-model'
 import styles from './FilesView.module.css'
 
-const MARK_LABEL: Record<NonNullable<TreeRow['mark']>, string> = {
-  M: '已修改',
-  A: '新增',
-  D: '已删除',
-  U: '未跟踪',
-  '•': '包含改动'
-}
+const M = defineMessages<{ files: string; mark: Record<NonNullable<TreeRow['mark']>, string> }>({
+  zh: {
+    files: '文件',
+    mark: {
+      M: '已修改',
+      A: '新增',
+      D: '已删除',
+      U: '未跟踪',
+      '•': '包含改动'
+    }
+  },
+  en: {
+    files: 'Files',
+    mark: {
+      M: 'Modified',
+      A: 'Added',
+      D: 'Deleted',
+      U: 'Untracked',
+      '•': 'Contains changes'
+    }
+  }
+})
 
 /** The file's type icon (Figma 72A / 72A′), or lucide File when its type has none. Icons with a light variant draw both;
  * the theme's CSS shows one. */
@@ -43,6 +60,7 @@ interface Props {
 }
 
 export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
+  const m = useMessages(M)
   const id = useId()
   const list = useRef<HTMLDivElement | null>(null)
   const index = selected === null ? -1 : rows.findIndex((r) => r.path === selected)
@@ -120,7 +138,7 @@ export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
       }}
       className={styles.tree}
       role="tree"
-      aria-label="文件"
+      aria-label={m.files}
       tabIndex={0}
       aria-activedescendant={index >= 0 ? `${id}-${index}` : undefined}
       onKeyDown={onKeyDown}
@@ -166,7 +184,7 @@ export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
           </span>
           <span className={styles.name}>{row.name}</span>
           {row.mark && (
-            <span className={styles.mark} data-mark={row.mark} title={MARK_LABEL[row.mark]} aria-label={MARK_LABEL[row.mark]}>
+            <span className={styles.mark} data-mark={row.mark} title={m.mark[row.mark]} aria-label={m.mark[row.mark]}>
               {row.mark}
             </span>
           )}

@@ -1,4 +1,10 @@
+import { defineMessages, pick } from '@shared/i18n'
 import type { Session, SessionStatus } from '@shared/types'
+
+const M = defineMessages({
+  zh: { waiting: (elapsed: string) => `已等 ${elapsed}`, ago: (elapsed: string) => `${elapsed} 前` },
+  en: { waiting: (elapsed: string) => `waiting ${elapsed}`, ago: (elapsed: string) => `${elapsed} ago` }
+})
 
 /** Compact elapsed time for the SessionRow meta column: `<1m`, `4m`, `1h`, `2d`. */
 export function formatElapsed(ms: number): string {
@@ -28,16 +34,17 @@ type TimedSession = Pick<Session, 'startedAt' | 'lastActivityAt' | 'statusSince'
  */
 export function sessionTime(session: TimedSession, status: SessionStatus, now: number): SessionTime {
   const since = session.statusSince ?? session.lastActivityAt
+  const m = pick(M)
   switch (status) {
     case 'running':
       return { text: formatElapsed(now - (session.turnStartedAt ?? session.startedAt)), emphasis: false }
     case 'needs_you':
-      return { text: `已等 ${formatElapsed(now - since)}`, emphasis: now - since >= LONG_WAIT_MS }
+      return { text: m.waiting(formatElapsed(now - since)), emphasis: now - since >= LONG_WAIT_MS }
     case 'idle':
     case 'done_unread':
-      return { text: `${formatElapsed(now - (session.finishedAt ?? since))} 前`, emphasis: false }
+      return { text: m.ago(formatElapsed(now - (session.finishedAt ?? since))), emphasis: false }
     default:
-      return { text: `${formatElapsed(now - since)} 前`, emphasis: false }
+      return { text: m.ago(formatElapsed(now - since)), emphasis: false }
   }
 }
 

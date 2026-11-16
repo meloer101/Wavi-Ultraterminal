@@ -1,25 +1,57 @@
-// Worktree view (PRD F17, Figma 13C): the project's git worktrees joined with the workspace's sessions, grouped
+// Worktree view (PRD F17, Figma 13C / 85B″): the project's git worktrees joined with the workspace's sessions, grouped
 // into the working list, 可清理 (bulk) and 没有会话 (one by one), plus the delete guard. Pure; WorktreeView renders it.
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
 import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import { isActiveStatus } from '@shared/lifecycle'
-import { PORT_BLOCK } from '@shared/ports'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
+import { defineMessages, pick } from '@shared/i18n'
 
-export const AGENT_LABEL: Record<AgentKind, string> = {
-  ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>),
-  claude: 'Claude',
-  shell: '终端'
-}
-
-/** What the session line adds after the agent; running and idle say nothing (the glyph shows it). */
-const STATE_TEXT: Partial<Record<SessionStatus, string>> = {
-  needs_you: '等你确认',
-  done_unread: '待审阅',
-  error: '出错',
-  exited: '已退出'
-}
+const M = defineMessages({
+  zh: {
+    noCommit: '无提交',
+    merged: '已合并',
+    main: '主目录',
+    rebasing: '变基中',
+    detachedUnreachable: (count: number) => `分离的 HEAD · ${count} 个提交不在分支上`,
+    detached: '分离的 HEAD',
+    locked: '已锁定',
+    folderGone: '文件夹已不在',
+    mainBlocked: '主目录不能删除',
+    activeSession: '有会话正在运行或等你处理，先结束它',
+    notDetailed: '还没读完它的状态，稍后再试',
+    lockedBlocked: '已被 git worktree lock 锁定',
+    rebasingBlocked: '正在变基，先完成或中止',
+    dirtyUnknown: '无法确认有没有未提交的改动',
+    dirty: (count: number) => `有 ${count} 个未提交的改动，先提交或丢弃`,
+    unreachableUnknown: '无法确认它的提交是否都在分支上',
+    unreachable: (count: number) => `有 ${count} 个提交不在任何分支上，先给它建一个分支`,
+    hasSession: '有会话',
+    branchKept: (branch: string) => `分支 ${branch} 保留`,
+    commitsElsewhere: '它的提交都已在其他分支上'
+  },
+  en: {
+    noCommit: 'no commits',
+    merged: 'Merged',
+    main: 'main folder',
+    rebasing: 'rebasing',
+    detachedUnreachable: (count: number) => `detached HEAD · ${count} ${count === 1 ? 'commit' : 'commits'} not on a branch`,
+    detached: 'detached HEAD',
+    locked: 'locked',
+    folderGone: 'folder is gone',
+    mainBlocked: "The main folder can't be deleted",
+    activeSession: 'A session is running or needs you. End it first',
+    notDetailed: "Its state hasn't been read yet. Try again in a moment",
+    lockedBlocked: 'Locked with git worktree lock',
+    rebasingBlocked: 'Rebasing. Finish or abort it first',
+    dirtyUnknown: "Can't tell whether there are uncommitted changes",
+    dirty: (count: number) => `${count} uncommitted ${count === 1 ? 'change' : 'changes'}. Commit or discard first`,
+    unreachableUnknown: "Can't tell whether all its commits are on a branch",
+    unreachable: (count: number) => `${count} ${count === 1 ? 'commit is' : 'commits are'} not on any branch. Create a branch for ${count === 1 ? 'it' : 'them'} first`,
+    hasSession: 'Has a session',
+    branchKept: (branch: string) => `Branch ${branch} is kept`,
+    commitsElsewhere: 'Its commits are all on other branches'
+  }
+})
 
 export interface WorktreeRow {
   /** Resolved path: stable identity across refreshes. */
@@ -33,13 +65,18 @@ export interface WorktreeRow {
   status: SessionStatus | null
   /** The workspace's records for this folder. */
   worktreeIds: WorktreeId[]
-  /** Path new sessions should use (and the one shown): the workspace's spelling when known, else git's. */
+  /** Path new sessions should use: the workspace's spelling when known, else git's. */
   openPath: string
-  sessionLine: string
+  /** What the row is called: the most urgent session's title, else the branch (Figma 85B″). */
+  title: string
+  /** Shown after the title, quieter: the branch and what is odd about the checkout; '' when the title already is it. */
+  where: string
+  /** Agent of the most urgent session, drawn before `where`; null without a session. */
+  agent: AgentKind | null
   /** `+N −M` uncommitted, '' when clean, '?' when git could not tell. */
   diff: string
-  /** `↑ahead ↓behind`, '—' without a base. */
-  sync: string
+  /** `↑N` commits of its own, 已合并 once they are all in the base (not in 可清理, which says it), '' otherwise. */
+  ahead: string
 }
 
 export interface WorktreeGroups {
@@ -52,7 +89,7 @@ export interface WorktreeGroups {
 }
 
 export function shortSha(sha: string | null): string {
-  return sha ? sha.slice(0, 7) : '无提交'
+  return sha ? sha.slice(0, 7) : pick(M).noCommit
 }
 
 /** `/Users/me/x` → `~/x`. */
@@ -68,30 +105,30 @@ export function formatDiff(info: Pick<GitWorktreeInfo, 'added' | 'removed' | 'di
   return info.dirtyCount > 0 || info.added > 0 || info.removed > 0 ? `+${info.added} −${info.removed}` : ''
 }
 
-export function formatSync(info: Pick<GitWorktreeInfo, 'ahead' | 'behind'>): string {
-  return info.ahead === null || info.behind === null ? '—' : `↑${info.ahead} ↓${info.behind}`
+/** Commits of its own: `↑N`; 已合并 once they are all in the base; nothing at 0 or without a base. Behind is left out. */
+export function formatAhead(info: Pick<GitWorktreeInfo, 'ahead' | 'merged' | 'base'>): string {
+  if (info.merged && info.base) return pick(M).merged
+  return info.ahead ? `↑${info.ahead}` : ''
 }
 
-/** Nothing of its own yet: no commits ahead of the base, and not merged (an agent that has not committed). */
-export function hasNoNewCommits(info: Pick<GitWorktreeInfo, 'isMain' | 'ahead' | 'merged'>): boolean {
-  return !info.isMain && info.ahead === 0 && !info.merged
+/** What is odd about the checkout, said after its branch: main, a rebase, a detached HEAD, a lock, a missing folder. */
+function checkoutNotes(info: GitWorktreeInfo): string[] {
+  const m = pick(M)
+  const notes: string[] = []
+  if (info.isMain) notes.push(m.main)
+  if (info.rebasing) notes.push(m.rebasing)
+  else if (info.branch === null) notes.push(info.unreachableCommits ? m.detachedUnreachable(info.unreachableCommits) : m.detached)
+  if (info.locked) notes.push(m.locked)
+  if (info.prunable !== null) notes.push(m.folderGone)
+  return notes
 }
 
-/** "title · agent · state", the other sessions counted, then the merge state. */
-export function sessionLine(sessions: readonly Session[], info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'base' | 'ahead'>): string {
-  const parts: string[] = []
+/** Title and the quieter text after it (Figma 85B″): a session's title is followed by the branch; else the branch leads. */
+export function rowLabels(name: string, sessions: readonly Session[], info: GitWorktreeInfo): { title: string; where: string } {
+  const notes = checkoutNotes(info)
   const top = sessions[0]
-  if (top) {
-    parts.push(top.title, AGENT_LABEL[top.kind])
-    const state = STATE_TEXT[top.status]
-    if (state) parts.push(state)
-    if (sessions.length > 1) parts.push(`另有 ${sessions.length - 1} 个会话`)
-  } else {
-    parts.push('无会话')
-  }
-  if (info.merged && info.base) parts.push(`已合并到 ${info.base}`)
-  else if (hasNoNewCommits(info)) parts.push('无新提交')
-  return parts.join(' · ')
+  if (top) return { title: top.title, where: [name, ...notes].join(' · ') }
+  return { title: name, where: notes.join(' · ') }
 }
 
 /** Which group a worktree goes in. Any session keeps it in the working list. */
@@ -143,18 +180,21 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
     const matched = recordsOf(listing, info, worktrees)
     const ids = new Set(matched.map((w) => w.id))
     const inside = sessions.filter((s) => ids.has(s.worktreeId)).sort(compareByUrgency)
-    const line = sessionLine(inside, info)
-    groups[groupOf(info, inside.length)].push({
+    const name = info.branch ?? info.rebasing ?? shortSha(info.head)
+    const group = groupOf(info, inside.length)
+    groups[group].push({
       key: info.realPath,
       info,
-      name: info.branch ?? info.rebasing ?? shortSha(info.head),
+      name,
       sessions: inside,
       status: inside[0]?.status ?? null,
       worktreeIds: matched.map((w) => w.id),
       openPath: matched[0]?.path ?? info.path,
-      sessionLine: info.isMain ? `主目录 · ${line}` : line,
+      ...rowLabels(name, inside, info),
+      agent: inside[0]?.kind ?? null,
       diff: formatDiff(info),
-      sync: formatSync(info)
+      // In 可清理 the group already says merged.
+      ahead: group === 'cleanable' && info.merged ? '' : formatAhead(info)
     })
   }
   return groups
@@ -166,16 +206,17 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
  */
 export function deleteBlocker(row: Pick<WorktreeRow, 'info' | 'sessions'>): string | null {
   const { info } = row
-  if (info.isMain) return '主目录不能删除'
-  if (row.sessions.some((s) => isActiveStatus(s.status))) return '有会话正在运行或等你处理，先结束它'
-  if (!info.detailed) return '还没读完它的状态，稍后再试'
-  if (info.locked) return '已被 git worktree lock 锁定'
-  if (info.rebasing) return '正在变基，先完成或中止'
-  if (info.dirtyCount === null) return '无法确认有没有未提交的改动'
-  if (info.dirtyCount > 0) return `有 ${info.dirtyCount} 个未提交的改动，先提交或丢弃`
+  const m = pick(M)
+  if (info.isMain) return m.mainBlocked
+  if (row.sessions.some((s) => isActiveStatus(s.status))) return m.activeSession
+  if (!info.detailed) return m.notDetailed
+  if (info.locked) return m.lockedBlocked
+  if (info.rebasing) return m.rebasingBlocked
+  if (info.dirtyCount === null) return m.dirtyUnknown
+  if (info.dirtyCount > 0) return m.dirty(info.dirtyCount)
   if (info.branch === null && info.head) {
-    if (info.unreachableCommits === null) return '无法确认它的提交是否都在分支上'
-    if (info.unreachableCommits > 0) return `有 ${info.unreachableCommits} 个提交不在任何分支上，先给它建一个分支`
+    if (info.unreachableCommits === null) return m.unreachableUnknown
+    if (info.unreachableCommits > 0) return m.unreachable(info.unreachableCommits)
   }
   return null
 }
@@ -189,7 +230,7 @@ export interface CleanupPlan {
 export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
   const plan: CleanupPlan = { remove: [], skip: [] }
   for (const row of rows) {
-    const reason = row.sessions.length > 0 ? '有会话' : deleteBlocker(row)
+    const reason = row.sessions.length > 0 ? pick(M).hasSession : deleteBlocker(row)
     if (reason) plan.skip.push({ row, reason })
     else plan.remove.push(row)
   }
@@ -198,50 +239,7 @@ export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
 
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
-  return info.branch ? `分支 ${info.branch} 保留` : '它的提交都已在其他分支上'
-}
-
-export interface DetailLine {
-  label: string
-  value: string
-  /** Port block, shown in the mono face. */
-  mono?: boolean
-}
-
-/** The reserved block, TR_PORT through the last port of the ten. */
-export function portBlockLabel(port: number): string {
-  return `${port}\u2013${port + PORT_BLOCK - 1}`
-}
-
-const MAX_LISTED_FILES = 3
-
-/** The selected row's key–value lines (Figma 13C "Details"). `port` is the directory's TR_PORT, when it has a block. */
-export function detailLines(info: GitWorktreeInfo, port: number | null = null): DetailLine[] {
-  let branch = info.branch ?? (info.rebasing ? `变基中 · ${info.rebasing}` : `分离的 HEAD · ${shortSha(info.head)}`)
-  if (info.branch === null && info.unreachableCommits) branch += ` · ${info.unreachableCommits} 个提交不在分支上`
-  if (info.locked) branch += ' · 已锁定'
-  const files = info.dirtyFiles.slice(0, MAX_LISTED_FILES).join(', ')
-  const lines: DetailLine[] = [
-    { label: '分支', value: branch },
-    {
-      label: '基线',
-      value: info.base && info.ahead !== null && info.behind !== null ? `${info.base} · 领先 ${info.ahead}，落后 ${info.behind}` : '—'
-    },
-    {
-      label: '未提交',
-      value:
-        info.dirtyCount === null
-          ? '无法读取'
-          : info.dirtyCount === 0
-            ? '无'
-            : info.dirtyCount > MAX_LISTED_FILES
-              ? `${files} 等 ${info.dirtyCount} 个`
-              : files
-    }
-  ]
-  if (port !== null) lines.push({ label: '端口段', value: portBlockLabel(port), mono: true })
-  if (info.prunable !== null) lines.push({ label: '文件夹', value: '已不存在' })
-  return lines
+  return info.branch ? pick(M).branchKept(info.branch) : pick(M).commitsElsewhere
 }
 
 /** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */
