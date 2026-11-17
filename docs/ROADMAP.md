@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-16：官网整合成五章（看板 / 合奏 / 多线程 / 交付 / 衣橱），产品画面换成 Figma 画的高保真窗口，派活单独一整个跨页（PRD v1.200，Figma W10）。`site/src/components/Magazine.astro`、`Plate.astro`、`i18n.ts`、`styles/site.css`，图在 `site/src/assets/magazine/{en,zh}-*.webp`，宋体子集按新文案重做。
 - 2026-11-16：发送即上屏 + 运行行（PRD v1.199，Figma 91 / 91′）：桌面 GUI 会话发出的同一帧出现 agent 头像和运行行（正在跑的步骤或「思考中」+ 到 0.1 秒、逐位翻滚的用时），手机会话页同样；`renderer/gui/Feed.tsx` `RunLine`、`model.ts` `runRowOf` / `runClock`、`GuiState.busySince`，手机 `SessionView.swift` `RunLine`、`Format.swift` `runRow` / `runClock`；e2e `gui-session.spec.ts`，iOS `FormatTests`。
 - 2026-11-15：看板浮层里的 GUI 会话显示它的聊天（可以直接回复），不再是一块空终端（PRD F9 / F23）。`overview/BorrowedTerminal.tsx` 对 GUI 会话画 `ChatPane`；e2e `gui-session.spec.ts`（同时把侧栏入口的名字从「总览」改成「看板」）。
 - 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
@@ -562,7 +563,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - [ ] PRD §4 “P2 储备”中的各项
 
 ### D · 发布质量（穿插在各批次里）
-- [ ] 官网 `site/`：2026-11-15 改成杂志（PRD v1.196，Figma「官网·时尚杂志风」W9）——宽屏 12 个跨页沿中缝翻、手机 20 个单页沿左边翻，滚轮 / 触控板 / 触摸 / 键盘各翻一页，中英两版，截图英文版用英文界面、中文版用中文界面；W11 的动效页（2026-10-21，PRD v1.61）整套去掉，GSAP、Lenis 不再依赖。翻页数学有单测（`cd site && npm test`）。还没做：og:image、文档页（Starlight）
+- [ ] 官网 `site/`：2026-11-16 整合成五章、画面改成画出来的高保真窗口（PRD v1.200，Figma W10：宽屏 12 个跨页、手机 19 页）；2026-11-15 改成杂志（PRD v1.196，Figma「官网·时尚杂志风」W9）——宽屏 12 个跨页沿中缝翻、手机 20 个单页沿左边翻，滚轮 / 触控板 / 触摸 / 键盘各翻一页，中英两版，截图英文版用英文界面、中文版用中文界面；W11 的动效页（2026-10-21，PRD v1.61）整套去掉，GSAP、Lenis 不再依赖。翻页数学有单测（`cd site && npm test`）。还没做：og:image、文档页（Starlight）
 - [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
   - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查

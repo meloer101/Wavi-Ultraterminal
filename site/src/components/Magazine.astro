@@ -1,30 +1,17 @@
 ---
-/* The site as a magazine (Figma W9): twelve spreads on wide screens, twenty single pages on phones.
+/* The site as a magazine (Figma W10): twelve spreads on wide screens, nineteen single pages on phones.
    Each <section data-spread> is one spread; its .page children are the phone pages, except where data-merge
-   keeps the spread as one phone page. scripts/book.ts turns them; without it they simply stack and scroll. */
-import en68a from '../assets/magazine/en-68a.webp'
-import en75a from '../assets/magazine/en-75a.webp'
-import en75b from '../assets/magazine/en-75b.webp'
-import en75c from '../assets/magazine/en-75c.webp'
-import en77a from '../assets/magazine/en-77a.webp'
-import en77b from '../assets/magazine/en-77b.webp'
-import braid from '../assets/magazine/still-braid.webp'
+   keeps the spread as one phone page. scripts/book.ts turns them; without it they simply stack and scroll.
+   Five chapters: I Board, II Ensemble (two spreads and a plate), III Threads, IV Ship (a spread and the chain), V Wardrobe. */
+import type { ImageMetadata } from 'astro'
+import { Image } from 'astro:assets'
 import mirror from '../assets/magazine/still-mirror.webp'
-import rail from '../assets/magazine/still-rail.webp'
-import seam from '../assets/magazine/still-seam.webp'
-import stitch from '../assets/magazine/still-stitch.webp'
 import windows from '../assets/magazine/still-windows.webp'
-import zh68a from '../assets/magazine/zh-68a.webp'
-import zh75a from '../assets/magazine/zh-75a.webp'
-import zh75b from '../assets/magazine/zh-75b.webp'
-import zh75c from '../assets/magazine/zh-75c.webp'
-import zh77a from '../assets/magazine/zh-77a.webp'
-import zh77b from '../assets/magazine/zh-77b.webp'
 import { copy, otherPath, roman, type Lang } from '../i18n'
 import { gh, withBase } from '../site'
 import Ctas from './Ctas.astro'
 import Items from './Items.astro'
-import Look from './Look.astro'
+import Plate from './Plate.astro'
 import Still from './Still.astro'
 
 interface Props {
@@ -32,13 +19,19 @@ interface Props {
 }
 const { lang } = Astro.props
 const t = copy[lang]
-/** Look 01 … 06 in index order. */
-const shots = lang === 'en' ? [en75b, en75a, en77a, en68a, en75c, en77b] : [zh75b, zh75a, zh77a, zh68a, zh75c, zh77b]
-/** Where each look is printed: its page number and the spread it sits on. */
-const lookAt: [number, string][] = [[1, 'cover'], [4, 'look-02'], [8, 'look-03'], [11, 'ensemble'], [14, 'windows'], [18, 'look-06']]
+const art = import.meta.glob<{ default: ImageMetadata }>('../assets/magazine/{en,zh}-*.webp', { eager: true })
+const pic = (name: string): ImageMetadata => {
+  const hit = art[`../assets/magazine/${lang}-${name}.webp`]
+  if (!hit) throw new Error(`missing plate image ${lang}-${name}.webp`)
+  return hit.default
+}
 const two = (n: number): string => String(n).padStart(2, '0')
+/** Plate n (1-based): its image, copy and number. */
+const plate = (n: number) => ({ src: pic(`plate-${two(n)}`), plate: t.plates[n - 1], n, word: t.plateWord })
+/** Where each chapter starts, and where each plate is printed: page number and the spread it sits on. */
+const chapterAt: [string, string][] = [['04', 'board'], ['08', 'hand'], ['14', 'threads'], ['16', 'ship'], ['20', 'wardrobe']]
+const plateAt: [string, string][] = [['01', 'cover'], ['06', 'plate-02'], ['09', 'hand'], ['10', 'plate-04'], ['12', 'teams'], ['12', 'teams'], ['14', 'threads'], ['17', 'ship'], ['18', 'chain'], ['21', 'wardrobe']]
 const download = gh('/releases/latest')
-const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: t.index.look })
 ---
 
 <main id="main" class="book" data-book>
@@ -46,10 +39,11 @@ const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: 
     <header class="bar">
       <a class="bar-mark" href="#cover" aria-label={t.bar.home}>WAVI</a>
       <nav aria-label={t.bar.label}>
-        <a class="bar-section" href="#status">{t.bar.status}</a>
-        <a class="bar-section" href="#merge">{t.bar.merge}</a>
-        <a class="bar-section" href="#wardrobe">{t.bar.wardrobe}</a>
+        <a class="bar-section" href="#board">{t.bar.board}</a>
+        <a class="bar-section" href="#hand">{t.bar.ensemble}</a>
+        <a class="bar-section" href="#threads">{t.bar.threads}</a>
         <a class="bar-section" href="#ship">{t.bar.ship}</a>
+        <a class="bar-section" href="#wardrobe">{t.bar.wardrobe}</a>
         <a href={download} rel="noopener">{t.bar.download}</a>
         <a href={withBase(otherPath(lang))} hreflang={lang === 'en' ? 'zh-CN' : 'en'} aria-label={t.bar.otherLabel}>{t.bar.other}</a>
       </nav>
@@ -64,21 +58,21 @@ const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: 
         <p class="folio folio-l">{t.issue}</p>
       </div>
       <div class="page r">
-        <Look {...look(0)} size="half" eager />
+        <Plate {...plate(1)} size="half" eager />
         <p class="folio folio-r">01</p>
       </div>
     </section>
 
-    <section class="spread duo index" id="index" data-spread>
+    <section class="spread duo index" id="contents" data-spread>
       <div class="page l">
-        <h2 class="label">{t.index.label}</h2>
-        <ol class="toc">
-          {t.looks.map((l, i) => (
+        <h2 class="label">{t.contents.label}</h2>
+        <ol class="toc toc-chapters">
+          {t.contents.chapters.map(([numeral, name, line], i) => (
             <li>
-              <a href={`#${lookAt[i][1]}`}>
-                <span class="toc-look">{t.index.look} {two(i + 1)}</span>
-                <span class="toc-name">{l.name}</span>
-                <span class="toc-page">{two(lookAt[i][0])}</span>
+              <a href={`#${chapterAt[i][1]}`}>
+                <span class="toc-look">{numeral}</span>
+                <span class="toc-name">{name}<span class="toc-line">{line}</span></span>
+                <span class="toc-page">{chapterAt[i][0]}</span>
               </a>
             </li>
           ))}
@@ -86,89 +80,124 @@ const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: 
         <p class="folio folio-l">02</p>
       </div>
       <div class="page r">
-        <h2 class="label">{t.collection.label}</h2>
-        <Items items={t.collection.items} />
+        <h2 class="label">{t.contents.plates}</h2>
+        <ol class="toc toc-plates">
+          {t.plates.map((p, i) => (
+            <li>
+              <a href={`#${plateAt[i][1]}`}>
+                <span class="toc-look">{t.plateWord} {two(i + 1)}</span>
+                <span class="toc-name">{p.name}</span>
+                <span class="toc-page">{plateAt[i][0]}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
         <p class="folio folio-r">03</p>
       </div>
     </section>
 
-    <section class="spread full plate" id="look-02" data-spread>
-      <div class="page full" data-center>
-        <Look {...look(1)} size="full" />
-        <p class="folio folio-r">04 — 05</p>
-      </div>
-    </section>
-
-    <section class="spread duo status" id="status" data-spread>
+    <section class="spread duo status" id="board" data-spread>
       <div class="page l inset" data-center>
-        <Still src={windows} caption={t.status.still} size="tall" />
-        <p class="folio folio-l">06</p>
+        <Still src={windows} caption={t.board.still} size="tall" />
+        <p class="folio folio-l">04</p>
       </div>
       <div class="page r">
-        <p class="label">{t.status.label}</p>
-        <h2 class="display">{t.status.title[0]}</h2>
-        <p class="body body-lead">{t.status.body}</p>
-        <p class="folio folio-r">07</p>
+        <p class="label">{t.board.label}</p>
+        <h2 class="display">{t.board.title}</h2>
+        <p class="body body-lead">{t.board.body}</p>
+        <Items items={t.board.items} />
+        <p class="folio folio-r">05</p>
       </div>
     </section>
 
-    <section class="spread full plate" id="look-03" data-spread>
+    <section class="spread full plate-spread" id="plate-02" data-spread>
       <div class="page full" data-center>
-        <Look {...look(2)} size="full" />
-        <p class="folio folio-r">08 — 09</p>
+        <Plate {...plate(2)} size="full" />
+        <p class="folio folio-r">06 — 07</p>
       </div>
     </section>
 
-    <section class="spread duo ensemble" id="ensemble" data-spread>
+    <section class="spread duo ensemble hand" id="hand" data-spread>
       <div class="page l">
-        <p class="label">{t.ensemble.label}</p>
-        <h2 class="display">{t.ensemble.title[0]}<br />{t.ensemble.title[1]}</h2>
-        <Items items={t.ensemble.items} />
-        <p class="folio folio-l">10</p>
+        <p class="label">{t.hand.label}</p>
+        <h2 class="display">{t.hand.title[0]}<br />{t.hand.title[1]}</h2>
+        <Items items={t.hand.items} />
+        <p class="folio folio-l">08</p>
       </div>
-      <div class="page r wide" data-center>
-        <Look {...look(3)} size="half" />
-        <Still src={seam} size="square" class="still-end" />
-        <p class="folio folio-r">11</p>
+      <div class="page r wide bleed" data-center>
+        <Plate {...plate(3)} size="bleed-r" />
+        <p class="folio folio-r">09</p>
       </div>
     </section>
 
-    <section class="spread duo merge" id="merge" data-spread>
-      <div class="page l">
-        <p class="label">{t.merge.label}</p>
-        <h2 class="display">{t.merge.title[0]}<br />{t.merge.title[1]}</h2>
-        <ol class="steps">
-          {t.merge.steps.map(([title, keys, body], i) => (
-            <li>
-              <span class="step-n">{roman(i).toLowerCase()}.</span>
-              <h3 class="step-title">{title}</h3>
-              {keys && <kbd class="step-keys">{keys}</kbd>}
-              <p class="body">{body}</p>
-            </li>
-          ))}
-        </ol>
+    <section class="spread full plate-spread" id="plate-04" data-spread>
+      <div class="page full" data-center>
+        <Plate {...plate(4)} size="full" />
+        <p class="folio folio-r">10 — 11</p>
+      </div>
+    </section>
+
+    <section class="spread duo ensemble teams" id="teams" data-spread>
+      <div class="page l wide bleed" data-center>
+        <Plate {...plate(5)} size="bleed-l" />
+        <Plate {...plate(6)} size="detail" />
         <p class="folio folio-l">12</p>
       </div>
-      <div class="page r inset" data-center>
-        <Still src={braid} caption={t.merge.still} size="tall" />
+      <div class="page r">
+        <p class="label">{t.hand.label}</p>
+        <h2 class="display">{t.teams.title[0]}<br />{t.teams.title[1]}</h2>
+        <Items items={t.teams.items} />
         <p class="folio folio-r">13</p>
       </div>
     </section>
 
-    <section class="spread duo windows" id="windows" data-spread>
+    <section class="spread duo windows" id="threads" data-spread>
       <div class="page l wide" data-center>
-        <Look {...look(4)} size="half" />
+        <Plate {...plate(7)} size="half" />
         <div class="still-row">
           <Still src={mirror} size="square" />
-          <p class="still-cap">{t.windows.still}</p>
+          <p class="still-cap">{t.threads.still}</p>
         </div>
         <p class="folio folio-l">14</p>
       </div>
       <div class="page r">
-        <p class="label">{t.windows.label}</p>
-        <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
-        <Items items={t.windows.items} />
+        <p class="label">{t.threads.label}</p>
+        <h2 class="display">{t.threads.title[0]}<br />{t.threads.title[1]}</h2>
+        <Items items={t.threads.items} />
         <p class="folio folio-r">15</p>
+      </div>
+    </section>
+
+    <section class="spread duo ship" id="ship" data-spread>
+      <div class="page l wide bleed" data-center>
+        <Plate {...plate(8)} size="bleed-l" />
+        <p class="folio folio-l">16</p>
+      </div>
+      <div class="page r">
+        <p class="label">{t.ship.label}</p>
+        <h2 class="display">{t.ship.title[0]}<br />{t.ship.title[1]}</h2>
+        <Items items={t.ship.items} />
+        <p class="folio folio-r">17</p>
+      </div>
+    </section>
+
+    <section class="spread full chain" id="chain" data-spread>
+      <div class="page full">
+        <h2 class="display">{t.chain.title}</h2>
+        <ol class="chain-steps">
+          {t.chain.steps.map((step, i) => (
+            <li>
+              <span class="num">{roman(i).toLowerCase()}.</span>
+              <h3 class="item-title">{step}</h3>
+              <Image src={pic(`step${i + 1}`)} alt={step} widths={[480, 740]} sizes="(min-width: 900px) 17vw, 45vw" loading="lazy" data-zoomable />
+            </li>
+          ))}
+        </ol>
+        <p class="plate-caption">
+          <span class="plate-n">{t.plateWord} 09</span>
+          <span class="plate-cap">{t.plates[8].caption}</span>
+        </p>
+        <p class="folio folio-r">18 — 19</p>
       </div>
     </section>
 
@@ -177,52 +206,33 @@ const look = (i: number) => ({ src: shots[i], look: t.looks[i], n: i + 1, word: 
         <p class="label">{t.wardrobe.label}</p>
         <h2 class="display">{t.wardrobe.title[0]}<br />{t.wardrobe.title[1]}</h2>
         <Items items={t.wardrobe.items} />
-        <p class="folio folio-l">16</p>
-      </div>
-      <div class="page r inset" data-center>
-        <Still src={rail} caption={t.wardrobe.still} size="tall" />
-        <p class="folio folio-r">17</p>
-      </div>
-    </section>
-
-    <section class="spread full plate" id="look-06" data-spread>
-      <div class="page full" data-center>
-        <Look {...look(5)} size="full" />
-        <p class="folio folio-r">18 — 19</p>
-      </div>
-    </section>
-
-    <section class="spread duo ship" id="ship" data-spread>
-      <div class="page l inset" data-center>
-        <Still src={stitch} caption={t.ship.still} size="tall" />
         <p class="folio folio-l">20</p>
       </div>
-      <div class="page r">
-        <p class="label">{t.ship.label}</p>
-        <h2 class="display">{t.ship.title[0]}<br />{t.ship.title[1]}</h2>
-        <Items items={t.ship.items} />
+      <div class="page r wide" data-center>
+        <figure class="plate plate-tiles">
+          <ol class="tiles">
+            {t.wardrobe.tiles.map((label, i) => (
+              <li>
+                <Image src={pic(`tile${i + 1}`)} alt={label} widths={[580, 870]} sizes="(min-width: 900px) 21vw, 45vw" loading="lazy" data-zoomable />
+                <span class="still-cap">{label}</span>
+              </li>
+            ))}
+          </ol>
+          <figcaption>
+            <span class="plate-n">{t.plateWord} 10</span>
+            <span class="plate-cap">{t.plates[9].caption}</span>
+          </figcaption>
+        </figure>
         <p class="folio folio-r">21</p>
       </div>
     </section>
 
     <section class="spread full finale" id="finale" data-spread>
-      <div class="page full six">
-        <h2 class="label">{t.six.label}</h2>
-        <ol class="pieces">
-          {t.six.items.map(([title, body], i) => (
-            <li>
-              <span class="num">({roman(i).toLowerCase()})</span>
-              <h3 class="piece-title">{title}</h3>
-              <p class="body">{body}</p>
-            </li>
-          ))}
-        </ol>
-        <p class="folio folio-l">22</p>
-      </div>
       <div class="page full back" data-center>
         <p class="wordmark" aria-hidden="true">WAVI</p>
         <Ctas download={t.cover.download} github={t.cover.github} class="ctas-end" />
         <p class="colophon">{t.colophon}</p>
+        <p class="folio folio-l">22</p>
         <p class="folio folio-r">23</p>
       </div>
     </section>
