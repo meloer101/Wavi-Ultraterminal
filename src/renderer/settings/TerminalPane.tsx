@@ -1,6 +1,6 @@
 // 设置 · 终端 (Figma 66C / 66G): everything the CLI sessions' terminal reads — colors, font, screen reader.
 import { useMemo } from 'react'
-import { LIMITS, type AppearancePatch, type AppearanceSettings } from '@shared/settings'
+import { isOpaqueMaterial, LIMITS, type AppearancePatch, type AppearanceSettings } from '@shared/settings'
 import { defineMessages, withLang } from '@shared/i18n'
 import { Segmented } from '../ui/Segmented'
 import { useLang, useMessages } from '../ui/i18n'
@@ -115,7 +115,7 @@ export function TerminalPane({ appearance, update }: { appearance: AppearanceSet
           />
         </Row>
         {/* 实色 makes every card opaque (Figma 66B), so the opacity has nothing to change there. */}
-        {appearance.windowMaterial !== 'solid' && (
+        {!isOpaqueMaterial(appearance.windowMaterial) && (
           <Row label={m.opacity} id="terminalOpacity">
             <Slider
               label={m.opacity}

@@ -8,7 +8,8 @@ import { toAppearanceDom, toTerminalAppearance } from './map'
 
 let lastTerminal = ''
 
-/** Mirrors <html data-material> for the boot screen (public/boot.js), which paints before settings are read. */
+/** Mirrors <html data-material> and, for 实心玻璃, its data-finish ('solid+glass') for the boot screen (public/boot.js),
+ * which paints before settings are read. */
 const MATERIAL_BOOT_KEY = 'tr.material.boot'
 
 function rememberMaterial(material: string): void {
@@ -30,11 +31,13 @@ export function applyAppearance(appearance: AppearanceSettings): void {
       root.style.setProperty(name, value)
     }
   }
+  let material = false
   for (const [name, value] of Object.entries(dom.attrs)) {
     if (root.getAttribute(name) === value) continue
     root.setAttribute(name, value)
-    if (name === 'data-material') rememberMaterial(value)
+    if (name === 'data-material' || name === 'data-finish') material = true
   }
+  if (material) rememberMaterial(`${dom.attrs['data-material']}${dom.attrs['data-finish'] === 'glass' ? '+glass' : ''}`)
   const terminal = toTerminalAppearance(appearance)
   const key = JSON.stringify(terminal)
   if (key !== lastTerminal) {

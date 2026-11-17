@@ -30,7 +30,10 @@
   const pref = read(THEME_KEY)
   const light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches)
   document.documentElement.dataset.theme = light ? 'light' : 'dark'
-  if (read(MATERIAL_KEY) === 'solid') document.documentElement.dataset.material = 'solid'
+  // 'solid' is 实色; 'solid+glass' is 实心玻璃 (appearance/runtime.ts), whose tokens hang off data-finish.
+  const material = read(MATERIAL_KEY)
+  if (material === 'solid' || material === 'solid+glass') document.documentElement.dataset.material = 'solid'
+  if (material === 'solid+glass') document.documentElement.dataset.finish = 'glass'
 
   let layout = null
   try {

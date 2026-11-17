@@ -64,7 +64,7 @@ describe('toAppearanceDom', () => {
   })
 
   it('names the full-screen palette on <html> (auto picks by theme in CSS)', () => {
-    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off', 'data-material': 'frosted', 'data-bg-image': 'off' })
+    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off', 'data-material': 'frosted', 'data-finish': 'flat', 'data-bg-image': 'off' })
     expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }, false).attrs['data-fs-backdrop']).toBe('dune')
   })
 })
@@ -130,6 +130,18 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     const glass = toAppearanceDom({ ...a, windowMaterial: 'glass' }, true).vars
     expect(glass['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 70%, transparent)')
     expect(glass['--tr-term-ring']).toBe('color-mix(in srgb, var(--term-bg) 60%, transparent)')
+  })
+
+  it('实心玻璃 (Figma 93) is opaque like 实色, with the glass finish named on <html>', () => {
+    const a = { ...base, windowMaterial: 'solid-glass' as const, terminalOpacity: 0.6, chat: { ...base.chat, opacity: 0.7 }, backgroundImage: 'x.png' }
+    expect(terminalBackgroundAlpha(a)).toBe(1)
+    const dom = toAppearanceDom(a, true)
+    expect(dom.attrs['data-material']).toBe('solid')
+    expect(dom.attrs['data-finish']).toBe('glass')
+    expect(dom.attrs['data-bg-image']).toBe('off')
+    expect(dom.vars['--tr-chat-bg']).toBe('var(--bg-app)')
+    expect(toAppearanceDom({ ...a, windowMaterial: 'solid' }, true).attrs['data-finish']).toBe('flat')
+    expect(toAppearanceDom({ ...a, windowMaterial: 'glass' }, true).attrs['data-finish']).toBe('flat')
   })
 
   it('shows the user’s picture only when there is one', () => {

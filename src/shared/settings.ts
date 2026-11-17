@@ -65,9 +65,13 @@ export interface ChatAppearance {
 
 /**
  * 窗口 · 材质 (PRD §5 v1.174, Figma 66′): 玻璃 shows the desktop through the window (macOS 26's Liquid Glass, vibrancy
- * before it: main/appearance.ts picks); 实色 (v1.139, Figma 57) is an opaque window in the softer solid palette.
+ * before it: main/appearance.ts picks); 实色 (v1.139, Figma 57) is an opaque window in the softer solid palette; 实心玻璃
+ * (Figma 93) is as opaque, its cards and menus thick glass whose finish is at the edge (deeplethe/solid-glass).
  */
-export type WindowMaterial = 'glass' | 'solid'
+export type WindowMaterial = 'glass' | 'solid-glass' | 'solid'
+
+/** 实色 and 实心玻璃: nothing of the desktop shows, and the cards ignore their opacity. */
+export const isOpaqueMaterial = (material: WindowMaterial): boolean => material !== 'glass'
 
 export interface AppearanceSettings {
   /** 语言 · 界面语言 (Figma 89): 跟随系统 resolves in main from the system's preferred languages (shared/i18n.ts). */
@@ -325,8 +329,8 @@ function chat(value: unknown): ChatAppearance {
   }
 }
 
-/** 'liquid' and 'frosted' are what windowMaterial was called before v1.174; any other value is 玻璃 unless it is 'solid'. */
-const windowMaterial = (value: unknown): WindowMaterial => (value === 'solid' ? 'solid' : 'glass')
+/** 'liquid' and 'frosted' are what windowMaterial was called before v1.174; any other unknown value is 玻璃. */
+const windowMaterial = (value: unknown): WindowMaterial => (value === 'solid' || value === 'solid-glass' ? value : 'glass')
 
 function num(value: unknown, fallback: number, range: { min: number; max: number }): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback

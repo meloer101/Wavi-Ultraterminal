@@ -3,7 +3,7 @@
 import { useRef, type ReactNode } from 'react'
 import { backgroundImageUrl } from '@shared/background-image'
 import { defineMessages, type LanguagePreference } from '@shared/i18n'
-import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
+import { FULLSCREEN_BACKDROPS, isOpaqueMaterial, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { GlassBase } from '../ui/GlassBase'
 import { Button, PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
@@ -125,7 +125,7 @@ function WindowPreview() {
 }
 
 export function AppearancePane({ appearance, update }: { appearance: AppearanceSettings; update: (patch: AppearancePatch) => void }) {
-  const solid = appearance.windowMaterial === 'solid'
+  const solid = isOpaqueMaterial(appearance.windowMaterial)
   const image = appearance.backgroundImage
   const picker = useRef<HTMLInputElement>(null)
   const m = useMessages(M)
