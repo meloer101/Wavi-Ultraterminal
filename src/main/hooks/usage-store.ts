@@ -4,6 +4,8 @@
 // Readings come from several places that see the account at different moments — every session's statusLine or rollout
 // (whatever its last response said) and the polled account answer (./plan-usage-poller.ts) — so they are merged per
 // window: within one period usage only grows, so the higher figure is the newer one; a later reset time is a new period.
+// The one exception is the provider lowering a window without moving its end (a usage reset the user bought or was
+// given): only the account answer can say so, and the sessions' readings of that window are pre-reset until it ends.
 import { USAGE_VENDORS } from '@shared/agents'
 import {
   sameUsage,
@@ -25,6 +27,11 @@ const VENDORS: ReadonlySet<string> = new Set<UsageVendor>(USAGE_VENDORS)
 export const ALERT_FRESH_MS = 10 * 60_000
 /** Two readings of one window whose reset times differ by less than this are the same period. */
 const SAME_PERIOD_MS = 10 * 60_000
+/**
+ * A newer account answer this many points below the held figure, same period, means the provider reset the window
+ * early (a small dip is the account's own lag behind a session's live reading).
+ */
+export const RESET_DROP = 5
 
 /** The highest level already announced for a window's current period. */
 export interface AlertMark {
@@ -64,9 +71,15 @@ export function crossedAlert(vendor: UsageVendor, w: UsageWindow, mark: AlertMar
   return { vendor, minutes: w.minutes, ...(w.scope ? { scope: w.scope } : {}), percent: w.percent, level, ...(w.resetsAt !== undefined ? { resetsAt: w.resetsAt } : {}) }
 }
 
+/** Whether a newer account answer says the provider lowered this window within its period. */
+export function lowered(held: UsageWindow, next: UsageWindow, nextIsAccountAndNewer: boolean): boolean {
+  return nextIsAccountAndNewer && samePeriod(held.resetsAt, next.resetsAt) && held.percent - next.percent >= RESET_DROP
+}
+
 /** One window from two readings of it. */
-function mergeWindow(held: UsageWindow, next: UsageWindow, nextIsNewer: boolean): UsageWindow {
+function mergeWindow(held: UsageWindow, next: UsageWindow, nextIsNewer: boolean, nextIsAccount: boolean): UsageWindow {
   if (held.resetsAt === undefined || next.resetsAt === undefined) return nextIsNewer ? next : held
+  if (lowered(held, next, nextIsAccount && nextIsNewer)) return next
   if (samePeriod(held.resetsAt, next.resetsAt)) {
     // A reader that has not heard of the latest use (an idle session, a cached answer) reports less, never more.
     const top = next.percent >= held.percent ? next : held
@@ -87,7 +100,7 @@ export function mergeUsage(held: VendorUsage | undefined, next: VendorUsage): Ve
   const windows: UsageWindow[] = []
   for (const w of next.windows) {
     const h = heldByKey.get(windowKey(w))
-    windows.push(stripRate(h ? mergeWindow(h, w, nextIsNewer) : w))
+    windows.push(stripRate(h ? mergeWindow(h, w, nextIsNewer, next.complete === true) : w))
     heldByKey.delete(windowKey(w))
   }
   if (!next.complete) for (const h of heldByKey.values()) windows.push(stripRate(h))
@@ -149,6 +162,8 @@ export class UsageStore {
   private readonly marks = new Map<string, AlertMark>()
   /** Per vendor and window: the current period's readings, for the pace (memory only; a restart starts over). */
   private readonly samples = new Map<string, { period: number | undefined; points: Sample[] }>()
+  /** Per vendor and window: the period the account lowered (memory only); sessions' readings of it are pre-reset. */
+  private readonly loweredPeriods = new Map<string, number | undefined>()
 
   constructor(
     private readonly io: {
@@ -179,14 +194,44 @@ export class UsageStore {
   }
 
   /** A new reading from a session or the poller, merged into what is held (sessions report out of order). */
-  update(usage: VendorUsage): void {
-    const held = this.byVendor.get(usage.vendor)
+  update(reading: VendorUsage): void {
+    const held = this.byVendor.get(reading.vendor)
+    const usage = this.withoutPreReset(held, reading)
     const merged = this.withRates(mergeUsage(held, usage), usage)
     this.checkAlerts(merged, usage.at)
     if (held && sameUsage(held, merged) && merged.at - held.at < UNCHANGED_REFRESH_MS) return
     this.byVendor.set(usage.vendor, merged)
     this.io.broadcast(merged)
     this.io.save(this.list().map((u) => ({ ...u, windows: u.windows.map(stripRate) })))
+  }
+
+  /**
+   * Notes the windows a newer account answer lowered within their period (their alerts start over), and leaves out of
+   * a session's reading the windows lowered this period: until its next response a session repeats the pre-reset figure.
+   */
+  private withoutPreReset(held: VendorUsage | undefined, reading: VendorUsage): VendorUsage {
+    if (reading.complete) {
+      const heldByKey = new Map(held?.windows.map((w) => [windowKey(w), w]))
+      let marksChanged = false
+      for (const w of reading.windows) {
+        const key = `${reading.vendor}:${windowKey(w)}`
+        const h = heldByKey.get(windowKey(w))
+        if (!h || !held || !lowered(h, w, reading.at >= held.at)) continue
+        this.loweredPeriods.set(key, w.resetsAt)
+        this.samples.delete(key)
+        marksChanged = this.marks.delete(key) || marksChanged
+      }
+      if (marksChanged) this.io.saveMarks?.([...this.marks.values()])
+      return reading
+    }
+    const windows = reading.windows.filter((w) => {
+      const key = `${reading.vendor}:${windowKey(w)}`
+      if (!this.loweredPeriods.has(key)) return true
+      if (samePeriod(this.loweredPeriods.get(key), w.resetsAt)) return false
+      this.loweredPeriods.delete(key)
+      return true
+    })
+    return windows.length === reading.windows.length ? reading : { ...reading, windows }
   }
 
   /** Records the windows the reading named (at the reading's time) and attaches each window's recent pace. */
