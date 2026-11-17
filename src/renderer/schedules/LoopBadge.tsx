@@ -1,7 +1,7 @@
 // Claude's own `/loop` in this session (PRD F24, Figma 67I′): a mark in the session header, its timers listed on hover.
 // Display only — Wavi never changes them; they end with the session. Only Claude reports them (Stop hook
 // `session_crons`), so no other agent shows one.
-import { RotateCw } from 'lucide-react'
+import { RotateCw } from '../ui/icons'
 import { cronLabel } from '@shared/agent-events'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'

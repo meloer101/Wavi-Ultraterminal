@@ -1,7 +1,7 @@
 // 浏览器 view (PRD F17, Figma 13A / 13E): a page per worktree for checking what the agents' dev servers serve.
 // Toolbar on top, the worktree's listening ports below it, the page in a bg/inset well, console counts at the bottom.
 // Mounted with key = worktree.
-import { Globe } from 'lucide-react'
+import { Globe } from '../../ui/icons'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { formatErrorsForAgent, mergePorts, portUrl, type ListeningPort } from '@shared/browser'

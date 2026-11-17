@@ -1,7 +1,7 @@
 // BrowserBar (Figma 130:283): back · forward · reload · borderless address field · phone viewport · open in the
 // system browser.
 // The address shows the host in the primary color and the path in tertiary; focused, it is a plain text field.
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Smartphone } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Smartphone } from '../../ui/icons'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { parseAddress, splitUrl, type BrowserPageState } from '@shared/browser'
 import { defineMessages } from '@shared/i18n'

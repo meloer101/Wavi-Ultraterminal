@@ -47,6 +47,15 @@ export default tseslint.config(
     }
   },
   {
+    // Icons (CLAUDE.md, PRD v1.204): a glyph is chosen only in src/renderer/ui/glyphs.ts and drawn only by ui/icons.tsx;
+    // the iPhone app's generator reads glyphs.ts too.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/ui/glyphs.ts', 'src/renderer/ui/icons.tsx', 'src/main/remote/phone-assets.test.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [{ group: ['@hugeicons/*', 'lucide-react'], message: 'Icons come from src/renderer/ui/icons.tsx; choose a new glyph in ui/glyphs.ts.' }] }]
+    }
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
     }

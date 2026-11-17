@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ellipsis, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Ellipsis, Plus } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import type { SessionStatus } from '@shared/types'
 import { useMessages } from '../ui/i18n'

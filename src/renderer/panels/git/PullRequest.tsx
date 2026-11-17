@@ -2,7 +2,7 @@
 // the base too (29J), with 让 Claude 处理 for comments nobody answered (29I), 让 Claude 修复 when the checks fail and
 // PR #N at the end — and the PR's facts for the zone's facts line. What went wrong last, or — without a usable gh — how
 // to get one, stands in; a muted notice (a receipt such as 已创建 PR #3) only while there is no PR to show.
-import { Check, CircleDashed, CircleHelp, GitPullRequest, X } from 'lucide-react'
+import { Check, CircleDashed, CircleHelp, GitPullRequest, X } from '../../ui/icons'
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import type { Session, SessionId, Worktree } from '@shared/types'

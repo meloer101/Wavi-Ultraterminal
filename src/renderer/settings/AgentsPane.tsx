@@ -3,7 +3,7 @@
 // estimates it from the title (估计); 没装 offers the vendor's install command to copy — Wavi never installs anything.
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from '../ui/icons'
 import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import { defineMessages } from '@shared/i18n'

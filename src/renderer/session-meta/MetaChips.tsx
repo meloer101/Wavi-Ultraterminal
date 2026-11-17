@@ -2,7 +2,7 @@
 // TodoPopover, ContextChip v2 274:10418 + ContextPopover (27B), UsageChip v2 274:10443 + UsagePopover (27B). The two
 // popovers show only the figures — no captions, no trend. Neutral meters and numbers only — no status colors; near
 // the limit is drawn heavier. No data, no chip.
-import { Check } from 'lucide-react'
+import { Check } from '../ui/icons'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import {
   contextHigh,

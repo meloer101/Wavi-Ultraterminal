@@ -4,7 +4,7 @@
 // step says what git said in plain words (合入链路 v2, Figma 73E), and the footer offers the one way on: 同步 / 拉取 /
 // 提交… (the chain's own action), 改为创建 PR, 交给 <agent> (into its input line, never sent), 重试, or only 取消. A
 // pre-push review that found a P0 / P1 stopped the push: 让 <agent> 修 (the findings into its input line) or 照样推送.
-import { ArrowDown, ArrowUp, Check, CircleAlert, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, AlertCircle, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type IconComponent } from '../ui/icons'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { defineMessages } from '@shared/i18n'
 import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
@@ -77,7 +77,7 @@ const M = defineMessages({
   }
 })
 
-const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
+const TITLE_ICON: Record<ShipKind | 'push', IconComponent> = {
   main: GitMerge,
   pr: GitPullRequest,
   'push-pr': GitPullRequest,
@@ -186,7 +186,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
             step.id === held?.step ? (
               <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
                 <span className={styles.glyph} role="img" aria-label={m.notStarted}>
-                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
+                  <AlertCircle size={16} strokeWidth={1.75} aria-hidden />
                 </span>
                 <span className={styles.stepBody} role="alert">
                   <span className={styles.stepText}>{held.text}</span>
@@ -199,7 +199,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
               // reason on its own row.
               <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
                 <span className={styles.glyph} role="img" aria-label={m.notDone}>
-                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
+                  <AlertCircle size={16} strokeWidth={1.75} aria-hidden />
                 </span>
                 <span className={styles.stepBody}>
                   <span className={styles.stepText}>{step.label}</span>

@@ -1,7 +1,7 @@
 // 终端 view (PRD F17, Figma 76A / 76B): plain shells in the active session's worktree, one tab each. Every session of
 // the worktree shares its tabs (RightPanel keys this view by worktree). The shells are no workspace sessions: no
 // sidebar row, no status, no notifications.
-import { Plus, X } from 'lucide-react'
+import { Plus, X } from '../../ui/icons'
 import { useEffect, useRef, useState } from 'react'
 import type { SessionId, Worktree } from '@shared/types'
 import { defineMessages } from '@shared/i18n'

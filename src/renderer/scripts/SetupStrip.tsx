@@ -1,4 +1,4 @@
-import { CircleAlert } from 'lucide-react'
+import { AlertCircle } from '../ui/icons'
 import { AGENT_NAME } from '../lifecycle/present'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
@@ -41,7 +41,7 @@ export function SetupStrip({ sessionId }: { sessionId: SessionId }) {
     return (
       <div className={styles.bar} role="status" data-testid="setup-strip">
         <span className={styles.icon}>
-          <CircleAlert size={16} strokeWidth={1.75} />
+          <AlertCircle size={16} strokeWidth={1.75} />
         </span>
         <p className={styles.title}>{m.skipped(run.reason)}</p>
         <button type="button" className={styles.secondary} onClick={() => dismissSetupNote(id)}>

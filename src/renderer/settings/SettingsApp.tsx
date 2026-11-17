@@ -1,6 +1,6 @@
 // Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
 import { useRef, type KeyboardEvent } from 'react'
-import { Bot, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTerminal, Workflow, X, type LucideIcon } from 'lucide-react'
+import { Bot, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
 import { create } from 'zustand'
 import { defineMessages } from '@shared/i18n'
 import { IconButton } from '../ui/IconButton'
@@ -39,7 +39,7 @@ const M = defineMessages({
   }
 })
 
-const NAV: ReadonlyArray<{ id: PaneId; Icon: LucideIcon }> = [
+const NAV: ReadonlyArray<{ id: PaneId; Icon: IconComponent }> = [
   { id: 'appearance', Icon: Palette },
   { id: 'terminal', Icon: SquareTerminal },
   { id: 'chat', Icon: MessageSquare },

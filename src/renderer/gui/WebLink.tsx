@@ -2,7 +2,7 @@
 // the system one); resting on it shows its site, its title when a search in the conversation found it, and its URL.
 // A search's results are listed under its row, a title and a site each.
 import { createContext, useContext, useRef, type MouseEvent, type ReactNode } from 'react'
-import { ExternalLink, Globe } from 'lucide-react'
+import { ExternalLink, Globe } from '../ui/icons'
 import type { ChatLink } from '@shared/transcript-chat'
 import type { SessionId } from '@shared/types'
 import { openLink } from '../state/link-actions'

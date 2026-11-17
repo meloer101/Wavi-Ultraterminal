@@ -5,7 +5,7 @@
 // member's window gets a compare bar under its title bar: what it changed, the checks it ran, how its launch went,
 // 看 diff and 合并这个. Status is the glyph's shape plus text, never color alone.
 import { memo, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, GitCompareArrows, GitMerge } from 'lucide-react'
+import { AlertCircle, GitCompareArrows, GitMerge } from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import {
   diffSummary,

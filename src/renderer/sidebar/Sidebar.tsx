@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { Clock, Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Clock, Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
 import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'

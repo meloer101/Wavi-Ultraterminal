@@ -4,7 +4,7 @@
 // agent waits on or what the user said in it, and can be edited; 份数 lists agents with − n ＋ and 加一个智能体 adds
 // any installed one. No explanatory captions: the labels, the values and the button say what happens.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { Check, GitBranch, GitFork, Globe, Minus, Plus } from 'lucide-react'
+import { Check, GitBranch, GitFork, Globe, Minus, Plus } from '../ui/icons'
 import {
   addAgentRow,
   attemptBaseRef,

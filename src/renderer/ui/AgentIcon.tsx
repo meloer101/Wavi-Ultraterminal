@@ -1,4 +1,4 @@
-import { SquareTerminal } from 'lucide-react'
+import { SquareTerminal } from './icons'
 import { agentName } from '@shared/agents'
 import type { AgentKind } from '@shared/types'
 import { AGENT_ICON_SVG } from '@shared/agent-icon-svg'

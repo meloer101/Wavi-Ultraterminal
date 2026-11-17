@@ -2,7 +2,7 @@
 // with sessions still open (同任务多解's members have their own row there, so not here), its name and each session it started as status glyph and name, then 比较 to put them
 // side by side. Clicking a name goes to that session. Status is the glyph's shape plus text, never color alone.
 import { useMemo } from 'react'
-import { Split } from 'lucide-react'
+import { Split } from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { defineMessages } from '@shared/i18n'
 import type { Session } from '@shared/types'

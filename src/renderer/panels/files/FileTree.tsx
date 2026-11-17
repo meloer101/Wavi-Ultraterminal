@@ -1,5 +1,5 @@
 // The tree itself: FileTreeRow (Figma 130:259) rows with keyboard navigation, double-click preview and the context menu.
-import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from '../../ui/icons'
 import { useEffect, useId, useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type Ref } from 'react'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
@@ -36,7 +36,7 @@ const M = defineMessages<{ files: string; mark: Record<NonNullable<TreeRow['mark
   }
 })
 
-/** The file's type icon (Figma 72A / 72A′), or lucide File when its type has none. Icons with a light variant draw both;
+/** The file's type icon (Figma 72A / 72A′), or the plain File icon when its type has none. Icons with a light variant draw both;
  * the theme's CSS shows one. */
 function TypeIcon({ name }: { name: string }) {
   const dark = fileIcon(name)

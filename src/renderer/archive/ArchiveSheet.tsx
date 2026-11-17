@@ -3,7 +3,7 @@
 // restore from ⌘K 历史. Refused while a session is running. While it works the current step spins; a failing archive
 // script shows its output and offers 仍然归档.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { Check, X } from 'lucide-react'
+import { Check, X } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import { useRepoScripts } from '../scripts/run-script'

@@ -3,7 +3,7 @@
 // someone may be typing there, delivery failed, or it was woken 20 times this hour). 送进去 types them as a message,
 // which the user chose to send; a dialog on its screen refuses that like any send (§6.9).
 import { useState } from 'react'
-import { Inbox } from 'lucide-react'
+import { Inbox } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { useSessionView } from '../state/workspace'

@@ -1,5 +1,5 @@
 // 文件 view (PRD F17, Figma 13D / 13G): the active worktree's tree with git state, a filter, and the read-only preview.
-import { Ellipsis, FolderOpen, Search } from 'lucide-react'
+import { Ellipsis, FolderOpen, Search } from '../../ui/icons'
 import { useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { indexStatus } from '@shared/worktree-files'
 import type { SessionId } from '@shared/types'

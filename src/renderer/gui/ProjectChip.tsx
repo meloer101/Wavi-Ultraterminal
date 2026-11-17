@@ -4,7 +4,7 @@
 // session moves (its agent restarts there) once the wheel has been still for a moment, so a trackpad swipe through
 // several projects restarts the agent once.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronsUpDown } from 'lucide-react'
+import { ChevronsUpDown } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import { wheelSteps } from './model'

@@ -5,7 +5,7 @@
 // Archiving after the merge is 合并后自动归档's (pull-requests/auto-archive.ts), not this sheet's.
 import { headlessAgent } from '@shared/agents'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
+import { ArrowRight, CircleX, GitBranch } from '../../ui/icons'
 import { severityCounts } from '@shared/background-review'
 import type { MergeMethod, PrStatus } from '@shared/pull-requests'
 import { defineMessages } from '@shared/i18n'

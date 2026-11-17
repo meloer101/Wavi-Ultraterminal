@@ -291,8 +291,8 @@
   overflow-wrap: anywhere;
 }
 
-/* Figma 91: the running turn's last row — what the agent does now (or 思考中) and the turn's clock; no icon, the
-   clock is what moves. */
+/* Figma 91 / 94′: the running turn's last row — the icon of what the agent does now (the brain for 思考中), the words
+   swept by light, and the turn's clock. */
 .runRow {
   display: flex;
   align-items: center;
@@ -340,6 +340,48 @@
   .runRoll {
     animation: none;
     transform: translateY(-50%);
+  }
+}
+
+/* Figma 94′: words for what is still happening. They are drawn at text/primary and masked to 45% outside a band that
+   sweeps left to right for 80% of the cycle, then rests out of sight; reduced motion leaves them plain text/primary. */
+.shimmer {
+  color: var(--text-primary);
+  mask-image: linear-gradient(90deg, color-mix(in srgb, black 45%, transparent) 42%, black 50%, color-mix(in srgb, black 45%, transparent) 58%);
+  mask-size: 250% 100%;
+  mask-repeat: no-repeat;
+  /* Its duration comes inline from SHIMMER_MS (gui/Feed.tsx), which also sets its phase from the wall clock. */
+  animation: shimmer linear infinite;
+}
+
+/* Above the verb's and target's own colours (.toolVerb, .toolArg come later at the same weight). */
+.shimmer > span {
+  color: var(--text-primary);
+}
+
+/* A row's verb and target swept as one: laid out like the row they sit in, taking the room the target took. */
+.shimmerGroup {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+@keyframes shimmer {
+  0% {
+    mask-position: 100% 0;
+  }
+  80%,
+  100% {
+    mask-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+    mask-image: none;
   }
 }
 

@@ -22,8 +22,8 @@ import {
   RefreshCw,
   Search,
   Sun,
-  type LucideIcon
-} from 'lucide-react'
+  type IconComponent
+} from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
@@ -40,7 +40,7 @@ import { useGitGroup } from './useGitGroup'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
-const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
+const ACTION_ICONS: Record<ActionIcon, IconComponent> = {
   plus: Plus,
   'folder-plus': FolderPlus,
   sidebar: PanelLeft,

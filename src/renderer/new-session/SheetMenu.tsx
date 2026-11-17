@@ -4,7 +4,7 @@
 // over the control like a macOS pop-up menu and keeps the whole menu on screen, so a long list need not scroll.
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Search } from 'lucide-react'
+import { Search } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import styles from './NewSessionSheet.module.css'

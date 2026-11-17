@@ -3,7 +3,7 @@
 // and 停止; a row per phase (done / all, time) and the running phase's agents under it (74B). Once it ends: the phases,
 // the failed agents with their error, a failed run's error, where a stopped run stopped (74C).
 import { useEffect, useState } from 'react'
-import { Workflow } from 'lucide-react'
+import { Workflow } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionStatus } from '@shared/types'

@@ -1,12 +1,12 @@
 // What the iPhone app (ios/, PRD F22) takes from the desktop instead of keeping its own copy: status words, agent names
-// and marks, the lucide icons it uses (the desktop's set, CLAUDE.md), the words of generated branch names and the
+// and marks, the icons it uses (the desktop's Hugeicons set, src/renderer/ui/icons.tsx), the words of generated branch names and the
 // link's limits. This test writes them into ios/ from the
 // shared modules and fails when the files there differ, so the Swift app cannot drift;
 // `WAVI_WRITE_PHONE_ASSETS=1 npx vitest run src/main/remote/phone-assets.test.ts` writes them after a change here.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import * as lucide from 'lucide-react'
-import { createElement, type ComponentType } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AGENT_ICON_SVG } from '../../shared/agent-icon-svg'
@@ -15,13 +15,14 @@ import { withLang, type Lang } from '../../shared/i18n'
 import { ADJECTIVES, NOUNS } from '../../shared/new-session'
 import { DEFAULT_REMOTE_PORT, PAIRING_ALPHABET, PAIRING_CODE_LENGTH, REMOTE_LIMITS, REMOTE_PROTOCOL } from '../../shared/remote'
 import { STATUS_LABEL } from '../../shared/session-status'
+import { GLYPHS, type GlyphName } from '../../renderer/ui/glyphs'
 
 const IOS = join(__dirname, '../../../ios/Wavi')
 const SHARED = join(IOS, 'Resources/Shared.json')
 const MARKS = join(IOS, 'Assets.xcassets/Agents')
-const ICONS = join(IOS, 'Assets.xcassets/Lucide')
-/** The lucide icons the app draws, by asset name (`Image("Lucide/git-branch")`). */
-const LUCIDE: Record<string, keyof typeof lucide> = {
+const ICONS = join(IOS, 'Assets.xcassets/Icons')
+/** The icons the app draws, by asset name (`Image("Icons/git-branch")`): the desktop's glyphs (ui/glyphs.ts) by name. */
+const ICON_NAMES: Record<string, GlyphName> = {
   'arrow-up': 'ArrowUp',
   bot: 'Bot',
   camera: 'Camera',
@@ -148,15 +149,13 @@ function spellPath(d: string): string {
 
 const marks = () => imagesets(Object.fromEntries(Object.entries(AGENT_ICON_SVG).filter((e): e is [string, string] => e[1] !== undefined).map(([id, svg]) => [id, forCoreSvg(svg)])))
 
-/** At the desktop's stroke (CLAUDE.md: 1.75), without lucide's class and aria attributes. */
+/** At the desktop's stroke (CLAUDE.md: 1.75), path data spelled for CoreSVG. */
 const icons = () =>
   imagesets(
     Object.fromEntries(
-      Object.entries(LUCIDE).map(([name, component]) => [
+      Object.entries(ICON_NAMES).map(([name, glyph]) => [
         name,
-        renderToStaticMarkup(createElement(lucide[component] as ComponentType<{ size: number; strokeWidth: number }>, { size: 24, strokeWidth: 1.75 }))
-          .replace(/ class="[^"]*"/, '')
-          .replace(/ aria-hidden="true"/, '')
+        forCoreSvg(renderToStaticMarkup(createElement(HugeiconsIcon, { icon: GLYPHS[glyph], size: 24, strokeWidth: 1.75 })).replace(/ class=""/, ''))
       ])
     )
   )
@@ -184,5 +183,5 @@ describe('the iPhone app’s copy of src/shared', () => {
 
   it('ios/Wavi/Assets.xcassets/Agents', () => sync(MARKS, marks()))
 
-  it('ios/Wavi/Assets.xcassets/Lucide', () => sync(ICONS, icons()))
+  it('ios/Wavi/Assets.xcassets/Icons', () => sync(ICONS, icons()))
 })

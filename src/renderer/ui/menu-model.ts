@@ -1,7 +1,7 @@
 // Pure parts of the in-app menu (ui/MenuHost.tsx): entries, placement, shortcut labels, keyboard movement.
 import type { ComponentType } from 'react'
 
-/** A 16px lucide-style icon shown before an item's label. */
+/** A 16px icon (ui/icons) shown before an item's label. */
 export type MenuIcon = ComponentType<{ size?: number; strokeWidth?: number }>
 
 /** A menu entry. Choosing an item resolves `popupMenu()` with its id. */

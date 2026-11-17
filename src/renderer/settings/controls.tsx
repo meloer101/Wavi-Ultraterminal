@@ -1,7 +1,7 @@
 // Form atoms for the settings window — Figma components Select (12:126), Slider (12:137),
 // Toggle (12:136) and ThemeSwatch (12:162); Segment (9:54) is the shared ui/Segmented.
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from '../ui/icons'
 import { normalizeHex } from '@shared/color'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'

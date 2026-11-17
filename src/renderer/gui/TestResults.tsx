@@ -1,7 +1,7 @@
 // A test command's results under its row (PRD F23, Figma 90D): each failure (✕ · name · its place, a link) with its
 // first lines, expected in green and received in red; the passed ones as one row; the whole output behind 完整输出.
 import { useState, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, Terminal, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Terminal, X } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import { codeRef } from './file-refs'

@@ -4,7 +4,7 @@
 // session sit in 可清理 (one 全部清理 for all); other session-less ones in 没有会话 (one by one).
 // Refreshes on window focus, when git's worktree / branch files change, every POLL_MS while visible, and — only the
 // worktrees concerned — when their sessions change.
-import { Ellipsis, Plus } from 'lucide-react'
+import { Ellipsis, Plus } from '../../ui/icons'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { SHORTCUTS } from '@shared/shortcuts'

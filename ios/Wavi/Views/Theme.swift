@@ -2,7 +2,7 @@
 // white with an alpha (OpenAI Style, the author's design-system file), so they read on glass; the colours that mean
 // something (status, diff) come from the desktop's tokens.css through Resources/Shared.json, so a status reads the same
 // on phone and Mac. Type follows the iOS text styles and Dynamic Type (the system face, PingFang for CJK); JetBrains Mono
-// for code, paths and counts scales with them. Icons are the desktop's lucide set.
+// for code, paths and counts scales with them. Icons are the desktop's Hugeicons set.
 import SwiftUI
 
 extension Color {
@@ -141,7 +141,7 @@ extension Font {
   }
 }
 
-/// A lucide icon at the desktop's stroke, in the colour of the text around it.
+/// A Hugeicons icon at the desktop's stroke, in the colour of the text around it.
 /// Grows with the text (Dynamic Type), as SF Symbols do.
 struct Icon: View {
   let name: String
@@ -154,7 +154,7 @@ struct Icon: View {
   }
 
   var body: some View {
-    Image("Lucide/\(name)").resizable().renderingMode(.template).frame(width: size * scale, height: size * scale).accessibilityHidden(true)
+    Image("Icons/\(name)").resizable().renderingMode(.template).frame(width: size * scale, height: size * scale).accessibilityHidden(true)
   }
 }
 

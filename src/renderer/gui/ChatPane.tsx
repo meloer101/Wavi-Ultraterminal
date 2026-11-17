@@ -5,7 +5,7 @@
 // terminal would be (TerminalArea / PaneHosts). Files dropped or pasted on it become attachments (terminal/file-input
 // → session-io → the composer).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { X } from '../ui/icons'
 import { agentName, type CliAgent } from '@shared/agents'
 import { emptyGuiState, guiCanEdit, type GuiAnswer, type GuiBranch, type GuiRewindInfo, type GuiRewindScope } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'

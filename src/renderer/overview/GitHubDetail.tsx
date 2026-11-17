@@ -3,7 +3,7 @@
 // item as its task (Figma 77E). GitHub's Markdown is rendered through the sanitize schema; links and images open in
 // the system browser rather than loading here.
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { Check, Circle, CircleDot, ExternalLink, GitPullRequest, X } from 'lucide-react'
+import { Check, Circle, CircleDot, ExternalLink, GitPullRequest, X } from '../ui/icons'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'

@@ -3,7 +3,7 @@
 // time with the messages they sent as arrows between lanes, so a loop (write → review → back → write) reads as one.
 // Display only: a teammate's ask is answered in the lead's terminal, so 去处理 puts the keyboard there.
 import { useEffect, useReducer, useState } from 'react'
-import { ChevronDown, ChevronUp, Users } from 'lucide-react'
+import { ChevronDown, ChevronUp, Users } from '../ui/icons'
 import { memberLine as progress, teamCounts, TEAM_GLYPH as GLYPH, TEAM_LEAD, type TeamState } from '@shared/agent-team'
 import { claudeModelLabel } from '@shared/terminal-settings'
 import type { SessionId } from '@shared/types'

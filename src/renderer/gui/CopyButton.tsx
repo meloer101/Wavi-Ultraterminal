@@ -1,7 +1,7 @@
 // A copy button in a GUI session's feed (PRD F23, Figma 54A / 54B): a message, a code block, a tool's output. It shows
 // ✓ for a moment once the text is on the clipboard.
 import { useEffect, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import styles from './Chat.module.css'

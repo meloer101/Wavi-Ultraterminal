@@ -1,7 +1,7 @@
 // Git view (PRD F17 Git · 图谱 / 变更, Figma 13B / 13H / 13B2): header, the 图谱 / 变更 switch, and either the commit
 // graph of the whole repo or the active worktree's changes. On 变更 the switch row also shows 已看 N / M and the 未看
 // filter (合入链路 v2, Figma 73A).
-import { ChevronDown, Ellipsis, RotateCw } from 'lucide-react'
+import { ChevronDown, Ellipsis, RotateCw } from '../../ui/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { compareByUrgency } from '@shared/session-status'

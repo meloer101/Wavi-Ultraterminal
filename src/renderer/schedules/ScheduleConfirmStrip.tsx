@@ -2,7 +2,7 @@
 // sits under that session's terminal and the session shows 等你处理 until the user answers. One row per request:
 // name · time · 发给这个会话 / 每次开一个 X 会话 · the message; the footer says when it would expire. ⌘↵ starts.
 import { useEffect, useRef } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock } from '../ui/icons'
 import { agentName } from '@shared/agents'
 import { monthDay, timingLabel } from '@shared/schedule'
 import type { SessionId } from '@shared/types'
