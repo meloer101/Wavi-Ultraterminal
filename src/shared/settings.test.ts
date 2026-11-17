@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySettingsPatch, DEFAULT_SETTINGS, sanitizeSettings } from './settings'
+import { applySettingsPatch, DEFAULT_SETTINGS, isOpaqueMaterial, sanitizeSettings } from './settings'
 
 describe('sanitizeSettings', () => {
   it('returns defaults for garbage', () => {
@@ -230,5 +230,12 @@ describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 
     expect(read('liquid', 0.2).windowMaterial).toBe('glass')
     expect(read('solid', 0.45).windowMaterial).toBe('solid')
     expect('shellOpacity' in read('glass', 0.3)).toBe(false)
+  })
+
+  it('keeps 实心玻璃 (Figma 93); it and 实色 are the opaque materials', () => {
+    expect(sanitizeSettings({ appearance: { windowMaterial: 'solid-glass' } }).appearance.windowMaterial).toBe('solid-glass')
+    expect(isOpaqueMaterial('solid-glass')).toBe(true)
+    expect(isOpaqueMaterial('solid')).toBe(true)
+    expect(isOpaqueMaterial('glass')).toBe(false)
   })
 })

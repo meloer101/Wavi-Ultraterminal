@@ -60,6 +60,7 @@
 
 .item[data-active='true'] {
   background: var(--bg-selected);
+  box-shadow: var(--state-ring);
 }
 
 .item[aria-disabled='true'] {

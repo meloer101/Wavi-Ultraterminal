@@ -8,7 +8,7 @@
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import liquidGlass from 'electron-liquid-glass'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
-import type { AppSettings } from '@shared/settings'
+import { isOpaqueMaterial, type AppSettings } from '@shared/settings'
 import { allAppWindows, isAppWindow } from './app-windows'
 import { getSettings, onSettingsChange } from './settings'
 
@@ -54,7 +54,7 @@ function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
   win.setBackgroundColor(windowBackgroundColor(resolved, glass))
   if (!glass) return
   if (nativeGlass) attachGlass(win)
-  const liquid = nativeGlass && !unglassed.has(win) && settings.appearance.windowMaterial === 'glass'
+  const liquid = nativeGlass && !unglassed.has(win) && !isOpaqueMaterial(settings.appearance.windowMaterial)
   const next = liquid ? null : 'sidebar'
   if (vibrancy.has(win) && vibrancy.get(win) === next) return
   vibrancy.set(win, next)

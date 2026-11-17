@@ -3,7 +3,7 @@
 // The terminal color comes from the theme (--term-bg: white in light mode, near-black in dark) unless the user chose
 // or imported one (PRD F7 v1.71): then --term-bg is set on <html> to it and xterm gets the matching customTheme.
 import { backgroundBlurPx, backgroundImageUrl } from '@shared/background-image'
-import type { AppearanceSettings, ChatAppearance, ChatWidth } from '@shared/settings'
+import { isOpaqueMaterial, type AppearanceSettings, type ChatAppearance, type ChatWidth } from '@shared/settings'
 import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
 
@@ -12,12 +12,12 @@ type CardOpacity = Pick<AppearanceSettings, 'terminalOpacity' | 'windowMaterial'
 
 /** Alpha of the terminal's default cell background: the user's terminal opacity over the theme color. */
 export function terminalBackgroundAlpha(a: CardOpacity): number {
-  return a.windowMaterial === 'solid' ? 1 : a.terminalOpacity
+  return isOpaqueMaterial(a.windowMaterial) ? 1 : a.terminalOpacity
 }
 
 /** Opacity of the GUI chat card over the window; 1 under 实色, like the terminal. */
 export function chatOpacity(a: Pick<AppearanceSettings, 'chat' | 'windowMaterial'>): number {
-  return a.windowMaterial === 'solid' ? 1 : a.chat.opacity
+  return isOpaqueMaterial(a.windowMaterial) ? 1 : a.chat.opacity
 }
 
 /** True when xterm needs `allowTransparency` (it costs subpixel text AA and WebGL, so only then). */
@@ -80,7 +80,15 @@ export function chatFontStack(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont'>):
 export type ShownMaterial = 'liquid' | 'frosted' | 'solid'
 
 export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liquidGlass: boolean): ShownMaterial =>
-  a.windowMaterial === 'solid' ? 'solid' : liquidGlass ? 'liquid' : 'frosted'
+  isOpaqueMaterial(a.windowMaterial) ? 'solid' : liquidGlass ? 'liquid' : 'frosted'
+
+/** How a pane's edge is drawn, named on <html data-finish>: 实心玻璃 (Figma 93) lights it; every other material is flat. */
+export type Finish = 'glass' | 'flat'
+
+export const finish = (a: Pick<AppearanceSettings, 'windowMaterial'>): Finish => (a.windowMaterial === 'solid-glass' ? 'glass' : 'flat')
+
+/** Whether the running window wears 实心玻璃's finish (read from <html data-finish>, which appearance/runtime.ts sets). */
+export const hasGlassFinish = (): boolean => document.documentElement.dataset.finish === ('glass' satisfies Finish)
 
 /** A theme color at `opacity` over what is behind it; fully opaque is the color itself, none is transparent. */
 const over = (color: string, opacity: number): string =>
@@ -130,7 +138,14 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
     },
     // The full-screen field (AppShell.module.css picks the palette, `auto` by theme).
     // data-material: 实色 swaps in the softer solid palette (tokens.css) and keeps full screen solid (AppShell.module.css).
+    // data-finish: 实心玻璃 is data-material 'solid' (opaque everywhere 实色 is) with the glass finish's tokens (tokens.css).
     // data-bg-image: the shell draws the user's picture under its base layer (AppShell.module.css).
-    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off', 'data-material': material, 'data-bg-image': image ? 'on' : 'off' }
+    attrs: {
+      'data-fs-backdrop': a.fullscreenBackdrop,
+      'data-chat-avatar': chat.avatar ? 'on' : 'off',
+      'data-material': material,
+      'data-finish': finish(a),
+      'data-bg-image': image ? 'on' : 'off'
+    }
   }
 }

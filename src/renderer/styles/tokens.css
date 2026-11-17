@@ -220,6 +220,11 @@
   --drop-edge: inset 0 1px 0 #ffffff8c, inset 0 -1px 0 #ffffff2e, inset 0 0 0 0.5px #ffffff59, 0 6px 18px #0000002e;
   --drop-iris: linear-gradient(115deg, #ffffffe6, #a0d2ff66 30%, #ffaae659 55%, #fff5b459 75%, #ffffffb3);
   --card-shadow: 0 1px 3px #00000059;
+  /* 实心玻璃's edges (Figma 93), drawn with box-shadow; a shadow that draws nothing everywhere else, so they can sit in a
+     list beside a focus ring. The one state (hovered, chosen, menu open), the primary button and a text field. */
+  --state-ring: 0 0 #0000;
+  --primary-finish: 0 0 #0000;
+  --field-finish: 0 0 #0000;
 }
 
 /* Light — applied via data-theme (see renderer/theme.ts), which follows the system by default */
@@ -373,4 +378,64 @@
   --float-bg: #fafafa;
   --term-bg: #f6f6f6;
   --term-fg: #2e2e2e;
+}
+
+/* 实心玻璃 (PRD §5, Figma 93; after deeplethe/solid-glass, MIT): opaque like 实色 (data-material='solid'), the cards a step
+   lighter than the base layer, every pane's finish at its edge: a line of light along the top, a faint second line inside
+   it, a hairline round it and a shadow gathered underneath. Menus and sheets are the thickest pane. Hovered, chosen and
+   held open are one state: a faint tint, lit along its top, a hairline round it. Contrast stays 实色's (11–13:1). */
+:root[data-theme='dark'][data-material='solid'][data-finish='glass'] {
+  --glass-shell-color: #141414;
+  --bg-sidebar: #141414;
+  --bg-app: #202020;
+  --bg-panel: #202020;
+  --bg-raised: #272727;
+  --bg-float: #262626;
+  --bg-inset: #1a1a1a;
+  --term-bg: #202020;
+  --float-bg: #262626;
+  --card-edge: inset 0 1px 0 #ffffff29, inset 0 0 0 1px #ffffff0a;
+  --card-shadow: 0 0 0 1px #ffffff0f, 0 1px 2px #0000001a, 0 12px 32px -14px #00000099;
+  --float-edge: inset 0 1px 0 #ffffff29;
+  --shadow-glass-menu: 0 0 0 1px #ffffff0f, 0 24px 60px -18px #00000099, 0 6px 16px -6px #00000038;
+  --glass-sheet: #262626f5;
+  --glass-menu: #2a2a2af5;
+  --glass-highlight: inset 0 1px 0 #ffffff29;
+  --shadow-glass: 0 0 0 1px #ffffff0f, 0 24px 60px -18px #00000099, 0 6px 16px -6px #00000038;
+  --state-ring: inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff0f;
+  --drop-fill: var(--bg-selected);
+  --drop-edge: var(--state-ring);
+  --drop-iris: transparent;
+  --glass-primary-bg: #d5d5d5db;
+  --glass-primary-fg: #1f1f1f;
+  --primary-finish: inset 0 1px 0 #ffffff, inset 0 -1px 0 #00000038, 0 0 0 1px #ffffff42;
+  --field-finish: inset 0 1px 0 #ffffff26, inset 0 0 0 1px #ffffff14;
+}
+
+:root[data-theme='light'][data-material='solid'][data-finish='glass'] {
+  --glass-shell-color: #e6e6e6;
+  --bg-sidebar: #e6e6e6;
+  --bg-app: #f6f6f6;
+  --bg-panel: #f6f6f6;
+  --bg-raised: #f9f9f9;
+  --bg-float: #fbfbfb;
+  --bg-inset: #efefef;
+  --term-bg: #f6f6f6;
+  --float-bg: #fbfbfb;
+  --card-edge: inset 0 1px 0 #ffffffe6, inset 0 0 0 1px #ffffff59;
+  --card-shadow: 0 0 0 1px #4444441a, 0 1px 2px #2a2a2a0f, 0 12px 32px -14px #2a2a2a47;
+  --float-edge: inset 0 1px 0 #ffffffe6, inset 0 -1px 0 #44444429;
+  --shadow-glass-menu: 0 0 0 1px #44444438, 0 24px 60px -18px #2a2a2a47, 0 6px 16px -6px #2a2a2a24;
+  --glass-sheet: #fbfbfbf5;
+  --glass-menu: #fbfbfbf5;
+  --glass-highlight: inset 0 1px 0 #ffffffe6;
+  --shadow-glass: 0 0 0 1px #44444438, 0 24px 60px -18px #2a2a2a47, 0 6px 16px -6px #2a2a2a24;
+  --state-ring: inset 0 1px 0 #ffffffd9, inset 0 0 0 1px #2a2a2a21;
+  --drop-fill: var(--bg-selected);
+  --drop-edge: var(--state-ring);
+  --drop-iris: transparent;
+  --glass-primary-bg: #2e2e2ee0;
+  --glass-primary-fg: #f6f6f6;
+  --primary-finish: inset 0 1px 0 #ffffff4d, inset 0 -1px 0 #00000073, 0 0 0 1px #2e2e2e4d;
+  --field-finish: inset 0 1px 0 #ffffff, inset 0 0 0 1px #2a2a2a24;
 }

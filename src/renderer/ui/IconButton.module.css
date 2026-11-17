@@ -29,16 +29,19 @@
 
 .button:hover {
   background: var(--bg-hover);
+  box-shadow: var(--state-ring);
   color: var(--text-primary);
 }
 
 .button[data-active='true'],
 .button[data-menu-open] {
   background: var(--bg-selected);
+  box-shadow: var(--state-ring);
   color: var(--text-primary);
 }
 
 .button:disabled {
   background: transparent;
+  box-shadow: none;
   color: var(--text-disabled);
 }

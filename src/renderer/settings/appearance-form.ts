@@ -119,10 +119,12 @@ export const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: str
   defineMessages<ReadonlyArray<{ value: WindowMaterial; label: string }>>({
     zh: [
       { value: 'glass', label: '玻璃' },
+      { value: 'solid-glass', label: '实心玻璃' },
       { value: 'solid', label: '实色' }
     ],
     en: [
       { value: 'glass', label: 'Glass' },
+      { value: 'solid-glass', label: 'Solid glass' },
       { value: 'solid', label: 'Solid' }
     ]
   })

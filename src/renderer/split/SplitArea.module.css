@@ -207,6 +207,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--bg-selected);
+  box-shadow: var(--field-finish);
   color: var(--text-primary);
   font: var(--text-body);
   outline: none;

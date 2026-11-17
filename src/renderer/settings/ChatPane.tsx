@@ -1,6 +1,6 @@
 // 设置 · 对话 (Figma 66D / 66H): what GUI sessions read — my picture, the chat font, its column and card opacity.
 import { useMemo, useRef } from 'react'
-import { LIMITS, type AppearancePatch, type AppearanceSettings, type ChatAppearance, type ChatWeight } from '@shared/settings'
+import { isOpaqueMaterial, LIMITS, type AppearancePatch, type AppearanceSettings, type ChatAppearance, type ChatWeight } from '@shared/settings'
 import { defineMessages, withLang } from '@shared/i18n'
 import { Segmented } from '../ui/Segmented'
 import { useLang, useMessages } from '../ui/i18n'
@@ -147,7 +147,7 @@ export function ChatPane({ appearance, update }: { appearance: AppearanceSetting
           <Segmented label={m.width} value={chat.width} options={CHAT_WIDTH_OPTIONS} onChange={(width) => updateChat({ width })} />
         </Row>
         {/* 实色 makes every card opaque (Figma 66B), so the opacity has nothing to change there. */}
-        {appearance.windowMaterial !== 'solid' && (
+        {!isOpaqueMaterial(appearance.windowMaterial) && (
           <Row label={m.opacity} id="chatOpacity">
             <Slider
               label={m.opacity}
