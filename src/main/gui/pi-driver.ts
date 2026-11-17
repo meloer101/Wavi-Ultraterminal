@@ -32,7 +32,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
   let models: unknown[] = []
   /** The levels Pi says the running model takes; unknown for a model chosen but not yet running. */
   let levels: string[] | undefined
-  const picks: PiPicks = { ...(options.model ? { model: options.model } : {}), permission: options.permission === 'accept-edits' ? 'accept-edits' : 'ask' }
+  const picks: PiPicks = { ...(options.model ? { model: options.model } : {}), permission: PI_LEVELS.find((level) => level === options.permission) ?? 'ask' }
   let config: GuiConfigOption[] = []
   /** 总是允许: the same call again goes through for the rest of this process. */
   const allowed = new Set<string>()
@@ -120,8 +120,9 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
     })
   }
 
-  /** 接受编辑 lets file changes through; 总是允许 the same call. */
-  const allowedNow = (call: { tool: string; input: unknown }): boolean => (picks.permission === 'accept-edits' && PI_FILE_CHANGE_TOOLS.has(call.tool)) || allowed.has(callKey(call.tool, call.input))
+  /** 完全访问 lets every call through, 接受编辑 file changes; 总是允许 the same call. */
+  const allowedNow = (call: { tool: string; input: unknown }): boolean =>
+    picks.permission === 'full-access' || (picks.permission === 'accept-edits' && PI_FILE_CHANGE_TOOLS.has(call.tool)) || allowed.has(callKey(call.tool, call.input))
 
   const respond = (id: string, fields: Rec): boolean => io.write({ type: 'extension_ui_response', id, ...fields })
 

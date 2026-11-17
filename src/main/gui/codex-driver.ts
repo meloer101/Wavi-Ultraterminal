@@ -6,7 +6,7 @@
 
 import type { GuiAnswer, GuiConfigOption, GuiPermission } from '@shared/gui-chat'
 import { parseCodexThreadTokenUsage } from '@shared/session-meta'
-import { CODEX_APPROVAL, codexAnswerResult, codexConfig, codexTurnParams, createCodexNormalizer, isCodexLevel } from './codex-app-server'
+import { CODEX_APPROVAL, codexAnswerResult, codexSandbox, codexConfig, codexTurnParams, createCodexNormalizer, isCodexLevel } from './codex-app-server'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { isImagePath, withPaths } from './launch'
 import { defineMessages, pick } from '@shared/i18n'
@@ -37,6 +37,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
   let threadId: string | undefined
   /** 自动 sent `approvalsReviewer: auto_review` on this thread: later turns at another level send `user`. */
   let reviewerSet = false
+  /** 完全访问 lifted the sandbox on this thread: later turns at another level put workspace-write back. */
+  let sandboxLifted = (options.permission ?? 'accept-edits') === 'full-access'
   let turnId: string | undefined
   let interruptWanted = false
   let isReady = false
@@ -87,9 +89,11 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
         return
       }
     }
+    const level = current.permission ?? 'accept-edits'
+    const { sandboxPolicy: _turnOnly, ...approval } = CODEX_APPROVAL[level]
     const started = await rpc.request(
       'thread/start',
-      { cwd: options.cwd, ...CODEX_APPROVAL[current.permission ?? 'accept-edits'], sandbox: 'workspace-write', ...(current.model ? { model: current.model } : {}) },
+      { cwd: options.cwd, ...approval, sandbox: codexSandbox(level), ...(current.model ? { model: current.model } : {}) },
       HANDSHAKE_TIMEOUT_MS
     )
     if (!started.ok || !isRec(started.result) || !takeThread(started.result.thread)) {
@@ -182,6 +186,9 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       // The reviewer holds for later turns: once 自动 was used, the other levels put the user back.
       if (params.approvalsReviewer === 'auto_review') reviewerSet = true
       else if (reviewerSet) params.approvalsReviewer = 'user'
+      // So is the sandbox: once 完全访问 lifted it, the other levels put workspace-write back (its defaults).
+      if (params.sandboxPolicy) sandboxLifted = true
+      else if (sandboxLifted) params.sandboxPolicy = { type: 'workspaceWrite' }
       void rpc.request('turn/start', params).then((outcome) => {
         if (outcome.ok) return
         // Refused before it began: there is no turn/completed to end it.

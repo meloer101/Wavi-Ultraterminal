@@ -200,4 +200,11 @@ describe('Figma 56 pickers', () => {
     expect(acpAutoAllow(request('execute'), 'accept-edits')).toBeNull()
     expect(acpAutoAllow(request('edit'), 'ask')).toBeNull()
   })
+
+  it('lets every request through under 完全访问 (PRD v1.205), and asks when the agent offers no allow', () => {
+    const request = (kind: string) => ({ toolCall: { kind }, options: [{ optionId: 'no', kind: 'reject_once' }, { optionId: 'once', kind: 'allow_once' }] })
+    expect(acpAutoAllow(request('execute'), 'full-access')).toBe('once')
+    expect(acpAutoAllow({ toolCall: {}, options: [{ optionId: 'once', kind: 'allow_once' }] }, 'full-access')).toBe('once')
+    expect(acpAutoAllow({ toolCall: { kind: 'execute' }, options: [{ optionId: 'no', kind: 'reject_once' }] }, 'full-access')).toBeNull()
+  })
 })

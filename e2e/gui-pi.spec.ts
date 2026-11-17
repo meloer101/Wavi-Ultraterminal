@@ -89,11 +89,11 @@ test.describe('F23 GUI session · Pi over its rpc mode', () => {
     expect(args!.at(args!.indexOf('-e') + 1)).toMatch(/resources\/hooks\/wavi-pi-gui\.js$/)
   })
 
-  test('模式 offers 询问 and 接受编辑; a bash call is asked on a card and the turn goes on', async () => {
+  test('模式 offers 询问, 接受编辑 and 完全访问; a bash call is asked on a card and the turn goes on', async () => {
     const mode = composer().locator('[data-picker="permission"]')
     await expect(mode).toHaveText('询问')
     await mode.click()
-    await expect(page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio')).toHaveText(['询问', '接受编辑'])
+    await expect(page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '完全访问'])
     await page.keyboard.press('Escape')
 
     await send('bash please')

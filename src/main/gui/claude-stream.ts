@@ -21,6 +21,7 @@ import { scriptMeta, workflowRows, workflowStatus, type WorkflowPhase, type Work
 import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
 import { defineMessages, pick } from '@shared/i18n'
+import { guiPermissionLevels } from '@shared/gui-agents'
 
 const M = defineMessages({
   zh: {
@@ -63,15 +64,18 @@ type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
-/** Figma 56: Wavi's permission levels as Claude's permission modes (`bypassPermissions` is left out on purpose). */
-export const CLAUDE_MODE_OF: Readonly<Record<GuiPermission, string>> = { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto' }
-const CLAUDE_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
+/**
+ * Figma 56: Wavi's permission levels as Claude's permission modes. 完全访问 is `bypassPermissions` (PRD v1.205): a GUI
+ * Claude is launched with `--allow-dangerously-skip-permissions` (launch.ts) so it can be switched to mid-session.
+ */
+export const CLAUDE_MODE_OF: Readonly<Record<GuiPermission, string>> = { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }
+const CLAUDE_LEVELS: readonly GuiPermission[] = guiPermissionLevels('claude')
 const isClaudeLevel = (value: string): value is GuiPermission => (CLAUDE_LEVELS as readonly string[]).includes(value)
 
 /** The level a Claude permission mode stands for; `plan` stands for the level it returns to (`before`). */
 export function claudeLevel(mode: string | undefined, before: GuiPermission | undefined): GuiPermission {
   if (mode === 'plan') return before ?? 'ask'
-  return mode === 'acceptEdits' ? 'accept-edits' : mode === 'auto' ? 'auto' : 'ask'
+  return mode === 'acceptEdits' ? 'accept-edits' : mode === 'auto' ? 'auto' : mode === 'bypassPermissions' ? 'full-access' : 'ask'
 }
 
 /** What the driver keeps for the pickers: Claude's own permission `mode`, and the level 计划 returns to. */

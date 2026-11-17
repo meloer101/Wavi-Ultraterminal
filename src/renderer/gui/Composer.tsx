@@ -6,7 +6,7 @@
 // Before anything is said (`switchable`) the model menu lists the agents first, each with its models (Figma 65B).
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, Workflow, X, Zap } from '../ui/icons'
+import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldAlert, ShieldCheck, Square, Workflow, X, Zap } from '../ui/icons'
 import { agentName, type CliAgent } from '@shared/agents'
 import { guiAdapterOf } from '@shared/gui-agents'
 import { matchCommands, type GuiCatalogResult, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
@@ -88,7 +88,7 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 /** Figma 65: each 模式 with its mark, on the button and in its list. */
-const MODE_ICON: Record<ModeChoice, typeof Shield> = { ask: Shield, 'accept-edits': Pencil, auto: ShieldCheck, plan: ListTodo }
+const MODE_ICON: Record<ModeChoice, typeof Shield> = { ask: Shield, 'accept-edits': Pencil, auto: ShieldCheck, 'full-access': ShieldAlert, plan: ListTodo }
 
 interface Props {
   sessionId: SessionId

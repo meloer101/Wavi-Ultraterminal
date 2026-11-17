@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { agentArgv, agentShellArgs, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
+import { agentArgv, agentShellArgs, CLI_PERMISSIONS, cliPermissionHasDefault, cliPermissionLevels, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
+import { CLI_AGENTS } from './agents'
 
 describe('shellQuote', () => {
   it('wraps in single quotes and escapes embedded ones', () => {
@@ -9,10 +10,39 @@ describe('shellQuote', () => {
 })
 
 describe('agentArgv', () => {
-  it('gives claude the 定时任务 permission mode, but not when resuming or to another CLI (PRD F24)', () => {
+  it('gives claude the 定时任务 permission mode, but not when resuming (PRD F24)', () => {
     expect(agentArgv('claude', '/r', { permission: 'accept-edits', initialPrompt: 'go' })).toEqual(['claude', '--permission-mode', 'acceptEdits', '--', 'go'])
+    expect(agentArgv('claude', '/r', { permission: 'full-access', initialPrompt: 'go' })).toEqual(['claude', '--permission-mode', 'bypassPermissions', '--', 'go'])
+    expect(agentArgv('claude', '/r', { permission: 'ask' })).toEqual(['claude'])
     expect(agentArgv('claude', '/r', { permission: 'auto', resumeAgentSessionId: 'abc' })).not.toContain('--permission-mode')
-    expect(agentArgv('codex', '/r', { permission: 'auto' })).not.toContain('--permission-mode')
+  })
+
+  it('gives every other CLI its own flag for the level, before the first message; a level it lacks passes none (PRD F24 v1.205)', () => {
+    expect(agentArgv('codex', '/r', { permission: 'full-access', initialPrompt: 'go' }).slice(-3)).toEqual(['--dangerously-bypass-approvals-and-sandbox', '--', 'go'])
+    expect(agentArgv('gemini', '/r', { permission: 'accept-edits' })).toEqual(['gemini', '--approval-mode', 'auto_edit'])
+    expect(agentArgv('kiro', '/r', { permission: 'full-access' })).toEqual(['kiro-cli', 'chat', '--tui', '--trust-all-tools'])
+    expect(agentArgv('kimi', '/r', { permission: 'auto' })).toEqual(['kimi'])
+    // A leader's read-only profile wins over a 定时任务's level.
+    expect(agentArgv('codex', '/r', { permission: 'full-access', extraArgs: ['-c', 'default_permissions="wavi-leader"'] })).not.toContain('--dangerously-bypass-approvals-and-sandbox')
+  })
+
+  it('lists each CLI’s levels, and 默认 only where no level is its plain launch', () => {
+    expect(cliPermissionLevels('claude')).toEqual(['ask', 'accept-edits', 'auto', 'full-access'])
+    expect(cliPermissionHasDefault('claude')).toBe(false)
+    expect(cliPermissionLevels('pi')).toEqual(['ask', 'accept-edits', 'full-access'])
+    expect(cliPermissionHasDefault('pi')).toBe(false)
+    expect(cliPermissionLevels('codex')).toEqual(['ask', 'accept-edits', 'auto', 'full-access'])
+    expect(cliPermissionHasDefault('codex')).toBe(true)
+    expect(cliPermissionLevels('amp')).toEqual(['full-access'])
+    expect(cliPermissionHasDefault('amp')).toBe(false)
+    expect(cliPermissionLevels('droid')).toEqual([])
+    expect(cliPermissionHasDefault('droid')).toBe(true)
+    // Every CLI has a row, and every level that never asks is the last one it lists.
+    for (const kind of CLI_AGENTS) {
+      expect(CLI_PERMISSIONS[kind]).toBeDefined()
+      const levels = cliPermissionLevels(kind)
+      if (levels.includes('full-access')) expect(levels.at(-1)).toBe('full-access')
+    }
   })
 
   it('starts claude with no extra flags', () => {
@@ -132,6 +162,13 @@ describe('agentShellArgs', () => {
   it('runs `before` (the setup script) first, for agents and plain shells alike', () => {
     expect(agentShellArgs('shell', '/tmp', '/bin/zsh', { before: 'make setup' })).toEqual(['-l', '-i', '-c', "make setup; exec '/bin/zsh' -l"])
     expect(agentShellArgs('claude', '/tmp', '/bin/zsh', { before: 'make setup' })[3]).toBe(`make setup; ${script('claude', "'claude'")}`)
+  })
+
+  it('sets a level’s variables for this launch only, through env (Goose, Pi; PRD F24 v1.205)', () => {
+    expect(agentShellArgs('goose', '/tmp', '/bin/zsh', { permission: 'auto' })[3]).toContain("'env' 'GOOSE_MODE=smart_approve' 'goose' 'session'")
+    expect(agentShellArgs('pi', '/tmp', '/usr/local/bin/fish', { permission: 'ask' })[3]).toContain("'env' 'WAVI_PI_PERMISSION=ask' 'pi'")
+    expect(agentShellArgs('pi', '/tmp', '/bin/zsh', { permission: 'full-access' })[3]).not.toContain("'env'")
+    expect(agentShellArgs('goose', '/tmp', '/bin/zsh', { permission: 'auto', resumeAgentSessionId: CONTINUE_LATEST })[3]).not.toContain('GOOSE_MODE')
   })
 
   it('runs the agent, reports how it ended, then execs a login shell', () => {

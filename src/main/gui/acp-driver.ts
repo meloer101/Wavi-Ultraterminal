@@ -42,7 +42,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
   let config: GuiConfigOption[] = []
   const launch = options.launchPermission
   const picks: AcpPickerState = {
-    levels: ['ask', 'accept-edits', ...(launch?.auto ? (['auto'] as const) : [])],
+    levels: ['ask', 'accept-edits', ...(launch?.auto ? (['auto'] as const) : []), 'full-access'],
     permission: options.permission ?? 'ask',
     ...(launch?.plan ? { launchPlan: options.plan ?? false } : {})
   }

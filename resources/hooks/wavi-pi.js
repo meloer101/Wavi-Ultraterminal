@@ -91,7 +91,31 @@ function watchMessages(pi) {
   timer.unref?.()
 }
 
+/** Pi's read-only tools and the ones that change files (as the GUI extension, wavi-pi-gui.js, and pi-rpc.ts list them). */
+const READ_ONLY = new Set(['read', 'grep', 'find', 'ls'])
+const FILE_CHANGES = new Set(['edit', 'write'])
+
+/**
+ * A 定时任务's 权限 for this launch (PRD F24 v1.205, `WAVI_PI_PERMISSION` from agent-launch.ts CLI_PERMISSIONS): Pi has
+ * no approval dialogs of its own, so under 询问 every call that is not read-only, and under 接受编辑 every one that is
+ * not a file change either, asks in Pi's own TUI (`ctx.ui.confirm`) and tells Wavi it waits. Unset or anything else:
+ * Pi's own default, nothing asked.
+ */
+function gate(pi) {
+  const level = process.env.WAVI_PI_PERMISSION
+  if (level !== 'ask' && level !== 'accept-edits') return
+  pi.on('tool_call', async (event, ctx) => {
+    if (READ_ONLY.has(event.toolName) || (level === 'accept-edits' && FILE_CHANGES.has(event.toolName))) return undefined
+    if (!ctx.hasUI) return { block: true, reason: `${event.toolName} needs approval and there is no one to ask.` }
+    void post('Notification', { notification_type: 'permission_prompt', message: `Pi needs your permission to use ${event.toolName}` })
+    const command = event.toolName === 'bash' && event.input && typeof event.input.command === 'string' ? event.input.command : undefined
+    const approved = await ctx.ui.confirm(`Allow ${event.toolName}?`, command ?? JSON.stringify(event.input ?? {}).slice(0, 2000))
+    return approved ? undefined : { block: true, reason: `${event.toolName} was declined.` }
+  })
+}
+
 export default function wavi(pi) {
+  gate(pi)
   if (!sock || !token || !session) return
   watchMessages(pi)
   const calls = new Map()

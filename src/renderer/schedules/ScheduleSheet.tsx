@@ -5,6 +5,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { Check, ChevronRight, GitBranch, Globe } from '../ui/icons'
 import { AGENT_SPECS, agentName, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { GUI_PERMISSION_LABELS, type GuiPermission } from '@shared/gui-chat'
+import { guiPermissionLevels } from '@shared/gui-agents'
+import { cliPermissionHasDefault, cliPermissionLevels } from '@shared/agent-launch'
 import type { AgentAvailability } from '@shared/ipc'
 import { defaultBase, groupBranches, type NewSessionInfo } from '@shared/new-session'
 import {
@@ -214,7 +216,8 @@ function initialForm(source: Schedule | undefined, copy: boolean, projectId: Pro
     agent: 'claude',
     ui: 'gui',
     model: '',
-    permission: 'ask',
+    // Each list's first entry: 询问 for a GUI, the CLI's plain launch for a terminal.
+    permission: 'default',
     autoArchive: true,
     precheck: '',
     sessionId: null,
@@ -269,7 +272,9 @@ function timingOf(form: Form): ScheduleTiming | null {
 }
 
 /** Only Claude's terminal takes a 权限 at launch; every GUI session does (PRD F24). */
-const permissionsFor = (agent: CliAgent, ui: SessionUi): readonly Permission[] => (ui === 'gui' || agent === 'claude' ? ['ask', 'accept-edits', 'auto'] : ['default'])
+/** PRD F24 v1.205: the levels the agent offers — its GUI's, or what its CLI can be launched with (默认 first when none is its plain launch). */
+const permissionsFor = (agent: CliAgent, ui: SessionUi): readonly Permission[] =>
+  ui === 'gui' ? guiPermissionLevels(agent) : [...(cliPermissionHasDefault(agent) ? (['default'] as const) : []), ...cliPermissionLevels(agent)]
 
 export function ScheduleSheet() {
   const state = useSchedules((s) => s.sheet)

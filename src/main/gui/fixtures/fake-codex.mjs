@@ -14,7 +14,7 @@ function startTurn(id, params) {
   out({ id, result: { turn: { id: turnId, status: 'inProgress' } } })
   out({ method: 'turn/started', params: { threadId, turn: { id: turnId } } })
   out({ method: 'item/completed', params: { item: { type: 'userMessage', id: `u${turnN}`, content: params.input } } })
-  current = { turnId, model: params.model ?? null, effort: params.effort ?? null, approvalPolicy: params.approvalPolicy ?? null, approvalsReviewer: params.approvalsReviewer ?? null }
+  current = { turnId, model: params.model ?? null, effort: params.effort ?? null, approvalPolicy: params.approvalPolicy ?? null, approvalsReviewer: params.approvalsReviewer ?? null, ...(params.sandboxPolicy ? { sandboxPolicy: params.sandboxPolicy } : {}) }
   // Codex's app-server names no thread itself; a client's `thread/name/set` (or another thread's) does.
   if (text.includes('name me')) out({ method: 'thread/name/updated', params: { threadId: 'thr-other', threadName: 'Not this one' } })
   if (text.includes('name me')) out({ method: 'thread/name/updated', params: { threadId, threadName: 'Fake\nthread   name' } })

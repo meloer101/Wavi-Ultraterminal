@@ -313,7 +313,7 @@ export const acpPlanValue = (mode: GuiConfigOption | undefined): string | undefi
 
 /** What the ACP driver keeps for Wavi's own pickers (Figma 56). */
 export interface AcpPickerState {
-  /** The levels this agent gets: 询问 and 接受编辑 (Wavi answers its requests), 自动 only where the agent has its own. */
+  /** The levels this agent gets: 询问, 接受编辑 and 完全访问 (Wavi answers its requests), 自动 only where the agent has its own. */
   levels: readonly GuiPermission[]
   permission: GuiPermission
   /** 计划 when it is a launch argument (AGENT_GUI launchPermission); undefined when it is the agent's own plan mode. */
@@ -346,13 +346,14 @@ export function acpPickers(agent: readonly GuiConfigOption[], state: AcpPickerSt
 const EDIT_KINDS: ReadonlySet<string> = new Set(['edit', 'delete', 'move'])
 
 /**
- * Figma 56: under 接受编辑, Wavi answers a request to change files itself — the option to allow it once (or always,
- * when the agent offers no once). Null: the user is asked.
+ * Figma 56: under 接受编辑, Wavi answers a request to change files itself, and under 完全访问 every request (PRD v1.205,
+ * as Orca's Full access does) — the option to allow it once (or always, when the agent offers no once). Null: the user
+ * is asked.
  */
 export function acpAutoAllow(params: Rec, permission: GuiPermission): string | null {
-  if (permission !== 'accept-edits') return null
+  if (permission !== 'accept-edits' && permission !== 'full-access') return null
   const kind = isRec(params.toolCall) ? str(params.toolCall.kind) : undefined
-  if (!kind || !EDIT_KINDS.has(kind)) return null
+  if (permission === 'accept-edits' && (!kind || !EDIT_KINDS.has(kind))) return null
   const options = (Array.isArray(params.options) ? params.options : []).filter(isRec)
   const pick = options.find((o) => o.kind === 'allow_once') ?? options.find((o) => o.kind === 'allow_always')
   return pick ? (str(pick.optionId) ?? null) : null

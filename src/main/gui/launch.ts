@@ -87,7 +87,9 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
     const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
     // The saved 权限 / 计划 (Figma 56); 询问 is Claude's default (its --permission-mode has no `default` choice).
     const mode = input.launch.plan ? 'plan' : input.launch.permission && input.launch.permission !== 'ask' ? CLAUDE_MODE_OF[input.launch.permission] : undefined
-    return [binary, ...CLAUDE_STREAM_ARGS, ...thinkingDisplayArgs(input.claudeVersion), ...(mode ? ['--permission-mode', mode] : []), ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
+    // 完全访问 can be chosen mid-session only when the launch allows it (`bypass_not_launched` otherwise, 2.1.326); the
+    // flag alone leaves the mode as it is (PRD v1.205).
+    return [binary, ...CLAUDE_STREAM_ARGS, '--allow-dangerously-skip-permissions', ...thinkingDisplayArgs(input.claudeVersion), ...(mode ? ['--permission-mode', mode] : []), ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
   }
   if (driver.protocol === 'codex-app-server') {
     // Global `-c` overrides go before the subcommand; trust for this folder only, nothing written to ~/.codex.
