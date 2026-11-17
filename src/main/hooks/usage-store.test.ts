@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UsageAlert, VendorUsage } from '@shared/session-meta'
-import { crossedAlert, mergeUsage, parseStoredMarks, parseStoredUsage, RATE_MIN_SPAN_MS, recentRate, UNCHANGED_REFRESH_MS, UsageStore, type AlertMark } from './usage-store'
+import { crossedAlert, mergeUsage, RESET_DROP, parseStoredMarks, parseStoredUsage, RATE_MIN_SPAN_MS, recentRate, UNCHANGED_REFRESH_MS, UsageStore, type AlertMark } from './usage-store'
 
 const claude = (percent: number, at: number): VendorUsage => ({ vendor: 'claude', at, windows: [{ minutes: 300, percent, resetsAt: 1_800_000_000_000 }] })
 
@@ -116,6 +116,15 @@ describe('mergeUsage · readings from sessions and from the account', () => {
     expect(mergeUsage(held, { vendor: 'codex', at: 2, windows: [five(1, RESET - 5 * 3_600_000)] }).windows).toEqual([five(90)])
   })
 
+  it('takes a newer account answer well below the held figure as a reset within the period (a usage reset card)', () => {
+    const held: VendorUsage = { vendor: 'claude', at: 1, windows: [five(95)] }
+    expect(mergeUsage(held, { vendor: 'claude', at: 2, complete: true, windows: [five(35, RESET - 1000)] }).windows).toEqual([five(35, RESET - 1000)])
+    // A session's reading, an older account answer and the account's small lag behind a live session do not lower it.
+    expect(mergeUsage(held, { vendor: 'claude', at: 2, windows: [five(35)] }).windows).toEqual([five(95)])
+    expect(mergeUsage({ ...held, at: 3 }, { vendor: 'claude', at: 2, complete: true, windows: [five(35)] }).windows).toEqual([five(95)])
+    expect(mergeUsage(held, { vendor: 'claude', at: 2, complete: true, windows: [five(95 - RESET_DROP + 1)] }).windows).toEqual([five(95)])
+  })
+
   it('keeps windows a session does not name, drops those a complete answer leaves out', () => {
     const polled: VendorUsage = { vendor: 'claude', at: 1, complete: true, windows: [five(20), sonnet(40)] }
     expect(mergeUsage(polled, { vendor: 'claude', at: 2, windows: [five(21)] }).windows).toEqual([five(21), sonnet(40)])
@@ -149,5 +158,34 @@ describe('UsageStore · recent pace', () => {
     usage.update(at(30, 80))
     usage.update({ vendor: 'claude', at: RESET + MIN, windows: [{ minutes: 300, percent: 2, resetsAt: RESET + 300 * MIN }] })
     expect(broadcasts.at(-1)?.windows[0]).toEqual({ minutes: 300, percent: 2, resetsAt: RESET + 300 * MIN })
+  })
+})
+
+describe('UsageStore · a window the account lowered within its period', () => {
+  const RESET = 1_800_000_000_000
+  const week = (percent: number) => ({ minutes: 10080, percent, resetsAt: RESET })
+  const five = (percent: number) => ({ minutes: 300, percent, resetsAt: RESET - 3_600_000 })
+
+  it('ignores sessions still repeating the pre-reset figure until the period ends, and announces levels again', () => {
+    const alerts: UsageAlert[] = []
+    let now = RESET - 86_400_000
+    const usage = new UsageStore({ load: () => null, save: () => undefined, broadcast: () => undefined, alert: (a) => alerts.push(a), now: () => now })
+    usage.update({ vendor: 'claude', at: now, windows: [week(95), five(10)] })
+    expect(alerts.map((a) => a.level)).toEqual([90])
+    now += 60_000
+    usage.update({ vendor: 'claude', at: now, complete: true, windows: [week(35), five(10)] })
+    expect(usage.list()[0]!.windows.map((w) => w.percent)).toEqual([10, 35])
+    // A session that has not responded since: its weekly figure is pre-reset, its 5-hour one still counts.
+    now += 60_000
+    usage.update({ vendor: 'claude', at: now, windows: [week(95), five(12)] })
+    expect(usage.list()[0]!.windows.map((w) => w.percent)).toEqual([12, 35])
+    // The account keeps the weekly window moving, and crossing 90 again is announced again.
+    now += 60_000
+    usage.update({ vendor: 'claude', at: now, complete: true, windows: [week(91), five(12)] })
+    expect(alerts.map((a) => a.level)).toEqual([90, 90])
+    // The next period takes sessions' readings again.
+    now = RESET + 60_000
+    usage.update({ vendor: 'claude', at: now, windows: [{ minutes: 10080, percent: 2, resetsAt: RESET + 7 * 86_400_000 }] })
+    expect(usage.list()[0]!.windows.find((w) => w.minutes === 10080)!.percent).toBe(2)
   })
 })
