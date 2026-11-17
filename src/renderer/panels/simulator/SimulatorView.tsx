@@ -1,7 +1,7 @@
 // iOS 模拟器 view (PRD F17, Figma 76C / 76D): one simulator, drawn and driven through main (serve-sim). Global, not per
 // worktree. States: 需要 Xcode · 选择设备 (simulators by runtime) · 正在启动 · the screen, with the Device Hub row when
 // Xcode 27 holds the device's input. Frames flow only while this view is shown and the window is visible.
-import { ChevronDown, Circle, CircleAlert, RotateCw, Smartphone } from '../../ui/icons'
+import { ChevronDown, Circle, AlertCircle, RotateCw, Smartphone } from '../../ui/icons'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { findDevice, initialDevice, type SimRuntimeGroup, type SimulatorScreen as Screen } from '@shared/simulator'
 import { defineMessages } from '@shared/i18n'
@@ -176,7 +176,7 @@ export function SimulatorView() {
       </div>
       {current?.inputBlocked && (
         <div className={styles.notice} role="alert">
-          <CircleAlert {...ICON} aria-hidden />
+          <AlertCircle {...ICON} aria-hidden />
           <span className={styles.noticeText}>{m.inputBlocked}</span>
           <button type="button" className={styles.secondary} disabled={repairing} onClick={() => void repair()}>
             {m.repairInput}

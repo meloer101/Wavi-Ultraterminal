@@ -1,5 +1,5 @@
 import { usageVendor } from '@shared/agents'
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
+import { AlertCircle, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react'
 import { emptyQueue, wakesThisHour } from '@shared/dispatch'
 import { useDispatch } from '../dispatch/store'
@@ -244,7 +244,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
           </SessionMetaChips>
           {agentUp && hooks === 'unavailable' && (
             <span className={styles.hooks} data-testid="hooks-unavailable" title={m.hooksTitle}>
-              <CircleAlert size={16} strokeWidth={1.75} />
+              <AlertCircle size={16} strokeWidth={1.75} />
               {m.hooks}
             </span>
           )}

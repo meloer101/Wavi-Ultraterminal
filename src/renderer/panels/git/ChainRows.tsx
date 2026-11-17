@@ -3,7 +3,7 @@
 // (⇧⌘M), then ⋯ with every chain action in a fixed order, a blocked one disabled with its reason in the trailing slot.
 // Every action goes through pull-requests/chain-actions.ts, the same function ⌘K calls.
 import { useEffect, useRef } from 'react'
-import { Check, CircleAlert, CircleDashed, Ellipsis } from '../../ui/icons'
+import { Check, AlertCircle, CircleDashed, Ellipsis } from '../../ui/icons'
 import type { ChainMove, ChainState } from '@shared/ship-chain'
 import { SHORTCUTS } from '@shared/shortcuts'
 import { defineMessages } from '@shared/i18n'
@@ -25,7 +25,7 @@ const MARK = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** The state line (73C1–73D4, 73G1): never color alone — the glyph's shape and the words say it. */
 export function ChainHeadlineRow({ headline, files }: { headline: ZoneHeadline; files: readonly string[] }) {
   const m = useMessages(M)
-  const Glyph = headline.tone === 'ok' ? Check : headline.tone === 'working' ? CircleDashed : CircleAlert
+  const Glyph = headline.tone === 'ok' ? Check : headline.tone === 'working' ? CircleDashed : AlertCircle
   const text = headline.rest ? m.headline(headline.strong, headline.rest) : headline.strong
   return (
     <>

@@ -1,5 +1,5 @@
 // Pieces both merge sheets use (PRD F4 · F16 v1.63): a checklist line, the agent's own checks this turn, a checkbox.
-import { Check, CircleAlert, CircleX, Minus } from '../../ui/icons'
+import { Check, AlertCircle, CircleX, Minus } from '../../ui/icons'
 import { runNote, type TurnCheckView } from '@shared/turn-checks'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../../ui/i18n'
@@ -28,7 +28,7 @@ export function Line({ line }: { line: CheckLine }) {
     line.tone === 'ok' ? (
       <Check {...ICON} />
     ) : line.tone === 'warn' ? (
-      <CircleAlert {...ICON} />
+      <AlertCircle {...ICON} />
     ) : line.tone === 'working' ? (
       <StatusGlyph status="running" />
     ) : line.tone === 'muted' ? (

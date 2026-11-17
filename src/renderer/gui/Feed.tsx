@@ -8,10 +8,11 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type IconComponent } from '../ui/icons'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, ArrowRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type IconComponent } from '../ui/icons'
 import type { GuiBranch, GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
+import { STATUS_LABEL } from '@shared/session-status'
 import type { ChatItem, FileDiff } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
@@ -124,7 +125,7 @@ const TOOL_ICONS: Readonly<Record<ToolIcon, IconComponent>> = {
   sparkles: Sparkles,
   'clipboard-list': ClipboardList,
   trash: Trash2,
-  'move-right': MoveRight,
+  'move-right': ArrowRight,
   brain: Brain,
   toggle: ToggleLeft,
   wrench: Wrench
@@ -606,12 +607,19 @@ function ToolIconMark({ icon }: { icon: ToolIcon }) {
   return <Icon {...ICON} />
 }
 
-/** A step row's mark (Figma 59J, 94′): the tool's icon, or its status while it waits on you or failed. */
-function StepMark({ children }: { children: ReactNode }) {
-  return <span className={styles.stepMark}>{children}</span>
+/**
+ * A step row's mark (Figma 59J, 94′): the tool's icon, or its status while it waits on you or failed. `label` names a
+ * state the icon does not show (运行中, its words swept instead) for screen readers.
+ */
+function StepMark({ label, children }: { label?: string; children: ReactNode }) {
+  return (
+    <span className={styles.stepMark} role={label ? 'img' : undefined} aria-label={label}>
+      {children}
+    </span>
+  )
 }
 
-/** One sweep of `.shimmer` and its pause: tokens.css `--duration-shimmer`. */
+/** One sweep of `.shimmer` and its pause (its only definition: the stylesheet gets it inline). */
 const SHIMMER_MS = 2000
 
 /**
@@ -622,7 +630,7 @@ function Shimmer({ on = true, className, role, children }: { on?: boolean; class
   const [delay] = useState(() => `${-(Date.now() % SHIMMER_MS)}ms`)
   if (!on) return <>{children}</>
   return (
-    <span className={`${styles.shimmer} ${className ?? styles.shimmerGroup}`} style={{ animationDelay: delay }} role={role}>
+    <span className={`${styles.shimmer} ${className ?? styles.shimmerGroup}`} style={{ animationDuration: `${SHIMMER_MS}ms`, animationDelay: delay }} role={role}>
       {children}
     </span>
   )
@@ -656,7 +664,7 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   return (
     <div className={styles.tool} data-testid="gui-tool-group">
       <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <StepMark>{view.live ? <ToolIconMark icon={view.live.icon} /> : open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</StepMark>
+        <StepMark label={view.live ? STATUS_LABEL.running : undefined}>{view.live ? <ToolIconMark icon={view.live.icon} /> : open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</StepMark>
         <span className={styles.groupText}>{view.text}</span>
         {view.live && (
           <Shimmer>
@@ -716,7 +724,7 @@ function Tool({
   return (
     <div className={styles.tool} data-subagent={subagent || undefined}>
       <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
-        <StepMark>{view.status === 'done_unread' || view.status === 'running' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
+        <StepMark label={view.status === 'running' ? STATUS_LABEL.running : undefined}>{view.status === 'done_unread' || view.status === 'running' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
         <Shimmer on={view.status === 'running'}>
           <span className={styles.toolVerb} title={view.name}>
             {view.verb}

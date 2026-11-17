@@ -5,27 +5,7 @@
 // `WAVI_WRITE_PHONE_ASSETS=1 npx vitest run src/main/remote/phone-assets.test.ts` writes them after a change here.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import {
-  ArrowDown01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  ArrowUp02Icon,
-  Alert02Icon,
-  Camera01Icon,
-  Cancel01Icon,
-  CheckmarkSquare02Icon,
-  File01Icon,
-  GitBranchIcon,
-  GitPullRequestIcon,
-  Image01Icon,
-  PlusSignIcon,
-  Robot01Icon,
-  SmartPhone01Icon,
-  SquareTerminalIcon,
-  StopIcon,
-  Tick02Icon
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -35,31 +15,32 @@ import { withLang, type Lang } from '../../shared/i18n'
 import { ADJECTIVES, NOUNS } from '../../shared/new-session'
 import { DEFAULT_REMOTE_PORT, PAIRING_ALPHABET, PAIRING_CODE_LENGTH, REMOTE_LIMITS, REMOTE_PROTOCOL } from '../../shared/remote'
 import { STATUS_LABEL } from '../../shared/session-status'
+import { GLYPHS, type GlyphName } from '../../renderer/ui/glyphs'
 
 const IOS = join(__dirname, '../../../ios/Wavi')
 const SHARED = join(IOS, 'Resources/Shared.json')
 const MARKS = join(IOS, 'Assets.xcassets/Agents')
 const ICONS = join(IOS, 'Assets.xcassets/Icons')
-/** The icons the app draws, by asset name (`Image("Icons/git-branch")`): the same Hugeicons glyphs as the desktop's ui/icons.tsx. */
-const GLYPHS: Record<string, IconSvgElement> = {
-  'arrow-up': ArrowUp02Icon,
-  bot: Robot01Icon,
-  camera: Camera01Icon,
-  check: Tick02Icon,
-  'chevron-down': ArrowDown01Icon,
-  'chevron-left': ArrowLeft01Icon,
-  'chevron-right': ArrowRight01Icon,
-  file: File01Icon,
-  'git-branch': GitBranchIcon,
-  'git-pull-request': GitPullRequestIcon,
-  image: Image01Icon,
-  plus: PlusSignIcon,
-  smartphone: SmartPhone01Icon,
-  square: StopIcon,
-  'square-check': CheckmarkSquare02Icon,
-  'square-terminal': SquareTerminalIcon,
-  'triangle-alert': Alert02Icon,
-  x: Cancel01Icon
+/** The icons the app draws, by asset name (`Image("Icons/git-branch")`): the desktop's glyphs (ui/glyphs.ts) by name. */
+const ICON_NAMES: Record<string, GlyphName> = {
+  'arrow-up': 'ArrowUp',
+  bot: 'Bot',
+  camera: 'Camera',
+  check: 'Check',
+  'chevron-down': 'ChevronDown',
+  'chevron-left': 'ChevronLeft',
+  'chevron-right': 'ChevronRight',
+  file: 'File',
+  'git-branch': 'GitBranch',
+  'git-pull-request': 'GitPullRequest',
+  image: 'Image',
+  plus: 'Plus',
+  smartphone: 'Smartphone',
+  square: 'Square',
+  'square-check': 'SquareCheck',
+  'square-terminal': 'SquareTerminal',
+  'triangle-alert': 'TriangleAlert',
+  x: 'X'
 }
 const WRITE = process.env.WAVI_WRITE_PHONE_ASSETS === '1'
 const TOKENS = join(__dirname, '../../renderer/styles/tokens.css')
@@ -172,9 +153,9 @@ const marks = () => imagesets(Object.fromEntries(Object.entries(AGENT_ICON_SVG).
 const icons = () =>
   imagesets(
     Object.fromEntries(
-      Object.entries(GLYPHS).map(([name, glyph]) => [
+      Object.entries(ICON_NAMES).map(([name, glyph]) => [
         name,
-        forCoreSvg(renderToStaticMarkup(createElement(HugeiconsIcon, { icon: glyph, size: 24, strokeWidth: 1.75 })).replace(/ class=""/, ''))
+        forCoreSvg(renderToStaticMarkup(createElement(HugeiconsIcon, { icon: GLYPHS[glyph], size: 24, strokeWidth: 1.75 })).replace(/ class=""/, ''))
       ])
     )
   )

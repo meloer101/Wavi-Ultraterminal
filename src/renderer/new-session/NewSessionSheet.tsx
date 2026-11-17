@@ -11,7 +11,7 @@
 // has no leader. On, the session opens in the main checkout (当前目录, 基于 dimmed), CLI only, with no 高级; the agent
 // menu lists the agents that can lead, one that cannot here dimmed with `<version> · <reason>` on its right.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, CircleAlert, GitBranch, GitFork, Globe } from '../ui/icons'
+import { Check, ChevronDown, ChevronRight, AlertCircle, GitBranch, GitFork, Globe } from '../ui/icons'
 import {
   defaultBase,
   generateBranchName,
@@ -664,7 +664,7 @@ export function Field({
         {children}
         {error && (
           <p className={styles.error} role="alert">
-            <CircleAlert size={14} strokeWidth={1.75} aria-hidden />
+            <AlertCircle size={14} strokeWidth={1.75} aria-hidden />
             {error}
           </p>
         )}

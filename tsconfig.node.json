@@ -29,6 +29,8 @@
     "src/pty-daemon/**/*.ts",
     "src/shared/**/*.ts",
     "src/renderer/styles/token-usage.test.ts",
-    "src/renderer/ui/glass-cards.test.ts"
+    "src/renderer/ui/glass-cards.test.ts",
+    // The glyphs the iPhone app's icons are rendered from (src/main/remote/phone-assets.test.ts).
+    "src/renderer/ui/glyphs.ts"
   ]
 }

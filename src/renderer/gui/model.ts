@@ -666,8 +666,7 @@ const GROUP_WORDS: Readonly<Record<string, { kind: GroupKind; distinct?: true }>
 export interface GroupView {
   /** 「读取了 2 个文件，运行了 1 条命令」: each kind once, in the order it first came. */
   text: string
-  /** A call in it still runs (Figma 70C): `live` is the last of them, its icon in the row's mark (Figma 94′). */
-  running: boolean
+  /** The last call in it still running (Figma 70C), its icon in the row's mark (Figma 94′); none when all are done. */
   live?: { verb: string; arg: string; icon: ToolIcon }
   /** Calls that failed: 「N 个失败」 at the row's end. */
   failed: number
@@ -703,7 +702,7 @@ export function groupView(items: readonly StepItem[]): GroupView {
     }
   }
   const text = [...kinds.values()].map((k) => k.say(k.distinct ? k.args.size : k.calls, [...k.args])).join(m.groupSeparator)
-  return { text, running: live !== undefined, ...(live ? { live } : {}), failed, ...(added > 0 ? { added } : {}), ...(removed > 0 ? { removed } : {}) }
+  return { text, ...(live ? { live } : {}), failed, ...(added > 0 ? { added } : {}), ...(removed > 0 ? { removed } : {}) }
 }
 
 /**
