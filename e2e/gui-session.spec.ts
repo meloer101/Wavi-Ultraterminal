@@ -43,6 +43,11 @@ test.describe('F23 GUI session (Claude)', () => {
     await input().fill(text)
     await input().press('Enter')
   }
+  // The turn over: its run row gone, so the feed no longer moves under a resting pointer.
+  const settled = async () => {
+    await expect(composer().getByRole('button', { name: '停止' })).toHaveCount(0, WITHIN)
+    await expect(feed().getByTestId('gui-run-row')).toHaveCount(0, WITHIN)
+  }
 
   test.beforeAll(async () => {
     writeFileSync(
@@ -325,6 +330,7 @@ test.describe('F23 GUI session (Claude)', () => {
     const link = feed().getByTestId('gui-file-ref').filter({ hasText: 'README.md:1' }).first()
     await expect(link).toBeVisible(WITHIN)
     await expect(feed().getByTestId('gui-file-ref')).toHaveCount(3)
+    await settled()
     await link.hover()
     const card = page.getByTestId('gui-file-card')
     await expect(card).toContainText('# demo', WITHIN)
@@ -682,6 +688,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await send('copy this one')
     const reply = feed().getByText('Hello: copy this one')
     await expect(reply).toBeVisible(WITHIN)
+    await settled()
     await reply.hover()
     const actions = feed().getByTestId('gui-turn-actions').last()
     await expect.poll(() => actions.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
@@ -808,6 +815,9 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(jump).toHaveCount(0, WITHIN)
     await expect.poll(() => feed().evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 48), WITHIN).toBe(true)
     await composer().getByRole('button', { name: '停止' }).click()
+    // Settled before the next test counts the turns: the stopped reply is gone.
+    await settled()
+    await expect.poll(() => feed().evaluate((el) => el.textContent?.includes('Hello...') ?? false), WITHIN).toBe(false)
   })
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {

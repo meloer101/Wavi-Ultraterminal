@@ -2339,7 +2339,7 @@ button.testHead:hover {
   height: 28px;
   padding: 0 var(--space-12) 0 var(--space-8);
   border: 0;
-  border-radius: 14px;
+  border-radius: 100vmax; /* a pill: clamped to half its height */
   background: var(--float-bg);
   box-shadow: var(--float-edge), var(--shadow-glass-menu);
   font: var(--type-step);
