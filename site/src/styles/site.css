@@ -1,5 +1,5 @@
 /*
- * Wavi website · the magazine (Figma page 「官网·时尚杂志风」, W9 spreads at 1440×900 and W9 phone pages at 390×844).
+ * Wavi website · the magazine (Figma page 「官网·时尚杂志风」, W10 spreads at 1440×900 and W10 phone pages at 390×844).
  * Imported once by layouts/Base.astro. Paper and ink only; hierarchy from type, hairlines and white space.
  *
  * Three layouts share one DOM (components/Magazine.astro):
@@ -43,7 +43,7 @@
   --rule: rgb(18 18 18 / 0.2);
   --serif: 'Cormorant Garamond', 'Noto Serif SC', 'Songti SC', serif;
   --sans: 'Archivo', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif;
-  /* Phone sizes (W9 phone pages): display type at 0.62 of the spread, text unchanged. */
+  /* Phone sizes (W10 phone pages): display type at 0.62 of the spread, text unchanged. */
   --title: 55px;
   --display: 40px;
   --display-s: 32px;
@@ -183,16 +183,12 @@ img {
 .cta:active {
   opacity: 0.6;
 }
-.num,
-.step-n {
+.num {
   font: italic 400 14px/1.2 var(--serif);
 }
 .item-title {
   font: italic 400 26px/1.2 var(--serif);
   margin: 3px 0 6px;
-}
-.index .item-title {
-  font-size: 28px;
 }
 .body {
   font: 300 12px/1.6 var(--sans);
@@ -203,15 +199,16 @@ img {
   margin-top: 26px;
   max-width: 420px;
 }
-.look figcaption {
+.plate figcaption,
+.plate-caption {
   display: block;
   margin-top: 16px;
 }
-.look-n {
+.plate-n {
   display: block;
   font: italic 400 22px/1.2 var(--serif);
 }
-.look-cap {
+.plate-cap {
   display: block;
   margin-top: 5px;
   font: 300 12px/1.4 var(--sans);
@@ -244,12 +241,10 @@ img {
   gap: 36px;
 }
 
-.toc li a,
-.steps li {
+.toc li a {
   border-top: 1px solid var(--rule);
 }
-.toc,
-.steps {
+.toc {
   margin-top: 24px;
   border-bottom: 1px solid var(--rule);
 }
@@ -265,39 +260,15 @@ img {
 .toc-name {
   font: 400 22px/1.2 var(--serif);
 }
-.toc-page,
-.step-keys {
+.toc-line {
+  display: block;
+  margin-top: 6px;
+  font: 300 12px/1.4 var(--sans);
+}
+.toc-page {
   font: 400 11px/1 var(--sans);
 }
 
-.steps li {
-  display: grid;
-  grid-template-columns: 27px 1fr auto;
-  grid-template-areas: 'n title keys' '. body body';
-  padding: 13px 0 14px;
-}
-.step-n {
-  grid-area: n;
-  font-size: 18px;
-  padding-top: 3px;
-}
-.step-title {
-  grid-area: title;
-  font: 400 22px/1.2 var(--serif);
-}
-.step-keys {
-  grid-area: keys;
-  padding-top: 6px;
-}
-.steps .body {
-  grid-area: body;
-  margin-top: 4px;
-}
-
-.still-end {
-  width: 200px;
-  margin: 40px 0 0 auto;
-}
 .still-row {
   display: flex;
   align-items: flex-end;
@@ -309,25 +280,6 @@ img {
   flex: none;
 }
 
-.pieces {
-  display: grid;
-  gap: 12px;
-}
-.pieces li {
-  border-top: 1px solid var(--rule);
-  padding-top: 12px;
-}
-.pieces .num {
-  display: block;
-}
-.piece-title {
-  font: 400 26px/1.2 var(--serif);
-  margin: 2px 0 4px;
-}
-.six .label {
-  text-align: center;
-  margin-bottom: 18px;
-}
 
 .wordmark {
   font: 300 var(--wordmark) / 1 var(--serif);
@@ -418,9 +370,6 @@ img {
 .book-single .unit > :not(.folio) {
   width: 100%;
   zoom: var(--fit, 1);
-}
-.book-single .unit > .still-end {
-  width: 200px;
 }
 .book-single .spread.unit > .page {
   padding: 0;
@@ -584,7 +533,8 @@ img {
   margin-top: 81px;
   gap: 36px;
 }
-.book-spread .look figcaption {
+.book-spread .plate figcaption,
+.book-spread .plate-caption {
   margin-top: 20px;
 }
 
@@ -600,19 +550,9 @@ img {
   height: 64px;
   padding: 16px 0 0;
 }
-.book-spread .index .items {
-  margin-top: 35px;
-  gap: 66px;
-}
-.book-spread .index .item-title {
-  margin-bottom: 8px;
-}
-.book-spread .index .body {
-  max-width: 440px;
-}
 
-/* plates: one look across both pages */
-.book-spread .plate .page.full {
+/* plates: one plate across both pages */
+.book-spread .plate-spread .page.full {
   padding: 96px 176px 0;
 }
 
@@ -639,9 +579,6 @@ img {
   margin-top: 60px;
   gap: 41px;
 }
-.book-spread .page > .still-end {
-  margin: 40px 0 0 auto;
-}
 .book-spread .windows .still-row {
   margin-top: 0;
   position: absolute;
@@ -649,42 +586,9 @@ img {
   left: 0;
 }
 
-/* merge */
-.book-spread .steps {
-  margin-top: 46px;
-}
-.book-spread .steps li {
-  grid-template-columns: 44px 1fr auto;
-  height: 82px;
-  padding-top: 12px;
-}
 
-/* finale: six pieces above, the back cover below */
-.book-spread .finale .page.six {
-  height: 480px;
-}
-.book-spread .pieces {
-  grid-template-columns: repeat(3, 400px);
-  column-gap: 40px;
-  row-gap: 0;
-  margin-top: 42px;
-}
-.book-spread .pieces li {
-  height: 170px;
-  padding-top: 16px;
-}
-.book-spread .pieces .body {
-  max-width: 380px;
-}
-.book-spread .piece-title {
-  font-size: 28px;
-  margin: 3px 0 10px;
-}
-.book-spread .six .label {
-  margin-bottom: 0;
-}
 .book-spread .finale .page.back {
-  padding-top: 520px;
+  padding-top: 360px;
   text-align: center;
 }
 .book-spread .ctas-end {
@@ -701,8 +605,124 @@ img {
   right: 0;
   margin: 0;
 }
-.book-spread .finale .folio-l {
-  top: 860px;
+
+/* ---------- W10 blocks: plates that bleed, the chain, the tiles, the two contents lists ---------- */
+
+.toc-plates a {
+  padding: 10px 0 9px;
+}
+.toc-plates .toc-look,
+.toc-plates .toc-name {
+  font-size: 20px;
+}
+.plate-detail {
+  margin-top: 40px;
+}
+.chain-steps {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 12px;
+  align-items: start;
+}
+.chain-steps .item-title {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+.chain-steps .num {
+  display: none;
+}
+.chain .display {
+  font-size: var(--display-s);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 12px;
+}
+.tiles .still-cap {
+  display: block;
+  margin-top: 8px;
+}
+.plate-tiles figcaption {
+  margin-top: 28px;
+}
+
+.book-spread .toc-chapters a {
+  grid-template-columns: 70px 1fr auto;
+  height: 78px;
+}
+.book-spread .toc-plates {
+  margin-top: 39px;
+}
+.book-spread .toc-plates a {
+  grid-template-columns: 120px 1fr auto;
+  height: 46px;
+  padding: 10px 0 0;
+}
+/* a plate that runs off the spread's outer edge: 680 wide from the gutter side, top at 110 like the gutter rule */
+.book-spread .page.bleed {
+  padding-top: 110px;
+}
+.book-spread .plate-bleed-r img,
+.book-spread .plate-bleed-l img {
+  width: 680px;
+  max-width: none;
+}
+.book-spread .plate-bleed-l {
+  margin-left: -80px;
+}
+.book-spread .plate-bleed-l figcaption {
+  padding-left: 80px;
+}
+.book-spread .plate-bleed-r figcaption,
+.book-spread .plate-bleed-l figcaption {
+  max-width: 640px;
+}
+.book-spread .plate-detail {
+  margin-top: 46px;
+  width: 560px;
+}
+.book-spread .plate-detail figcaption {
+  margin-top: 14px;
+}
+/* four items under a two-line title (threads, ship) end above the folio */
+.book-spread .windows .page > .display + .items,
+.book-spread .ship .page > .display + .items {
+  gap: 34px;
+}
+.book-spread .page > .body-lead + .items {
+  margin-top: 46px;
+  gap: 30px;
+}
+.book-spread .chain .page.full {
+  padding: 120px 80px 0;
+}
+.book-spread .chain-steps {
+  grid-template-columns: repeat(5, 232px);
+  column-gap: 30px;
+  align-items: start;
+  margin-top: 68px;
+}
+.book-spread .chain-steps .num {
+  display: block;
+}
+.book-spread .chain-steps .item-title {
+  font-size: 22px;
+  margin: 3px 0 22px;
+}
+.book-spread .chain .plate-caption {
+  position: absolute;
+  top: 700px;
+  left: 80px;
+  margin: 0;
+}
+.book-spread .tiles {
+  grid-template-columns: repeat(2, 290px);
+  gap: 22px 20px;
+}
+.book-spread .plate-tiles figcaption {
+  margin-top: 46px;
 }
 
 /* the turning leaf: two faces sharing the gutter as their hinge */
@@ -770,7 +790,7 @@ img {
   background: linear-gradient(270deg, rgb(18 18 18 / 0.4), rgb(18 18 18 / 0) 60%);
 }
 
-/* ---------- a look, full screen (phones) ---------- */
+/* ---------- a plate, full screen (phones) ---------- */
 
 .zoom {
   width: 100vw;
@@ -827,8 +847,7 @@ img {
 :lang(zh) .sub,
 :lang(zh) .cta,
 :lang(zh) .toc-name,
-:lang(zh) .step-title,
-:lang(zh) .piece-title {
+:lang(zh) .toc-look {
   font-style: normal;
   font-weight: 300;
 }
@@ -842,9 +861,6 @@ img {
 :lang(zh) .item-title {
   font-size: 22px;
 }
-:lang(zh) .index .item-title {
-  font-size: 24px;
-}
 :lang(zh) .sub {
   font-size: 19px;
 }
@@ -854,7 +870,7 @@ img {
 }
 /* PingFang's Light is too thin at 12px and reads as grey; CJK text runs at Regular. */
 :lang(zh) .body,
-:lang(zh) .look-cap,
+:lang(zh) .plate-cap,
 :lang(zh) .still figcaption,
 :lang(zh) .still-cap {
   font-weight: 400;
