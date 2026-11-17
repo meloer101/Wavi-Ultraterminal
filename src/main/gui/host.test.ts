@@ -116,7 +116,15 @@ describe('GuiHost · Claude stream-json', () => {
     expect(state.commands.map((c) => c.name)).toEqual(['review', 'research'])
     expect(state.config.find((c) => c.id === 'effort')?.current).toBe('max')
 
+    const sentAt = Date.now()
     expect(await h.host.send('c1', { text: 'hello', attachments: [] })).toEqual({ ok: true, queued: false })
+    // The turn's start goes out with the busy event, the time main's own state holds.
+    const startedAt = (): number | undefined => {
+      for (const e of h.owner.batches.flatMap((b) => b.events)) if (e.type === 'busy' && e.busy) return e.at
+      return undefined
+    }
+    await until(() => startedAt() !== undefined)
+    expect(startedAt()).toBeGreaterThanOrEqual(sentAt)
     await until(() => !stateOf(h, 'c1').busy && texts(stateOf(h, 'c1')).includes('text:Hello: hello'))
     expect(texts(stateOf(h, 'c1'))).toEqual(['user:hello', 'text:Hello: hello'])
     // Claude's own hooks carry its status; the host only says it started (with the conversation id).

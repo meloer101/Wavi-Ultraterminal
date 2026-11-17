@@ -238,6 +238,8 @@ export interface GuiState {
   prompts: GuiPrompt[]
   /** A turn is running (the stop button, the queue). */
   busy: boolean
+  /** Epoch ms the running turn started (Figma 91: the run row counts from it); absent while none runs. */
+  busySince?: number
   config: GuiConfigOption[]
   commands: GuiCommand[]
   /** Messages the user sent while a turn ran; sent, in order, when it ends (Figma 49″C). */
@@ -253,7 +255,8 @@ export type GuiEvent =
   | { type: 'live'; live: GuiLive | null }
   | { type: 'prompt'; prompt: GuiPrompt }
   | { type: 'prompt-done'; id: string }
-  | { type: 'busy'; busy: boolean }
+  /** `at`: epoch ms the turn started, stamped by main's host, so main, the renderer and the phone share one start. */
+  | { type: 'busy'; busy: boolean; at?: number }
   | { type: 'config'; config: GuiConfigOption[] }
   | { type: 'commands'; commands: GuiCommand[] }
   | { type: 'queued'; queued: GuiState['queued'] }
@@ -424,7 +427,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
       return state.prompts.some((p) => p.id === event.id) ? { ...state, prompts: state.prompts.filter((p) => p.id !== event.id) } : state
     case 'busy':
       // A turn that ends takes its stream and its questions with it.
-      return event.busy ? { ...state, busy: true } : { ...state, busy: false, live: null, prompts: [] }
+      if (event.busy) return state.busy ? state : { ...state, busy: true, ...(event.at !== undefined ? { busySince: event.at } : {}) }
+      return { ...state, busy: false, busySince: undefined, live: null, prompts: [] }
     case 'config':
       return { ...state, config: event.config }
     case 'commands':

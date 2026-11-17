@@ -23,6 +23,9 @@ final class AppModel {
   private(set) var dropped = false
   private(set) var macName = ""
   private(set) var sessions = RemoteSessionList.empty
+  /// Figma 91′: when each running session's turn began (ms), kept while it runs or waits on the user, so the run row's
+  /// clock does not start over after an answer (the session's `since` is its current status's).
+  private(set) var turnStarts: [String: Double] = [:]
   /// When the Mac last told this phone its sessions (ms): how old the list is once the link drops.
   private(set) var heardAt: Double?
   private(set) var prompts: [RemotePrompt] = []
@@ -157,6 +160,7 @@ final class AppModel {
     link = .offline(.unknown)
     dropped = false
     sessions = .empty
+    turnStarts = [:]
     heardAt = nil
     prompts = []
     receipts = [:]
@@ -287,6 +291,7 @@ final class AppModel {
   func refresh(timeout: Double = Link.requestSeconds) async -> Bool {
     guard let snapshot = await client?.request(.snapshot, timeout: timeout).decode(Snapshot.self) else { return false }
     sessions = RemoteSessionList(projects: snapshot.projects, sessions: snapshot.sessions)
+    turnStarts = nextTurnStarts(turnStarts, sessions: sessions.sessions)
     heardAt = Date().timeIntervalSince1970 * 1000
     promptsListed(snapshot.prompts ?? [])
     knownPrompts = Set(prompts.map(\.id))
@@ -324,6 +329,7 @@ final class AppModel {
       }
     case .sessions(let list):
       sessions = list
+      turnStarts = nextTurnStarts(turnStarts, sessions: list.sessions)
       heardAt = Date().timeIntervalSince1970 * 1000
       syncActivity()
     case .prompts(let list):

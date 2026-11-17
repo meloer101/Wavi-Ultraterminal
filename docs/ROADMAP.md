@@ -8,7 +8,9 @@
 
 ## 当前位置
 
-- 2026-11-16：GUI 对话的七处可视化（PRD v1.199，Figma 90）：文件引用可点和悬停看行、网页搜索结果和网页标题、代码块和 diff 着色（新依赖 lowlight）、测试结果、依赖栈帧折叠、「↓ 回到最新」、Claude 会话的回退（对话 / 代码 / 两者）和改过的消息切换版本。e2e `gui-session.spec.ts` 加 4 个；回退文件用真 Claude（Haiku）实测过 `rewind_files`，界面里只用假 Claude 测过。
+- 2026-11-16：GUI 对话的七处可视化（PRD v1.201，Figma 90）：文件引用可点和悬停看行、网页搜索结果和网页标题、代码块和 diff 着色（新依赖 lowlight）、测试结果、依赖栈帧折叠、「↓ 回到最新」、Claude 会话的回退（对话 / 代码 / 两者）和改过的消息切换版本。e2e `gui-session.spec.ts` 加 4 个；回退文件用真 Claude（Haiku）实测过 `rewind_files`，界面里只用假 Claude 测过。
+- 2026-11-16：官网整合成五章（看板 / 合奏 / 多线程 / 交付 / 衣橱），产品画面换成 Figma 画的高保真窗口，派活单独一整个跨页（PRD v1.200，Figma W10）。`site/src/components/Magazine.astro`、`Plate.astro`、`i18n.ts`、`styles/site.css`，图在 `site/src/assets/magazine/{en,zh}-*.webp`，宋体子集按新文案重做。
+- 2026-11-16：发送即上屏 + 运行行（PRD v1.199，Figma 91 / 91′）：桌面 GUI 会话发出的同一帧出现 agent 头像和运行行（正在跑的步骤或「思考中」+ 到 0.1 秒、逐位翻滚的用时），手机会话页同样；`renderer/gui/Feed.tsx` `RunLine`、`model.ts` `runRowOf` / `runClock`、`GuiState.busySince`，手机 `SessionView.swift` `RunLine`、`Format.swift` `runRow` / `runClock`；e2e `gui-session.spec.ts`，iOS `FormatTests`。
 - 2026-11-15：看板浮层里的 GUI 会话显示它的聊天（可以直接回复），不再是一块空终端（PRD F9 / F23）。`overview/BorrowedTerminal.tsx` 对 GUI 会话画 `ChatPane`；e2e `gui-session.spec.ts`（同时把侧栏入口的名字从「总览」改成「看板」）。
 - 2026-11-15：GUI 输入框的模式、快速、Ultracode 合成一个按钮（PRD v1.195，Figma 78）：按钮写当前档，快速 / Ultracode 开着时档名后各一个标记；菜单里分隔线下是两行开关，只列 agent 支持的，点开关菜单不关。
 - 2026-11-15：设置 · 额度 统计去掉多余的线：四个数字之间不再有竖线，只靠留白分开；还没有记录的月份 / 日期不再画空框，只留下面的标签；柱状图去掉中间那条参考线和它的刻度，只留顶线和底线（热力图的空格子没动；Figma 69″ 未同步）。
@@ -365,9 +367,9 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
-- [x] 回退 agent 改过的文件：Claude 用 `rewind_files`（v1.199，Figma 90G）
+- [x] 回退 agent 改过的文件：Claude 用 `rewind_files`（v1.201，Figma 90G）
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；Codex、Pi、ACP 的回退
-- [ ] v1.199 没测 / 没做：真 Claude 在 Wavi 里回退一次（只有假 Claude 的 e2e 和命令行实测）；`--resume` 之后旧消息的文件回退；Codex 的搜索结果列表（app-server 只给搜索词）、ACP 的 `resource_link`；版本切换只看一层（旧版本里再改过的消息不能再切）
+- [ ] v1.201 没测 / 没做：真 Claude 在 Wavi 里回退一次（只有假 Claude 的 e2e 和命令行实测）；`--resume` 之后旧消息的文件回退；Codex 的搜索结果列表（app-server 只给搜索词）、ACP 的 `resource_link`；版本切换只看一层（旧版本里再改过的消息不能再切）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
 - [ ] 没做：总览浮层里 GUI 会话不显示聊天；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上（手机打开也算看到，v1.161）；ACP agent 的状态事件 agent 字段暂报 `opencode`
@@ -564,7 +566,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - [ ] PRD §4 “P2 储备”中的各项
 
 ### D · 发布质量（穿插在各批次里）
-- [ ] 官网 `site/`：2026-11-15 改成杂志（PRD v1.196，Figma「官网·时尚杂志风」W9）——宽屏 12 个跨页沿中缝翻、手机 20 个单页沿左边翻，滚轮 / 触控板 / 触摸 / 键盘各翻一页，中英两版，截图英文版用英文界面、中文版用中文界面；W11 的动效页（2026-10-21，PRD v1.61）整套去掉，GSAP、Lenis 不再依赖。翻页数学有单测（`cd site && npm test`）。还没做：og:image、文档页（Starlight）
+- [ ] 官网 `site/`：2026-11-16 整合成五章、画面改成画出来的高保真窗口（PRD v1.200，Figma W10：宽屏 12 个跨页、手机 19 页）；2026-11-15 改成杂志（PRD v1.196，Figma「官网·时尚杂志风」W9）——宽屏 12 个跨页沿中缝翻、手机 20 个单页沿左边翻，滚轮 / 触控板 / 触摸 / 键盘各翻一页，中英两版，截图英文版用英文界面、中文版用中文界面；W11 的动效页（2026-10-21，PRD v1.61）整套去掉，GSAP、Lenis 不再依赖。翻页数学有单测（`cd site && npm test`）。还没做：og:image、文档页（Starlight）
 - [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
   - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查

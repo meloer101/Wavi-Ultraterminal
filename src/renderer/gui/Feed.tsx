@@ -42,7 +42,9 @@ import {
   feedBlocks,
   groupView,
   isSubagentTool,
+  isWorkflowTool,
   liveStartsTurn,
+  runClock,
   sentMessage,
   stepParts,
   subagentElapsed,
@@ -55,6 +57,7 @@ import {
   type DispatchRow,
   type FeedBlock,
   type NestedItem,
+  type RunRow,
   type StepItem,
   type ToolIcon,
   type ToolView,
@@ -146,6 +149,8 @@ interface FeedProps {
   agent: AgentKind
   items: readonly ChatItem[]
   live: GuiLive | null
+  /** Figma 91: the running turn's last row — what the agent does now and for how long (runRowOf). */
+  run: RunRow | null
   waitingTool: string | null
   /** A turn runs: its reply has no actions yet, and nothing can be edited. */
   busy: boolean
@@ -184,7 +189,7 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   if (block.kind !== 'steps') return ''
   const parts: string[] = []
   for (const item of block.items) {
-    if (item.kind !== 'tool' || item.name !== 'Workflow') continue
+    if (item.kind !== 'tool' || !isWorkflowTool(item.name)) continue
     const run = slot.byTool.get(item.id)
     if (run) parts.push(runShape(run))
     if (item.id === waitingTool && slot.ask) parts.push(`ask:${slot.ask.id}:${slot.ask.pending}`)
@@ -192,22 +197,26 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, run: runRow, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
   // Figma 90G′: the version chosen per edited message; back to the current ones when a message is sent.
   const users = useMemo(() => chatItems.filter((item) => item.kind === 'user').length, [chatItems])
   const [chosen, setChosen] = useState<{ users: number; versions: ReadonlyMap<string, number> }>({ users, versions: NO_VIEWING })
   // A choice is kept while no message is added (sending one draws the current versions again).
   const viewing = chosen.users === users ? chosen.versions : NO_VIEWING
   const chat = useMemo(() => branchedChat(chatItems, branches, viewing), [chatItems, branches, viewing])
-  const items = chat.items
-  // An earlier version is drawn as it was: the reply being streamed belongs to the current one.
+  const all = chat.items
+  // An earlier version is drawn as it was: the reply being streamed and its run row belong to the current one.
   const live = chat.readOnlyFrom === null ? liveBlock : null
-  const readOnly = useMemo(() => new Set(chat.readOnlyFrom === null ? [] : items.slice(chat.readOnlyFrom).map((item) => item.id)), [chat.readOnlyFrom, items])
+  const run = chat.readOnlyFrom === null ? runRow : null
+  const readOnly = useMemo(() => new Set(chat.readOnlyFrom === null ? [] : all.slice(chat.readOnlyFrom).map((item) => item.id)), [chat.readOnlyFrom, all])
   const switchVersion = useCallback((messageId: string, index: number) => setChosen({ users, versions: new Map(viewing).set(messageId, index) }), [users, viewing])
   const slot = useMemo<WorkflowSlot>(
     () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
     [workflows, workflowAsk, onStopWorkflow]
   )
+  // The step the run row carries is not drawn twice; it becomes a row when it is done.
+  const running = run?.tool ?? null
+  const items = useMemo(() => (running ? all.filter((item) => item !== running) : all), [all, running])
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
@@ -268,7 +277,7 @@ export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, wait
     seen.current = blocks
     if (!stuck.current) setBehind(true)
     follow()
-  }, [blocks, live, follow])
+  }, [blocks, live, run, follow])
 
   const jumpToLatest = useCallback(() => {
     const scroller = scrollerRef.current
@@ -316,9 +325,14 @@ export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, wait
             </AgentTurn>
           )
         )}
-        {live && (
+        {live?.kind === 'text' && (
           <AgentTurn agent={agent} start={liveStartsTurn(blocks)} faded={editingAt >= 0}>
-            <Live sessionId={sessionId} live={live} />
+            <ChatMarkdown sessionId={sessionId} text={live.text} className={`${styles.block} ${styles.live}`} />
+          </AgentTurn>
+        )}
+        {run && (
+          <AgentTurn agent={agent} start={liveStartsTurn(blocks)} faded={editingAt >= 0}>
+            <RunLine run={run} />
           </AgentTurn>
         )}
       </div>
@@ -368,7 +382,7 @@ const Block = memo(
               you stay out, and the calls the graph draws are not there to split a run. */}
           {stepParts(
             block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
-            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && item.name === 'Workflow')
+            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && isWorkflowTool(item.name))
           ).map((part) => {
             if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
             const { item } = part
@@ -376,7 +390,7 @@ const Block = memo(
             if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
             if (row?.kind === 'merged') return null
             // Figma 74: a Workflow call is its run's card — the ask before it runs, then the run.
-            if (item.kind === 'tool' && item.name === 'Workflow') {
+            if (item.kind === 'tool' && isWorkflowTool(item.name)) {
               const run = workflow.byTool.get(item.id)
               const ask = item.id === waitingTool ? workflow.ask : null
               if (run || ask) return <WorkflowCard key={item.id} {...(run ? { run } : {})} {...(ask ? { ask } : {})} {...(workflow.onStop ? { onStop: workflow.onStop } : {})} />
@@ -878,20 +892,75 @@ function FoldedFrames({ text, count }: { text: string; count: number }) {
   )
 }
 
-/** The block being streamed: the agent's text so far with a caret, or its thinking going on. */
-function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
+/**
+ * Figma 91: the running turn's last row, there from the moment the message is sent — the step running now (its verb and
+ * target) or 思考中, and the turn's clock.
+ */
+function RunLine({ run }: { run: RunRow }) {
   const m = useMessages(M)
-  if (live.kind === 'thinking') {
-    return (
-      <div className={styles.steps}>
-        <div className={styles.thinkingRow}>
-          <StepMark>
-            <Brain {...ICON} />
-          </StepMark>
-          <p className={styles.thinkingLive}>{m.thinking}</p>
-        </div>
-      </div>
-    )
-  }
-  return <ChatMarkdown sessionId={sessionId} text={live.text} className={`${styles.block} ${styles.live}`} />
+  const view = run.tool ? toolView(run.tool, false) : null
+  return (
+    <div className={styles.runRow} data-testid="gui-run-row">
+      <span className={styles.runLabel} role="status">
+        {view ? `${view.verb} ${view.arg}` : m.thinking}
+      </span>
+      <RunClock since={run.since} />
+    </div>
+  )
+}
+
+/**
+ * Figma 91D: how long the turn has run, to the tenth under a minute; a digit that changes rolls up into place. It ticks
+ * only while on screen.
+ */
+function RunClock({ since }: { since: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let timer: number | undefined
+    const stop = (): void => {
+      window.clearTimeout(timer)
+      timer = undefined
+    }
+    // Next tick on the clock's own edge: every tenth under a minute, every second after.
+    const tick = (): void => {
+      const at = Date.now()
+      setNow(at)
+      const ran = Math.max(0, at - since)
+      timer = window.setTimeout(tick, ran < 60_000 ? 100 - (ran % 100) : 1000 - (ran % 1000))
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return stop()
+      if (timer === undefined) tick()
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      stop()
+    }
+  }, [since])
+  const text = runClock(now - since)
+  // The text drawn before this one: which digits roll (state adjusted while rendering, as in ChatPane).
+  const [shown, setShown] = useState({ text, before: text })
+  if (shown.text !== text) setShown({ text, before: shown.text })
+  const before = shown.text === text ? shown.before : shown.text
+  const same = before.length === text.length
+  return (
+    <span ref={ref} className={styles.runClock} aria-hidden data-testid="gui-run-clock">
+      {[...text].map((char, i) =>
+        same && before[i] !== char && /\d/.test(char) ? (
+          <span key={`${i}:${before[i]}${char}`} className={styles.runDigit}>
+            <span className={styles.runRoll}>
+              <span>{before[i]}</span>
+              <span>{char}</span>
+            </span>
+          </span>
+        ) : (
+          <span key={i}>{char}</span>
+        )
+      )}
+    </span>
+  )
 }

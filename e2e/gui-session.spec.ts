@@ -225,17 +225,21 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(await feed().evaluate((el) => [el.scrollTop, el.scrollHeight <= el.clientHeight])).toEqual([0, true])
   })
 
-  test('「思考中」 pulses while Claude thinks; thinking with no text leaves no 「思考了」 row', async () => {
+  test('the run row comes with the message: the agent’s mark, 「思考中」 and a running clock, gone when the turn ends; thinking with no text leaves no 「思考了」 row (Figma 91)', async () => {
     // The fake answers `--version` as 2.1.318, so Claude is asked for summaries.
     await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[] }
     expect(launched.args[launched.args.indexOf('--thinking-display') + 1]).toBe('summarized')
     await send('think first')
-    const live = feed().getByText('思考中', { exact: true })
-    await expect(live).toBeVisible(WITHIN)
-    expect(await live.evaluate((el) => getComputedStyle(el).animationName)).toContain('thinking-pulse')
+    const run = feed().getByTestId('gui-run-row')
+    await expect(run).toBeVisible(WITHIN)
+    await expect(run.getByRole('status')).toHaveText('思考中')
+    // The turn's first row: the agent's mark is beside it.
+    await expect(run.locator('..').locator('> [data-agent-mark]')).toHaveCount(1)
+    await expect(run.getByTestId('gui-run-clock')).toHaveText(/^\d+\.\ds$/)
+    await page.screenshot({ path: join(SHOTS, 'run-row.png') })
     await expect(feed().getByText('Hello: think first')).toBeVisible(WITHIN)
-    await expect(live).toHaveCount(0)
+    await expect(run).toHaveCount(0)
     await expect(feed().getByText(/^思考了/)).toHaveCount(0)
   })
 

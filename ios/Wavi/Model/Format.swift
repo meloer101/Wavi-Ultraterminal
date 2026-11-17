@@ -53,6 +53,44 @@ func groupSessions(_ list: RemoteSessionList) -> [SessionGroup] {
   return groups
 }
 
+/// Figma 91D: how long a turn has run — tenths under a minute (`4.3s`), then `1m 05s`, then `1h 02m`.
+func runClock(_ ms: Double) -> String {
+  let t = max(0, ms)
+  if t < 60_000 { return String(format: "%.1fs", (t / 100).rounded(.down) / 10) }
+  let s = Int(t / 1000)
+  if s < 3600 { return String(format: "%dm %02ds", s / 60, s % 60) }
+  return String(format: "%dh %02dm", s / 3600, s / 60 % 60)
+}
+
+/// Figma 91′: the running turn's last row, there from the moment a message is sent until the turn ends or waits on the
+/// user — what the agent does now (nil: 思考中) and since when; `startsTurn` puts the agent's mark above it.
+struct RunRow: Equatable {
+  let action: String?
+  let since: Double
+  let startsTurn: Bool
+}
+
+/// A running session's row: its turn's start (`turnStart`), the agent's mark only right after the user's message (one
+/// sent from the phone meanwhile waits on the Mac and does not start a turn). Before the Mac says it runs, a message
+/// still sending makes the row, counted from the send.
+func runRow(session: RemoteSession, turnStart: Double?, sending: [ChatItem], lastIsUser: Bool) -> RunRow? {
+  if session.status == .running {
+    return RunRow(action: session.action, since: turnStart ?? session.since ?? session.activity, startsTurn: lastIsUser)
+  }
+  guard session.status != .needsYou, let first = sending.first else { return nil }
+  return RunRow(action: nil, since: first.at, startsTurn: true)
+}
+
+/// Each session's turn start: kept while it runs or waits on the user, taken from `since` when a turn begins, dropped
+/// when it ends.
+func nextTurnStarts(_ previous: [String: Double], sessions: [RemoteSession]) -> [String: Double] {
+  var next: [String: Double] = [:]
+  for session in sessions where session.status == .running || session.status == .needsYou {
+    next[session.id] = previous[session.id] ?? session.since ?? session.activity
+  }
+  return next
+}
+
 /// `45s` / `3m` / `2h` / `4d`.
 func shortAge(_ ms: Double) -> String {
   let s = max(0, Int(ms / 1000))
