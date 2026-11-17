@@ -176,6 +176,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--bg-selected);
+  box-shadow: var(--field-finish);
   font: var(--text-mono-terminal);
   color: var(--text-primary);
   outline: none;
@@ -288,7 +289,7 @@
 .primary {
   border-radius: var(--radius-button-glass);
   background: var(--glass-primary-bg);
-  box-shadow: var(--glass-highlight), var(--shadow-glass-button);
+  box-shadow: var(--glass-highlight), var(--shadow-glass-button), var(--primary-finish);
   color: var(--glass-primary-fg);
 }
 

@@ -175,7 +175,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-selected);
   /* Figma 73K2: an inner hairline (focus makes it stronger). */
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  box-shadow: inset 0 0 0 1px var(--border-subtle), var(--field-finish);
   color: var(--text-primary);
   outline: none;
   user-select: text;
