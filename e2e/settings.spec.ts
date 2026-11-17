@@ -435,7 +435,7 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   // more opaque than the shown session's card — the terminal's 85% default, the chat's 20% set above.
   await showTab(settings, '外观')
   const windowSection = settings.getByRole('region', { name: '窗口' })
-  await expect(windowSection.getByRole('radio')).toHaveText(['玻璃', '实色'])
+  await expect(windowSection.getByRole('radio')).toHaveText(['玻璃', '实心玻璃', '实色'])
   await expect(windowSection.getByRole('slider')).toHaveCount(0)
   expect(await look()).toMatchObject({ windowMaterial: 'glass', terminalOpacity: 0.85 })
   const rootVar = (name: string) => settings.evaluate((n) => document.documentElement.style.getPropertyValue(n), name)
@@ -458,8 +458,20 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   await showTab(settings, '终端')
   await expect(settings.getByRole('slider', { name: '终端不透明度' })).toHaveCount(0)
 
+  // 实心玻璃 (Figma 93): as opaque as 实色, its panes' finish named on <html> for the edge tokens.
+  await showTab(settings, '外观')
+  await windowSection.getByRole('radio', { name: '实心玻璃' }).click()
+  await expect.poll(async () => (await look()).windowMaterial).toBe('solid-glass')
+  await expect.poll(() => settings.evaluate(() => [document.documentElement.dataset.material, document.documentElement.dataset.finish])).toEqual(['solid', 'glass'])
+  await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
+  await expect.poll(chatBg).toBe('var(--bg-app)')
+  expect(await settings.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--card-shadow'))).toContain('-14px')
+  await showTab(settings, '终端')
+  await expect(settings.getByRole('slider', { name: '终端不透明度' })).toHaveCount(0)
+
   await showTab(settings, '外观')
   await windowSection.getByRole('radio', { name: '玻璃', exact: true }).click()
+  await expect.poll(() => settings.evaluate(() => document.documentElement.dataset.finish)).toBe('flat')
   await expect(settings.getByRole('region', { name: '全屏背景' })).toBeVisible()
   await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 20%, transparent)')
   await app.close()
