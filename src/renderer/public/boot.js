@@ -85,7 +85,7 @@
     // The settings can name another theme or material than the mirror did (first launch): the dots follow. The same
     // attributes re-theme xterm (terminal/xterm-surface.ts) and the 底色值 swatch (settings/useThemeBackground.ts).
     observer = new MutationObserver(() => worker.postMessage({ color: colour() }))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material'] })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material', 'data-finish'] })
     // The canvas keeps its pixels in step with the window, so the dots never stretch.
     onResize = () => worker.postMessage({ size: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio || 1 } })
     addEventListener('resize', onResize)

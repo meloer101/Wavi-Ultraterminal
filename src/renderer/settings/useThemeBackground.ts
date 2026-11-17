@@ -10,7 +10,7 @@ export function useThemeBackground(): string {
   const [color, setColor] = useState(read)
   useEffect(() => {
     const observer = new MutationObserver(() => setColor(read()))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material', 'style'] })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material', 'data-finish', 'style'] })
     return () => observer.disconnect()
   }, [])
   return color

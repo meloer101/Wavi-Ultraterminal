@@ -465,7 +465,7 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   await expect.poll(() => settings.evaluate(() => [document.documentElement.dataset.material, document.documentElement.dataset.finish])).toEqual(['solid', 'glass'])
   await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
   await expect.poll(chatBg).toBe('var(--bg-app)')
-  expect(await settings.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--card-shadow'))).toContain('-14px')
+  expect((await settings.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--state-ring'))).trim()).not.toBe('0 0 #0000')
   await showTab(settings, '终端')
   await expect(settings.getByRole('slider', { name: '终端不透明度' })).toHaveCount(0)
 

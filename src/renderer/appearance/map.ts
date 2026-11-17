@@ -87,6 +87,9 @@ export type Finish = 'glass' | 'flat'
 
 export const finish = (a: Pick<AppearanceSettings, 'windowMaterial'>): Finish => (a.windowMaterial === 'solid-glass' ? 'glass' : 'flat')
 
+/** Whether the running window wears 实心玻璃's finish (read from <html data-finish>, which appearance/runtime.ts sets). */
+export const hasGlassFinish = (): boolean => document.documentElement.dataset.finish === ('glass' satisfies Finish)
+
 /** A theme color at `opacity` over what is behind it; fully opaque is the color itself, none is transparent. */
 const over = (color: string, opacity: number): string =>
   opacity >= 1 ? color : opacity <= 0 ? 'transparent' : `color-mix(in srgb, ${color} ${+(opacity * 100).toFixed(2)}%, transparent)`
