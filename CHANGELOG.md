@@ -4,6 +4,37 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-17
+
+A livelier GUI chat, a new icon set and a third window material: a message shows its run row the moment you send it, the chat links files, colors code and folds stacks, and every icon in Wavi and the iPhone app is now Hugeicons.
+GUI 对话更有生气，换了一套图标，窗口多了一种材质：消息一发出就有运行行；对话里的文件可点、代码着色、错误栈折叠；Wavi 和 iPhone 上的图标全部换成 Hugeicons。
+
+### GUI sessions / GUI 会话
+- The agent's mark and a run row appear the moment you send: the step running now, or 思考中, with a rolling clock to 0.1 s; the iPhone shows the same row.
+  发出消息的同一刻就出现 agent 头像和运行行：正在跑的那一步或「思考中」，用时滚动到 0.1 秒；iPhone 上也一样。
+- What is still running is no longer a spinner: the row shows that step's icon (思考 is a brain) and light sweeps over its words from left to right.
+  正在进行的事不再用转圈：行首是那一步的图标（思考是大脑），文字从左到右亮起。
+- File references in replies and tool output are links (hover to see the line, click to open it in 文件); web search shows its results and page titles; code blocks and diffs are colored by language; test commands show passed and failed counts; library frames in a stack fold away.
+  回复和工具输出里的文件引用可以点（悬停看那一行，单击在「文件」里打开）；网页搜索显示结果和网页标题；代码块和 diff 按语言着色；测试命令显示通过和失败数；错误栈里依赖库的帧折叠起来。
+- ↓ 回到最新 appears when new output comes while you are scrolled up.
+  往上翻着时来了新输出，出现「↓ 回到最新」。
+- Claude sessions: rewind to before an earlier message (the chat, the code or both), and switch between an edited message's versions.
+  Claude 会话：回退到某条消息之前（对话、代码或两者），改过的消息可以切换版本。
+
+### Icons / 图标
+- Every icon on the desktop and the iPhone is now Hugeicons (stroke, rounded), drawn from one glyph table.
+  桌面和 iPhone 的图标全部换成 Hugeicons（线性圆角），出自同一张对照表。
+
+### Appearance / 外观
+- 设置 · 外观 · 窗口 · 材质 has a third choice, 实心玻璃: opaque like 实色, with a glass finish only at the edges of cards, menus, sheets, the selected state, primary buttons and fields.
+  设置 · 外观 · 窗口 · 材质 多了第三项「实心玻璃」：和实色一样不透明，玻璃感只在卡片、菜单、sheet、选中状态、主按钮和输入框的边缘。
+- Session terminals' right margin now matches the left.
+  会话终端右边的留白和左边一样宽了。
+
+### Usage / 额度
+- After a plan usage reset, Wavi follows the lower figure within the same period instead of keeping the one from before the reset.
+  额度重置后，Wavi 在同一周期里跟着降下来，不再停在重置前的数。
+
 ## [0.19.0] - 2026-11-16
 
 Wavi in English, 看板 with a GitHub tab, and a leader for each project: the whole interface follows 设置 · 外观 · 语言; 总览 becomes 看板 with 进度 and GitHub; a leader session dispatches the work and never edits code. 0.18.0 was tagged but never published (notarization failed), so its right-panel 终端 and iOS 模拟器 ship here too.
@@ -695,7 +726,9 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/meloer101/terminal-reborn/compare/v0.19.0...v0.20.0
+[0.19.0]: https://github.com/meloer101/terminal-reborn/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/meloer101/terminal-reborn/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/meloer101/terminal-reborn/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/meloer101/terminal-reborn/compare/v0.15.1...v0.16.0
