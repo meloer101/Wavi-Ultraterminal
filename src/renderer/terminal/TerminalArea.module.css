@@ -130,10 +130,11 @@
   background: linear-gradient(to bottom, color-mix(in srgb, var(--term-bg) 80%, transparent) 0%, color-mix(in srgb, var(--term-bg) 50%, transparent) 70%, transparent 100%);
 }
 
-/* Breathing room lives on xterm's own element, which the fit addon subtracts. A host elsewhere (the right panel's 终端
-   view) sets its own through --term-padding. */
+/* Breathing room lives on xterm's own element, which the fit addon subtracts. The fit addon also keeps xterm's 14px
+   scrollbar free at the right of the grid, so the right padding is that much smaller and the grid's right edge sits
+   as far in as its left. A host elsewhere (the right panel's 终端 view) sets its own through --term-padding. */
 .host :global(.xterm) {
-  padding: var(--term-padding, var(--space-12) var(--space-16));
+  padding: var(--term-padding, var(--space-12) var(--space-2) var(--space-12) var(--space-16));
   height: 100%;
 }
 
