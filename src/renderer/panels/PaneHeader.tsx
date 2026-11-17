@@ -1,5 +1,5 @@
 // Top row of every right panel view (Figma 13 "Pane header"): title · context · a few icons · ×.
-import { X } from 'lucide-react'
+import { X } from '../ui/icons'
 import type { ReactNode } from 'react'
 import { useWorkspace } from '../state/workspace'
 import { SHORTCUTS } from '@shared/shortcuts'

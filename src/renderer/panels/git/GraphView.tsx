@@ -1,6 +1,6 @@
 // The commit graph (PRD F6, Figma 13B / 13H): one 28px row per commit — lanes drawn as SVG, ✓ on the active worktree's
 // HEAD, GraphRef pills, subject and age. Rows have a fixed height, so only the visible window is rendered.
-import { Check, GitBranch, Globe } from 'lucide-react'
+import { Check, GitBranch, Globe } from '../../ui/icons'
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type MouseEvent } from 'react'
 import type { GraphRow } from '@shared/git-graph/lanes'
 import type { GitCommit } from '@shared/git-graph/log'

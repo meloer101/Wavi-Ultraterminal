@@ -3,7 +3,7 @@
 // arrow for a base that moved on) and so does the text; only the icon has color. Every pair and file is in the tooltip
 // and the accessible name.
 import { memo } from 'react'
-import { ArrowDown, OctagonAlert } from 'lucide-react'
+import { ArrowDown, OctagonAlert } from '../ui/icons'
 import type { RadarMark } from '@shared/conflict-radar'
 import { defineMessages } from '@shared/i18n'
 import { useLang, useMessages } from '../ui/i18n'

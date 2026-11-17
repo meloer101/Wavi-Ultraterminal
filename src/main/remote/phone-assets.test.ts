@@ -1,12 +1,32 @@
 // What the iPhone app (ios/, PRD F22) takes from the desktop instead of keeping its own copy: status words, agent names
-// and marks, the lucide icons it uses (the desktop's set, CLAUDE.md), the words of generated branch names and the
+// and marks, the icons it uses (the desktop's Hugeicons set, src/renderer/ui/icons.tsx), the words of generated branch names and the
 // link's limits. This test writes them into ios/ from the
 // shared modules and fails when the files there differ, so the Swift app cannot drift;
 // `WAVI_WRITE_PHONE_ASSETS=1 npx vitest run src/main/remote/phone-assets.test.ts` writes them after a change here.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import * as lucide from 'lucide-react'
-import { createElement, type ComponentType } from 'react'
+import {
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowUp02Icon,
+  Alert02Icon,
+  Camera01Icon,
+  Cancel01Icon,
+  CheckmarkSquare02Icon,
+  File01Icon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  Image01Icon,
+  PlusSignIcon,
+  Robot01Icon,
+  SmartPhone01Icon,
+  SquareTerminalIcon,
+  StopIcon,
+  Tick02Icon
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AGENT_ICON_SVG } from '../../shared/agent-icon-svg'
@@ -19,27 +39,27 @@ import { STATUS_LABEL } from '../../shared/session-status'
 const IOS = join(__dirname, '../../../ios/Wavi')
 const SHARED = join(IOS, 'Resources/Shared.json')
 const MARKS = join(IOS, 'Assets.xcassets/Agents')
-const ICONS = join(IOS, 'Assets.xcassets/Lucide')
-/** The lucide icons the app draws, by asset name (`Image("Lucide/git-branch")`). */
-const LUCIDE: Record<string, keyof typeof lucide> = {
-  'arrow-up': 'ArrowUp',
-  bot: 'Bot',
-  camera: 'Camera',
-  check: 'Check',
-  'chevron-down': 'ChevronDown',
-  'chevron-left': 'ChevronLeft',
-  'chevron-right': 'ChevronRight',
-  file: 'File',
-  'git-branch': 'GitBranch',
-  'git-pull-request': 'GitPullRequest',
-  image: 'Image',
-  plus: 'Plus',
-  smartphone: 'Smartphone',
-  square: 'Square',
-  'square-check': 'SquareCheck',
-  'square-terminal': 'SquareTerminal',
-  'triangle-alert': 'TriangleAlert',
-  x: 'X'
+const ICONS = join(IOS, 'Assets.xcassets/Icons')
+/** The icons the app draws, by asset name (`Image("Icons/git-branch")`): the same Hugeicons glyphs as the desktop's ui/icons.tsx. */
+const GLYPHS: Record<string, IconSvgElement> = {
+  'arrow-up': ArrowUp02Icon,
+  bot: Robot01Icon,
+  camera: Camera01Icon,
+  check: Tick02Icon,
+  'chevron-down': ArrowDown01Icon,
+  'chevron-left': ArrowLeft01Icon,
+  'chevron-right': ArrowRight01Icon,
+  file: File01Icon,
+  'git-branch': GitBranchIcon,
+  'git-pull-request': GitPullRequestIcon,
+  image: Image01Icon,
+  plus: PlusSignIcon,
+  smartphone: SmartPhone01Icon,
+  square: StopIcon,
+  'square-check': CheckmarkSquare02Icon,
+  'square-terminal': SquareTerminalIcon,
+  'triangle-alert': Alert02Icon,
+  x: Cancel01Icon
 }
 const WRITE = process.env.WAVI_WRITE_PHONE_ASSETS === '1'
 const TOKENS = join(__dirname, '../../renderer/styles/tokens.css')
@@ -148,15 +168,13 @@ function spellPath(d: string): string {
 
 const marks = () => imagesets(Object.fromEntries(Object.entries(AGENT_ICON_SVG).filter((e): e is [string, string] => e[1] !== undefined).map(([id, svg]) => [id, forCoreSvg(svg)])))
 
-/** At the desktop's stroke (CLAUDE.md: 1.75), without lucide's class and aria attributes. */
+/** At the desktop's stroke (CLAUDE.md: 1.75), path data spelled for CoreSVG. */
 const icons = () =>
   imagesets(
     Object.fromEntries(
-      Object.entries(LUCIDE).map(([name, component]) => [
+      Object.entries(GLYPHS).map(([name, glyph]) => [
         name,
-        renderToStaticMarkup(createElement(lucide[component] as ComponentType<{ size: number; strokeWidth: number }>, { size: 24, strokeWidth: 1.75 }))
-          .replace(/ class="[^"]*"/, '')
-          .replace(/ aria-hidden="true"/, '')
+        forCoreSvg(renderToStaticMarkup(createElement(HugeiconsIcon, { icon: glyph, size: 24, strokeWidth: 1.75 })).replace(/ class=""/, ''))
       ])
     )
   )
@@ -184,5 +202,5 @@ describe('the iPhone app’s copy of src/shared', () => {
 
   it('ios/Wavi/Assets.xcassets/Agents', () => sync(MARKS, marks()))
 
-  it('ios/Wavi/Assets.xcassets/Lucide', () => sync(ICONS, icons()))
+  it('ios/Wavi/Assets.xcassets/Icons', () => sync(ICONS, icons()))
 })

@@ -1,7 +1,7 @@
 // Inline comments in Git · 变更 (PRD F5, Figma 03): the ＋ on a diff line, a saved comment of the user's under its line,
 // and the editor (⌘↵ 添加评论 · Esc 取消). The text being written lives in the store, so scrolling the editor out of the
 // rendered window and back keeps it.
-import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, Pencil, Trash2 } from '../../ui/icons'
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { clipCode, commentLocation, type ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'

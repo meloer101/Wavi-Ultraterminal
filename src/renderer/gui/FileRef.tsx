@@ -2,7 +2,7 @@
 // is a link only once main says it is an existing file of the session's worktree. Click: the 文件 view's preview at
 // that line; ⌘-click: the default editor; right-click: the link menu. Resting on it shows the lines around it, colored.
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
-import { ExternalLink, FileText } from 'lucide-react'
+import { ExternalLink, FileText } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'
 import { MAX_LINK_PATHS } from '@shared/worktree-files'

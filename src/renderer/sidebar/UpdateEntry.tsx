@@ -2,7 +2,7 @@
 // 检查更新. A newer GitHub release turns the button into 下载 <version>, which opens the release page — Wavi never
 // downloads or installs anything itself (PRD §7). Replaces settings' 关于 pane.
 import { useCallback, useRef, useState } from 'react'
-import { CircleArrowUp } from 'lucide-react'
+import { CircleArrowUp } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import type { UpdateInfo } from '@shared/ipc'
 import { useMessages } from '../ui/i18n'

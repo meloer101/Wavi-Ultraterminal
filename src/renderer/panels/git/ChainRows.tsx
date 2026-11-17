@@ -3,7 +3,7 @@
 // (⇧⌘M), then ⋯ with every chain action in a fixed order, a blocked one disabled with its reason in the trailing slot.
 // Every action goes through pull-requests/chain-actions.ts, the same function ⌘K calls.
 import { useEffect, useRef } from 'react'
-import { Check, CircleAlert, CircleDashed, Ellipsis } from 'lucide-react'
+import { Check, CircleAlert, CircleDashed, Ellipsis } from '../../ui/icons'
 import type { ChainMove, ChainState } from '@shared/ship-chain'
 import { SHORTCUTS } from '@shared/shortcuts'
 import { defineMessages } from '@shared/i18n'

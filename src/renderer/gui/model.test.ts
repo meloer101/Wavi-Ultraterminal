@@ -126,7 +126,7 @@ describe('tool groups (Figma 70′B / 70C)', () => {
 
   it('shows the call still running after the summary, and how many failed', () => {
     const view = groupView([tool('1', { name: 'Bash', arg: 'pnpm i', state: 'error' }), tool('2', { name: 'Bash', arg: 'pnpm test', state: 'running' })])
-    expect(view).toMatchObject({ text: '运行了 2 条命令', running: true, live: { verb: '运行', arg: 'pnpm test' }, failed: 1 })
+    expect(view).toMatchObject({ text: '运行了 2 条命令', running: true, live: { verb: '运行', arg: 'pnpm test', icon: 'terminal' }, failed: 1 })
     expect(view.added).toBeUndefined()
   })
 })

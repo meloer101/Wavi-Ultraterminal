@@ -2,7 +2,7 @@
 // task's own: 做什么 · 会话 or 项目 · 基于 · 智能体 · 界面 · 模型 · 权限 · 消息 · 时间 · 错过了 · 自动归档 · 前置检查.
 // No explanatory lines: labels, values and the 下次 time carry it (Figma 67′).
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { Check, ChevronRight, GitBranch, Globe } from 'lucide-react'
+import { Check, ChevronRight, GitBranch, Globe } from '../ui/icons'
 import { AGENT_SPECS, agentName, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { GUI_PERMISSION_LABELS, type GuiPermission } from '@shared/gui-chat'
 import type { AgentAvailability } from '@shared/ipc'

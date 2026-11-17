@@ -5,7 +5,7 @@
 // instructions go into its input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the
 // new-session sheet (PRD §5).
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
+import { ArrowRight, CircleX, GitBranch } from '../../ui/icons'
 import type { MergePrecheck } from '@shared/git-merge'
 import type { ShipMainResult } from '@shared/ship'
 import { defineMessages } from '@shared/i18n'

@@ -3,7 +3,7 @@
 // 评论, 时间 — kept in place when empty. A row opens the item (GitHubDetail); a session already started on it takes the
 // 评论 and 时间 slot, and clicking that enters it. Projects not on GitHub are folded at the bottom.
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, Circle, CircleDot, GitPullRequest, GitPullRequestDraft, MessageSquare, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Circle, CircleDot, GitPullRequest, GitPullRequestDraft, MessageSquare, X } from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { BOARD_SCOPES, type BoardItem, type BoardPr, type BoardProject } from '@shared/github-board'
 import { STATUS_LABEL } from '@shared/session-status'

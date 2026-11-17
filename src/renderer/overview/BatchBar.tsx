@@ -3,7 +3,7 @@
 // for the text, which lists exactly who gets it, and nothing is typed into any agent before the confirmation that
 // quotes the text and names every recipient (PRD §2). Sessions an action cannot reach are skipped and said so.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { X } from '../ui/icons'
 import { useShallow } from 'zustand/react/shallow'
 import {
   batchButtonLabel,

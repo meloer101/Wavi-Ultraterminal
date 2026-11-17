@@ -1,4 +1,4 @@
-import { CircleAlert } from 'lucide-react'
+import { CircleAlert } from '../ui/icons'
 import { AGENT_NAME } from '../lifecycle/present'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'

@@ -3,7 +3,7 @@
 // block appears only when neither supported agent is installed. It comes in with the mark's entrance (Figma 39G,
 // mark-entrance.ts), carried on from the boot screen on a cold start (Figma 39I, boot.ts).
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react'
-import { Copy } from 'lucide-react'
+import { Copy } from '../ui/icons'
 import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
 import { SHORTCUTS } from '@shared/shortcuts'

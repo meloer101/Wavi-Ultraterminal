@@ -3,7 +3,7 @@
 // and the full description is the tag's accessible name and tooltip. While the PR poll fails (合入链路 v2, Figma 73I)
 // the tag reads `#12 ? 查询失败` instead of a state that may be stale.
 import { memo } from 'react'
-import { Check, CircleDashed, CircleHelp, X } from 'lucide-react'
+import { Check, CircleDashed, CircleHelp, X } from '../ui/icons'
 import { prDescription, prStateLabel, type ChecksState, type PullRequestInfo } from '@shared/pull-requests'
 import { defineMessages } from '@shared/i18n'
 import { prQueryFailed, useSessionPrStatus } from './store'

@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-16：图标全应用换成 Hugeicons（含手机端），GUI 对话的运行行和正在跑的工具行：左边是那件事的图标（思考是大脑），文字从左到右亮起，不再用蓝色转圈（PRD v1.203，Figma 94′）。桌面的图标只从 `src/renderer/ui/icons.tsx` 取，`lucide-react` 移除；手机端 `Assets.xcassets/Icons` 由 `phone-assets.test.ts` 生成。手机端的运行行未扫光（未定）。
 - 2026-11-16：GUI 对话的七处可视化（PRD v1.201，Figma 90）：文件引用可点和悬停看行、网页搜索结果和网页标题、代码块和 diff 着色（新依赖 lowlight）、测试结果、依赖栈帧折叠、「↓ 回到最新」、Claude 会话的回退（对话 / 代码 / 两者）和改过的消息切换版本。e2e `gui-session.spec.ts` 加 4 个；回退文件用真 Claude（Haiku）实测过 `rewind_files`，界面里只用假 Claude 测过。
 - 2026-11-16：官网整合成五章（看板 / 合奏 / 多线程 / 交付 / 衣橱），产品画面换成 Figma 画的高保真窗口，派活单独一整个跨页（PRD v1.200，Figma W10）。`site/src/components/Magazine.astro`、`Plate.astro`、`i18n.ts`、`styles/site.css`，图在 `site/src/assets/magazine/{en,zh}-*.webp`，宋体子集按新文案重做。
 - 2026-11-16：发送即上屏 + 运行行（PRD v1.199，Figma 91 / 91′）：桌面 GUI 会话发出的同一帧出现 agent 头像和运行行（正在跑的步骤或「思考中」+ 到 0.1 秒、逐位翻滚的用时），手机会话页同样；`renderer/gui/Feed.tsx` `RunLine`、`model.ts` `runRowOf` / `runClock`、`GuiState.busySince`，手机 `SessionView.swift` `RunLine`、`Format.swift` `runRow` / `runClock`；e2e `gui-session.spec.ts`，iOS `FormatTests`。

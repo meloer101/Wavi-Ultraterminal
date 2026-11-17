@@ -2,7 +2,7 @@
 // of Git · 变更's ship zone: the headline with the checks mark, 打开 CI at its end, what 自动修复 is doing as a facts
 // line, and the switch (label first). A stopped fix asks on the decision surface (FixStopFooter). Only for a worktree
 // that pushed a base commit.
-import { Check, CircleDashed, X } from 'lucide-react'
+import { Check, CircleDashed, X } from '../../ui/icons'
 import type { SessionId, Worktree } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../../ui/i18n'

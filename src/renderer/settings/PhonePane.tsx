@@ -2,7 +2,7 @@
 // reaches this Mac at, and the paired phones (撤销 forgets one). The page asks main for the status when it opens,
 // which is what makes a pairing code: nothing can pair while the page is closed.
 import { useEffect, useState } from 'react'
-import { Smartphone } from 'lucide-react'
+import { Smartphone } from '../ui/icons'
 import { formatPairingCode, type RemoteStatus } from '@shared/remote'
 import type { RemoteSettings } from '@shared/settings'
 import { defineMessages } from '@shared/i18n'

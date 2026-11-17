@@ -6,7 +6,7 @@
 // A leader's `wavi adopt` (PRD F21 v1.198, Figma 81A) is a row of the same strip: the adopted session's agent,
 // 接管 <its name>, its own branch and the task; the head counts them apart (想开 N 个会话 · 接管 M 个).
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, CircleAlert, Split } from 'lucide-react'
+import { ChevronRight, CircleAlert, Split } from '../ui/icons'
 import { agentLabel, confirmHead, pendingShown } from '@shared/dispatch'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'

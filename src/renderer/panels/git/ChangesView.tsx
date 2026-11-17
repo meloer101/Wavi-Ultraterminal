@@ -11,7 +11,7 @@
 // it is an exit (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N…. 未提交 rows carry a
 // checkbox (73F1): the exits and 提交… commit only the ticked files. Every row ends with its 已看 mark (73A, viewed.ts);
 // the header's 未看 filter (GitView) lists only what is left to read.
-import { Check, ChevronDown, ChevronRight, Circle, CircleCheck, CircleDot, MessageSquare, Minus } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Circle, CircleCheck, CircleDot, MessageSquare, Minus } from '../../ui/icons'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'

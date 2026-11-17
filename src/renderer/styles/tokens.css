@@ -78,6 +78,8 @@
   --duration-spin: 1s;
   /* A digit of the run row's clock rolling to the next (Figma 91D). */
   --duration-roll: 220ms;
+  /* One sweep of light over words still happening, and its pause (Figma 94′; SHIMMER_MS in gui/Feed.tsx). */
+  --duration-shimmer: 2s;
   /* Strong ease-out: leaves at speed, so a change starts the moment it is asked for. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /* On-screen movement between two resting places (a chevron turning). */

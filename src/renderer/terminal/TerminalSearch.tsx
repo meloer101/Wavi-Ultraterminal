@@ -1,4 +1,4 @@
-import { CaseSensitive, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { CaseSensitive, ChevronDown, ChevronUp, X } from '../ui/icons'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { defineMessages } from '@shared/i18n'
 import type { SessionId } from '@shared/types'

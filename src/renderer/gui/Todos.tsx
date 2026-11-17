@@ -2,7 +2,7 @@
 // in a card above the composer while something in it is left (ChatPane, `currentTodos`); in the feed its row
 // 「任务 · N 项」 opens to the same list (Feed). Each task: its status glyph — done, in progress, not started — and its
 // text, the one in progress in the primary colour, done ones tertiary.
-import { ListTodo } from 'lucide-react'
+import { ListTodo } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import type { ChatTodo } from '@shared/transcript-chat'
 import { StatusGlyph } from '../ui/StatusGlyph'

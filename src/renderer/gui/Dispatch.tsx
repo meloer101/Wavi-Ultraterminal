@@ -5,7 +5,7 @@
 // Above the composer, the strip keeps every session in view after the graph scrolled away. Wavi's own messages — a
 // report, the notice of what the user decided — are drawn as such, never as the user's bubble.
 import { memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Split } from 'lucide-react'
+import { ChevronDown, ChevronRight, Split } from '../ui/icons'
 import { agentLabel, DISPATCH_LIMITS, pendingShown, type PendingStart } from '@shared/dispatch'
 import { defineMessages, pick } from '@shared/i18n'
 import type { AgentKind, SessionId, SessionStatus } from '@shared/types'

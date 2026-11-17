@@ -2,7 +2,7 @@
 // main area (v1.89). A row: switch · name, its time and what it does · 下次 and the last outcome · 「…」. Clicking a row
 // unfolds its last 20 runs, each opening its session or restoring an archived one. The sheet (ScheduleSheet) edits.
 import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent } from 'react'
-import { Copy, Ellipsis, Pencil, Play, Trash2, X } from 'lucide-react'
+import { Copy, Ellipsis, Pencil, Play, Trash2, X } from '../ui/icons'
 import { agentName } from '@shared/agents'
 import { clock, monthDay, nextRun, runLabel, timingLabel, whenLabel, type Schedule, type ScheduleRun } from '@shared/schedule'
 import { defineMessages } from '@shared/i18n'

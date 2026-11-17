@@ -2,7 +2,7 @@
 // hooks (no tokens). Row metadata, so caption-size and quiet; color only on the marks, whose shapes (✓ ✗ ?) carry the
 // meaning too, and the full description with every command is the tag's accessible name and tooltip.
 import { memo } from 'react'
-import { Check, CircleHelp, X } from 'lucide-react'
+import { Check, CircleHelp, X } from '../ui/icons'
 import { checksDescription, KIND_LABEL, runNote, turnCheckView, type CheckOutcome, type CheckRun, type TurnCheckView } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'

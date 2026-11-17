@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { Check, ChevronRight } from 'lucide-react'
+import { Check, ChevronRight } from './icons'
 import { anchorOf, formatAccelerator, isActionable, originToward, placeMenu, stepIndex, type MenuEntry, type Placement } from './menu-model'
 import { closeMenu, useMenu } from './menu'
 import { useWindowScope } from '../state/window-scope'

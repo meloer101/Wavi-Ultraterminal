@@ -1,7 +1,7 @@
 // 同任务多解 after one member was merged (PRD F4 / F15 v1.59): the merge sheet's result lists the members still left
 // and offers to archive them. Nothing is archived before the confirmation that names every branch.
 import { useEffect, useRef, useState } from 'react'
-import { Archive } from 'lucide-react'
+import { Archive } from '../ui/icons'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'
 import { useAttemptGroups } from '../state/attempt-groups'

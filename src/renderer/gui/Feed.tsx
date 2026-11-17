@@ -8,7 +8,7 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type LucideIcon } from 'lucide-react'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type IconComponent } from '../ui/icons'
 import type { GuiBranch, GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
@@ -109,8 +109,8 @@ const M = defineMessages({
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
-/** A tool row's icon key (model.ts `toolView`) → its lucide icon. */
-const TOOL_ICONS: Readonly<Record<ToolIcon, LucideIcon>> = {
+/** A tool row's icon key (model.ts `toolView`) → its icon (ui/icons). */
+const TOOL_ICONS: Readonly<Record<ToolIcon, IconComponent>> = {
   'file-text': FileText,
   'file-plus': FilePlus,
   pencil: Pencil,
@@ -606,9 +606,26 @@ function ToolIconMark({ icon }: { icon: ToolIcon }) {
   return <Icon {...ICON} />
 }
 
-/** A step row's mark (Figma 59J): the tool's icon, or its status while it runs, waits on you or failed. */
+/** A step row's mark (Figma 59J, 94′): the tool's icon, or its status while it waits on you or failed. */
 function StepMark({ children }: { children: ReactNode }) {
   return <span className={styles.stepMark}>{children}</span>
+}
+
+/** One sweep of `.shimmer` and its pause: tokens.css `--duration-shimmer`. */
+const SHIMMER_MS = 2000
+
+/**
+ * Figma 94′: words for what is still happening (思考中, 运行 pnpm test), a band of light sweeping them left to right.
+ * Its phase comes from the wall clock, so every row on screen sweeps together; `on` false leaves the words as they are.
+ */
+function Shimmer({ on = true, className, role, children }: { on?: boolean; className?: string; role?: string; children: ReactNode }) {
+  const [delay] = useState(() => `${-(Date.now() % SHIMMER_MS)}ms`)
+  if (!on) return <>{children}</>
+  return (
+    <span className={`${styles.shimmer} ${className ?? styles.shimmerGroup}`} style={{ animationDelay: delay }} role={role}>
+      {children}
+    </span>
+  )
 }
 
 function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
@@ -639,13 +656,13 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   return (
     <div className={styles.tool} data-testid="gui-tool-group">
       <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</StepMark>
+        <StepMark>{view.live ? <ToolIconMark icon={view.live.icon} /> : open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</StepMark>
         <span className={styles.groupText}>{view.text}</span>
         {view.live && (
-          <>
+          <Shimmer>
             <span className={styles.toolVerb}>· {view.live.verb}</span>
             <span className={styles.groupArg}>{view.live.arg}</span>
-          </>
+          </Shimmer>
         )}
         <span className={styles.groupFill} />
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
@@ -699,18 +716,20 @@ function Tool({
   return (
     <div className={styles.tool} data-subagent={subagent || undefined}>
       <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
-        <StepMark>{view.status === 'done_unread' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
-        <span className={styles.toolVerb} title={view.name}>
-          {view.verb}
-        </span>
-        {fetched ? (
-          <>
-            <span className={styles.pageTitle}>{fetched.title}</span>
-            <span className={styles.toolArg}>{fetched.site}</span>
-          </>
-        ) : (
-          <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
-        )}
+        <StepMark>{view.status === 'done_unread' || view.status === 'running' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
+        <Shimmer on={view.status === 'running'}>
+          <span className={styles.toolVerb} title={view.name}>
+            {view.verb}
+          </span>
+          {fetched ? (
+            <>
+              <span className={styles.pageTitle}>{fetched.title}</span>
+              <span className={styles.toolArg}>{fetched.site}</span>
+            </>
+          ) : (
+            <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+          )}
+        </Shimmer>
         {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
@@ -893,17 +912,18 @@ function FoldedFrames({ text, count }: { text: string; count: number }) {
 }
 
 /**
- * Figma 91: the running turn's last row, there from the moment the message is sent — the step running now (its verb and
- * target) or 思考中, and the turn's clock.
+ * Figma 91 / 94′: the running turn's last row, there from the moment the message is sent — the step running now (its
+ * icon, verb and target) or 思考中 with the brain, the words swept by light, and the turn's clock.
  */
 function RunLine({ run }: { run: RunRow }) {
   const m = useMessages(M)
   const view = run.tool ? toolView(run.tool, false) : null
   return (
     <div className={styles.runRow} data-testid="gui-run-row">
-      <span className={styles.runLabel} role="status">
+      <StepMark>{view ? <ToolIconMark icon={view.icon} /> : <Brain {...ICON} />}</StepMark>
+      <Shimmer className={styles.runLabel} role="status">
         {view ? `${view.verb} ${view.arg}` : m.thinking}
-      </span>
+      </Shimmer>
       <RunClock since={run.since} />
     </div>
   )

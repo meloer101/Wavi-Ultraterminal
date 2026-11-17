@@ -1,6 +1,6 @@
 // Read-only file preview (PRD F17, Figma 13F): line numbers and change marks, long lines wrap; Markdown renders,
 // with its source one click away. Esc / ← goes back to the tree.
-import { ArrowLeft, BookOpen, Code, Ellipsis, FileCode } from 'lucide-react'
+import { ArrowLeft, BookOpen, Code, Ellipsis, FileCode } from '../../ui/icons'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'

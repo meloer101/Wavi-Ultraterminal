@@ -1,5 +1,5 @@
 // What the 文件 view can do with an entry (PRD F17): the right-click menu (Figma 13D) and its shortcuts.
-import { AtSign, Code, Copy, File, FolderOpen } from 'lucide-react'
+import { AtSign, Code, Copy, File, FolderOpen } from '../../ui/icons'
 import type { SessionId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
 import { insertIntoTerminal } from '../../session-io'

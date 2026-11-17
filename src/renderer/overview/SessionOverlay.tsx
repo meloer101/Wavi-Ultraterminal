@@ -5,7 +5,7 @@
 // top-right window's bar adds a session through a picker tile. Esc (outside a terminal) and the scrim close the
 // overlay; a window's × closes that window, and the last one closes the overlay.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
-import { Columns2, X } from 'lucide-react'
+import { Columns2, X } from '../ui/icons'
 import type { SessionId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'

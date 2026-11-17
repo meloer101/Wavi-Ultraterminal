@@ -4,7 +4,7 @@
 // above the columns and open the overlay with their members side by side. GitHub lists each project's open issues and
 // PRs (GitHubBoard). The list view and its in-place terminal were removed in v1.184.
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from 'react'
-import { Check, PanelLeft, RefreshCw, Search } from 'lucide-react'
+import { Check, PanelLeft, RefreshCw, Search } from '../ui/icons'
 import { rangeBetween, togglePicked } from '@shared/batch-actions'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'

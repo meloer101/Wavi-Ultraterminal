@@ -5,7 +5,7 @@
 // (a new pane on that side). The terminals stay where TerminalArea mounted them; this only places them. Every window has
 // its own (F20 · 多窗口): a secondary window's panes borrow their terminals into its document (PaneHosts).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
-import { X } from 'lucide-react'
+import { X } from '../ui/icons'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { dropRect, evenSplit, measureSplit, PICKER_PANE, resizeSplit, type PaneBox, type Rect, type Size, type SplitHandle, type SplitNode } from '@shared/split-layout'

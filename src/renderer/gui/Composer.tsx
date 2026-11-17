@@ -6,7 +6,7 @@
 // Before anything is said (`switchable`) the model menu lists the agents first, each with its models (Figma 65B).
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, Workflow, X, Zap } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, Workflow, X, Zap } from '../ui/icons'
 import { agentName, type CliAgent } from '@shared/agents'
 import { guiAdapterOf } from '@shared/gui-agents'
 import { matchCommands, type GuiCatalogResult, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'

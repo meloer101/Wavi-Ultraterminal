@@ -3,7 +3,7 @@
 // findings — tag, title and location under it; tick to send, click to open it in the diff — the first three and
 // 其余 N 条. The finding last opened stays marked while its file is open.
 import { headlessAgent } from '@shared/agents'
-import { Check, ChevronDown, RotateCw } from 'lucide-react'
+import { Check, ChevronDown, RotateCw } from '../ui/icons'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReviewComment } from '@shared/review-comments'
 import type { SessionId } from '@shared/types'
