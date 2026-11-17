@@ -367,6 +367,17 @@ describe('GuiHost · Codex app-server', () => {
     expect(h.view('x1')).toEqual(stateOf(h, 'x1'))
   }, 30_000)
 
+  it('a resumed thread that runs without a sandbox gets workspace-write back on its next turn below 完全访问 (PRD v1.205)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x8', { resumeAgentSessionId: 'thr-full', permission: 'accept-edits' }), h.owner)
+    await ready(h, 'x8')
+    await h.host.send('x8', { text: 'go', attachments: [] })
+    await until(() => stateOf(h, 'x8').prompts.length === 1)
+    h.host.answer('x8', { kind: 'permission', id: stateOf(h, 'x8').prompts[0]!.id, optionId: 'accept' })
+    await until(() => !stateOf(h, 'x8').busy)
+    expect(texts(stateOf(h, 'x8')).at(-1)).toContain('"sandboxPolicy":{"type":"workspaceWrite"}')
+  }, 30_000)
+
   it('reports the thread’s name as the session title: a resumed thread’s, and each thread/name/updated for it (PRD F2)', async () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x5', { resumeAgentSessionId: 'thr-named' }), h.owner)

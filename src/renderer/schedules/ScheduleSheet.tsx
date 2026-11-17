@@ -6,7 +6,7 @@ import { Check, ChevronRight, GitBranch, Globe } from '../ui/icons'
 import { AGENT_SPECS, agentName, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { GUI_PERMISSION_LABELS, type GuiPermission } from '@shared/gui-chat'
 import { guiPermissionLevels } from '@shared/gui-agents'
-import { cliPermissionHasDefault, cliPermissionLevels } from '@shared/agent-launch'
+import { cliPermissionHasDefault, cliPermissionLevels, cliPlainPermission } from '@shared/agent-launch'
 import type { AgentAvailability } from '@shared/ipc'
 import { defaultBase, groupBranches, type NewSessionInfo } from '@shared/new-session'
 import {
@@ -216,7 +216,7 @@ function initialForm(source: Schedule | undefined, copy: boolean, projectId: Pro
     agent: 'claude',
     ui: 'gui',
     model: '',
-    // Each list's first entry: 询问 for a GUI, the CLI's plain launch for a terminal.
+    // None chosen: 询问 for a GUI, the CLI's plain launch for a terminal.
     permission: 'default',
     autoArchive: true,
     precheck: '',
@@ -342,7 +342,9 @@ function Sheet({ state }: { state: SheetState }) {
   const ui = uiRow(form.agent, form.ui, binaryInstalled(found))
   const sessionUi: SessionUi = ui?.value ?? 'cli'
   const permissions = permissionsFor(form.agent, sessionUi)
-  const permission: Permission = permissions.includes(form.permission) ? form.permission : (permissions[0] ?? 'default')
+  // No 权限 saved (or one the agent lacks): what it runs without one — the CLI's plain launch, a GUI's first level.
+  const plain = sessionUi === 'cli' ? cliPlainPermission(form.agent) : undefined
+  const permission: Permission = permissions.includes(form.permission) ? form.permission : (plain ?? permissions[0] ?? 'default')
   const base = form.base ?? (info ? defaultBase(info) : null)
   const agentModels = guiPicks[form.agent]?.models
   const models = useMemo(() => agentModels ?? [], [agentModels])

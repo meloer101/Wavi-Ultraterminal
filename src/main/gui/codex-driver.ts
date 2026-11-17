@@ -84,6 +84,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
     if (options.resume) {
       const resumed = await rpc.request('thread/resume', { threadId: options.resume }, HANDSHAKE_TIMEOUT_MS)
       if (resumed.ok && isRec(resumed.result) && takeThread(resumed.result.thread)) {
+        // The thread says its sandbox: one 完全访问 lifted earlier is put back by the next turn at another level.
+        if (isRec(resumed.result.sandbox) && resumed.result.sandbox.type === 'dangerFullAccess') sandboxLifted = true
         isReady = true
         io.ready()
         return
@@ -172,6 +174,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
 
     replayed() {
       if (threadId) {
+        // A reattached thread's sandbox is not known here: the next turn below 完全访问 sends workspace-write.
+        sandboxLifted = true
         isReady = true
         io.ready()
       } else void handshake()

@@ -63,7 +63,7 @@ function request(m) {
       return out({ id: m.id, result: { thread: { id: threadId, cwd: m.params.cwd }, approvalPolicy: m.params.approvalPolicy, sandbox: m.params.sandbox } })
     case 'thread/resume':
       threadId = m.params.threadId
-      return out({ id: m.id, result: { thread: { id: threadId, name: threadId === 'thr-named' ? 'Named earlier' : null } } })
+      return out({ id: m.id, result: { thread: { id: threadId, name: threadId === 'thr-named' ? 'Named earlier' : null }, sandbox: { type: threadId === 'thr-full' ? 'dangerFullAccess' : 'workspaceWrite' } } })
     case 'turn/start':
       return startTurn(m.id, m.params)
     case 'turn/interrupt':

@@ -17,6 +17,7 @@ import {
   armStartWatchdog,
   endAgentSession,
   handleRelayedHook,
+  piGatePath,
   prepareAgentLaunch,
   prepareShellLaunch,
   setHookTarget,
@@ -368,7 +369,7 @@ async function hostLaunch(
     ...(dispatch ? { pathPrefix: dispatch.pathPrefix } : {}),
     ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
     ...(options.model ? { model: options.model } : {}),
-    ...(options.permission ? { permission: options.permission } : {}),
+    ...(options.permission ? { permission: options.permission, piGatePath: piGatePath() } : {}),
     ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
     ...(extraArgs.length > 0 ? { extraArgs } : {}),
     ...(script ? { before: setupCommand(script) } : {})

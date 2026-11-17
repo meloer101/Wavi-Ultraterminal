@@ -71,6 +71,11 @@ let startFailure: HooksHealth = { ok: false, reason: 'server-unavailable', detai
 
 const DECISIONS: ReadonlySet<unknown> = new Set<PermissionDecision>(['allow-once', 'allow-always', 'deny'])
 
+/** Wavi's Pi permission gate (PRD F24 v1.205), next to tr-hook.sh: loaded for a Pi terminal's 询问 / 接受编辑. */
+export function piGatePath(): string {
+  return join(dirname(hookScriptPath()), 'wavi-pi-gate.js')
+}
+
 /** `resources/hooks/tr-hook.sh`: in the checkout in dev and in the linked app, in Contents/Resources/hooks when packaged. */
 export function hookScriptPath(): string {
   const checkout = sourceRoot()

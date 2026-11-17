@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentArgv, agentShellArgs, CLI_PERMISSIONS, cliPermissionHasDefault, cliPermissionLevels, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
+import { agentArgv, agentShellArgs, CLI_PERMISSIONS, cliPermissionHasDefault, cliPermissionLevels, cliPlainPermission, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
 import { CLI_AGENTS } from './agents'
 
 describe('shellQuote', () => {
@@ -22,6 +22,10 @@ describe('agentArgv', () => {
     expect(agentArgv('gemini', '/r', { permission: 'accept-edits' })).toEqual(['gemini', '--approval-mode', 'auto_edit'])
     expect(agentArgv('kiro', '/r', { permission: 'full-access' })).toEqual(['kiro-cli', 'chat', '--tui', '--trust-all-tools'])
     expect(agentArgv('kimi', '/r', { permission: 'auto' })).toEqual(['kimi'])
+    // Pi's 询问 loads Wavi's gate, and will not start without it (PRD F24 v1.205).
+    expect(agentArgv('pi', '/r', { permission: 'accept-edits', piGatePath: '/r/wavi-pi-gate.js' })).toEqual(['pi', '-e', '/r/wavi-pi-gate.js'])
+    expect(() => agentArgv('pi', '/r', { permission: 'ask' })).toThrow(/gate/)
+    expect(agentArgv('pi', '/r', { permission: 'full-access' })).toEqual(['pi'])
     // A leader's read-only profile wins over a 定时任务's level.
     expect(agentArgv('codex', '/r', { permission: 'full-access', extraArgs: ['-c', 'default_permissions="wavi-leader"'] })).not.toContain('--dangerously-bypass-approvals-and-sandbox')
   })
@@ -35,6 +39,8 @@ describe('agentArgv', () => {
     expect(cliPermissionHasDefault('codex')).toBe(true)
     expect(cliPermissionLevels('amp')).toEqual(['full-access'])
     expect(cliPermissionHasDefault('amp')).toBe(false)
+    expect(cliPlainPermission('pi')).toBe('full-access')
+    expect(cliPlainPermission('codex')).toBeUndefined()
     expect(cliPermissionLevels('droid')).toEqual([])
     expect(cliPermissionHasDefault('droid')).toBe(true)
     // Every CLI has a row, and every level that never asks is the last one it lists.
@@ -166,7 +172,7 @@ describe('agentShellArgs', () => {
 
   it('sets a level’s variables for this launch only, through env (Goose, Pi; PRD F24 v1.205)', () => {
     expect(agentShellArgs('goose', '/tmp', '/bin/zsh', { permission: 'auto' })[3]).toContain("'env' 'GOOSE_MODE=smart_approve' 'goose' 'session'")
-    expect(agentShellArgs('pi', '/tmp', '/usr/local/bin/fish', { permission: 'ask' })[3]).toContain("'env' 'WAVI_PI_PERMISSION=ask' 'pi'")
+    expect(agentShellArgs('pi', '/tmp', '/usr/local/bin/fish', { permission: 'ask', piGatePath: '/r/wavi-pi-gate.js' })[3]).toContain("'env' 'WAVI_PI_PERMISSION=ask' 'pi' '-e' '/r/wavi-pi-gate.js'")
     expect(agentShellArgs('pi', '/tmp', '/bin/zsh', { permission: 'full-access' })[3]).not.toContain("'env'")
     expect(agentShellArgs('goose', '/tmp', '/bin/zsh', { permission: 'auto', resumeAgentSessionId: CONTINUE_LATEST })[3]).not.toContain('GOOSE_MODE')
   })

@@ -24,11 +24,14 @@ export interface CliPermissionLaunch {
 const mode = (flag: string, values: Partial<Record<GuiPermission, string>>): Partial<Record<GuiPermission, CliPermissionLaunch>> =>
   Object.fromEntries(Object.entries(values).map(([level, value]) => [level, { args: [flag, value] }]))
 
+/** Stands for Wavi's Pi gate extension (resources/hooks/wavi-pi-gate.js) until a launch puts its path in. */
+const PI_GATE = '{waviPiGate}'
+
 /**
  * PRD F24 v1.205: the 权限 levels each CLI can be launched with, and how. A level is listed only where the CLI has a
  * per-launch flag or variable for it (never a write to its config); `{}` is the CLI's own default with nothing passed.
  * 自动 only where the CLI judges steps itself. Measured with `--help`: Claude 2.1.326, Codex 0.167, Cursor 2026.10.22,
- * Grok 1.0.77, Pi 1.5.2 (no flags: Wavi's extension asks, resources/hooks/wavi-pi.js). From each CLI's docs or source
+ * Grok 1.0.77, Pi 1.5.2 (no flags: Wavi's gate extension asks, resources/hooks/wavi-pi-gate.js). From each CLI's docs or source
  * (2026-11-17, not run here): Qwen Code, Gemini CLI, OpenCode, Goose, Copilot CLI, Kimi Code, Kiro, Crush, Cline,
  * Antigravity, CodeBuddy, Amp. Droid's levels are `droid exec` flags and Auggie's need its tool names: neither yet.
  */
@@ -44,7 +47,11 @@ export const CLI_PERMISSIONS: Readonly<Record<CliAgent, Partial<Record<GuiPermis
   opencode: { 'full-access': { args: ['--auto'] } },
   gemini: mode('--approval-mode', { ask: 'default', 'accept-edits': 'auto_edit', 'full-access': 'yolo' }),
   qwen: mode('--approval-mode', { ask: 'default', 'accept-edits': 'auto-edit', auto: 'auto', 'full-access': 'yolo' }),
-  pi: { ask: { env: { WAVI_PI_PERMISSION: 'ask' } }, 'accept-edits': { env: { WAVI_PI_PERMISSION: 'accept-edits' } }, 'full-access': {} },
+  pi: {
+    ask: { args: ['-e', PI_GATE], env: { WAVI_PI_PERMISSION: 'ask' } },
+    'accept-edits': { args: ['-e', PI_GATE], env: { WAVI_PI_PERMISSION: 'accept-edits' } },
+    'full-access': {}
+  },
   copilot: { ask: {}, 'accept-edits': { args: ['--allow-tool', 'write'] }, 'full-access': { args: ['--yolo'] } },
   cursor: { ask: {}, auto: { args: ['--auto-review'] }, 'full-access': { args: ['--yolo'] } },
   grok: mode('--permission-mode', { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }),
@@ -70,18 +77,28 @@ export function cliPermissionLevels(kind: CliAgent): readonly GuiPermission[] {
   return GUI_PERMISSIONS.filter((level) => CLI_PERMISSIONS[kind][level] !== undefined)
 }
 
-/** Whether no level is the CLI's plain launch: the 定时任务 form then offers 默认 (nothing passed) first. */
-export function cliPermissionHasDefault(kind: CliAgent): boolean {
-  return !cliPermissionLevels(kind).some((level) => {
+/** The level that is the CLI's plain launch (nothing passed), if one is: what a 定时任务 without a 权限 runs at. */
+export function cliPlainPermission(kind: CliAgent): GuiPermission | undefined {
+  return cliPermissionLevels(kind).find((level) => {
     const launch = CLI_PERMISSIONS[kind][level]
     return !launch?.args?.length && !launch?.env
   })
 }
 
-/** The launch of a level for this CLI; none when it has no such level or the session resumes (its own default then). */
+/** Whether no level is the CLI's plain launch: the 定时任务 form then offers 默认 (nothing passed) first. */
+export const cliPermissionHasDefault = (kind: CliAgent): boolean => cliPlainPermission(kind) === undefined
+
+/**
+ * The launch of a level for this CLI; none when it has no such level or the session resumes (its own default then).
+ * A level that needs Wavi's Pi gate fails without its path rather than start Pi asking nothing.
+ */
 function permissionLaunch(kind: Exclude<AgentKind, 'shell'>, options: AgentLaunchOptions): CliPermissionLaunch {
   if (!options.permission || isSafeAgentSessionId(options.resumeAgentSessionId)) return {}
-  return CLI_PERMISSIONS[kind][options.permission] ?? {}
+  const launch = CLI_PERMISSIONS[kind][options.permission] ?? {}
+  if (!launch.args?.includes(PI_GATE)) return launch
+  const gate = options.piGatePath
+  if (!gate) throw new Error('the Pi permission gate (wavi-pi-gate.js) is missing')
+  return { ...launch, args: launch.args.map((arg) => (arg === PI_GATE ? gate : arg)) }
 }
 
 /**
@@ -122,6 +139,8 @@ export interface AgentLaunchOptions {
    * CLI does not have, when resuming, and when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.198).
    */
   permission?: CliPermission
+  /** Wavi's Pi gate extension (resources/hooks/wavi-pi-gate.js), loaded for Pi's 询问 / 接受编辑 whether or not hooks are. */
+  piGatePath?: string
   /**
    * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
    * Ignored when resuming.

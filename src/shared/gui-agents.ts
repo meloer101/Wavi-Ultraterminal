@@ -97,8 +97,11 @@ export function guiPermissionLevels(agent: CliAgent): readonly GuiPermission[] {
   if (!protocol) return []
   if (protocol === 'claude-stream' || protocol === 'codex-app-server') return ['ask', 'accept-edits', 'auto', 'full-access']
   if (protocol === 'pi-rpc') return ['ask', 'accept-edits', 'full-access']
-  return ['ask', 'accept-edits', ...(launchPermissionOf(agent)?.auto ? (['auto'] as const) : []), 'full-access']
+  return acpPermissionLevels(launchPermissionOf(agent)?.auto === true)
 }
+
+/** An ACP agent's levels: 询问, 接受编辑 and 完全访问 (Wavi answers its requests), 自动 when its launch has one. */
+export const acpPermissionLevels = (auto: boolean): readonly GuiPermission[] => ['ask', 'accept-edits', ...(auto ? (['auto'] as const) : []), 'full-access']
 
 export function guiProtocolOf(agent: CliAgent): GuiProtocol | null {
   return AGENT_GUI[agent]?.protocol ?? null
