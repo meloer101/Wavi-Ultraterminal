@@ -1,5 +1,5 @@
 /* Site-wide constants. The GitHub repository is named only here. */
-export const REPO = 'meloer101/terminal-reborn'
+export const REPO = 'meloer101/Wavi-Ultraterminal'
 export const gh = (path = ''): string => `https://github.com/${REPO}${path}`
 
 /** A path under the site's base (Vercel serves at "/", GitHub Pages under "/terminal-reborn/"). */

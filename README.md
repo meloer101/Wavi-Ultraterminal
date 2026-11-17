@@ -11,15 +11,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/meloer101/terminal-reborn/releases/latest"><img src="https://img.shields.io/github/v/release/meloer101/terminal-reborn?style=flat-square&label=release&labelColor=1a1a1a&color=3a3a3a" alt="Latest release"></a>
+  <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><img src="https://img.shields.io/github/v/release/meloer101/Wavi-Ultraterminal?style=flat-square&label=release&labelColor=1a1a1a&color=3a3a3a" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-3a3a3a?style=flat-square&logo=apple&logoColor=white&labelColor=1a1a1a" alt="macOS 13+">
   <img src="https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="Claude Code and Codex">
   <img src="https://img.shields.io/badge/telemetry-none-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="No telemetry">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/meloer101/terminal-reborn?style=flat-square&labelColor=1a1a1a&color=3a3a3a" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/meloer101/Wavi-Ultraterminal?style=flat-square&labelColor=1a1a1a&color=3a3a3a" alt="MIT license"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/meloer101/terminal-reborn/releases/latest"><b>Download for macOS</b></a>
+  <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><b>Download for macOS</b></a>
   &nbsp;·&nbsp; <a href="https://wavi-pi.vercel.app">Website</a>
   &nbsp;·&nbsp; <a href="CHANGELOG.md">Changelog</a>
   &nbsp;·&nbsp; <a href="docs/ROADMAP.md">Roadmap</a>
@@ -118,7 +118,7 @@ The changes panel shows uncommitted and committed work against the base branch, 
 
 ## Install
 
-1. Download the dmg from [Releases](https://github.com/meloer101/terminal-reborn/releases/latest): `arm64` for Apple silicon, `x64` for Intel.
+1. Download the dmg from [Releases](https://github.com/meloer101/Wavi-Ultraterminal/releases/latest): `arm64` for Apple silicon, `x64` for Intel.
 2. Open it and drag Wavi into Applications. Builds are signed with a Developer ID and notarized by Apple.
 3. Have [Claude Code](https://docs.claude.com/en/docs/claude-code) and/or [Codex](https://github.com/openai/codex) installed and signed in. Without either, Wavi still works as a terminal.
 
@@ -178,7 +178,7 @@ npm run test:e2e     # build and run the Electron end-to-end tests
 npm run dist         # package arm64 / x64 dmg and zip into release/
 ```
 
-The product spec is [docs/PRD.md](docs/PRD.md), progress is in [docs/ROADMAP.md](docs/ROADMAP.md), and [CONTRIBUTING.md](CONTRIBUTING.md) covers the rest. Found a bug or want a feature? [Open an issue](https://github.com/meloer101/terminal-reborn/issues/new/choose). Including your Wavi, macOS, `claude --version` and `codex --version` helps the most.
+The product spec is [docs/PRD.md](docs/PRD.md), progress is in [docs/ROADMAP.md](docs/ROADMAP.md), and [CONTRIBUTING.md](CONTRIBUTING.md) covers the rest. Found a bug or want a feature? [Open an issue](https://github.com/meloer101/Wavi-Ultraterminal/issues/new/choose). Including your Wavi, macOS, `claude --version` and `codex --version` helps the most.
 
 ## License
 
