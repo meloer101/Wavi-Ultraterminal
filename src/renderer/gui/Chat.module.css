@@ -573,6 +573,35 @@
   opacity: 0.6;
 }
 
+/* Figma 90C: code colored by scope (highlight.ts) with the terminal theme's colors; other scopes keep the text's. */
+.hl:is([data-hl='keyword'], [data-hl='selector-tag'], [data-hl='literal']) {
+  color: var(--term-violet);
+}
+
+.hl:is([data-hl='string'], [data-hl='regexp'], [data-hl='symbol'], [data-hl='char'], [data-hl='addition']) {
+  color: var(--term-green);
+}
+
+.hl:is([data-hl='number'], [data-hl='attr'], [data-hl='attribute']) {
+  color: var(--term-yellow);
+}
+
+.hl:is([data-hl='title'], [data-hl='section'], [data-hl='name'], [data-hl='selector-id'], [data-hl='selector-class']) {
+  color: var(--term-blue);
+}
+
+.hl:is([data-hl='type'], [data-hl='built_in'], [data-hl='tag'], [data-hl='property']) {
+  color: var(--term-cyan);
+}
+
+.hl:is([data-hl='comment'], [data-hl='quote'], [data-hl='doctag'], [data-hl='meta']) {
+  color: var(--term-dim);
+}
+
+.hl[data-hl='deletion'] {
+  color: var(--term-red);
+}
+
 .fileBlocks {
   display: flex;
   flex-direction: column;
@@ -1957,4 +1986,392 @@
   .round:active:not(:disabled) {
     transform: none;
   }
+}
+
+/* --- Figma 90A / 90E: file references --- */
+
+/* A path the session's worktree has: underlined like a link, in the color of the text around it. */
+.fileRef {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.fileRef:hover {
+  text-decoration-color: currentColor;
+}
+
+.fileRef:hover > code {
+  background: var(--bg-selected);
+}
+
+.fileRef:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+/* Figma 90E: 「› 依赖里的 7 帧」 in a command's output, one line of it. */
+.foldedFrames {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 0 0 var(--space-24);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.foldedFrames:hover {
+  color: var(--text-secondary);
+}
+
+/* A card under a link (HoverCard): the menus' surface, 520 wide at most. */
+.hoverCard {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: min(520px, calc(100vw - 16px));
+  padding: var(--space-4);
+  border-radius: var(--radius-popover);
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
+  color: var(--text-primary);
+  animation: pop-in var(--duration-pop) var(--ease-out);
+}
+
+/* Figma 90A: file icon · path:line · open · copy. */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-8);
+  color: var(--text-tertiary);
+}
+
+.cardPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardLine {
+  color: var(--text-tertiary);
+}
+
+.cardCode {
+  margin: 0;
+  padding: 0 0 var(--space-4);
+  overflow-x: auto;
+  font: var(--type-code);
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.cardCodeLine {
+  display: block;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-sm);
+}
+
+.cardCodeLine[data-current] {
+  background: var(--bg-selected);
+}
+
+.cardLineNumber {
+  display: inline-block;
+  min-width: 3ch;
+  margin-right: var(--space-12);
+  color: var(--text-tertiary);
+  text-align: right;
+  user-select: none;
+}
+
+/* --- Figma 90B: web pages --- */
+
+/* A fetched page's title on its row, in the subagent task's weight; its site follows in the target's style. */
+.pageTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「5 个结果」 at a search row's end. */
+.toolMeta {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-step);
+  color: var(--text-tertiary);
+}
+
+/* A search's results right of a line, as under a subagent's row: title · site, ↗ on the row under the pointer. */
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: var(--space-4) 0 0 var(--subagent-rail);
+  padding: 0 0 0 var(--space-8);
+  border-left: 1px solid var(--border-subtle);
+  list-style: none;
+}
+
+.searchResult {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.searchResult:hover {
+  background: var(--bg-hover);
+}
+
+.searchResult:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.searchTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchSite {
+  flex: 1 0 auto;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+}
+
+.searchOpen {
+  flex: none;
+  color: var(--text-secondary);
+  opacity: 0;
+}
+
+.searchResult:hover .searchOpen,
+.searchResult:focus-visible .searchOpen {
+  opacity: 1;
+}
+
+/* A web link's card: site, title, URL. */
+.webCard {
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-12);
+}
+
+.webSite {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--type-code);
+  color: var(--text-tertiary);
+}
+
+.webTitle {
+  font: var(--type-step);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.webUrl {
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Figma 90D: test results --- */
+
+/* 「1 失败 · 11 通过 · 1.8s」 at a test command's row end. */
+.testCountFailed {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-step);
+  color: var(--status-error);
+}
+
+.testCount {
+  flex-shrink: 0;
+  font: var(--type-step);
+  color: var(--text-tertiary);
+}
+
+.testDuration {
+  flex-shrink: 0;
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+/* Opened: a hairline box, the failures first. */
+.testResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: var(--space-4) 0 0 var(--step-indent);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.testFailure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.testHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--type-step);
+  color: var(--text-tertiary);
+  text-align: left;
+}
+
+button.testHead {
+  cursor: pointer;
+}
+
+button.testHead:hover {
+  color: var(--text-secondary);
+}
+
+.testFailed {
+  flex: none;
+  color: var(--status-error);
+}
+
+.testPassed {
+  flex: none;
+  color: var(--status-done);
+}
+
+.testName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testPlace {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testMeta {
+  color: inherit;
+}
+
+.testMessage {
+  margin: 0 0 0 var(--space-24);
+  overflow-x: auto;
+  font: var(--type-code);
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.testMessage [data-kind='expected'] {
+  color: var(--diff-add-fg);
+}
+
+.testMessage [data-kind='received'] {
+  color: var(--diff-del-fg);
+}
+
+/* --- Figma 90F′: jump to latest --- */
+
+/* The feed and what floats over its foot. */
+.feedFrame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+/* 「↓ 回到最新」 centered 12 above the composer, on the menus' surface. */
+.jumpToLatest {
+  position: absolute;
+  bottom: var(--space-12);
+  left: 50%;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 28px;
+  padding: 0 var(--space-12) 0 var(--space-8);
+  border: 0;
+  border-radius: 100vmax; /* a pill: clamped to half its height */
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
+  font: var(--type-step);
+  color: var(--text-primary);
+  translate: -50% 0;
+  cursor: pointer;
+  animation: pop-in var(--duration-pop) var(--ease-out);
+}
+
+.jumpToLatest:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- Figma 90G′: an edited message's versions --- */
+
+/* ‹ 1 / 2 › under the bubble, right-aligned, always shown (not only on hover like the actions under it). */
+.versionSwitch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+}
+
+.versionCount {
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.versionSwitch .actionIcon:disabled {
+  color: var(--text-disabled);
+  background: none;
+  cursor: default;
 }

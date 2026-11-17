@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentBranch, resumePointOf } from './claude-rewind'
+import { branchVersions, currentBranch, resumePointOf } from './claude-rewind'
 
 const user = (uuid: string, parentUuid: string | null, content: unknown = 'hi') => ({ type: 'user', uuid, parentUuid, message: { role: 'user', content } })
 const assistant = (uuid: string, parentUuid: string) => ({ type: 'assistant', uuid, parentUuid, message: { content: [{ type: 'text', text: 'OK' }] } })
@@ -56,5 +56,20 @@ describe('resumePointOf', () => {
   it('is undefined, not a new conversation, when the chain runs into lines that were not read', () => {
     // The newest part of a long transcript: u3's parent r1 is in the part not read.
     expect(resumePointOf([user('u3', 'r1'), assistant('r3', 'u3')], 'u3')).toBeUndefined()
+  })
+})
+
+describe('branchVersions', () => {
+  it('lists what an edit cut as the earlier version of the new message (Figma 90G′)', () => {
+    expect(branchVersions(rows)).toEqual([{ current: 'u3', older: [[3, 4, 5, 6]] }])
+  })
+
+  it('keeps every earlier version of a message edited twice, oldest first', () => {
+    const again = [...rows, user('u4', 'r1'), assistant('r4', 'u4')]
+    expect(branchVersions(again)).toEqual([{ current: 'u4', older: [[3, 4, 5, 6], [8, 9]] }])
+  })
+
+  it('has none for a conversation without edits', () => {
+    expect(branchVersions([user('u1', null), assistant('r1', 'u1')])).toEqual([])
   })
 })

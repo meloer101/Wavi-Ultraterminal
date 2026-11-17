@@ -72,3 +72,53 @@ export function resumePointOf(rows: readonly Row[], messageId: string): string |
   }
   return null
 }
+
+/** An edited message's earlier versions (Figma 90G′): each the lines an edit cut, in file order. */
+export interface BranchVersions {
+  /** The message on the current branch these are earlier versions of. */
+  current: string
+  /** Line indexes of each earlier version, oldest first. */
+  older: number[][]
+}
+
+/**
+ * The edited messages of the current branch and what each edit cut (the same walk as currentBranch): a prompt whose
+ * parent already had a child makes the lines under that earlier child an older version of it. Lines an earlier edit
+ * had already cut are not part of a later version.
+ */
+export function branchVersions(rows: readonly Row[]): BranchVersions[] {
+  const keep = rows.map(() => true)
+  const firstChild = new Map<string, number>()
+  const groups = new Map<string, { current: number; older: number[][] }>()
+  rows.forEach((row, i) => {
+    const parent = str(row?.parentUuid)
+    if (parent === undefined) return
+    const earlier = firstChild.get(parent)
+    if (earlier === undefined) {
+      firstChild.set(parent, i)
+      return
+    }
+    if (!isPrompt(row)) return
+    const cut = new Set([str(rows[earlier]?.uuid)!])
+    const lines: number[] = []
+    for (let j = earlier; j < i; j++) {
+      const r = rows[j]
+      const id = str(r?.uuid)
+      if (id === undefined) continue
+      if (j === earlier || cut.has(str(r?.parentUuid) ?? '')) {
+        cut.add(id)
+        if (keep[j]) lines.push(j)
+        keep[j] = false
+        firstChild.delete(id)
+      }
+    }
+    firstChild.set(parent, i)
+    const group = groups.get(parent) ?? { current: i, older: [] }
+    if (lines.length > 0) group.older.push(lines)
+    group.current = i
+    groups.set(parent, group)
+  })
+  return [...groups.values()]
+    .filter((g) => keep[g.current] && g.older.length > 0)
+    .map((g) => ({ current: str(rows[g.current]?.uuid)!, older: g.older }))
+}

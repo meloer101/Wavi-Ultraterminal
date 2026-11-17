@@ -245,6 +245,36 @@ describe('GuiHost · Claude stream-json', () => {
     expect(prepared.at(-1)?.resumeAgentSessionId).toBeUndefined()
   }, 30_000)
 
+  it('rewinds to before a message: counts the files, puts the code back, restarts the conversation with nothing sent (Figma 90G)', async () => {
+    const prepared: GuiLaunch[] = []
+    const h = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve('reply-1'), prepared })
+    await h.host.open(launchOf('claude', 'c12'), h.owner)
+    await ready(h, 'c12')
+    for (const text of ['first', 'second']) {
+      await h.host.send('c12', { text, attachments: [] })
+      await until(() => !stateOf(h, 'c12').busy && texts(stateOf(h, 'c12')).includes(`text:Hello: ${text}`))
+    }
+    const second = stateOf(h, 'c12').items.find((i) => i.kind === 'user' && i.text === 'second')!
+    expect(await h.host.rewindInfo('c12', second.id)).toEqual({ conversation: true, files: 1 })
+    expect(await h.host.rewindInfo('c12', 'nope')).toEqual({ conversation: false, files: null })
+    // The code alone: the conversation stays as it is.
+    expect(await h.host.rewind('c12', second.id, 'code')).toMatchObject({ ok: true })
+    expect(texts(stateOf(h, 'c12'))).toEqual(['user:first', 'text:Hello: first', 'user:second', 'text:Hello: second'])
+    // Both: the agent restarts at the message before it, and nothing is sent in its place.
+    expect((await h.host.rewind('c12', second.id, 'both')).ok).toBe(true)
+    expect(texts(stateOf(h, 'c12'))).toEqual(['user:first', 'text:Hello: first'])
+    expect(prepared.at(-1)).toMatchObject({ resumeAgentSessionId: 'fake-claude-session', resumeAt: 'reply-1' })
+    expect(prepared.at(-1)?.initialPrompt).toBeUndefined()
+    // Both, when the conversation cannot go back: refused before any file is put back.
+    const h2 = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve(undefined) })
+    await h2.host.open(launchOf('claude', 'c13'), h2.owner)
+    await ready(h2, 'c13')
+    await h2.host.send('c13', { text: 'only', attachments: [] })
+    await until(() => !stateOf(h2, 'c13').busy && texts(stateOf(h2, 'c13')).includes('text:Hello: only'))
+    const only = stateOf(h2, 'c13').items.find((i) => i.kind === 'user')!
+    expect(await h2.host.rewind('c13', only.id, 'both')).toEqual({ ok: false, reason: '对话记录里找不到这条消息' })
+  }, 30_000)
+
   it('refuses an edit while a turn runs, of a message it does not have, or one the transcript lacks', async () => {
     const h = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve(undefined) })
     await h.host.open(launchOf('claude', 'c11'), h.owner)

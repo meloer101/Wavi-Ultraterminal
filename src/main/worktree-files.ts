@@ -12,6 +12,7 @@ import {
   compareEntries,
   looksBinary,
   MAX_DIR_ENTRIES,
+  MAX_LINK_PATHS,
   MAX_LISTED_FILES,
   MAX_PREVIEW_BYTES,
   parseGitStatus,
@@ -65,7 +66,6 @@ async function resolveInside(realRoot: string, path: unknown): Promise<{ rel: st
 }
 
 /** Paths checked per call (the renderer sends one terminal line's candidates). */
-const MAX_LINK_PATHS = 64
 
 /**
  * Which of the paths printed in a session's terminal are files inside the worktree (PRD F17): each becomes its

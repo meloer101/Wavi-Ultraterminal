@@ -118,7 +118,9 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
 export function guiEnv(agent: CliAgent): Record<string, string> {
   const driver = AGENT_GUI[agent]
   const acpEnv = driver?.protocol === 'acp' && 'env' in driver ? driver.env : undefined
-  return { ...AGENT_SPECS[agent].env, ...acpEnv }
+  // Figma 90G: Claude keeps a file checkpoint per message, so 回退 can put the code back (`rewind_files`).
+  const claudeEnv = driver?.protocol === 'claude-stream' ? { CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING: 'true' } : undefined
+  return { ...AGENT_SPECS[agent].env, ...acpEnv, ...claudeEnv }
 }
 
 /**

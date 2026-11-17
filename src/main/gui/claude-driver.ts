@@ -313,6 +313,17 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       return (await control({ subtype: 'stop_task', task_id: taskId }, 10_000)).ok
     },
 
+    // Figma 90G: `rewind_files` (2.1.325, the SDK's file checkpointing; on with the launch env, launch.ts). A dry run
+    // answers `{ canRewind, filesChanged: [...] }`, the real one `{ canRewind }`; a message with no checkpoint fails.
+    async rewindFiles(messageId, dryRun) {
+      if (!isReady) return { ok: false, reason: 'the agent is not running' }
+      const outcome = await control({ subtype: 'rewind_files', user_message_id: messageId, ...(dryRun ? { dry_run: true } : {}) }, 30_000)
+      if (!outcome.ok) return { ok: false, reason: outcome.error }
+      if (outcome.response.canRewind !== true) return { ok: false, reason: str(outcome.response.error) ?? 'no checkpoint for this message' }
+      const files = Array.isArray(outcome.response.filesChanged) ? outcome.response.filesChanged.length : 0
+      return { ok: true, files }
+    },
+
     async setConfig(id, value) {
       const option = config.find((o) => o.id === id)
       // The level 计划 returns to: the one chosen before it (or before Claude was put in plan mode some other way).

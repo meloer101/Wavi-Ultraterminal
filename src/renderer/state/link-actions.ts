@@ -97,7 +97,7 @@ async function openLinkMenu(sessionId: SessionId, url: string, at: { x: number; 
   else if (choice === 'copy') void navigator.clipboard.writeText(url).catch(() => {})
 }
 
-interface FileLink {
+export interface FileLink {
   root: string
   /** Relative to the root, checked by main. */
   path: string
@@ -118,7 +118,7 @@ export function openFile(file: FileLink, target: LinkTarget): void {
   useWorkspace.getState().setRightPanel('files')
 }
 
-async function openFileLinkMenu(file: FileLink, at: { x: number; y: number }): Promise<void> {
+export async function openFileLinkMenu(file: FileLink, at: { x: number; y: number }): Promise<void> {
   const entries: MenuEntry[] = [
     { type: 'item', id: 'preview', label: pick(M).preview },
     { type: 'item', id: 'open', label: pick(M).openInEditor },

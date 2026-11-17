@@ -6,10 +6,10 @@
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
-import type { GuiLive } from '@shared/gui-chat'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type LucideIcon } from 'lucide-react'
+import type { GuiBranch, GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
 import type { ChatItem, FileDiff } from '@shared/transcript-chat'
@@ -23,6 +23,13 @@ import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEdit
 import { CopyButton } from './CopyButton'
 import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
+import { outputRuns, refPieces } from './file-refs'
+import { FileRef, RefSession } from './FileRef'
+import { PageTitles, SearchResults } from './WebLink'
+import { TestResults } from './TestResults'
+import { branchedChat, type BranchSwitch } from './branches'
+import { testResults, type TestResults as TestRun } from './test-results'
+import { pageTitles, shortUrl, siteOf } from './web-links'
 import { TodoList } from './Todos'
 import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
@@ -63,24 +70,40 @@ const M = defineMessages({
   zh: {
     pictures: '图片',
     edit: '编辑',
+    rewind: '回退',
+    previousVersion: '上一个版本',
+    nextVersion: '下一个版本',
     editMessage: '编辑消息',
     cancel: '取消',
     send: '发送',
     failed: (count: number) => `${count} 个失败`,
     waiting: '等你确认',
     copyOutput: '复制输出',
-    thinking: '思考中'
+    thinking: '思考中',
+    dependencyFrames: (count: number) => `依赖里的 ${count} 帧`,
+    results: (count: number) => `${count} 个结果`,
+    testsFailed: (count: number) => `${count} 失败`,
+    testsPassed: (count: number) => `${count} 通过`,
+    jumpToLatest: '回到最新'
   },
   en: {
     pictures: 'Pictures',
     edit: 'Edit',
+    rewind: 'Rewind',
+    previousVersion: 'Previous version',
+    nextVersion: 'Next version',
     editMessage: 'Edit message',
     cancel: 'Cancel',
     send: 'Send',
     failed: (count: number) => `${count} failed`,
     waiting: 'Needs you',
     copyOutput: 'Copy output',
-    thinking: 'Thinking'
+    thinking: 'Thinking',
+    dependencyFrames: (count: number) => `${count} frames in dependencies`,
+    results: (count: number) => (count === 1 ? '1 result' : `${count} results`),
+    testsFailed: (count: number) => `${count} failed`,
+    testsPassed: (count: number) => `${count} passed`,
+    jumpToLatest: 'Jump to latest'
   }
 })
 
@@ -115,6 +138,9 @@ function waviOf(item: Extract<ChatItem, { kind: 'user' }>): WaviMessage | null {
   return found
 }
 
+const NO_BRANCHES: readonly GuiBranch[] = []
+const NO_VIEWING: ReadonlyMap<string, number> = new Map()
+
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
 
@@ -132,6 +158,10 @@ interface FeedProps {
   canEdit: boolean
   /** Asks again from `messageId` with `text`; the reason when it did not. */
   onEdit(messageId: string, text: string): Promise<string | null>
+  /** Figma 90G: back to before an earlier message (the menu hangs from `anchor`). */
+  onRewind?(messageId: string, text: string, anchor: HTMLElement): Promise<void>
+  /** Figma 90G′: edited messages and their earlier versions (ChatPane asks main for them). */
+  branches?: readonly GuiBranch[]
   /** Claude's workflow runs (PRD F25): drawn as a card at their Workflow call. */
   workflows?: readonly WorkflowRun[]
   /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
@@ -167,7 +197,19 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items: all, live, run, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, run: runRow, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+  // Figma 90G′: the version chosen per edited message; back to the current ones when a message is sent.
+  const users = useMemo(() => chatItems.filter((item) => item.kind === 'user').length, [chatItems])
+  const [chosen, setChosen] = useState<{ users: number; versions: ReadonlyMap<string, number> }>({ users, versions: NO_VIEWING })
+  // A choice is kept while no message is added (sending one draws the current versions again).
+  const viewing = chosen.users === users ? chosen.versions : NO_VIEWING
+  const chat = useMemo(() => branchedChat(chatItems, branches, viewing), [chatItems, branches, viewing])
+  const all = chat.items
+  // An earlier version is drawn as it was: the reply being streamed and its run row belong to the current one.
+  const live = chat.readOnlyFrom === null ? liveBlock : null
+  const run = chat.readOnlyFrom === null ? runRow : null
+  const readOnly = useMemo(() => new Set(chat.readOnlyFrom === null ? [] : all.slice(chat.readOnlyFrom).map((item) => item.id)), [chat.readOnlyFrom, all])
+  const switchVersion = useCallback((messageId: string, index: number) => setChosen({ users, versions: new Map(viewing).set(messageId, index) }), [users, viewing])
   const slot = useMemo<WorkflowSlot>(
     () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
     [workflows, workflowAsk, onStopWorkflow]
@@ -180,15 +222,28 @@ export function Feed({ sessionId, agent, items: all, live, run, waitingTool, bus
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
   // Figma 68′: the turn's wavi run calls as one graph.
   const dispatch = useMemo(() => dispatchRows(items), [items])
+  // Figma 90B: a fetched page or a link named by the title a search found.
+  const titles = useMemo(() => pageTitles(items), [items])
   const [editingId, setEditingId] = useState<string | null>(null)
   // The message being edited, while it is still there (an edit sent replaces the conversation after it).
   const editingAt = editingId === null ? -1 : blocks.findIndex((b) => b.kind === 'item' && b.item.id === editingId)
   const editing = editingAt >= 0 ? editingId : null
   const startEdit = useCallback((id: string) => setEditingId(id), [])
   const cancelEdit = useCallback(() => setEditingId(null), [])
+  // A sent edit is done with: the message may come back (an earlier version, Figma 90G′) and must not reopen as a box.
+  const saveEdit = useCallback(
+    async (id: string, text: string): Promise<string | null> => {
+      const reason = await onEdit(id, text)
+      if (reason === null) setEditingId(null)
+      return reason
+    },
+    [onEdit]
+  )
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
+  // Figma 90F′: the user scrolled up and something new came below.
+  const [behind, setBehind] = useState(false)
   // The blocks last drawn, to tell a message the user just sent.
   const seen = useRef<FeedBlock[] | null>(null)
 
@@ -205,6 +260,7 @@ export function Feed({ sessionId, agent, items: all, live, run, waitingTool, bus
     if (!scroller || !content) return
     const onScroll = (): void => {
       stuck.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX
+      if (stuck.current) setBehind(false)
     }
     const observer = new ResizeObserver(follow)
     observer.observe(content)
@@ -219,10 +275,23 @@ export function Feed({ sessionId, agent, items: all, live, run, waitingTool, bus
   useLayoutEffect(() => {
     if (sentMessage(seen.current, blocks)) stuck.current = true
     seen.current = blocks
+    if (!stuck.current) setBehind(true)
     follow()
   }, [blocks, live, run, follow])
 
+  const jumpToLatest = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    stuck.current = true
+    setBehind(false)
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: instant ? 'auto' : 'smooth' })
+  }, [])
+
   return (
+    <RefSession.Provider value={sessionId}>
+    <PageTitles.Provider value={titles}>
+    <div className={styles.feedFrame}>
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
         {blocks.map((block, i) =>
@@ -234,11 +303,13 @@ export function Feed({ sessionId, agent, items: all, live, run, waitingTool, bus
               sessionId={sessionId}
               item={block.item}
               faded={editingAt >= 0 && i > editingAt}
-              editable={canEdit && !busy && !block.item.id.startsWith('pending-')}
-              editing={editing === block.item.id}
+              editable={canEdit && !busy && !block.item.id.startsWith('pending-') && !readOnly.has(block.item.id)}
+              {...(chat.switches.has(block.item.id) ? { branch: chat.switches.get(block.item.id)!, onSwitch: switchVersion } : {})}
+              editing={editing === block.item.id && !readOnly.has(block.item.id)}
               onStartEdit={startEdit}
               onCancel={cancelEdit}
-              onSave={onEdit}
+              onSave={saveEdit}
+              {...(onRewind ? { onRewind } : {})}
             />
           ) : (
             <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
@@ -266,6 +337,21 @@ export function Feed({ sessionId, agent, items: all, live, run, waitingTool, bus
         )}
       </div>
     </div>
+    {behind && <JumpToLatest onJump={jumpToLatest} />}
+    </div>
+    </PageTitles.Provider>
+    </RefSession.Provider>
+  )
+}
+
+/** Figma 90F′: 「↓ 回到最新」 over the foot of the feed; it never takes the composer's focus. */
+function JumpToLatest({ onJump }: { onJump(): void }) {
+  const m = useMessages(M)
+  return (
+    <button type="button" className={styles.jumpToLatest} onPointerDown={(e) => e.preventDefault()} onClick={onJump} data-testid="gui-jump-to-latest">
+      <ArrowDown {...ICON} />
+      {m.jumpToLatest}
+    </button>
   )
 }
 
@@ -378,6 +464,9 @@ interface UserMessageProps {
   onStartEdit(id: string): void
   onCancel(): void
   onSave(id: string, text: string): Promise<string | null>
+  onRewind?(id: string, text: string, anchor: HTMLElement): Promise<void>
+  branch?: BranchSwitch
+  onSwitch?(messageId: string, index: number): void
 }
 
 /**
@@ -385,7 +474,7 @@ interface UserMessageProps {
  * copy · edit under it on hover; 54C: editing, a text box in its place. 71A: the pictures sent with it over the bubble
  * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
-const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
+const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave, onRewind, branch, onSwitch }: UserMessageProps) {
   const m = useMessages(M)
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
@@ -410,12 +499,25 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
                 <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
               </div>
             )}
+            {branch && onSwitch && <VersionSwitch branch={branch} onSwitch={onSwitch} />}
             <div className={styles.messageActions} data-testid="gui-message-actions">
               <span className={styles.messageTime}>{timeOf(item.at)}</span>
               <CopyButton text={item.text} />
               {editable && (
                 <button type="button" className={styles.actionIcon} aria-label={m.edit} title={m.edit} onClick={() => onStartEdit(item.id)}>
                   <Pencil {...ICON} />
+                </button>
+              )}
+              {editable && onRewind && (
+                <button
+                  type="button"
+                  className={styles.actionIcon}
+                  aria-label={m.rewind}
+                  title={m.rewind}
+                  data-testid="gui-rewind"
+                  onClick={(event) => void onRewind(item.id, item.text, event.currentTarget)}
+                >
+                  <Undo2 {...ICON} />
                 </button>
               )}
             </div>
@@ -426,6 +528,24 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
     </div>
   )
 })
+
+/** Figma 90G′: ‹ 1 / 2 › under an edited message, always shown. */
+function VersionSwitch({ branch, onSwitch }: { branch: BranchSwitch; onSwitch(messageId: string, index: number): void }) {
+  const m = useMessages(M)
+  return (
+    <div className={styles.versionSwitch} data-testid="gui-version-switch">
+      <button type="button" className={styles.actionIcon} aria-label={m.previousVersion} disabled={branch.index === 0} onClick={() => onSwitch(branch.messageId, branch.index - 1)}>
+        <ChevronLeft {...ICON} />
+      </button>
+      <span className={styles.versionCount}>
+        {branch.index + 1} / {branch.count}
+      </span>
+      <button type="button" className={styles.actionIcon} aria-label={m.nextVersion} disabled={branch.index === branch.count - 1} onClick={() => onSwitch(branch.messageId, branch.index + 1)}>
+        <ChevronRight {...ICON} />
+      </button>
+    </div>
+  )
+}
 
 /** 54C: the message as text to change; ⏎ sends it in the original's place (the rest is dropped), ⎋ cancels. */
 function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void; onSave(text: string): Promise<string | null> }) {
@@ -541,6 +661,9 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   )
 }
 
+/** Calls that read one web page (Claude WebFetch, an ACP agent's fetch). */
+const isFetch = (name: string): boolean => name === 'WebFetch' || name === 'Fetch'
+
 const NO_NESTED: ReadonlyMap<string, readonly NestedItem[]> = new Map()
 const NO_CHILDREN: readonly NestedItem[] = []
 
@@ -568,6 +691,11 @@ function Tool({
   const files = item.files ?? (item.diff ? [item.diff] : [])
   const hasChildren = children.length > 0
   const expandable = view.expandable || hasChildren
+  // Figma 90D: a test command's results, read from what it printed.
+  const tests = useMemo(() => (view.icon === 'terminal' && item.state !== 'running' && view.output ? testResults(view.output) : null), [view.icon, view.output, item.state])
+  // Figma 90B: a fetched page by its title (when a search found it) and site, not its whole URL.
+  const titles = useContext(PageTitles)
+  const fetched = isFetch(item.name) && /^https?:\/\//i.test(item.arg) ? { title: titles.get(item.arg) ?? shortUrl(item.arg), site: titles.has(item.arg) ? siteOf(item.arg) : '' } : null
   return (
     <div className={styles.tool} data-subagent={subagent || undefined}>
       <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
@@ -575,13 +703,29 @@ function Tool({
         <span className={styles.toolVerb} title={view.name}>
           {view.verb}
         </span>
-        <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        {fetched ? (
+          <>
+            <span className={styles.pageTitle}>{fetched.title}</span>
+            <span className={styles.toolArg}>{fetched.site}</span>
+          </>
+        ) : (
+          <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        )}
         {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>{m.waiting}</span>}
-        {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
+        {tests ? (
+          <>
+            {tests.failed > 0 && <span className={styles.testCountFailed}>{m.testsFailed(tests.failed)}</span>}
+            <span className={tests.failed > 0 ? styles.testCount : styles.toolMeta}>{m.testsPassed(tests.passed)}</span>
+            {tests.duration && <span className={styles.testDuration}>{tests.duration}</span>}
+          </>
+        ) : (
+          view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>
+        )}
         {subagent && <Elapsed item={item} />}
+        {item.links && item.links.length > 0 && <span className={styles.toolMeta}>{m.results(item.links.length)}</span>}
       </button>
       {hasChildren ? (
         open && (
@@ -600,20 +744,33 @@ function Tool({
           </div>
         )
       ) : (
-        <ToolBody item={item} open={open} files={files} view={view} />
+        <ToolBody item={item} open={open} files={files} view={view} tests={tests} />
       )}
     </div>
   )
 }
 
 /** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
-function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
+function ToolBody({ item, open, files, view, tests }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView; tests: TestRun | null }) {
   const m = useMessages(M)
+  const sessionId = useContext(RefSession)
   return (
     <>
-      {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
+      {view.summary && !open && !tests && <p className={styles.toolSummary}>{view.summary}</p>}
+      {open && tests && (
+        <TestResults
+          results={tests}
+          output={
+            <div className={styles.codeWrap}>
+              <Output raw={item.output ?? ''} command={view.command} />
+              <CopyButton text={() => view.output ?? ''} label={m.copyOutput} className={styles.cornerCopy} />
+            </div>
+          }
+        />
+      )}
       {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
-      {open && !item.todos && (files.length > 0 || view.output || view.command) && (
+      {open && item.links && item.links.length > 0 && sessionId && <SearchResults sessionId={sessionId} links={item.links} />}
+      {open && !tests && !item.todos && !item.links?.length && (files.length > 0 || view.output || view.command) && (
         <div className={styles.codeWrap}>
           {files.length > 0 ? (
             <div className={styles.fileBlocks}>
@@ -672,10 +829,11 @@ function Elapsed({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
 
 /**
  * What a command printed, in its colors (the --term-* ones), under `$ <command>` when the agent gave its whole text
- * (Figma 59J); the copy button copies the text alone.
+ * (Figma 59J); the copy button copies the text alone. Figma 90E: file locations in it are links (FileRef), and two or
+ * more stack frames in dependencies in a row fold into one row that opens them.
  */
 function Output({ raw, command }: { raw: string; command?: string }) {
-  const spans = useMemo(() => ansiSpans(raw), [raw])
+  const runs = useMemo(() => outputRuns(raw), [raw])
   return (
     <pre className={styles.output}>
       {command !== undefined && (
@@ -684,16 +842,53 @@ function Output({ raw, command }: { raw: string; command?: string }) {
           {raw ? '\n' : ''}
         </span>
       )}
-      {spans.map((span, i) =>
-        span.fg || span.bold || span.dim ? (
+      {runs.map((run, i) => (
+        <Fragment key={i}>
+          {i > 0 && '\n'}
+          {run.kind === 'frames' ? <FoldedFrames text={run.text} count={run.count} /> : <OutputText raw={run.text} />}
+        </Fragment>
+      ))}
+    </pre>
+  )
+}
+
+/** Output text in its colors, its file locations as links. */
+const OutputText = memo(function OutputText({ raw }: { raw: string }) {
+  const spans = useMemo(() => ansiSpans(raw), [raw])
+  return (
+    <>
+      {spans.map((span, i) => {
+        const text = refPieces(span.text).map((piece, j) =>
+          typeof piece === 'string' ? (
+            piece
+          ) : (
+            <FileRef key={j} target={piece.target}>
+              {piece.text}
+            </FileRef>
+          )
+        )
+        return span.fg || span.bold || span.dim ? (
           <span key={i} className={styles.ansi} data-fg={span.fg} data-bold={span.bold} data-dim={span.dim}>
-            {span.text}
+            {text}
           </span>
         ) : (
-          span.text
+          <Fragment key={i}>{text}</Fragment>
         )
-      )}
-    </pre>
+      })}
+    </>
+  )
+})
+
+/** Figma 90E: 「› node_modules 里的 7 帧」; opened, the frames themselves. */
+function FoldedFrames({ text, count }: { text: string; count: number }) {
+  const m = useMessages(M)
+  const [open, setOpen] = useState(false)
+  if (open) return <OutputText raw={text} />
+  return (
+    <button type="button" className={styles.foldedFrames} onClick={() => setOpen(true)} data-testid="gui-folded-frames">
+      <ChevronRight {...ICON} className={styles.rowChevron} />
+      {m.dependencyFrames(count)}
+    </button>
   )
 }
 

@@ -10,7 +10,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { createChatParser, type ChatItem, type KeepImage } from '@shared/transcript-chat'
 import { claudeTranscriptPath, type AgentDataDirs } from '../hooks/agent-title'
-import { currentBranch, resumePointOf } from './claude-rewind'
+import { branchVersions, currentBranch, resumePointOf } from './claude-rewind'
 import { piBranchMessages, piHistoryItems } from './pi-rpc'
 
 /** Like the phone's first read (remote/feed.ts): the newest part of a long transcript. */
@@ -172,6 +172,27 @@ export async function readTranscript(source: TranscriptSource, keepImage?: KeepI
     if (!keep || keep[i]) parser.push(line)
   })
   return parser.items.slice()
+}
+
+/** Earlier versions kept per edited message, and edited messages read (the newest ones). */
+const MAX_VERSIONS = 9
+const MAX_BRANCHES = 50
+
+/** Claude: the edited messages of the current branch with their earlier versions as chat (claude-rewind.ts branchVersions). */
+export async function claudeBranches(path: string, keepImage?: KeepImage): Promise<{ messageId: string; older: ChatItem[][] }[]> {
+  const lines = await readLines(path)
+  if (!lines) return []
+  return branchVersions(lines.map(parseRow))
+    .slice(-MAX_BRANCHES)
+    .map(({ current, older }) => ({
+      messageId: current,
+      older: older.slice(-MAX_VERSIONS).map((indexes) => {
+        const parser = createChatParser('claude', undefined, keepImage)
+        for (const i of indexes) parser.push(lines[i]!)
+        return parser.items.slice()
+      })
+    }))
+    .filter((b) => b.older.every((items) => items.some((item) => item.kind === 'user')))
 }
 
 /** Claude: where `--resume-session-at` resumes to edit the prompt `messageId` (claude-rewind.ts resumePointOf). */
