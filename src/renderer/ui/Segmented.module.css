@@ -42,6 +42,7 @@
   left: 0;
   border-radius: var(--radius-sm);
   background: var(--bg-selected);
+  box-shadow: var(--state-ring);
   transition:
     transform var(--motion-duration-slide) var(--motion-spring),
     width var(--motion-duration-slide) var(--motion-spring),

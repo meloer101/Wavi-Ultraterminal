@@ -62,6 +62,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-inset);
+  box-shadow: var(--field-finish);
   color: var(--text-primary);
   font: var(--text-title-m);
   letter-spacing: var(--tracking-title-m);

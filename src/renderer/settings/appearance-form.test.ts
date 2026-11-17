@@ -31,9 +31,9 @@ describe('misc formatting', () => {
 })
 
 describe('MATERIAL_OPTIONS (PRD v1.174, Figma 66′)', () => {
-  it('offers 玻璃 and 实色 on every macOS; the engine behind 玻璃 is not a choice', () => {
-    expect(MATERIAL_OPTIONS.map((o) => o.label)).toEqual(['玻璃', '实色'])
-    expect(MATERIAL_OPTIONS.map((o) => o.value)).toEqual(['glass', 'solid'])
+  it('offers 玻璃, 实心玻璃 (Figma 93) and 实色 on every macOS; the engine behind 玻璃 is not a choice', () => {
+    expect(MATERIAL_OPTIONS.map((o) => o.label)).toEqual(['玻璃', '实心玻璃', '实色'])
+    expect(MATERIAL_OPTIONS.map((o) => o.value)).toEqual(['glass', 'solid-glass', 'solid'])
   })
 })
 

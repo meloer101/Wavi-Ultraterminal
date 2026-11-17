@@ -100,7 +100,7 @@
   border: 0;
   border-radius: var(--radius-button-glass);
   background: var(--glass-primary-bg);
-  box-shadow: var(--glass-highlight), var(--shadow-glass-button);
+  box-shadow: var(--glass-highlight), var(--shadow-glass-button), var(--primary-finish);
   font: var(--text-body-strong);
   color: var(--glass-primary-fg);
   white-space: nowrap;

@@ -527,6 +527,7 @@ button.pill:hover {
 
 .primaryButton {
   background: var(--fill-primary);
+  box-shadow: var(--primary-finish);
   color: var(--text-inverse);
 }
 
@@ -697,6 +698,7 @@ button.pill:hover {
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--fill-primary);
+  box-shadow: var(--primary-finish);
   color: var(--text-inverse);
   opacity: 0;
 }

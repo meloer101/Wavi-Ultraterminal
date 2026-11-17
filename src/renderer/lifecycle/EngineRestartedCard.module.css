@@ -48,6 +48,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--fill-primary);
+  box-shadow: var(--primary-finish);
   color: var(--text-inverse);
   font: var(--text-caption-strong);
   white-space: nowrap;

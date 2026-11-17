@@ -67,6 +67,7 @@
   padding: 0 var(--space-8);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
+  box-shadow: var(--field-finish);
   color: var(--text-tertiary);
 }
 

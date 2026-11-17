@@ -177,6 +177,7 @@
 
 .action[data-primary] {
   background: var(--fill-primary);
+  box-shadow: var(--primary-finish);
   color: var(--text-inverse);
 }
 

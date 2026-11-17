@@ -11,6 +11,7 @@
 // resizing. Frames write width / height rather than a scale: a scaled block would stretch its 1px rim, its shadow
 // and its corners into ellipses, and the bead (12 px) would lose them altogether.
 import { useLayoutEffect, useRef } from 'react'
+import { hasGlassFinish } from '../appearance/map'
 import { advance, changes, dripOnto, evaporate, flowTo, follow, frameOf, moving, restAt, type DropState, type RowBox } from './selection-drop'
 import styles from './SelectionDrop.module.css'
 
@@ -109,7 +110,9 @@ function createDrops(root: HTMLElement, list: HTMLElement): Drops {
       before = null
       return
     }
-    const still = before === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // 实心玻璃 (Figma 93): the selection is the one state, which does not travel; it lands on the row like reduced motion.
+    const still =
+      before === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches || hasGlassFinish()
     if (still) {
       for (const block of leaving) drop(block)
       leaving = []

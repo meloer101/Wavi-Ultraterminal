@@ -202,7 +202,7 @@ export class XtermSurface implements TerminalSurface {
     // Re-theme when <html data-theme> flips (theme.ts also follows the system setting), or data-material: 实色 has its
     // own --term-bg / --term-fg (tokens.css).
     this.themeObserver = new MutationObserver(() => this.applyTheme())
-    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material'] })
+    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material', 'data-finish'] })
   }
 
   /**
