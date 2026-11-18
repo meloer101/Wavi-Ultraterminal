@@ -4,7 +4,9 @@
 import { app, BrowserWindow, ipcMain, MessageChannelMain, shell, type IpcMainEvent, type MessagePortMain, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { SIM_FRAME_ACK, SIMULATOR_IPC, type SimFrameMessage, type SimulatorListing, type SimulatorScreen } from '@shared/simulator'
+import { sourceRoot } from '../source-checkout'
 import { bootDevice, deviceHubHoldsInput, listDevices } from './devices'
+import { serveSimCliPath } from './helper'
 import { RememberedDevice } from './remembered'
 import { SimulatorHost, type SimViewer } from './session'
 import { parseKeyPhase, parseScroll, parseTouch, parseUdid, parseUsage } from './validate'
@@ -15,11 +17,6 @@ const XCODE_APP_STORE = 'macappstore://apps.apple.com/app/id497799835'
 const IDLE_STOP_MS = 60_000
 /** A page that has not acknowledged a frame for this long gets the next one anyway. */
 const ACK_TIMEOUT_MS = 2_000
-
-/** serve-sim's CLI; packaged, it runs from app.asar.unpacked (electron-builder.yml asarUnpack) with its .node addon. */
-function serveSimCli(): string {
-  return join(app.getAppPath(), 'node_modules', 'serve-sim', 'dist', 'serve-sim.js').replace(/app\.asar(?=[/\\])/, 'app.asar.unpacked')
-}
 
 /** One app window's simulator view: its frame port and the frame (if any) waiting for the page to take the last one. */
 class PortViewer implements SimViewer {
@@ -80,7 +77,7 @@ class PortViewer implements SimViewer {
 export function registerSimulatorHandlers(): void {
   const remembered = new RememberedDevice(join(app.getPath('userData'), 'simulator.json'))
   const host = new SimulatorHost({
-    runtime: { execPath: process.execPath, cliPath: serveSimCli(), env: process.env },
+    runtime: { execPath: process.execPath, cliPath: serveSimCliPath(app.getAppPath(), sourceRoot()), env: process.env },
     listDevices,
     boot: bootDevice,
     deviceHubHoldsInput,

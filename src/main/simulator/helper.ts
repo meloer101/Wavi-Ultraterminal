@@ -3,6 +3,16 @@
 // its stream and input URLs. No Electron imports.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
+import { join } from 'node:path'
+
+/**
+ * serve-sim's `dist/serve-sim.js` with its .node addon beside it. `npm run dev`: the checkout's node_modules, which is
+ * the app path. Release build: app.asar.unpacked (electron-builder.yml asarUnpack). Linked app (`npm run app:install`):
+ * the app path holds only its entry file, so the CLI is the one in the checkout it runs (`checkout`).
+ */
+export function serveSimCliPath(appPath: string, checkout: string | null): string {
+  return join(checkout ?? appPath, 'node_modules', 'serve-sim', 'dist', 'serve-sim.js').replace(/app\.asar(?=[/\\])/, 'app.asar.unpacked')
+}
 
 /**
  * Runs the CLI as `-e` code, with argv `[execPath, cli, ...cliArgs]`. The CLI reads its flags from argv[2] on, as if

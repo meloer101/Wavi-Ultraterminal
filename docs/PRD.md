@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.214 · 2026-11-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.215 · 2026-11-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.215 | 2026-11-18 | **链接版里 iOS 模拟器连不上**（F17；作者 2026-11-18：「基本上都连不上」，截图是「没能连接到模拟器 · 重新连接」）。原因：serve-sim 的路径取自 `app.getAppPath()`，链接版（`npm run app:install`）的 app 路径是 `Wavi.app/Contents/Resources/app`，里面只有入口文件、没有 `node_modules`，helper 一启动就以 `ERR_MODULE_NOT_FOUND` 退出，所以链接版从 v1.176 起一次都没连上过；`npm run dev` 和正式包的路径是对的。改为链接版从它运行的 checkout 的 `node_modules` 取（`sourceRoot()`，和 hook 脚本同一个办法）。本机实测（Xcode 26.2，iPhone 17 / iOS 26.3，用链接版的二进制跑 checkout 里的 serve-sim）：1.5 s 内给出地址，3 s 收到约 1 MB 的 MJPEG。界面没有改。 |
 | v1.214 | 2026-11-18 | **Claude 会话的标题更早换成 agent 起的名字**（F2 / §6.6；作者 2026-11-18：「现在还是容易出现左上角 session 标题没有总结直接用的用户第一条信息的情况」）。实测本机 2026-11-10 以后 Wavi 启动的 Claude 会话：首条消息是正文的 20 个都有 `ai-title`（transcript 只能给出写入时刻的范围：prompt 后 0.1 s 之后、下一条带时间戳的记录之前，22 个会话里这个上界最短 2.5 s、中位数 8 s；§6.6 实测是约 4 s）；首条只是问候（「你好」「hello」）时 Claude 不起名，等到有内容的消息才起。Wavi 这边两处会让首条消息多留在标题上：① 第一轮比起名请求先结束时，Stop 取消了 prompt 后排好的读取、自己只读一次，标题要到下一轮才换；② prompt 后第一次读在 3 s，错过后要等到 8 s。改为：会话还没有 agent 标题时，prompt 后 1.5 / 3 / 4.5 / 6 / 8 / 12 / 20 s 读，Stop 后 0 / 3 / 8 s 读；有了标题后照旧（prompt 后 3 / 8 / 20 s，Stop 读一次，只为跟上 /rename）。不变：标题仍只读 agent 自己的，Wavi 不调模型（v1.14）；Codex app-server、Pi、不发 `session_info_update` 的 ACP agent、其余 CLI 没有自己的标题，仍是首条消息。 |
 | v1.213 | 2026-11-18 | **终端和 iOS 模拟器的入口挪进「…」菜单**（F17；作者 2026-11-18：「把终端，ios simulator直接塞到最右边的···里面去」，位置选最上面、不加分割线，不要设计稿直接做）：会话头的视图图标从 6 个回到 4 个（浏览器 · Git · Worktree · 文件）；「…」菜单最上面加「终端」「iOS 模拟器」两项，打开的那个带 ✓，右侧栏显示它们时「…」为 Active 底色；只在主窗口焦点 pane 里出现。⌘K 和 ⇧⌘B 不变。 |
 | v1.212 | 2026-11-18 | **你的消息从输入框「递交」上屏**（F23 / F22，Figma 98 `1669:79679`、手机 98′ `1677:8467`；作者 2026-11-18：「我想让用户消息的上屏更美观体验更好一点」，在五种动效样张——轻升 / 递交 / 绽开 / 置顶 / 待收——里选 B「递交」；滚动照旧回到底部，不改成置顶）。调研（源码）：T3 Code web 没有入场动画、发送后把你的消息滚到顶部，mobile 是 `FadeInDown` 220 ms；Paseo、Orca 没有入场动画、瞬间到底；Vercel ai-chatbot 淡入上浮 250 ms 6 px；assistant-ui 150 ms，默认置顶；没有一家让气泡从输入框飞出。① 按下回车，输入框里的字原地变成你的气泡（还没有底色），沿弹簧（`--motion-spring`，380 ms，约 4.5% 回弹）直线飞到它在对话里的位置，只平移不缩放（落点的宽度起飞，字不重排）；底色和你的头像从 60 ms 起 200 ms 淡入；上面的对话为它让位时跟着同一条弹簧走，不跳；飞的途中对话又滚动（运行行、回复到了）时落点跟着移，桌面起点不动、手机起点跟着移。② agent 头像和运行行照 v1.199 在同一帧出现在落点下方。③ 输入框的「回复」等它落定才出现（桌面再 120 ms 淡入）。④ 不飞、在落点 150 ms 淡入：减少动态效果、超过 6 行（按对话行高算）、只有图片没有字；带图片的消息只有气泡飞，缩略图淡入。⑤ 只对刚从输入框发出的那条：agent 回传同一条（pending 换成正式 id）、切会话、重开 app、编辑后重问、从欢迎页发出的第一条都不飞；排队的消息不进对话、不飞。⑥ 手机同一规则（`Flight.of`，同桌面 `flightOf`），飞的复制品画在对话和输入框之上；发送中的消息照旧 60% 不透明，复制品也是 60%。 |
@@ -646,7 +647,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
   - 技术：PTY id `panel-<worktreeId>-<n>`（`src/shared/panel-terminal.ts`），和会话终端同一套 `SessionTerminal`（外观、缩放、快照）；由 pty 守护进程持有，tab 列表不存盘，窗口重载或重启后从启动时的 live 列表接回并带着输出；这类 id 不读旧屏幕快照（编号在下一次运行会重用）。worktree 离开工作区（删除、所在项目移除）时结束它的 shell，包括重载后还没显示过的。
 - **iOS 模拟器**（Figma 76C `1201:57385` / 76D `1202:57473`，v1.176）：全局一台，不跟 worktree 换，记住上次看的设备。标题行：iOS 模拟器 · 设备名 · 系统版本 ⌄（点开切换或启动设备）· ○ 主屏幕 · ↻ 旋转 · ×。画面按比例居中、圆角约宽度的 13.7%；鼠标按下 / 拖动 / 松开是触摸，滚轮是滚动，画面有焦点时键盘按键发给模拟器（⌘ 组合键留给 Mac）。状态：没装 Xcode（需要 Xcode · 在 App Store 中打开）、选设备（按系统版本分组，悬停出「启动」）、正在启动、Xcode 27 的 Device Hub 占用输入（一行提示 · 修复输入）、连不上（重新连接）。视图隐藏时不再发帧，关面板 60 s 后停掉 helper，退出 Wavi 全部停掉；从不关模拟器本身。
   - 技术：每台设备一个 serve-sim helper（`--no-preview --host 127.0.0.1 --port <空闲端口>`），用 app 自己的二进制以 `ELECTRON_RUN_AS_NODE` 跑，独立进程组，stdin 接父进程，父进程意外退出时 helper 自己结束。主进程读 `/helper/<udid>/stream.mjpeg`、拆成单帧 JPEG，经 `MessagePort` 送页面（一次只在途一帧，页面画完回 ack，期间只留最新一帧）；触摸、按键、旋转由主进程转发到 helper 的 `/ws`（`[tag][JSON]` 二进制帧，坐标归一化到 0–1）。所有 IPC 载荷在主进程校验（udid 形状、枚举、0–1 的有限数）。打包时 serve-sim 和 ws 放进 `asarUnpack`。
-  - 实测（2026-11-12，Xcode 26.2，iPhone 17 Pro / iOS 26.3）：serve-sim 的原生模块是 N-API，能在 Electron 的 Node 里加载；帧是 1206×2622 JPEG，165–358 KB，平均 254 KB，画面不变时不发帧；打开到出第一帧约 1.3–2.2 s；点按、滚动、键盘、主屏幕、旋转都到达设备。打包后（Developer ID 签名、hardened runtime）helper 以 app 自己的二进制从 `app.asar.unpacked` 运行，serve-sim 的 `.node` 和可执行文件被重签成本 Team ID，库校验通过。Xcode 27 的 Device Hub 检测（`simctl spawn <udid> notifyutil -g com.apple.coredevice.dtuhidd.active`）和修复输入没在 Xcode 27 上测过。
+  - 实测（2026-11-12，Xcode 26.2，iPhone 17 Pro / iOS 26.3）：serve-sim 的原生模块是 N-API，能在 Electron 的 Node 里加载；帧是 1206×2622 JPEG，165–358 KB，平均 254 KB，画面不变时不发帧；打开到出第一帧约 1.3–2.2 s；点按、滚动、键盘、主屏幕、旋转都到达设备。链接版（`npm run app:install`）的 app 路径里没有 `node_modules`，serve-sim 取自它运行的 checkout（v1.215）。打包后（Developer ID 签名、hardened runtime）helper 以 app 自己的二进制从 `app.asar.unpacked` 运行，serve-sim 的 `.node` 和可执行文件被重签成本 Team ID，库校验通过。Xcode 27 的 Device Hub 检测（`simctl spawn <udid> notifyutil -g com.apple.coredevice.dtuhidd.active`）和修复输入没在 Xcode 27 上测过。
 - **验收**：Figma 13 在深浅两套主题下还原；切换会话时右侧栏 100 ms 内换成新 worktree 的内容；1 万个文件的仓库首屏目录树 < 200 ms；浏览器页面无法访问 `window.tr` 和 Node。
 
 ### F18 欢迎页 · P1 · Figma 14（Section `159:7315`）
