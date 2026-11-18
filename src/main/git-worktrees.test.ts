@@ -1,6 +1,6 @@
 // Real git repositories in a temp folder: what the Worktree view lists and what removal refuses.
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -112,6 +112,76 @@ describe('listWorktrees / removeWorktree on real repositories', () => {
     const listing = (await listWorktrees(root, [], [root]))!
     expect(listing.worktrees.find((w) => w.path === root)?.detailed).toBe(true)
     expect(listing.worktrees.filter((w) => w.path !== root).every((w) => !w.detailed)).toBe(true)
+  })
+})
+
+describe('untracked symbolic links are not uncommitted work (PRD v1.217)', () => {
+  let root: string
+  let outside: string
+  beforeAll(() => {
+    root = repo('link-repo')
+    // Somewhere outside every worktree: what the links point at must survive the worktree.
+    outside = join(base, 'outside-deps')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'dep.js'), 'export const dep = 1\n')
+  })
+
+  it('a worktree whose only uncommitted entry is an untracked symlink is clean, and removing it keeps the target', async () => {
+    const linked = join(base, 'linked')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/linked', linked)
+    // A repository ignoring `node_modules/` only matches folders: git reports this link as an untracked file.
+    symlinkSync(outside, join(linked, 'node_modules'))
+    expect(await byPath(root, linked)).toMatchObject({ added: 0, removed: 0, dirtyFiles: [], dirtyCount: 0 })
+    expect(await removeWorktree(root, linked, false)).toEqual({ ok: true })
+    expect(existsSync(linked)).toBe(false)
+    expect(git(root, 'branch', '--list', 'jacob/linked')).toContain('jacob/linked')
+    // Only the link went; its target and its content are untouched.
+    expect(lstatSync(outside).isSymbolicLink()).toBe(false)
+    expect(readFileSync(join(outside, 'dep.js'), 'utf8')).toBe('export const dep = 1\n')
+  })
+
+  it('the same with a broken symlink', async () => {
+    const broken = join(base, 'linked-broken')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/broken-link', broken)
+    symlinkSync(join(base, 'nowhere'), join(broken, 'node_modules'))
+    expect(await byPath(root, broken)).toMatchObject({ dirtyCount: 0, dirtyFiles: [] })
+    expect(await removeWorktree(root, broken, false)).toEqual({ ok: true })
+    expect(existsSync(broken)).toBe(false)
+    expect(git(root, 'branch', '--list', 'jacob/broken-link')).toContain('jacob/broken-link')
+  })
+
+  it('an untracked symlink next to an untracked file still counts, and nothing is unlinked', async () => {
+    const mixed = join(base, 'linked-mixed')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/mixed', mixed)
+    symlinkSync(outside, join(mixed, 'node_modules'))
+    writeFileSync(join(mixed, 'wip.ts'), 'export const wip = 1\n')
+    expect(await byPath(root, mixed)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['wip.ts'] })
+    expect(await removeWorktree(root, mixed, false)).toEqual({ ok: false, reason: 'dirty' })
+    expect(lstatSync(join(mixed, 'node_modules')).isSymbolicLink()).toBe(true)
+    expect(existsSync(join(mixed, 'wip.ts'))).toBe(true)
+  })
+
+  it('a tracked symlink that changed still counts as uncommitted work', async () => {
+    const tracked = join(base, 'linked-tracked')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/tracked-link', tracked)
+    symlinkSync(outside, join(tracked, 'deps'))
+    git(tracked, 'add', 'deps')
+    git(tracked, 'commit', '-q', '-m', 'track the link')
+    expect((await byPath(root, tracked)).dirtyCount).toBe(0)
+    unlinkSync(join(tracked, 'deps'))
+    symlinkSync(join(outside, 'dep.js'), join(tracked, 'deps'))
+    expect(await byPath(root, tracked)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['deps'] })
+    expect(await removeWorktree(root, tracked, false)).toEqual({ ok: false, reason: 'dirty' })
+  })
+
+  it('an untracked folder holding a symlink still counts as uncommitted work', async () => {
+    const folder = join(base, 'linked-folder')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/folder-link', folder)
+    mkdirSync(join(folder, 'cache'))
+    symlinkSync(outside, join(folder, 'cache', 'deps'))
+    expect(await byPath(root, folder)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['cache/'] })
+    expect(await removeWorktree(root, folder, false)).toEqual({ ok: false, reason: 'dirty' })
+    expect(lstatSync(join(folder, 'cache', 'deps')).isSymbolicLink()).toBe(true)
   })
 })
 
