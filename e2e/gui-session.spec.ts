@@ -918,6 +918,43 @@ test.describe('F23 GUI session (Claude)', () => {
     }
   })
 
+  test('a long message of yours opens folded to 10 lines over 「展开」; 「收起」 folds it again, the button staying put (Figma 96A)', async () => {
+    const long = Array.from({ length: 40 }, (_, i) => `第 ${i + 1} 段：把登录态从 localStorage 挪到 httpOnly cookie，改完跑一遍测试。`).join(' ')
+    await send(long)
+    await expect(feed().getByText(/^Hello: 第 1 段/)).toBeVisible(WITHIN)
+    await settled()
+    const mine = feed().locator('[data-item]').filter({ hasText: '第 40 段' }).first()
+    const fold = mine.getByTestId('gui-message-fold')
+    await expect(fold).toHaveText('展开')
+    await expect(fold).toHaveAttribute('aria-expanded', 'false')
+    // A short message has no button.
+    await expect(feed().locator('[data-item]').filter({ hasText: '你好' }).first().getByTestId('gui-message-fold')).toHaveCount(0)
+    const lines = () => mine.evaluate((row) => {
+      const body = row.querySelector<HTMLElement>('[data-folded], [class*="bubbleBody"]')!
+      return Math.round(body.getBoundingClientRect().height / parseFloat(getComputedStyle(body.firstElementChild!).lineHeight))
+    })
+    expect(await lines()).toBe(10)
+    const top = async () => Math.round((await fold.boundingBox())?.y ?? NaN)
+    // In view first: a click scrolls a button that is not, and that is not the button moving.
+    await fold.scrollIntoViewIfNeeded()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `long-message-folded-${theme}.png`) })
+    }
+    const before = await top()
+    await fold.click()
+    await expect(fold).toHaveText('收起')
+    expect(await lines()).toBeGreaterThan(13)
+    expect(Math.abs((await top()) - before)).toBeLessThanOrEqual(1)
+    await page.screenshot({ path: join(SHOTS, 'long-message-expanded.png') })
+    await fold.click()
+    await expect(fold).toHaveText('展开')
+    expect(await lines()).toBe(10)
+    expect(Math.abs((await top()) - before)).toBeLessThanOrEqual(1)
+  })
+
   test('看板 shows a GUI session’s chat in its overlay, not an empty terminal (PRD F9 / F23)', async () => {
     const overview = page.locator('[data-region="overview"]')
     const overlay = page.locator('[data-region="overview-overlay"]')

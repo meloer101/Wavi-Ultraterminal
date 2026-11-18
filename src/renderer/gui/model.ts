@@ -479,6 +479,17 @@ export function userBubble(text: string): { header: string | null; body: string 
   return { header: trimmed.slice(1, end), body: trimmed.slice(end + 1).replace(/^\s+/, '') }
 }
 
+/** Figma 96A: lines of a long message of yours shown before 「展开」. */
+export const FOLD_ROWS = 10
+
+/**
+ * Whether a message of yours `height` tall (its whole body, in px) opens folded to its first `rows` lines of `line`
+ * px: only when that hides 3 lines or more, so 「展开」 never opens onto one or two. 0 (not laid out yet) never folds.
+ */
+export function foldsMessage(height: number, line: number, rows: number): boolean {
+  return line > 0 && height >= (rows + 3) * line - 1
+}
+
 /** 「思考了 8s」 (rounded up to whole seconds; minutes past a minute), or 「思考了」 when the agent gave no duration. */
 export function thinkingLabel(ms: number | undefined): string {
   if (ms === undefined || !Number.isFinite(ms) || ms < 0) return pick(M).thought

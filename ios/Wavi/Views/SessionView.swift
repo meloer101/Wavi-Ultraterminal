@@ -288,7 +288,7 @@ struct FeedRow: View {
         HStack {
           Spacer(minLength: 48)
           VStack(alignment: .leading, spacing: 4) {
-            if let text = item.text, !text.isEmpty { Text(text).font(.ui(.callout)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
+            if let text = item.text, !text.isEmpty { UserText(text: text, key: "\(session)/\(item.id)") }
             if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
           }
           .padding(.horizontal, 12)
@@ -319,6 +319,59 @@ struct FeedRow: View {
       Text(item.text ?? "").font(.ui(.footnote)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity)
     default:
       Text("未识别的条目").font(.ui(.footnote)).foregroundStyle(Color.textSecondary)
+    }
+  }
+}
+
+/// Figma 96′A: the words of a message of yours. A long one opens folded to its first 8 lines, the last two fading, over
+/// 「展开」; opened, 「收起」 at its foot folds it again. Folded only when that hides 3 lines or more (11 lines or more:
+/// taller than its first 10), like the desktop (96A). Whether it is open is kept in the model while the app runs. The
+/// conversation keeps its bottom still as it changes size, so the button stays where it was.
+private struct UserText: View {
+  let text: String
+  /// Session and message id.
+  let key: String
+  @Environment(AppModel.self) private var model
+  @State private var whole: CGFloat = 0
+  @State private var firstTen: CGFloat = 0
+
+  private func words() -> some View { Text(text).font(.ui(.callout)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
+
+  var body: some View {
+    let open = model.openMessages.contains(key)
+    let foldable = firstTen > 0 && whole > firstTen + 1
+    let folded = foldable && !open
+    VStack(alignment: .leading, spacing: 4) {
+      words()
+        .lineLimit(folded ? 8 : nil)
+        // Eight lines: the last two are the bottom quarter.
+        .mask {
+          LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: folded ? 0.75 : 1), .init(color: folded ? .clear : .black, location: 1)],
+                         startPoint: .top, endPoint: .bottom)
+        }
+        .background(alignment: .top) {
+          ZStack(alignment: .top) {
+            words().fixedSize(horizontal: false, vertical: true)
+              .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { whole = $0 }
+            words().lineLimit(10).fixedSize(horizontal: false, vertical: true)
+              .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { firstTen = $0 }
+          }
+          .hidden()
+        }
+      if foldable {
+        Button { model.setMessageOpen(key, !open) } label: {
+          HStack(spacing: 4) {
+            Text(open ? "收起" : "展开")
+            Icon("chevron-down", size: 12).rotationEffect(.degrees(open ? 180 : 0))
+          }
+          .font(.ui(.footnote))
+          .foregroundStyle(Color.textPrimary)
+          .padding(.vertical, 4)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(open ? String(localized: "已展开") : String(localized: "已收起"))
+      }
     }
   }
 }

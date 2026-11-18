@@ -37,10 +37,17 @@ final class AppModel {
   private(set) var sending: [String: [ChatItem]] = [:]
   /// Answers given while this phone was connected, per session: left in the conversation where they happened.
   private(set) var receipts: [String: [Receipt]] = [:]
+  /// Figma 96′A: your long messages opened with 「展开」 (session/message id), kept while the app runs.
+  private(set) var openMessages: Set<String> = []
   /// The prompts as last listed, and the ones this phone answered (so a prompt that leaves without it was answered on the
   /// Mac).
   @ObservationIgnored private var listed: [String: RemotePrompt] = [:]
   @ObservationIgnored private var answeredHere: Set<String> = []
+
+  /// Opens (「展开」) or folds again (「收起」) a long message of yours.
+  func setMessageOpen(_ key: String, _ open: Bool) {
+    if open { openMessages.insert(key) } else { openMessages.remove(key) }
+  }
 
   /// Answers `prompt` from this phone (the app or the Live Activity). Marked as answered here before the request: the Mac
   /// lists the prompts again as soon as it takes the answer, and that list may arrive before the reply.

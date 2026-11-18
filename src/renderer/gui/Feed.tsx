@@ -6,9 +6,9 @@
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
-import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, ArrowRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type IconComponent } from '../ui/icons'
+import { ArrowDown, Bot, Brain, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, ArrowRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Undo2, Wrench, type IconComponent } from '../ui/icons'
 import type { GuiBranch, GuiLive } from '@shared/gui-chat'
 import { defineMessages } from '@shared/i18n'
 import { formatClock } from '@shared/session-meta'
@@ -41,6 +41,8 @@ import {
   dispatchRows,
   waviMessage,
   feedBlocks,
+  FOLD_ROWS,
+  foldsMessage,
   groupView,
   isSubagentTool,
   isWorkflowTool,
@@ -65,6 +67,7 @@ import {
   type WaviMessage
 } from './model'
 import { useLang, useMessages } from '../ui/i18n'
+import { setMessageExpanded, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const M = defineMessages({
@@ -85,7 +88,9 @@ const M = defineMessages({
     results: (count: number) => `${count} 个结果`,
     testsFailed: (count: number) => `${count} 失败`,
     testsPassed: (count: number) => `${count} 通过`,
-    jumpToLatest: '回到最新'
+    jumpToLatest: '回到最新',
+    showMore: '展开',
+    showLess: '收起'
   },
   en: {
     pictures: 'Pictures',
@@ -104,7 +109,9 @@ const M = defineMessages({
     results: (count: number) => (count === 1 ? '1 result' : `${count} results`),
     testsFailed: (count: number) => `${count} failed`,
     testsPassed: (count: number) => `${count} passed`,
-    jumpToLatest: 'Jump to latest'
+    jumpToLatest: 'Jump to latest',
+    showMore: 'Show more',
+    showLess: 'Show less'
   }
 })
 
@@ -497,7 +504,7 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
             {(item.text.trim() || pictures.length === 0) && (
               <div className={styles.bubble}>
                 {header && <span className={styles.bubbleHeader}>{header}</span>}
-                <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+                <BubbleBody sessionId={sessionId} messageId={item.id} markdown={markdown} />
               </div>
             )}
             {branch && onSwitch && <VersionSwitch branch={branch} onSwitch={onSwitch} />}
@@ -529,6 +536,67 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
     </div>
   )
 })
+
+const FOLD_STYLE = { '--fold-rows': FOLD_ROWS } as CSSProperties
+
+/**
+ * Figma 96A: the words of a message of yours. A long one opens folded to its first lines, the last two fading, over
+ * 「展开」; opened, 「收起」 at its foot folds it again. Whether it is open is kept in the store by message id (a block
+ * scrolled away or a session switched away from keeps it). The button stays where it was on screen: the feed scrolls by
+ * however far it moved.
+ */
+function BubbleBody({ sessionId, messageId, markdown }: { sessionId: SessionId; messageId: string; markdown: string }) {
+  const m = useMessages(M)
+  const expanded = useGuiSessions((s) => s.expanded[sessionId]?.has(messageId) ?? false)
+  const [foldable, setFoldable] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  // Where the button was before a click, to put it back there once the bubble has its new height.
+  const anchor = useRef<number | null>(null)
+
+  // Measured before the first paint, so a long message never shows whole for a frame; again whenever its words reflow
+  // (the feed's width, 对话 · 字号). The words' own height is not cut by the fold around them.
+  useLayoutEffect(() => {
+    const words = bodyRef.current?.firstElementChild
+    if (!(words instanceof HTMLElement)) return
+    const measure = (): void => {
+      const height = words.offsetHeight
+      // 0: not laid out (a hidden panel); it says nothing about the message.
+      if (height > 0) setFoldable(foldsMessage(height, parseFloat(getComputedStyle(words).lineHeight), FOLD_ROWS))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(words)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    const was = anchor.current
+    anchor.current = null
+    const button = toggleRef.current
+    const scroller = button?.closest<HTMLElement>('[data-region="gui-feed"]')
+    if (was !== null && button && scroller) scroller.scrollTop += button.getBoundingClientRect().top - was
+  }, [expanded])
+
+  const toggle = (): void => {
+    anchor.current = toggleRef.current?.getBoundingClientRect().top ?? null
+    setMessageExpanded(sessionId, messageId, !expanded)
+  }
+  const folded = foldable && !expanded
+  return (
+    <>
+      <div ref={bodyRef} className={styles.bubbleBody} style={FOLD_STYLE} data-folded={folded || undefined}>
+        <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+      </div>
+      {foldable && (
+        <button ref={toggleRef} type="button" className={styles.foldToggle} aria-expanded={expanded} onClick={toggle} data-testid="gui-message-fold">
+          {expanded ? m.showLess : m.showMore}
+          {expanded ? <ChevronUp size={12} strokeWidth={1.75} aria-hidden /> : <ChevronDown size={12} strokeWidth={1.75} aria-hidden />}
+        </button>
+      )}
+    </>
+  )
+}
 
 /** Figma 90G′: ‹ 1 / 2 › under an edited message, always shown. */
 function VersionSwitch({ branch, onSwitch }: { branch: BranchSwitch; onSwitch(messageId: string, index: number): void }) {

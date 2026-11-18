@@ -22,6 +22,8 @@ private func en(_ key: String) -> String { english?.localizedString(forKey: key,
     #expect(en("已等 %@") == "waiting %@")
     #expect(en("还没有 PR · %@ 有分支保护") == "No PR yet · %@ is protected")
     #expect(en("在后台继续") == "Continue in background")
+    #expect(en("展开") == "Show more")
+    #expect(en("收起") == "Show less")
   }
 
   @Test func englishCountsArePlural() {

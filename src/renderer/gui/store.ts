@@ -18,9 +18,11 @@ interface GuiSessionsState {
   attachments: Record<SessionId, readonly string[] | undefined>
   /** Bumped when the session's composer should take the keyboard. */
   focus: Record<SessionId, number | undefined>
+  /** Your long messages opened with 「展开」 (Figma 96A), by message id; kept while the app runs. */
+  expanded: Record<SessionId, ReadonlySet<string> | undefined>
 }
 
-export const useGuiSessions = create<GuiSessionsState>(() => ({ states: {}, drafts: {}, attachments: {}, focus: {} }))
+export const useGuiSessions = create<GuiSessionsState>(() => ({ states: {}, drafts: {}, attachments: {}, focus: {}, expanded: {} }))
 
 /** Whether a session is a GUI session (no terminal, PRD F23). */
 export function isGuiSession(sessionId: SessionId): boolean {
@@ -142,6 +144,16 @@ export function requestComposerFocus(sessionId: SessionId): void {
   useGuiSessions.setState((s) => ({ focus: { ...s.focus, [sessionId]: (s.focus[sessionId] ?? 0) + 1 } }))
 }
 
+/** Figma 96A: opens (「展开」) or folds again (「收起」) a long message of yours. */
+export function setMessageExpanded(sessionId: SessionId, messageId: string, open: boolean): void {
+  useGuiSessions.setState((s) => {
+    const ids = new Set(s.expanded[sessionId])
+    if (open) ids.add(messageId)
+    else ids.delete(messageId)
+    return { expanded: { ...s.expanded, [sessionId]: ids } }
+  })
+}
+
 /** GUI sessions of the workspace as last seen by `forgetGuiSessions`. */
 const knownGui = new Set<SessionId>()
 
@@ -152,13 +164,13 @@ const knownGui = new Set<SessionId>()
  */
 export function forgetGuiSessions(sessions: readonly { id: SessionId; ui?: 'gui' }[]): SessionId[] {
   const alive = new Set(sessions.map((s) => s.id))
-  const { states, drafts, attachments, focus } = useGuiSessions.getState()
+  const { states, drafts, attachments, focus, expanded } = useGuiSessions.getState()
   const gone = [...new Set([...knownGui, ...Object.keys(states)])].filter((id) => !alive.has(id))
   knownGui.clear()
   for (const s of sessions) if (s.ui === 'gui') knownGui.add(s.id)
   if (gone.length === 0) return gone
   const keep = <T>(record: Record<SessionId, T>): Record<SessionId, T> => Object.fromEntries(Object.entries(record).filter(([id]) => alive.has(id)))
-  useGuiSessions.setState({ states: keep(states), drafts: keep(drafts), attachments: keep(attachments), focus: keep(focus) })
+  useGuiSessions.setState({ states: keep(states), drafts: keep(drafts), attachments: keep(attachments), focus: keep(focus), expanded: keep(expanded) })
   for (const id of gone) {
     clearTimeout(pendingSaves.get(id))
     pendingSaves.delete(id)
