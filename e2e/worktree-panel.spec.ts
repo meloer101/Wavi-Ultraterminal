@@ -17,6 +17,14 @@ interface DialogHook {
   answer: boolean
 }
 
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd })
+const commitIn = (cwd: string, file: string) => {
+  writeFileSync(join(cwd, file), `export const x = '${file}'\n`)
+  git(cwd, 'add', '.')
+  git(cwd, 'commit', '-q', '-m', file)
+}
+
 /**
  * main · feature (1 commit ahead, behind after the merges, one uncommitted line) · merged (merged with --no-ff, no
  * session) · busy (merged, but a session works there) · detached (a commit that only it has).
@@ -28,13 +36,6 @@ function makeRepo(): { project: string; feature: string; merged: string; busy: s
   const merged = join(base, 'wt-merged')
   const busy = join(base, 'wt-busy')
   const detached = join(base, 'wt-detached')
-  const git = (cwd: string, ...args: string[]) =>
-    execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd })
-  const commitIn = (cwd: string, file: string) => {
-    writeFileSync(join(cwd, file), `export const x = '${file}'\n`)
-    git(cwd, 'add', '.')
-    git(cwd, 'commit', '-q', '-m', file)
-  }
   execFileSync('mkdir', ['-p', project])
   writeFileSync(join(project, 'README.md'), '# demo\n')
   git(project, 'init', '-q', '-b', 'main')
@@ -248,5 +249,166 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(working().locator(':scope > li')).toHaveCount(3)
     // The branch is kept.
     expect(execFileSync('git', ['branch', '--list', 'jacob/merged'], { cwd: repo.project }).toString()).toContain('jacob/merged')
+  })
+
+  test('清理 with more worktrees than its confirmation can list still asks once and removes them all', async () => {
+    // Twelve merged worktrees: their lines alone are over the 500 characters main accepts as a confirmation's detail.
+    const paths = Array.from({ length: 12 }, (_, i) => join(repo.project, '..', `wt-finished-${i}`))
+    paths.forEach((path, i) => {
+      git(repo.project, 'worktree', 'add', '-q', '-b', `jacob/finished-${i}`, path)
+      commitIn(path, `finished-${i}.ts`)
+      git(repo.project, 'merge', '-q', '--no-ff', '-m', `merge finished-${i}`, `jacob/finished-${i}`)
+    })
+    await expect(cleanable().locator(':scope > li')).toHaveCount(12, WITHIN)
+    const before = (await dialogs()).length
+    await panel().getByRole('button', { name: '全部清理' }).click()
+    await expect(panel().getByRole('status')).toHaveText('已清理 12 个 worktree', { timeout: 30_000 })
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe('清理 12 个 worktree？')
+    expect(asked[0]!.detail!.length).toBeLessThanOrEqual(500)
+    expect(asked[0]!.detail).toContain('jacob/finished-0')
+    expect(asked[0]!.detail).toMatch(/…还有 \d+ 个/)
+    for (const path of paths) expect(existsSync(path)).toBe(false)
+  })
+
+  test('⇧ / ⌘ click picks several worktrees and ⌫ deletes them at once, under the same guards as 全部清理 (PRD v1.216, Figma 99A)', async () => {
+    // Three unmerged session-less worktrees with a commit each, and one more with an uncommitted file: they all land in
+    // 没有会话, after the detached one.
+    const made = ['jacob/idle-0', 'jacob/idle-1', 'jacob/idle-2', 'jacob/idle-dirty'].map((branch) => ({ branch, path: join(repo.project, '..', `wt-${branch.slice(6)}`) }))
+    for (const { branch, path } of made) {
+      git(repo.project, 'worktree', 'add', '-q', '-b', branch, path)
+      commitIn(path, `${branch.slice(6)}.ts`)
+      real.set(path, realpathSync(path))
+    }
+    writeFileSync(join(made[3]!.path, 'wip.ts'), 'export const wip = 1\n')
+    await expect(idle().locator(':scope > li')).toHaveCount(5, WITHIN)
+
+    // Git lists them by path: the detached one, idle-0, idle-1, idle-2, idle-dirty.
+    const rows = idle().locator(':scope > li')
+    const names = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.path ?? ''))
+    const from = names.indexOf(real.get(made[0]!.path)!)
+    const to = names.indexOf(real.get(made[3]!.path)!)
+    expect(from).toBeGreaterThanOrEqual(0)
+    expect(to).toBeGreaterThan(from)
+    const pickedCount = to - from + 1
+    const picked = panel().locator('li[data-picked="true"]')
+    const expanded = panel().locator('button[aria-expanded="true"]')
+
+    // A row expanded only because it is the active session's worktree does not count as picked: ⌘ click on another row
+    // picks that one alone. Switching away and back puts the expansion on following the active session again (the row
+    // an earlier test clicked is no longer the one open).
+    await page.locator('[data-region="sidebar"] [data-session-id="s-busy"]').click()
+    await page.locator('[data-region="sidebar"] [data-session-id="s-feature"]').click()
+    await expect(expanded).toHaveCount(1)
+    const title = await page.locator('header h1').textContent()
+    await expect(item(repo.feature).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(1)
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(0)
+
+    // 1. Plain click, then ⇧ click: every row in between is picked, nothing in the panel expands, no session switches.
+    await item(made[0]!.path).locator('button[aria-expanded]').click()
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(pickedCount)
+    for (let i = from; i <= to; i++) await expect(rows.nth(i)).toHaveAttribute('data-picked', 'true')
+    await expect(expanded).toHaveCount(0)
+    await expect(page.locator('header h1')).toHaveText(title!)
+    // Expanded earlier, but not picked: still no menu on it.
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'false')
+    await item(repo.detached).locator('button[aria-expanded]').click({ button: 'right' })
+    await expect(page.getByRole('menuitem')).toHaveCount(0)
+
+    // 2. ⌘ click takes one row out of the pick and puts it back.
+    await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'false')
+    await expect(picked).toHaveCount(pickedCount - 1)
+    await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'true')
+
+    // 3. The main checkout can never be picked by ⌘ (a ⇧ range from it is checked at the end).
+    await item(repo.project).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
+    await expect(picked).toHaveCount(pickedCount)
+
+    // 4. A picked row's right-click menu holds one item, with ⌫ on its right.
+    await item(made[0]!.path).locator('button[aria-expanded]').click({ button: 'right' })
+    const entries = page.getByRole('menuitem')
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toContainText(`删除 ${pickedCount} 个 worktree…`)
+    await expect(entries).toContainText('⌫')
+    await shoot('99a-worktree-picked')
+    await expect(entries).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(entries).toHaveCount(0)
+    await expect(picked).toHaveCount(pickedCount)
+
+    // 5. Switching the session from the sidebar drops the pick (the rows' menu acts on worktrees, not on sessions).
+    await page.locator('[data-region="sidebar"] [data-session-id="s-busy"]').click()
+    await expect(picked).toHaveCount(0)
+    await expect(page.locator('header h1')).toHaveText('还在看的')
+
+    // 6. Expansion comes back: plain-click a row to expand it, ⌘ click two others, Esc puts its expansion back.
+    await item(made[1]!.path).locator('button[aria-expanded]').click()
+    await expect(item(made[1]!.path).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(2)
+    await expect(expanded).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
+    await expect(expanded).toHaveCount(1)
+    await expect(item(made[1]!.path).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+
+    // 7. ⌫ asks once — the same rule as 清理: the one with uncommitted work is skipped and says why. The count in the
+    // title is what will actually go (as 清理 counts), the dirty one is listed under 跳过.
+    await item(made[0]!.path).locator('button[aria-expanded]').click()
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(pickedCount)
+    const before = (await dialogs()).length
+    await page.keyboard.press('Backspace')
+    await expect(panel().getByRole('status')).toHaveText(`已删除 ${pickedCount - 1} 个 worktree`, { timeout: 30_000 })
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe(`删除 ${pickedCount - 1} 个 worktree？`)
+    expect(asked[0]!.detail).toContain('跳过')
+    expect(asked[0]!.detail).toContain('jacob/idle-dirty')
+    for (const { path } of made.slice(0, 3)) expect(existsSync(path)).toBe(false)
+    expect(existsSync(made[3]!.path)).toBe(true)
+    // The folders go, the branches stay.
+    for (const { branch } of made.slice(0, 3)) expect(execFileSync('git', ['branch', '--list', branch], { cwd: repo.project }).toString()).toContain(branch)
+    await expect(picked).toHaveCount(0)
+    await expect(idle().locator(':scope > li')).toHaveCount(2)
+
+    // 8. One picked row says 删除 1 个 worktree… (the batch flow, so not 更多 › 删除 worktree…).
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(1)
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ button: 'right' })
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toContainText('删除 1 个 worktree…')
+    await expect(entries).toContainText('⌫')
+    await page.keyboard.press('Escape')
+    await expect(entries).toHaveCount(0)
+
+    // 9. Esc drops a pick without asking anything.
+    const quiet = (await dialogs()).length
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(2)
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
+    expect((await dialogs()).length).toBe(quiet)
+
+    // 10. A ⇧ range that starts on the main checkout starts with the row below it and never picks main.
+    await item(repo.project).locator('button[aria-expanded]').click()
+    await expect(item(repo.project).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    const below = working().locator(':scope > li').nth(1)
+    await below.locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(1)
+    await expect(below).toHaveAttribute('data-picked', 'true')
+    await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
   })
 })

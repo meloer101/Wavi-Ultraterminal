@@ -5,11 +5,12 @@
 // Refreshes on window focus, when git's worktree / branch files change, every POLL_MS while visible, and — only the
 // worktrees concerned — when their sessions change.
 import { Ellipsis, Plus } from '../../ui/icons'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { ProjectId, Session, WorktreeId } from '@shared/types'
 import { defineMessages } from '@shared/i18n'
+import { pointerAnchor, type MenuAnchor } from '../../ui/menu'
 import { useLang, useMessages } from '../../ui/i18n'
 import { newSessionInProject } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
@@ -25,7 +26,7 @@ import { RadarTag } from '../../conflict-radar/RadarTag'
 import { useWorktreeRadarMark } from '../../conflict-radar/store'
 import { AgentIcon } from '../../ui/AgentIcon'
 import { PaneHeader } from '../PaneHeader'
-import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
+import { cleanUpInteractive, deletePickedInteractive, openPickedMenu, openRowMenu, pickRow, selectRow } from './actions'
 import { buildRows, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
 import { patchRoot, refreshWorktrees, useWorktrees, watchRepo, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
@@ -148,10 +149,51 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
     }
   }, [root, refreshAll])
 
-  // Switching sessions anywhere else moves the selection to the new session's worktree.
-  useEffect(() => patchRoot(root, { picked: null }), [root, activeWorktreeId])
+  // Switching sessions anywhere else moves the selection to the new session's worktree, and drops the pick (its menu
+  // acts on the foldouts, not on sessions). The anchor stays: a plain click on a row with a session sets it and
+  // switches in the same step.
+  useEffect(() => patchRoot(root, { picked: null, selection: [] }), [root, activeWorktreeId])
+  // A pick belongs to the view it was made in: it starts empty when the view opens or the project changes, and goes
+  // with it when it closes.
+  useEffect(() => {
+    patchRoot(root, { anchor: null, selection: [] })
+    return () => patchRoot(root, { selection: [] })
+  }, [root])
 
-  const selected = groups ? selectedRow([...groups.working, ...groups.cleanable, ...groups.idle], state.picked, activeWorktreeId) : null
+  const allRows = useMemo(() => (groups ? [...groups.working, ...groups.cleanable, ...groups.idle] : []), [groups])
+  // Every row as drawn: a ⇧ range counts through all of them, the main checkout included.
+  const ordered = useMemo(() => allRows.map((row) => row.key), [allRows])
+  // ...but the main checkout is only an anchor: a range that starts there does not pick it.
+  const never = useMemo(() => allRows.filter((row) => row.info.isMain).map((row) => row.key), [allRows])
+  // Rows picked with ⇧ / ⌘ (PRD v1.216); one that left the listing (deleted, folded away) drops out of the pick.
+  const drawnKeys = useMemo(() => new Set(ordered), [ordered])
+  const selection = useMemo(() => state.selection.filter((key) => drawnKeys.has(key)), [state.selection, drawnKeys])
+  const pickedSet = useMemo(() => new Set(selection), [selection])
+  const pickedRows = useMemo(() => allRows.filter((row) => pickedSet.has(row.key)), [allRows, pickedSet])
+  const onPick = useCallback((row: WorktreeRow, how: 'range' | 'toggle') => pickRow(root, ordered, never, row, how), [root, ordered, never])
+  const onPickedMenu = useCallback(
+    (anchor: MenuAnchor) => void openPickedMenu(root, pickedRows, anchor, refreshAll),
+    [root, pickedRows, refreshAll]
+  )
+  const onBodyKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (selection.length === 0) return
+    // Only the bare key: a shortcut with a modifier is something else, and a held key must not delete.
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return
+    // Esc drops the pick; ⌫ / ⌦ delete the picked worktrees, as the picked row's menu does.
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      patchRoot(root, { selection: [] })
+      return
+    }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault()
+      void deletePickedInteractive(root, pickedRows, refreshAll)
+    }
+  }
+
+  // While rows are picked none is expanded: the details and their buttons are for one row only.
+  const selected = groups && selection.length === 0 ? selectedRow(allRows, state.picked, activeWorktreeId) : null
   const rowProps = { projectId, root, refresh: refreshAll }
 
   const empty =
@@ -177,10 +219,10 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
       {empty || !groups ? (
         <p className={styles.empty}>{empty}</p>
       ) : (
-        <div className={styles.body}>
+        <div className={styles.body} onKeyDown={onBodyKeyDown}>
           <ul className={styles.list} aria-label="Worktree">
             {groups.working.map((row) => (
-              <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
+              <Row key={row.key} row={row} selected={row === selected} picked={pickedSet.has(row.key)} onPick={onPick} onPickedMenu={onPickedMenu} {...rowProps} />
             ))}
           </ul>
           {groups.cleanable.length > 0 && (
@@ -199,7 +241,7 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
               </div>
               <ul className={styles.list} aria-label={m.cleanable}>
                 {groups.cleanable.map((row) => (
-                  <Row key={row.key} row={row} selected={row === selected} cleanable {...rowProps} />
+                  <Row key={row.key} row={row} selected={row === selected} picked={pickedSet.has(row.key)} onPick={onPick} onPickedMenu={onPickedMenu} cleanable {...rowProps} />
                 ))}
               </ul>
             </section>
@@ -212,7 +254,7 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
               </div>
               <ul className={styles.list} aria-label={m.noSession}>
                 {groups.idle.map((row) => (
-                  <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
+                  <Row key={row.key} row={row} selected={row === selected} picked={pickedSet.has(row.key)} onPick={onPick} onPickedMenu={onPickedMenu} {...rowProps} />
                 ))}
               </ul>
             </section>
@@ -226,6 +268,12 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
 interface RowProps {
   row: WorktreeRow
   selected: boolean
+  /** Picked with ⇧ / ⌘ click for deleting several at once. */
+  picked: boolean
+  /** ⇧ click picks a range, ⌘ click toggles this row; neither switches sessions nor expands anything. */
+  onPick(row: WorktreeRow, how: 'range' | 'toggle'): void
+  /** Right-click on a picked row: the one menu that acts on all of them. */
+  onPickedMenu(anchor: MenuAnchor): void
   /** In 可清理: the title is quieter. */
   cleanable?: boolean
   projectId: ProjectId
@@ -234,7 +282,7 @@ interface RowProps {
 }
 
 /** One worktree (Figma 85B″): a single line; the selected one expands into its conflicts and the actions. */
-function Row({ row, selected, cleanable = false, projectId, root, refresh }: RowProps) {
+function Row({ row, selected, picked, onPick, onPickedMenu, cleanable = false, projectId, root, refresh }: RowProps) {
   const m = useMessages(M)
   const { info } = row
   const radar = useWorktreeRadarMark(root, row.worktreeIds)
@@ -242,13 +290,22 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
   const rebaseTarget = radar && wantsRebase(radar.self) ? agentSessionFor(row.sessions, activeSessionId) : null
   const radarLines = selected && radar ? radarDetailLines(radar) : []
   return (
-    <li className={styles.item} data-selected={selected} data-cleanable={cleanable || undefined} data-path={info.path}>
+    <li className={styles.item} data-selected={selected} data-picked={picked} data-cleanable={cleanable || undefined} data-path={info.path}>
       <button
         type="button"
         className={styles.row}
         aria-expanded={selected}
         title={tildePath(row.openPath, window.tr.homeDir)}
-        onClick={() => selectRow(root, row, selected)}
+        onClick={(e) => {
+          if (e.shiftKey || e.metaKey) onPick(row, e.shiftKey ? 'range' : 'toggle')
+          else selectRow(root, row, selected)
+        }}
+        onContextMenu={(e) => {
+          // A row that is not picked has no menu here; a picked one offers only 删除 (PRD v1.216 ③).
+          if (!picked) return
+          e.preventDefault()
+          onPickedMenu(pointerAnchor(e))
+        }}
       >
         <span className={styles.glyph}>
           {row.status ? (

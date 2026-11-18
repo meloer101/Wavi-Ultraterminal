@@ -5,6 +5,7 @@ import { isActiveStatus } from '@shared/lifecycle'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
+import { rangeBetween, togglePicked } from '@shared/batch-actions'
 
 const M = defineMessages({
   zh: {
@@ -237,6 +238,36 @@ export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
   return plan
 }
 
+/**
+ * The first of `lines` that fit in `budget` characters once joined (`gap` = the separator's length), and how many
+ * were left out. Main refuses a confirmation whose text is too long, so a list of any length has to be cut to fit.
+ */
+export function fitLines(lines: readonly string[], budget: number, gap = 1): { shown: string[]; left: number } {
+  const shown: string[] = []
+  let used = 0
+  for (const line of lines) {
+    const next = used + line.length + (shown.length > 0 ? gap : 0)
+    if (next > budget) break
+    shown.push(line)
+    used = next
+  }
+  return { shown, left: lines.length - shown.length }
+}
+
+/**
+ * `items` joined by `separator` in at most `budget` characters. When all of them fit they stay exactly as they are
+ * (no room is reserved for a suffix that is not needed); otherwise as many as fit plus `more(left)`. Main refuses a
+ * confirmation whose text is too long, so a list of any length has to be cut to fit.
+ */
+export function listWithin(items: readonly string[], separator: string, budget: number, more: (left: number) => string): string {
+  const full = items.join(separator)
+  if (full.length <= budget) return full
+  // Sized for every item left out; what is drawn names the ones that really did not fit.
+  const roomiest = more(items.length).length
+  const { shown, left } = fitLines(items, budget - roomiest - separator.length, separator.length)
+  return [...shown, ...(left > 0 ? [more(left)] : [])].join(separator)
+}
+
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
   return info.branch ? pick(M).branchKept(info.branch) : pick(M).commitsElsewhere
@@ -244,6 +275,30 @@ export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
 
 /** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */
 export const COLLAPSED = ''
+
+/**
+ * ⇧ / ⌘ click on a worktree row (PRD v1.216): ⇧ adds every row between the anchor and the clicked one in drawn order,
+ * across groups; ⌘ toggles one. Unlike the sidebar, a row that is only expanded because it holds the active session is
+ * not part of it: only rows clicked here count. `never` (the main checkout) counts for a range but is never in the
+ * result. Returned in drawn order; keys no longer drawn drop out.
+ */
+export function pickRows(input: {
+  ordered: readonly string[]
+  picked: readonly string[]
+  anchor: string | null
+  id: string
+  how: 'range' | 'toggle'
+  /** Rows a range may start at or span, but that can never be picked themselves. */
+  never: readonly string[]
+}): string[] {
+  const { ordered, anchor, id, how, never } = input
+  const drawn = (x: string | null): x is string => x !== null && ordered.includes(x)
+  const start = input.picked.filter(drawn)
+  const next = how === 'range' ? [...start, ...rangeBetween(ordered, drawn(anchor) ? anchor : null, id)] : togglePicked(start, id)
+  const skip = new Set(never)
+  const set = new Set(next)
+  return ordered.filter((key) => set.has(key) && !skip.has(key))
+}
 
 /** The row to show expanded: the user's pick while it still exists, else the active session's worktree (unless collapsed). */
 export function selectedRow(rows: readonly WorktreeRow[], picked: string | null, activeWorktreeId: WorktreeId | null): WorktreeRow | null {
