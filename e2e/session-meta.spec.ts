@@ -552,10 +552,10 @@ test.describe('session metrics: todo · context · usage', () => {
     })
     await page.locator('[data-region="sidebar"]').getByText('看板').click()
     const chip = page.locator('[data-region="overview"]').getByTestId('usage-chip-codex')
-    await expect(chip).toHaveText(/^Codex5h 用完 · \d\d:\d\d 恢复$/, WITHIN)
+    await expect(chip).toHaveText(/^Codex5h 用完 · (?:\d+ 月 \d+ 日 )?\d\d:\d\d 恢复$/, WITHIN)
     await expect(chip).toHaveAttribute('data-level', 'exhausted')
     await chip.click()
-    await expect(page.getByTestId('usage-window-codex-300')).toContainText(/100%.*\d\d:\d\d 恢复/)
+    await expect(page.getByTestId('usage-window-codex-300')).toContainText(/100%.*(?:\d+ 月 \d+ 日 )?\d\d:\d\d 恢复/)
     await shoot('18C-exhausted')
     await page.keyboard.press('Escape')
   })
@@ -569,7 +569,7 @@ test.describe('session metrics: todo · context · usage', () => {
     const dialog = page.getByRole('dialog', { name: '设置' })
     await expect(dialog.getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')
     // Codex has a used-up window, so it comes before Claude.
-    await expect(dialog.locator('section[data-testid^="usage-page-"]')).toHaveText([/^CodexPlus5 小时100%\d\d:\d\d 恢复每周30%/, /^ClaudeMax5 小时\d+%.*7 天\d+%/])
+    await expect(dialog.locator('section[data-testid^="usage-page-"]')).toHaveText([/^CodexPlus5 小时100%(?:\d+ 月 \d+ 日 )?\d\d:\d\d 恢复每周30%/, /^ClaudeMax5 小时\d+%.*7 天\d+%/])
     await expect(dialog.getByTestId('usage-page-window-codex-300')).toHaveAttribute('data-level', 'exhausted')
     await expect(dialog.getByRole('switch', { name: '用到 75%、90% 和用完时发通知' })).toHaveAttribute('aria-checked', 'true')
     // Figma 33I: the agent's mark on the title's left edge; window labels start where the agent's name does.
