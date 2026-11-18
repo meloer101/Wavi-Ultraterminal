@@ -231,6 +231,26 @@ test('shortcut hints show on hover only; 设置 · 快捷键 lists them all (PRD
   if (shot) await sidebar.screenshot({ path: `${shot}/sidebar-hover-jump.png` })
 
   const settings = await openSettings(app)
+  // A button's label stays at its centre whether its hint is hidden or shown, and the button keeps its width (v1.210).
+  await settings.getByRole('tab', { name: '自动化' }).click()
+  const open = settings.getByRole('button', { name: /打开定时任务/ })
+  const offCentre = () =>
+    open.evaluate((button) => {
+      const text = [...button.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim() !== '')!
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const label = range.getBoundingClientRect()
+      const box = button.getBoundingClientRect()
+      return Math.abs(label.left + label.width / 2 - (box.left + box.width / 2))
+    })
+  await settings.getByRole('tab', { name: '自动化' }).hover()
+  expect(await offCentre()).toBeLessThan(1.5)
+  const openWidth = (await open.boundingBox())!.width
+  await open.hover()
+  await expect.poll(() => open.locator('[data-shortcut-hint]').evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+  expect(await offCentre()).toBeLessThan(1.5)
+  expect((await open.boundingBox())!.width).toBe(openWidth)
+
   await settings.getByRole('tab', { name: '快捷键', exact: true }).click()
   const pane = settings.locator('#settings-pane')
   await expect(pane.getByRole('heading', { name: '快捷键', level: 1 })).toBeVisible()

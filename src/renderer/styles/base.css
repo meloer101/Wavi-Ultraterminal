@@ -53,6 +53,35 @@ button:not(:hover):not(:focus-visible) [data-shortcut-hint] {
   opacity: 0;
 }
 
+/* The hidden hint would leave the label off centre, so such a button is three columns: an empty one as wide as the
+   hint, the label, the hint. The label sits at the centre with the hint shown or not. `lead` puts the hint before the
+   label; `edge` (the sidebar's rows, label at the left) opts out. The label is one text run or one element. */
+button:has(> [data-shortcut-hint]:not([data-shortcut-hint='edge'])) {
+  display: inline-grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+button:has(> [data-shortcut-hint]:not([data-shortcut-hint='edge']))::before {
+  content: '';
+  grid-row: 1;
+  grid-column: 1;
+}
+
+button > [data-shortcut-hint]:not([data-shortcut-hint='edge']) {
+  grid-row: 1;
+  grid-column: 3;
+  justify-self: start;
+}
+
+button:has(> [data-shortcut-hint='lead'])::before {
+  grid-column: 3;
+}
+
+button > [data-shortcut-hint='lead'] {
+  grid-column: 1;
+  justify-self: end;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-shortcut-hint] {
     transition: none;
