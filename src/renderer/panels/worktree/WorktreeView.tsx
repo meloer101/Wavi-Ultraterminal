@@ -177,8 +177,9 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
   )
   const onBodyKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (selection.length === 0) return
-    // Only the bare key: a shortcut with a modifier is something else, and a held key must not delete.
-    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return
+    // A shortcut with ⌘ / ⌃ / ⌥ is something else, and a held key must not delete. ⇧ is let through: it is the key
+    // that picked the range, so it is often still down when ⌫ is pressed.
+    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
     // Esc drops the pick; ⌫ / ⌦ delete the picked worktrees, as the picked row's menu does.
     if (e.key === 'Escape') {
       e.preventDefault()

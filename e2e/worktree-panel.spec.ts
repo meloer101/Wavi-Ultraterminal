@@ -262,7 +262,17 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(cleanable().locator(':scope > li')).toHaveCount(12, WITHIN)
     const before = (await dialogs()).length
     await panel().getByRole('button', { name: '全部清理' }).click()
+    // A long run says how far it is, and rows can be picked meanwhile; the pick is still there when it ends.
+    await expect(panel().getByRole('status')).toHaveText(/^正在清理 \d+ \/ 12…$/, WITHIN)
+    // The detached row is still expanded from the test before: its 更多 button carries aria-expanded too.
+    const detachedRow = item(repo.detached).locator('button[aria-expanded]').first()
+    await detachedRow.click({ modifiers: ['Meta'] })
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
     await expect(panel().getByRole('status')).toHaveText('已清理 12 个 worktree', { timeout: 30_000 })
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
+    await detachedRow.focus()
+    await page.keyboard.press('Escape')
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
     const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)
     expect(asked[0]!.message).toBe('清理 12 个 worktree？')
@@ -368,7 +378,8 @@ test.describe('F17 right panel · Worktree', () => {
     await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
     await expect(picked).toHaveCount(pickedCount)
     const before = (await dialogs()).length
-    await page.keyboard.press('Backspace')
+    // ⇧ is the key that picked the range: it is often still down when ⌫ is pressed.
+    await page.keyboard.press('Shift+Backspace')
     await expect(panel().getByRole('status')).toHaveText(`已删除 ${pickedCount - 1} 个 worktree`, { timeout: 30_000 })
     const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)

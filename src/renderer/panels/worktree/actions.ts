@@ -57,6 +57,9 @@ const M = defineMessages({
     deletedMany: (removed: number) => `已删除 ${removed} 个 worktree`,
     nothingToDeleteList: (skipped: string) => `没有可以删除的：${skipped}`,
     nothingToDelete: '没有可以删除的 worktree',
+    cleaning: (done: number, total: number) => `正在清理 ${done} / ${total}…`,
+    deletingMany: (done: number, total: number) => `正在删除 ${done} / ${total}…`,
+    stillRunning: '上一次删除还没结束',
     copyPath: '复制路径',
     restore: '恢复归档',
     archive: '归档…',
@@ -103,6 +106,9 @@ const M = defineMessages({
     deletedMany: (removed: number) => `Deleted ${removed} ${removed === 1 ? 'worktree' : 'worktrees'}`,
     nothingToDeleteList: (skipped: string) => `Nothing to delete: ${skipped}`,
     nothingToDelete: 'No worktrees to delete',
+    cleaning: (done: number, total: number) => `Cleaning up ${done} of ${total}…`,
+    deletingMany: (done: number, total: number) => `Deleting ${done} of ${total}…`,
+    stillRunning: 'The previous delete is still running',
     copyPath: 'Copy path',
     restore: 'Restore archive',
     archive: 'Archive…',
@@ -130,13 +136,12 @@ export function selectRow(root: string, row: WorktreeRow, expanded: boolean): vo
 
 /**
  * ⇧ / ⌘ click on a row: picks it for a later 删除, shows nothing else. `ordered` is every row as drawn and `never` the
- * ones a range may span but never hold (the main checkout); it never switches sessions, never touches which row is
- * expanded, and nothing can be picked while a delete is running (the pick would be wiped when it ends).
+ * ones a range may span but never hold (the main checkout); it never switches sessions and never touches which row is
+ * expanded. Rows can be picked while a delete is running (it can take minutes); only a second delete waits.
  */
 export function pickRow(root: string, ordered: readonly string[], never: readonly string[], row: WorktreeRow, how: 'range' | 'toggle'): void {
   if (row.info.isMain) return
   const state = worktreesOf(root)
-  if (state.busy) return
   patchRoot(root, {
     selection: pickRows({ ordered, picked: state.selection, anchor: state.anchor, id: row.key, how, never }),
     anchor: row.key,
@@ -273,7 +278,8 @@ export async function cleanUpInteractive(
           nothingList: m.nothingToDeleteList,
           nothing: m.nothingToDelete,
           done: m.deletedMany,
-          partly: m.deletedManyPartly
+          partly: m.deletedManyPartly,
+          progress: m.deletingMany
         }
       : {
           message: m.cleanMessage,
@@ -281,7 +287,8 @@ export async function cleanUpInteractive(
           nothingList: m.nothingToCleanList,
           nothing: m.nothingToClean,
           done: m.cleaned,
-          partly: m.cleanedPartly
+          partly: m.cleanedPartly,
+          progress: m.cleaning
         }
   const plan = cleanupPlan(rows)
   const skipped = plan.skip.map(({ row, reason }) => m.skipped(row.name, reason))
@@ -303,7 +310,9 @@ export async function cleanUpInteractive(
   const failed: string[] = []
   let removed = 0
   try {
-    for (const row of plan.remove) {
+    for (const [index, row] of plan.remove.entries()) {
+      // Removing a folder with node_modules takes seconds: say how far it is, so a long run does not look stuck.
+      patchRoot(root, { notice: words.progress(index + 1, plan.remove.length) })
       const current = freshRow(row)
       if (current.sessions.length > 0) {
         failed.push(m.skipped(row.name, m.hasSession))
@@ -329,9 +338,15 @@ export async function deletePickedInteractive(
   rows: readonly WorktreeRow[],
   refresh: () => Promise<void>
 ): Promise<void> {
-  if (worktreesOf(root).busy) return
+  if (worktreesOf(root).busy) {
+    patchRoot(root, { notice: pick(M).stillRunning })
+    return
+  }
   const confirmed = await cleanUpInteractive(root, rows, refresh, 'delete')
-  if (confirmed) patchRoot(root, { selection: [] })
+  if (!confirmed) return
+  // Only the rows this run was about leave the pick: rows picked while it ran stay picked.
+  const done = new Set(rows.map((row) => row.key))
+  patchRoot(root, { selection: worktreesOf(root).selection.filter((key) => !done.has(key)) })
 }
 
 /** The menu a picked row opens: one 删除 N 个 worktree… and nothing else (PRD v1.216 ③), ⌫ on its right. */
