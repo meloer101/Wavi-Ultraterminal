@@ -21,8 +21,13 @@ const CODEX_TAIL_BYTES = 1024 * 1024
 /**
  * When to look again after a hook. Claude names the session ~4 s after the first prompt, in parallel with the reply;
  * Codex names it after the first turn ends, as long as its title request takes.
+ * A Claude session that has no title yet shows the first prompt in its place, so it is looked at more often, and its
+ * Stop keeps looking: a turn shorter than the title request ends before the title is written, and a single look at
+ * Stop would leave the prompt there until the next turn.
  */
 const CLAUDE_AFTER_PROMPT_MS = [3_000, 8_000, 20_000]
+const CLAUDE_UNNAMED_AFTER_PROMPT_MS = [1_500, 3_000, 4_500, 6_000, 8_000, 12_000, 20_000]
+const CLAUDE_UNNAMED_AFTER_STOP_MS = [0, 3_000, 8_000]
 const CODEX_AFTER_STOP_MS = [0, 2_000, 6_000, 15_000, 30_000]
 
 type Rec = Record<string, unknown>
@@ -155,8 +160,10 @@ export class AgentTitleWatcher {
       const transcript = claudeTranscriptPath(payload.transcript_path, this.dirs)
       if (transcript) tracked.transcript = transcript
       // A resumed conversation already has its title; a new one gets it shortly after the first prompt.
-      if (event === 'SessionStart' || event === 'Stop') this.schedule(sessionId, [0])
-      else if (event === 'UserPromptSubmit') this.schedule(sessionId, CLAUDE_AFTER_PROMPT_MS)
+      const named = tracked.sent !== undefined
+      if (event === 'SessionStart') this.schedule(sessionId, [0])
+      else if (event === 'Stop') this.schedule(sessionId, named ? [0] : CLAUDE_UNNAMED_AFTER_STOP_MS)
+      else if (event === 'UserPromptSubmit') this.schedule(sessionId, named ? CLAUDE_AFTER_PROMPT_MS : CLAUDE_UNNAMED_AFTER_PROMPT_MS)
     } else if (agent === 'codex') {
       if (isSafeAgentSessionId(payload.session_id)) tracked.threadId = payload.session_id
       if (event === 'Stop') this.schedule(sessionId, CODEX_AFTER_STOP_MS)

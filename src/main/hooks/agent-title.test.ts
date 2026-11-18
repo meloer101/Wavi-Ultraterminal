@@ -133,16 +133,37 @@ describe('AgentTitleWatcher', () => {
   it('Claude: looks again after the first prompt and emits only changes', async () => {
     const t = setup({ [transcript]: line({ type: 'ai-title', aiTitle: '会话标题' }) })
     t.watcher.observe('s1', 'claude', 'UserPromptSubmit', { transcript_path: transcript, session_id: 'abc' })
-    expect([...t.timers.values()].map((x) => x.ms)).toEqual([3000, 8000, 20000])
+    expect([...t.timers.values()].map((x) => x.ms)).toEqual([1500, 3000, 4500, 6000, 8000, 12000, 20000])
     await t.runAll()
     expect(t.emitted).toEqual([['s1', 'claude', '会话标题']])
+    // Named: only a /rename can change it, so later prompts and turn ends look less often.
+    t.watcher.observe('s1', 'claude', 'UserPromptSubmit', { transcript_path: transcript })
+    expect([...t.timers.values()].map((x) => x.ms)).toEqual([3000, 8000, 20000])
     t.watcher.observe('s1', 'claude', 'Stop', { transcript_path: transcript })
+    expect([...t.timers.values()].map((x) => x.ms)).toEqual([0])
     await t.runAll()
     expect(t.emitted).toHaveLength(1)
     t.files[transcript] += `\n${line({ type: 'custom-title', customTitle: '新名字' })}`
     t.watcher.observe('s1', 'claude', 'Stop', { transcript_path: transcript })
     await t.runAll()
     expect(t.emitted.at(-1)).toEqual(['s1', 'claude', '新名字'])
+  })
+
+  it('Claude: a turn that ends before the title is written still gets it', async () => {
+    const t = setup({ [transcript]: '' })
+    t.watcher.observe('s1', 'claude', 'UserPromptSubmit', { transcript_path: transcript })
+    // The reply took 2 s, the title request 4 s: Stop replaces the looks the prompt scheduled.
+    t.watcher.observe('s1', 'claude', 'Stop', { transcript_path: transcript })
+    expect([...t.timers.values()].map((x) => x.ms)).toEqual([0, 3000, 8000])
+    const looks = [...t.timers.values()]
+    t.timers.clear()
+    looks[0]?.fn()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(t.emitted).toEqual([])
+    t.files[transcript] = line({ type: 'ai-title', aiTitle: '会话标题' })
+    looks[1]?.fn()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(t.emitted).toEqual([['s1', 'claude', '会话标题']])
   })
 
   it('Claude: never reads a transcript outside its projects directory', async () => {

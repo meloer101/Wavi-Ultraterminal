@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseKeyPhase, parseScroll, parseTouch, parseUdid, parseUsage } from './validate'
 import { encodeHid, parseConfigMessage } from './stream'
-import { parseHelperLine } from './helper'
+import { parseHelperLine, serveSimCliPath } from './helper'
 import { sanitizeLastUdid } from './remembered'
 
 const UDID = 'D08CB4F0-C5A9-47B3-B65E-B395108FF267'
@@ -60,6 +60,14 @@ describe('helper protocol', () => {
     expect(parseHelperLine(line.replaceAll('127.0.0.1', '10.0.0.2'), UDID)).toBeNull()
     expect(parseHelperLine(line, 'B9FA2F0C-A518-4490-8C4A-7EDE21937603')).toBeNull()
     expect(parseHelperLine('serve-sim starting…', UDID)).toBeNull()
+  })
+
+  it('finds the CLI in the checkout, in app.asar.unpacked and, for the linked app, in the checkout it runs', () => {
+    const cli = 'node_modules/serve-sim/dist/serve-sim.js'
+    expect(serveSimCliPath('/repo', null)).toBe(`/repo/${cli}`)
+    expect(serveSimCliPath('/Applications/Wavi.app/Contents/Resources/app.asar', null)).toBe(`/Applications/Wavi.app/Contents/Resources/app.asar.unpacked/${cli}`)
+    // The linked app's own app path has no node_modules.
+    expect(serveSimCliPath('/Applications/Wavi.app/Contents/Resources/app', '/repo')).toBe(`/repo/${cli}`)
   })
 
   it('frames input as [tag][JSON] and reads config messages', () => {
