@@ -68,14 +68,14 @@ const M = defineMessages({
     groupSessions: 'Group sessions',
     hideSidebar: 'Hide sidebar',
     nav: 'Navigation',
-    openProject: 'Open project…',
+    openProject: 'Project',
     jumpTo: 'Jump to…',
     board: 'Board',
     waiting: (n: number) => (n === 1 ? '1 session needs you' : `${n} sessions need you`),
     usage: 'Usage',
     newSession: 'New session',
     noProjects: 'No projects yet',
-    schedules: 'Scheduled tasks',
+    schedules: 'Schedule',
     settings: 'Settings'
   }
 })
