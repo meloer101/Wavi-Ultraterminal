@@ -25,7 +25,7 @@ import { useSessionMeta } from '../session-meta/store'
 import { PaneStrips } from '../lifecycle/PaneStrips'
 import type { WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
-import { cardKey, chatIsEmpty, currentTodos, projectChoices, runRowOf, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
+import { cardKey, chatIsEmpty, currentTodos, projectChoices, runRowOf, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend, type Point } from './model'
 import { ProjectChip } from './ProjectChip'
 import { addAttachments, clearComposer, insertIntoDraft, notePick, setDraft, setGuiState, useGuiSessions } from './store'
 import { popupMenu } from '../ui/menu'
@@ -156,10 +156,10 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
   )
 
   const send = useCallback(
-    (text: string, attachments: readonly string[]) => {
+    (text: string, attachments: readonly string[], from?: Point) => {
       setSendError(null)
       if (!willQueue) {
-        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now(), attachments })
+        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now(), attachments, ...(from ? { from } : {}) })
         clearComposer(sessionId)
       }
       const undo = (reason: string): void => {
@@ -353,6 +353,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }
           workflows={workflows}
           workflowAsk={workflowAsk}
           onStopWorkflow={stopWorkflow}
+          launch={pending}
         />
       )}
       <div className={styles.dock}>

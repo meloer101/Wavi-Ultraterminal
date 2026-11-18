@@ -247,6 +247,21 @@
   mask-image: linear-gradient(to bottom, black calc(100% - 2 * var(--chat-line)), transparent);
 }
 
+/* Figma 98: a message of yours flying in from the composer — a copy of its bubble over the chat (Feed.tsx flyIn), the
+   bubble itself hidden where it lands until the copy is there. */
+.flyer {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  max-width: none;
+  margin: 0;
+  pointer-events: none;
+}
+
+.userRow[data-landing] .bubble {
+  visibility: hidden;
+}
+
 /* 「展开」 / 「收起」 at the bubble's foot, on the left: the words' colour, a chevron after it. */
 .foldToggle {
   display: inline-flex;

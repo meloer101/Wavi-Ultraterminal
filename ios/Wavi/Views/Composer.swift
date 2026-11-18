@@ -16,6 +16,11 @@ struct Composer: View {
   @State private var shooting = false
   @State private var sending = false
   @State private var error: String?
+  /// Figma 98′: where the text's first line starts on screen, for a message just sent to fly from; 「回复」 waits
+  /// while it flies.
+  @State private var firstLine: CGPoint?
+  @State private var holding = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// The + and the round button; one line of text is as tall, so the three share a centre line (and grow with the text).
   @ScaledMetric(relativeTo: .body) private var control: CGFloat = 42
 
@@ -50,9 +55,10 @@ struct Composer: View {
   private var capsule: some View {
     HStack(alignment: .bottom, spacing: 2) {
       attach
-      TextField(model.isOpen ? String(localized: "回复") : String(localized: "连上 Mac 后才能发送"), text: $text, axis: .vertical)
+      TextField(model.isOpen ? (holding ? "" : String(localized: "回复")) : String(localized: "连上 Mac 后才能发送"), text: $text, axis: .vertical)
         .font(.ui(.body))
         .lineLimit(1...6)
+        .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { firstLine = $0 }
         .foregroundStyle(Color.textPrimary)
         .padding(.leading, 4)
         .padding(.trailing, 8)
@@ -148,9 +154,16 @@ struct Composer: View {
     error = nil
     // On screen and out of the field at once; the Mac may take a while (it starts an agent that has not started).
     let (sentText, sentPhotos) = (text, photos)
-    let pending = model.willSend(session, text: sentText, photos: sentPhotos.count)
+    let pending = model.willSend(session, text: sentText, photos: sentPhotos.count, from: sentText.isEmpty ? nil : firstLine)
     text = ""
     photos = []
+    if !reduceMotion {
+      holding = true
+      Task {
+        try? await Task.sleep(for: .milliseconds(380))
+        holding = false
+      }
+    }
     Task {
       let result = await model.call(.send(session: session, text: sentText, photos: sentPhotos.map(\.photo)))
       sending = false

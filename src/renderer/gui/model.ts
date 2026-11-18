@@ -347,6 +347,13 @@ export interface PendingSend {
   at: number
   /** The files sent with it, for the thumbnails over the bubble (Figma 71A). */
   attachments?: readonly string[]
+  /** Figma 98: where its first line was in the composer (client px), for the bubble to fly from. */
+  from?: Point
+}
+
+export interface Point {
+  x: number
+  y: number
 }
 
 export const userCount = (items: readonly ChatItem[]): number => items.reduce((n, item) => (item.kind === 'user' ? n + 1 : n), 0)
@@ -488,6 +495,22 @@ export const FOLD_ROWS = 10
  */
 export function foldsMessage(height: number, line: number, rows: number): boolean {
   return line > 0 && height >= (rows + 3) * line - 1
+}
+
+/** Figma 98D: the most lines a sent message flies with; a longer one fades in where it lands. */
+export const FLIGHT_ROWS = 6
+
+export type Flight = { kind: 'fly'; dx: number; dy: number } | { kind: 'fade' }
+
+/**
+ * Figma 98: how a message of yours that just left the composer comes in. Its first line was at `from`; laid out in the
+ * feed it starts at `to`, its words `height` tall in lines of `line` px. It flies (dx / dy: from where it lands back to
+ * where it left) when it has words, is laid out and is no longer than FLIGHT_ROWS lines; otherwise, and when motion is
+ * reduced, it fades in where it lands.
+ */
+export function flightOf(from: Point, to: Point, height: number, line: number, reduced: boolean): Flight {
+  if (reduced || line <= 0 || height <= 0 || height > FLIGHT_ROWS * line + 1) return { kind: 'fade' }
+  return { kind: 'fly', dx: from.x - to.x, dy: from.y - to.y }
 }
 
 /** 「思考了 8s」 (rounded up to whole seconds; minutes past a minute), or 「思考了」 when the agent gave no duration. */

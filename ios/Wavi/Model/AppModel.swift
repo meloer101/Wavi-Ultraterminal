@@ -35,6 +35,9 @@ final class AppModel {
   /// Messages sent from this phone that the session's transcript has not shown yet (the agent writes a message there
   /// only once it takes it): drawn at the end of the conversation at once, gone when the transcript has them.
   private(set) var sending: [String: [ChatItem]] = [:]
+  /// Figma 98′: the message just sent from this phone and where its first line was in the composer (global points),
+  /// until its copy has taken off from there.
+  private(set) var launch: (id: String, from: CGPoint)?
   /// Answers given while this phone was connected, per session: left in the conversation where they happened.
   private(set) var receipts: [String: [Receipt]] = [:]
   /// Figma 96′A: your long messages opened with 「展开」 (session/message id), kept while the app runs.
@@ -82,10 +85,16 @@ final class AppModel {
   }
 
   /// Sent from the composer: on screen now, before the Mac answers.
-  func willSend(_ session: String, text: String, photos: Int) -> String {
+  func willSend(_ session: String, text: String, photos: Int, from: CGPoint? = nil) -> String {
     let id = "sending-\(UUID().uuidString)"
     sending[session, default: []].append(ChatItem(kind: "user", id: id, at: Date().timeIntervalSince1970 * 1000, text: text, images: photos))
+    launch = from.map { (id, $0) }
     return id
+  }
+
+  /// Its copy took off (or it faded in): later layouts of the message do not start it again.
+  func launched(_ id: String) {
+    if launch?.id == id { launch = nil }
   }
 
   /// The Mac refused it: it was never sent.

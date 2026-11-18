@@ -230,6 +230,65 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(await feed().evaluate((el) => [el.scrollTop, el.scrollHeight <= el.clientHeight])).toEqual([0, true])
   })
 
+  test('a sent message flies in from the composer: a copy of its bubble springs to where it lands, which waits hidden (Figma 98)', async () => {
+    // The flight's animations (made by script, in the chat) held at a time (ms), to look at it as Figma 98A / 98B / 98C
+    // draw it; CSS transitions elsewhere (the window settling) go on.
+    const at = (ms: number) =>
+      page.evaluate(async (t) => {
+        const held = document.getAnimations().filter((a) => a.constructor === Animation && (a.effect as KeyframeEffect | null)?.target?.closest('[data-gui-chat]'))
+        for (const a of held) a.pause()
+        // A pause asked for before an animation's first frame lands a frame later: the time is set once it has.
+        await Promise.all(held.map((a) => a.ready))
+        for (const a of held) a.currentTime = t
+      }, ms)
+    const flight = page.getByTestId('gui-message-flight')
+    await send('fly me to the feed')
+    await flight.waitFor({ state: 'attached' })
+    await at(0)
+    const landed = feed().locator('[data-item]').filter({ hasText: 'fly me to the feed' }).last()
+    await expect(flight).toHaveText('fly me to the feed')
+    const bubble = landed.locator('[class*="bubble"]').first()
+    await expect(bubble).toHaveCSS('visibility', 'hidden')
+    // 98A: its words start where the composer's first line is, below and left of where it lands.
+    const lines = await page.evaluate(() => {
+      const box = (el: Element | null | undefined) => el!.getBoundingClientRect()
+      const words = box(document.querySelector('[data-testid="gui-message-flight"] p'))
+      const composer = box(document.querySelector('[data-testid="gui-composer-box"] [contenteditable] > *'))
+      return { words: [words.left, words.top], composer: [composer.left, composer.top] }
+    })
+    expect(Math.abs(lines.words[0]! - lines.composer[0]!), JSON.stringify(lines)).toBeLessThan(1)
+    expect(Math.abs(lines.words[1]! - lines.composer[1]!), JSON.stringify(lines)).toBeLessThan(1)
+    const [start, end] = await Promise.all([flight.boundingBox(), bubble.boundingBox()])
+    expect(start!.y).toBeGreaterThan(end!.y + 40)
+    expect(start!.x).toBeLessThan(end!.x)
+    await page.screenshot({ path: join(SHOTS, 'flight-0ms-dark.png') })
+    await at(120)
+    await page.screenshot({ path: join(SHOTS, 'flight-120ms-dark.png') })
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'light' } }))
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    await page.screenshot({ path: join(SHOTS, 'flight-120ms-light.png') })
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await at(379)
+    // The feed above rides the same spring and may scroll again (the run row): both read in one frame, once the
+    // feed's scroll events are in.
+    const gap = await page.evaluate(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      const copy = document.querySelector('[data-testid="gui-message-flight"]')!.getBoundingClientRect()
+      const rows = document.querySelectorAll('[data-region="gui-feed"] [data-landing] [class*="bubble"]')
+      const place = rows[0]!.getBoundingClientRect()
+      return [Math.abs(copy.left - place.left), Math.abs(copy.top - place.top)]
+    })
+    expect(gap[0]).toBeLessThan(1)
+    expect(gap[1]).toBeLessThan(1)
+    await page.screenshot({ path: join(SHOTS, 'flight-380ms-dark.png') })
+    // 98C: landed, the copy gone and the bubble itself there, once.
+    await page.evaluate(() => document.getAnimations().forEach((a) => a.playState === 'paused' && a.play()))
+    await expect(flight).toHaveCount(0, WITHIN)
+    await expect(bubble).toHaveCSS('visibility', 'visible')
+    await expect(feed().getByText('Hello: fly me to the feed')).toBeVisible(WITHIN)
+    await expect(feed().locator('[data-item]').filter({ hasText: /^fly me to the feed/ })).toHaveCount(1)
+  })
+
   test('the run row comes with the message: the agent’s mark, 「思考中」 and a running clock, gone when the turn ends; thinking with no text leaves no 「思考了」 row (Figma 91)', async () => {
     // The fake answers `--version` as 2.1.318, so Claude is asked for summaries.
     await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)

@@ -32,7 +32,8 @@ import {
   thumbnailUrl,
   type ModeChoice,
   type PickerButton,
-  type SlashGroup
+  type SlashGroup,
+  type Point,
 } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import { defineMessages } from '@shared/i18n'
@@ -101,13 +102,35 @@ interface Props {
   cardWaiting: boolean
   /** Answers the waiting card from a key typed into the empty composer; true when the card took it. */
   cardKey(event: KeyboardEvent): boolean
-  send(text: string, attachments: readonly string[]): void
+  /** `from`: where the composer's first line was (Figma 98), for the message to fly from. */
+  send(text: string, attachments: readonly string[], from?: Point): void
   interrupt(): void
   setConfig(optionId: string, value: string): Promise<unknown>
   /** Figma 65: nothing said yet — the agent can still change (the model menu lists the agents). */
   switchable: boolean
   /** Figma 65B: run another agent (with one of its models, when it listed them before). */
   switchAgent(agent: CliAgent, model: string | undefined): void
+}
+
+/** Figma 98: where the composer's first line starts on screen, for the message just sent to fly from. */
+function firstLine(editor: Editor | null): Point | undefined {
+  const rect = editor?.view.dom.firstElementChild?.getBoundingClientRect()
+  return rect ? { x: rect.left, y: rect.top } : undefined
+}
+
+/** Figma 98D: 「回复」 comes back once the message has landed (--motion-duration-slide), fading in (--duration-fast). */
+function holdPlaceholder(editor: Editor | null): void {
+  if (!editor || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  requestAnimationFrame(() => {
+    const css = getComputedStyle(document.documentElement)
+    editor.view.dom.firstElementChild?.animate([{ opacity: 0 }, { opacity: 1 }], {
+      pseudoElement: '::before',
+      delay: parseFloat(css.getPropertyValue('--motion-duration-slide')) || 380,
+      duration: parseFloat(css.getPropertyValue('--duration-fast')) || 120,
+      easing: css.getPropertyValue('--ease-out').trim() || 'ease-out',
+      fill: 'backwards',
+    })
+  })
 }
 
 export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig, switchable, switchAgent }: Props) {
@@ -146,7 +169,8 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
 
   const submit = (): void => {
     if (empty) return
-    send(draft, attachments)
+    send(draft, attachments, firstLine(editorRef.current))
+    holdPlaceholder(editorRef.current)
   }
   const pick = (command: GuiCommand | undefined): void => {
     if (!command) return

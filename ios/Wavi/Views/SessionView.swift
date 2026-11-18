@@ -6,7 +6,10 @@ import SwiftUI
 struct SessionView: View {
   let id: String
   @Environment(AppModel.self) private var model
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var changed: Int?
+  /// Figma 98′: the message flying in from the composer, over the conversation and the composer.
+  @State private var flight: Shot?
 
   var body: some View {
     let session = model.session(id)
@@ -80,7 +83,10 @@ struct SessionView: View {
         // A running turn's row ends its turn, above messages sent meanwhile (they wait on the Mac); a message that
         // starts a turn has the row under it.
         if session.status == .running, let run { RunTurn(run: run, agent: session.agent) }
-        ForEach(sending) { item in FeedRow(item: item, session: id).opacity(0.6) }
+        ForEach(sending) { item in
+          SendingRow(item: item, session: id, flying: flight?.item.id == item.id,
+                     land: model.launch?.id == item.id || flight?.item.id == item.id ? { land(item, words: $0) } : nil)
+        }
         if session.status != .running, let run { RunTurn(run: run, agent: session.agent) }
       }
       .padding(.horizontal, Metric.margin)
@@ -120,6 +126,128 @@ struct SessionView: View {
         Composer(session: id, running: session.status == .running)
       }
     }
+    .overlay(alignment: .topLeading) {
+      GeometryReader { proxy in
+        if let flight {
+          let origin = proxy.frame(in: .global).origin
+          FlyingCopy(shot: flight, session: id) { if self.flight?.item.id == flight.item.id { self.flight = nil } }
+            .offset(x: flight.words.minX - 12 - origin.x, y: flight.words.minY - 8 - origin.y)
+        }
+      }
+      .allowsHitTesting(false)
+    }
+  }
+
+  /// Figma 98′ / 98D: where the message just sent landed (its words, global points). The first time, it flies in from
+  /// where it was in the composer or fades in; while it flies, the place it lands moves with the conversation.
+  private func land(_ item: ChatItem, words: CGRect) {
+    if flight?.item.id == item.id {
+      flight?.words = words
+      return
+    }
+    guard let launch = model.launch, launch.id == item.id else { return }
+    model.launched(item.id)
+    let line = UIFont.preferredFont(forTextStyle: .callout).lineHeight + 5
+    if case .fly(let dx, let dy) = Flight.of(from: launch.from, to: words.origin, height: words.height, line: line, reduced: reduceMotion) {
+      flight = Shot(item: item, words: words, dx: dx, dy: dy)
+    }
+  }
+}
+
+/// A message flying in (Figma 98′): what it is, where its words land, and how far off it starts.
+private struct Shot {
+  let item: ChatItem
+  var words: CGRect
+  let dx: CGFloat
+  let dy: CGFloat
+}
+
+/// Figma 98′ / 98D: a copy of the bubble that springs from the composer to where the message lands (--motion-spring:
+/// ζ 0.7, 380 ms), its fill coming in from 60 ms (200 ms ease-out); drawn at the 60% of a message still sending.
+private struct FlyingCopy: View {
+  let shot: Shot
+  let session: String
+  let done: () -> Void
+  @State private var home = false
+  @State private var filled = false
+
+  var body: some View {
+    UserBubble(item: shot.item, session: session, filled: filled)
+      .frame(width: shot.words.width + 24, alignment: .leading)
+      .offset(x: home ? 0 : shot.dx, y: home ? 0 : shot.dy)
+      .opacity(0.6)
+      .accessibilityHidden(true)
+      .onAppear {
+        withAnimation(.spring(duration: 0.38, bounce: 0.3)) { home = true } completion: { done() }
+        withAnimation(.easeOut(duration: 0.2).delay(0.06)) { filled = true }
+      }
+  }
+}
+
+/// A message of yours on its way to the Mac: drawn at once at 60% until the transcript has it, fading in (150 ms). The
+/// one just sent reports where its words land (`land`); while its copy flies (`flying`) only the picture shows, fading
+/// in from 60 ms (Figma 98′).
+private struct SendingRow: View {
+  let item: ChatItem
+  let session: String
+  let flying: Bool
+  let land: ((CGRect) -> Void)?
+  @State private var shown = false
+  @State private var pictured = false
+
+  var body: some View {
+    UserRow(item: item, session: session, bubble: flying ? 0 : 1, picture: pictured ? 1 : 0, onWords: land)
+      .opacity(shown ? 0.6 : 0)
+      .onAppear {
+        withAnimation(.easeOut(duration: 0.15)) { shown = true }
+        withAnimation(.easeOut(duration: 0.2).delay(0.06)) { pictured = true }
+      }
+  }
+}
+
+/// What you sent: your picture alone on its row, the bubble under it on the right (Figma 61B).
+private struct UserRow: View {
+  let item: ChatItem
+  let session: String
+  var bubble: Double = 1
+  var picture: Double = 1
+  var onWords: ((CGRect) -> Void)?
+
+  var body: some View {
+    VStack(alignment: .trailing, spacing: 8) {
+      MyAvatarView().opacity(picture)
+      HStack {
+        Spacer(minLength: 48)
+        UserBubble(item: item, session: session, onWords: onWords).opacity(bubble)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .trailing)
+  }
+}
+
+/// Your words (and how many pictures went with them) in the bubble. `filled` off: the words without the fill (a copy
+/// taking off from the composer, Figma 98′A). `onWords`: where the words are on screen, as they move.
+private struct UserBubble: View {
+  let item: ChatItem
+  let session: String
+  var filled = true
+  var onWords: ((CGRect) -> Void)?
+
+  var body: some View {
+    let words = VStack(alignment: .leading, spacing: 4) {
+      if let text = item.text, !text.isEmpty { UserText(text: text, key: "\(session)/\(item.id)") }
+      if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
+    }
+    Group {
+      if let onWords {
+        words.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onWords($0) }
+      } else {
+        words
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(Color.fillStrong.opacity(filled ? 1 : 0), in: RoundedRectangle(cornerRadius: Metric.radiusGroup))
   }
 }
 
@@ -283,20 +411,7 @@ struct FeedRow: View {
   var body: some View {
     switch item.kind {
     case "user":
-      VStack(alignment: .trailing, spacing: 8) {
-        MyAvatarView()
-        HStack {
-          Spacer(minLength: 48)
-          VStack(alignment: .leading, spacing: 4) {
-            if let text = item.text, !text.isEmpty { UserText(text: text, key: "\(session)/\(item.id)") }
-            if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Color.fillStrong, in: RoundedRectangle(cornerRadius: Metric.radiusGroup))
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .trailing)
+      UserRow(item: item, session: session)
     case "text":
       MarkdownText(text: item.text ?? "")
     case "thinking":

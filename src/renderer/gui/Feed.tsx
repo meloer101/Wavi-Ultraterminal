@@ -41,6 +41,7 @@ import {
   dispatchRows,
   waviMessage,
   feedBlocks,
+  flightOf,
   FOLD_ROWS,
   foldsMessage,
   groupView,
@@ -58,6 +59,8 @@ import {
   userBubble,
   userMarkdown,
   type DispatchRow,
+  type PendingSend,
+  type Point,
   type FeedBlock,
   type NestedItem,
   type RunRow,
@@ -175,6 +178,8 @@ interface FeedProps {
   /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
   workflowAsk?: WorkflowAsk | null
   onStopWorkflow?(run: WorkflowRun): void
+  /** Figma 98: the message just sent; drawn, it flies in from where it was in the composer. */
+  launch?: PendingSend | null
 }
 
 /** What the run cards of the feed draw: by Workflow call, the ask, and 停止. */
@@ -205,7 +210,7 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   return parts.join('|')
 }
 
-export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, run: runRow, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, run: runRow, waitingTool, busy, canEdit, onEdit, onRewind, branches = NO_BRANCHES, workflows, workflowAsk, onStopWorkflow, launch = null }: FeedProps) {
   // Figma 90G′: the version chosen per edited message; back to the current ones when a message is sent.
   const users = useMemo(() => chatItems.filter((item) => item.kind === 'user').length, [chatItems])
   const [chosen, setChosen] = useState<{ users: number; versions: ReadonlyMap<string, number> }>({ users, versions: NO_VIEWING })
@@ -280,12 +285,32 @@ export function Feed({ sessionId, agent, items: chatItems, live: liveBlock, run:
     }
   }, [follow])
 
+  // Figma 98: the message in flight (its id), and how to end the flight at once.
+  const landing = useRef<{ id: string; end: () => void } | null>(null)
+  useEffect(() => () => landing.current?.end(), [])
+
   useLayoutEffect(() => {
-    if (sentMessage(seen.current, blocks)) stuck.current = true
+    const sent = sentMessage(seen.current, blocks)
+    if (sent) stuck.current = true
     seen.current = blocks
     if (!stuck.current) setBehind(true)
+    const scroller = scrollerRef.current
+    const content = contentRef.current
+    const before = scroller?.scrollTop ?? 0
     follow()
-  }, [blocks, live, run, follow])
+    if (!scroller || !content) return
+    if (sent && launch?.from && sent === launch.id && landing.current?.id !== launch.id) {
+      landing.current?.end()
+      const flight = { id: launch.id, end: () => {} }
+      landing.current = flight
+      flight.end = flyIn(scroller, content, launch.id, launch.from, scroller.scrollTop - before, () => {
+        if (landing.current === flight) landing.current = null
+      })
+    } else if (landing.current) {
+      // The agent's copy took the place of the one drawn at once: it stays hidden until the flight lands.
+      lastUserRow(content)?.setAttribute('data-landing', '')
+    }
+  }, [blocks, live, run, follow, launch])
 
   const jumpToLatest = useCallback(() => {
     const scroller = scrollerRef.current
@@ -536,6 +561,96 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
     </div>
   )
 })
+
+const lastUserRow = (content: HTMLElement): HTMLElement | null => {
+  const rows = content.querySelectorAll<HTMLElement>(`.${styles.userRow}`)
+  return rows[rows.length - 1] ?? null
+}
+
+/**
+ * Figma 98 / 98D: the message `id` just sent, laid out where it lands, comes in from `from` (its first line in the
+ * composer). A copy of its bubble flies there on --motion-spring while the bubble itself stays hidden; the copy's fill
+ * and the user's picture fade in from 60 ms; the feed above, scrolled `shift` to make room, rides the same spring
+ * instead of jumping. A long message, one with only pictures, or reduced motion fades in where it lands instead.
+ * Returns what ends the flight at once; `done` runs when it ends.
+ */
+function flyIn(scroller: HTMLElement, content: HTMLElement, id: string, from: Point, shift: number, done: () => void): () => void {
+  const row = content.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`)
+  const host = scroller.closest<HTMLElement>('[data-gui-chat]')
+  if (!row || !host) {
+    done()
+    return () => {}
+  }
+  const css = getComputedStyle(document.documentElement)
+  const slide = parseFloat(css.getPropertyValue('--motion-duration-slide')) || 380
+  const spring = css.getPropertyValue('--motion-spring').trim() || 'ease-out'
+  const easeOut = css.getPropertyValue('--ease-out').trim() || 'ease-out'
+  const bubble = row.querySelector<HTMLElement>(`.${styles.bubble}`)
+  const words = bubble?.querySelector<HTMLElement>(`.${styles.bubbleText}`)
+  const first = (words?.firstElementChild ?? words)?.getBoundingClientRect()
+  const flight = flightOf(
+    from,
+    { x: first?.left ?? 0, y: first?.top ?? 0 },
+    words?.offsetHeight ?? 0,
+    words ? parseFloat(getComputedStyle(words).lineHeight) : 0,
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+  if (flight.kind === 'fade' || !bubble) {
+    row.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: easeOut })
+    done()
+    return () => {}
+  }
+  const at = bubble.getBoundingClientRect()
+  const box = host.getBoundingClientRect()
+  const copy = bubble.cloneNode(true) as HTMLElement
+  copy.className = `${bubble.className} ${styles.flyer}`
+  for (const el of copy.querySelectorAll('[data-testid]')) el.removeAttribute('data-testid')
+  copy.setAttribute('data-testid', 'gui-message-flight')
+  copy.setAttribute('aria-hidden', 'true')
+  copy.inert = true
+  let top = at.top - box.top
+  let dy = flight.dy
+  let scrolled = scroller.scrollTop
+  copy.style.left = `${at.left - box.left}px`
+  copy.style.top = `${top}px`
+  copy.style.width = `${at.width}px`
+  host.append(copy)
+  row.setAttribute('data-landing', '')
+  const fadeIn = { duration: 200, delay: 60, easing: easeOut, fill: 'backwards' } as const
+  const path = (): Keyframe[] => [{ transform: `translate(${flight.dx}px, ${dy}px)` }, { transform: 'none' }]
+  const slideIn = copy.animate(path(), { duration: slide, easing: spring })
+  const animations = [
+    slideIn,
+    // To the bubble's own fill, so it follows a theme changed on the way.
+    copy.animate([{ backgroundColor: 'transparent', offset: 0 }], fadeIn),
+    ...[...row.querySelectorAll<HTMLElement>(`.${styles.userAvatar}, .${styles.sentPictures}`)].map((el) => el.animate([{ opacity: 0 }, { opacity: 1 }], fadeIn)),
+    ...(shift ? [content.animate([{ transform: `translateY(${shift}px)` }, { transform: 'none' }], { duration: slide, easing: spring })] : []),
+  ]
+  // The feed may scroll again while it flies (the run row, the reply): the landing place moves with it, where it left
+  // from stays.
+  const follow = (): void => {
+    const delta = scroller.scrollTop - scrolled
+    if (!delta) return
+    scrolled = scroller.scrollTop
+    top -= delta
+    dy += delta
+    copy.style.top = `${top}px`
+    ;(slideIn.effect as KeyframeEffect | null)?.setKeyframes(path())
+  }
+  scroller.addEventListener('scroll', follow, { passive: true })
+  let ended = false
+  const end = (): void => {
+    if (ended) return
+    ended = true
+    scroller.removeEventListener('scroll', follow)
+    for (const animation of animations) animation.cancel()
+    copy.remove()
+    for (const el of content.querySelectorAll('[data-landing]')) el.removeAttribute('data-landing')
+    done()
+  }
+  void slideIn.finished.then(end, end)
+  return end
+}
 
 const FOLD_STYLE = { '--fold-rows': FOLD_ROWS } as CSSProperties
 

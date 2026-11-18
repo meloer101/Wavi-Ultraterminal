@@ -6,6 +6,7 @@ import {
   cardKey,
   composerKey,
   feedBlocks,
+  flightOf,
   foldsMessage,
   permissionBody,
   permissionButtons,
@@ -727,6 +728,22 @@ describe('runClock (Figma 91D)', () => {
     expect(runClock(65_000)).toBe('1m 05s')
     expect(runClock(3_725_000)).toBe('1h 02m')
     expect(runClock(-5)).toBe('0.0s')
+  })
+})
+
+describe('flightOf (Figma 98D)', () => {
+  const line = 22
+  const from = { x: 268, y: 768 }
+  const to = { x: 610, y: 524 }
+  it('flies a message of up to 6 lines from the composer: the offset from where it lands back to where it left', () => {
+    expect(flightOf(from, to, line, line, false)).toEqual({ kind: 'fly', dx: -342, dy: 244 })
+    expect(flightOf(from, to, 6 * line, line, false)).toEqual({ kind: 'fly', dx: -342, dy: 244 })
+  })
+  it('fades it in where it lands when longer, without words, not laid out, or motion is reduced', () => {
+    expect(flightOf(from, to, 7 * line, line, false)).toEqual({ kind: 'fade' })
+    expect(flightOf(from, to, 0, line, false)).toEqual({ kind: 'fade' })
+    expect(flightOf(from, to, line, 0, false)).toEqual({ kind: 'fade' })
+    expect(flightOf(from, to, line, line, true)).toEqual({ kind: 'fade' })
   })
 })
 
