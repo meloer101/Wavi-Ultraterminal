@@ -11,6 +11,7 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
+import { CLAUDE_MODE_OF, type GuiPermission } from './gui-chat'
 import { defineMessages, LANGS, pick, type Lang } from './i18n'
 import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
@@ -558,6 +559,9 @@ export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'Multi
 /** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.198). */
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
+/** The 权限 a leader launches at (PRD F21 v1.209), and so what its children start at until it reports another. */
+export const LEADER_PERMISSION = 'auto' satisfies GuiPermission
+
 /**
  * The launch arguments of a leader, after its binary (PRD F21 v1.198 / v1.209): it runs at 自动, so it asks the user
  * nothing its agent judges safe, and without a way to edit files itself. Claude: `auto`, named so it wins over a
@@ -569,7 +573,7 @@ export const LEADER_CODEX_PROFILE = 'wavi-leader'
  * cannot lead.
  */
 export function leaderLaunchArgs(kind: AgentKind, waviDir: string | null): string[] {
-  if (kind === 'claude') return ['--permission-mode', 'auto', '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
+  if (kind === 'claude') return ['--permission-mode', CLAUDE_MODE_OF[LEADER_PERMISSION], '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
   if (kind !== 'codex') return []
   const filesystem = waviDir ? `, filesystem={${tomlBasic(waviDir)}="write"}` : ''
   return [
@@ -577,6 +581,7 @@ export function leaderLaunchArgs(kind: AgentKind, waviDir: string | null): strin
     `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`,
     '-c',
     `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`,
+    // Codex's 自动 (LEADER_PERMISSION), as main/gui/codex-app-server.ts CODEX_APPROVAL has it.
     '-c',
     'approval_policy="on-request"',
     '-c',

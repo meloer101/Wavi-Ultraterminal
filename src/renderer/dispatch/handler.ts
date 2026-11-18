@@ -14,6 +14,7 @@ import {
   childBrief,
   childUi,
   DISPATCH_LIMITS,
+  LEADER_PERMISSION,
   messagePage,
   noticeText,
   pendingShown,
@@ -450,7 +451,7 @@ function launch(caller: Place, plan: ChildPlan, childId: SessionId, base: string
     ...(guiPermission ? { guiPermission } : {}),
     ...(guiPlan ? { guiPlan } : {}),
     ...(reported !== undefined ? { reported } : {}),
-    leader: isLeaderSession(caller.session.id)
+    ...(isLeaderSession(caller.session.id) ? { leaderLevel: LEADER_PERMISSION } : {})
   })
   const permission = childPermission(level, plan.item.agent, ui)
   useWorkspace.getState().patchSession(id, {

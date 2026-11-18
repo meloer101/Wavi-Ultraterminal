@@ -266,18 +266,20 @@ describe('other agent CLIs (agents.ts rows)', () => {
 
 describe('a child starts at its dispatcher\'s 权限 (PRD F21 v1.209)', () => {
   it('reads the dispatcher: a GUI session its picker, Claude in a terminal its reported mode, a leader 自动 until it reports', () => {
-    expect(dispatcherPermission({ kind: 'claude', ui: 'gui', guiPermission: 'accept-edits', leader: false })).toBe('accept-edits')
-    expect(dispatcherPermission({ kind: 'codex', ui: 'gui', guiPermission: 'full-access', guiPlan: true, leader: false })).toBeUndefined()
-    expect(dispatcherPermission({ kind: 'claude', ui: 'gui', leader: false })).toBeUndefined()
-    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'bypassPermissions', leader: false })).toBe('full-access')
-    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'default', leader: false })).toBe('ask')
-    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'acceptEdits', leader: true })).toBe('accept-edits')
-    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'plan', leader: true })).toBeUndefined()
-    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', leader: true })).toBe('auto')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'gui', guiPermission: 'accept-edits' })).toBe('accept-edits')
+    expect(dispatcherPermission({ kind: 'codex', ui: 'gui', guiPermission: 'full-access', guiPlan: true })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'gui' })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'bypassPermissions' })).toBe('full-access')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'default' })).toBe('ask')
+    // Modes without a level of their own (dontAsk, a newer name) are 询问, as in the GUI.
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'dontAsk' })).toBe('ask')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'acceptEdits', leaderLevel: 'auto' })).toBe('accept-edits')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'plan', leaderLevel: 'auto' })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', leaderLevel: 'auto' })).toBe('auto')
     // Codex in a terminal always reports "default" (measured), so only a leader's launch says what it runs at.
-    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default', leader: true })).toBe('auto')
-    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default', leader: false })).toBeUndefined()
-    expect(dispatcherPermission({ kind: 'gemini', ui: 'cli', leader: false })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default', leaderLevel: 'auto' })).toBe('auto')
+    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default' })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'gemini', ui: 'cli' })).toBeUndefined()
   })
 
   it('gives the child that level when its agent has it there, 完全访问 for a 自动 it lacks, else its own default', () => {

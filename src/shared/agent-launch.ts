@@ -1,7 +1,7 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
 import { AGENT_SPECS, hasOwnAdapter, type ClaudeOrCodex, type CliAgent } from './agents'
-import { GUI_PERMISSIONS, type CliPermission, type GuiPermission } from './gui-chat'
+import { CLAUDE_MODE_OF, claudeLevel, GUI_PERMISSIONS, type CliPermission, type GuiPermission } from './gui-chat'
 import { guiPermissionLevels } from './gui-agents'
 import type { AgentKind, SessionUi } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
@@ -37,7 +37,7 @@ const PI_GATE = '{waviPiGate}'
  * Antigravity, CodeBuddy, Amp. Droid's levels are `droid exec` flags and Auggie's need its tool names: neither yet.
  */
 export const CLI_PERMISSIONS: Readonly<Record<CliAgent, Partial<Record<GuiPermission, CliPermissionLaunch>>>> = {
-  claude: { ask: {}, ...mode('--permission-mode', { 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }) },
+  claude: { ask: {}, ...mode('--permission-mode', { 'accept-edits': CLAUDE_MODE_OF['accept-edits'], auto: CLAUDE_MODE_OF.auto, 'full-access': CLAUDE_MODE_OF['full-access'] }) },
   codex: {
     ask: { args: ['-s', 'read-only', '-a', 'on-request'] },
     'accept-edits': { args: ['-s', 'workspace-write', '-a', 'on-request'] },
@@ -86,25 +86,16 @@ export function cliPlainPermission(kind: CliAgent): GuiPermission | undefined {
   })
 }
 
-/** Claude's `permission_mode` (its hooks, §6.16) as a level; none for plan, dontAsk and anything else. */
-const CLAUDE_MODE_LEVEL: Readonly<Record<string, GuiPermission>> = {
-  default: 'ask',
-  manual: 'ask',
-  acceptEdits: 'accept-edits',
-  auto: 'auto',
-  bypassPermissions: 'full-access'
-}
-
 /**
- * The 权限 a dispatching session runs at now, as far as Wavi knows it (PRD F21 v1.209): a GUI session's picker (none
- * while planning); a terminal Claude's last reported `permission_mode`; a leader's 自动 until it reports (Codex never
- * reports its own, measured). None otherwise: its children start at their agent's default.
+ * The 权限 a dispatching session runs at now, as far as Wavi knows it (PRD F21 v1.209): a GUI session's picker; a
+ * terminal Claude's last reported `permission_mode` (its hooks, §6.16); else a leader's launch level (`leaderLevel`,
+ * dispatch.ts `LEADER_PERMISSION`), which Codex never reports changing (measured). None while planning or otherwise:
+ * its children start at their agent's default.
  */
-export function dispatcherPermission(d: { kind: AgentKind; ui: SessionUi; guiPermission?: GuiPermission; guiPlan?: boolean; reported?: string; leader: boolean }): GuiPermission | undefined {
+export function dispatcherPermission(d: { kind: AgentKind; ui: SessionUi; guiPermission?: GuiPermission; guiPlan?: boolean; reported?: string; leaderLevel?: GuiPermission }): GuiPermission | undefined {
   if (d.ui === 'gui') return d.guiPlan ? undefined : d.guiPermission
-  const reported = d.kind === 'claude' && d.reported !== undefined ? d.reported : undefined
-  if (reported !== undefined) return Object.hasOwn(CLAUDE_MODE_LEVEL, reported) ? CLAUDE_MODE_LEVEL[reported] : undefined
-  return d.leader ? 'auto' : undefined
+  if (d.kind === 'claude' && d.reported !== undefined) return d.reported === 'plan' ? undefined : claudeLevel(d.reported, undefined)
+  return d.leaderLevel
 }
 
 /**
