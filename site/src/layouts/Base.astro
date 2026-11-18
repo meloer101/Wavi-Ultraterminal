@@ -5,17 +5,29 @@ import cormorantItalic from '../assets/fonts/cormorant-garamond-italic-subset.wo
 import cormorant from '../assets/fonts/cormorant-garamond-subset.woff2?url'
 import songti from '../assets/fonts/noto-serif-sc-subset.woff2?url'
 import { copy, otherPath, type Lang } from '../i18n'
-import { withBase } from '../site'
+import { absolute, withBase } from '../site'
 
 interface Props {
   lang: Lang
 }
 const { lang } = Astro.props
 const t = copy[lang]
-const self = withBase(lang === 'en' ? '' : 'zh/')
-const other = withBase(otherPath(lang))
-// Link previews (X, Slack, iMessage) need an absolute URL; without a configured site (local dev) it stays a path.
-const ogImage = Astro.site ? new URL(withBase('og.png'), Astro.site).href : withBase('og.png')
+// Canonical, hreflang and link previews (X, Slack, iMessage) need absolute URLs.
+const self = absolute(lang === 'en' ? '' : 'zh/', Astro.site)
+const other = absolute(otherPath(lang), Astro.site)
+const english = absolute('', Astro.site)
+const ogImage = absolute('og.png', Astro.site)
+const app = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Wavi',
+  description: t.meta.description,
+  url: self,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'macOS',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  image: ogImage
+})
 ---
 
 <!doctype html>
@@ -36,8 +48,11 @@ const ogImage = Astro.site ? new URL(withBase('og.png'), Astro.site).href : with
     <meta property="og:image:alt" content={t.meta.title} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={ogImage} />
+    <link rel="canonical" href={self} />
     <link rel="alternate" hreflang={lang === 'en' ? 'en' : 'zh-CN'} href={self} />
     <link rel="alternate" hreflang={lang === 'en' ? 'zh-CN' : 'en'} href={other} />
+    <link rel="alternate" hreflang="x-default" href={english} />
+    <script type="application/ld+json" is:inline set:html={app} />
     <link rel="icon" type="image/png" sizes="64x64" href={withBase('icon-64.png')} />
     <link rel="apple-touch-icon" href={withBase('icon-180.png')} />
     <link rel="preload" href={cormorant} as="font" type="font/woff2" crossorigin />

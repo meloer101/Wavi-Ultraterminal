@@ -122,6 +122,7 @@
 - [x] Apple Developer 账号 → Developer ID 签名和公证，下载后不再需要 `xattr -cr`（2026-10-20 流水线接通，v0.3.1-rc.1 试跑、v0.4.0 正式发布；自动更新仍留在 D5）
 - [ ] Homebrew：自己的 tap，`brew install --cask` 一行装好。放在公证之后做，因为未公证的 app 经 brew 装上同样会被 Gatekeeper 拦
 - [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）；2026-10-21 起 `site/` 是 Astro 项目，Pages 工作流先构建再发布，同一份站点也部署到 Vercel（项目根目录 `site/`，见 `site/vercel.json`）
+- [x] 官网域名 https://wavi.autos （2026-11-18，在 Vercel 注册，项目 `wavi`）：`www.wavi.autos` 和 `wavi-pi.vercel.app` 301 到它；页头加 canonical、绝对地址的 hreflang 和 `x-default`、`SoftwareApplication` JSON-LD，`/robots.txt` 和 `/sitemap.xml` 由 `site/src/pages/` 按构建的 `site` 生成；README 链接已换。上面 GitHub Pages 的地址 2026-11-18 返回 404，`.github/workflows/pages.yml` 还在，停用还是修复待作者决定
 - [x] README 按 v0.3.0 重写，中文在前，加“Wavi 不会做的事”四条（2026-10-20）
 - [x] README 改为英文在前（`README.md`），中文另成 `README.zh-CN.md`（2026-10-24，跟随 PRD v1.62 主要市场改为海外）：横幅、徽章、深浅两套真实应用截图（`<picture>`）、官网的比较图和流程图，`docs/assets/readme/`；截图用 `npm run readme:shots` 重拍（演示仓库 + e2e 夹具 + 一个真实 Claude Code 会话，`scripts/readme-shots/`）。同日在 GitHub 上补了 20 个 topic、改了简介、上传了 social preview 图
 - [x] 发布视频三部（2026-10-22，HyperFrames 项目；源工程和成片 2026-11-18 移出仓库，由作者在仓库外保管）：A「等你的那一个」主发布片 29 s、B「十个问号」X 预告 22.5 s、C「一个任务，三份答案」功能片 31.5 s；都是 1.5 倍速、英文、同一首 CC BY 配乐（smilingcynic「do robots have a god?」，发布时要署名），关键动作卡在 120 BPM 的拍点上，响度 −15 LUFS。还没做：作者试听确认配乐、中文版（换变量和真实中文界面文案）、发布
