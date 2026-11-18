@@ -1,5 +1,5 @@
 import { usageVendor } from '@shared/agents'
-import { AlertCircle, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
+import { AlertCircle, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, Workflow, X, type IconComponent } from '../ui/icons'
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react'
 import { emptyQueue, wakesThisHour } from '@shared/dispatch'
 import { useDispatch } from '../dispatch/store'
@@ -84,14 +84,12 @@ const M = defineMessages({
   }
 })
 
-/** Right panel switcher (Figma 13 "Pane switcher" 149:6398 · 76A): one icon per view, the open one in Active. */
+/** Right panel switcher (Figma 13 "Pane switcher" 149:6398): one icon per view, the open one in Active. 终端 and iOS 模拟器 are in the … menu instead. */
 const PANE_ICONS: { view: PanelView; icon: IconComponent }[] = [
   { view: 'browser', icon: Globe },
   { view: 'git', icon: GitBranch },
   { view: 'worktree', icon: GitFork },
-  { view: 'files', icon: Folder },
-  { view: 'terminal', icon: SquareTerminal },
-  { view: 'simulator', icon: Smartphone }
+  { view: 'files', icon: Folder }
 ]
 
 /** A pane of the main area's split (PRD F20 · Figma 21 PaneHeader): one header per pane. */
@@ -163,6 +161,8 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
   const worktreeId = active?.worktree?.id
   const runSession = useWorkspace((s) => (worktreeId ? runSessionOf(s.sessions, worktreeId) : undefined))
   const running = useRunRunning(runSession?.id)
+  // The right panel's switcher, and the 终端 / iOS 模拟器 entries of the … menu: the focused pane of the main window.
+  const panelsInMenu = showTools && focused && active !== null && windowKey === MAIN_WINDOW
   const agentUp = active !== null && active.session.kind !== 'shell' && active.session.phase !== 'not-started' && active.session.phase !== 'exited'
   // The status is in the sidebar row already (F17 dropped the copy here); only a hooks problem is worth repeating.
 
@@ -279,7 +279,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
           </IconButton>
         )}
         {/* The right panel is the main window's (F20 · 多窗口: not in other windows yet). */}
-        {showTools && focused && active && windowKey === MAIN_WINDOW && (
+        {panelsInMenu && (
           <span className={styles.panes} role="group" aria-label={m.rightPanel}>
             {PANE_ICONS.map(({ view, icon: Icon }) => (
               <IconButton
@@ -298,9 +298,10 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
           <IconButton
             label={m.sessionMenu}
             aria-haspopup="menu"
+            active={panelsInMenu && (rightPanel === 'terminal' || rightPanel === 'simulator')}
             onClick={(e) => {
               const id = active.session.id
-              void openSessionHeaderMenu(id, e.currentTarget).then((choice) => {
+              void openSessionHeaderMenu(id, e.currentTarget, panelsInMenu).then((choice) => {
                 if (choice === 'rename') setRenaming(id)
               })
             }}

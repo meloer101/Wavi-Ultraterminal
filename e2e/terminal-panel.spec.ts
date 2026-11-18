@@ -31,6 +31,11 @@ test.describe('F17 right panel · 终端', () => {
   const panel = () => page.locator('[data-region="panel"]')
   const body = () => panel().getByTestId('panel-terminal')
   const host = (id: string) => body().locator(`[data-terminal-id="${id}"]`)
+  // 终端 is the first entry of the header's … menu (PRD F17), not an icon of the right panel's row.
+  const openTerminalFromMenu = async (): Promise<void> => {
+    await page.locator('header').getByRole('button', { name: '会话菜单' }).click()
+    await page.getByRole('menuitemradio', { name: '终端' }).click()
+  }
   const tabs = () => panel().getByRole('tablist', { name: '终端' }).getByRole('tab')
   const sidebarRows = () => page.locator('[data-region="sidebar"] [data-session-id]')
   const write = (id: string, data: string) => page.evaluate(([i, d]) => (globalThis as unknown as Globals).tr.pty.write(i!, d!), [id, data])
@@ -121,8 +126,8 @@ test.describe('F17 right panel · 终端', () => {
     await app?.close().catch(() => {})
   })
 
-  test("the header's 终端 icon opens a shell in the session's worktree, with no tab row for one shell", async () => {
-    await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '终端' }).click()
+  test("the header's … menu opens a shell in the session's worktree, with no tab row for one shell", async () => {
+    await openTerminalFromMenu()
     await expect(panel().getByRole('heading', { name: '终端' })).toBeVisible()
     await expect(panel()).toContainText('session-cookie')
     await expect(host('panel-w1-1').locator('.xterm')).toBeVisible({ timeout: 20_000 })
@@ -188,7 +193,7 @@ test.describe('F17 right panel · 终端', () => {
     await expect(page.locator('[data-region="terminal"] [data-session-id="s-a2"] .xterm')).toBeVisible({ timeout: 20_000 })
     // The open view is saved with the workspace; open it again if that save had not happened yet.
     await page.waitForTimeout(500)
-    if ((await panel().count()) === 0) await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '终端' }).click()
+    if ((await panel().count()) === 0) await openTerminalFromMenu()
     await expect(panel().getByRole('heading', { name: '终端' })).toBeVisible()
     await expect(host('panel-w1-1').locator('.xterm')).toBeVisible({ timeout: 20_000 })
     await expect(panel().getByRole('tablist')).toHaveCount(0)

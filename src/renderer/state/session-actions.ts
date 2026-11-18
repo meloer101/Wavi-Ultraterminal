@@ -16,12 +16,13 @@ import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
 import { removeWorktreeWithSessions } from '../panels/worktree/actions'
 import { openSettings } from '../settings/SettingsDialog'
+import { Smartphone, SquareTerminal } from '../ui/icons'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { everyWindow, windowOf } from '../app-shell/windows-runtime'
 import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
-import { leaderOf, newProjectAgent, projectOfSession } from './workspace-model'
+import { PANEL_VIEW_LABEL, leaderOf, newProjectAgent, projectOfSession } from './workspace-model'
 
 const M = defineMessages({
   zh: {
@@ -254,15 +255,24 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
 
 /**
  * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 同任务多解… · 移到新窗口 · 关闭会话 (Figma 26A).
+ * With `panels` (the focused pane in the main window) the right panel's 终端 and iOS 模拟器 views come first, the open one
+ * ticked: the header's icon row keeps only browser, Git, Worktree and files (PRD F17).
  * Renaming is inline in the header, so that choice is handed back to it.
  */
-export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<'rename' | null> {
+export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAnchor, panels = false): Promise<'rename' | null> {
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
   if (!session) return null
   const path = state.worktrees.find((w) => w.id === session.worktreeId)?.path
   const m = pick(M)
+  const open = useWorkspace.getState().rightPanel
   const entries: MenuEntry[] = [
+    ...(panels
+      ? ([
+          { view: 'terminal', icon: SquareTerminal },
+          { view: 'simulator', icon: Smartphone }
+        ] as const).map(({ view, icon }): MenuEntry => ({ type: 'item', id: `panel:${view}`, label: PANEL_VIEW_LABEL[view], icon, checked: open === view }))
+      : []),
     { type: 'item', id: 'rename', label: m.rename },
     { type: 'item', id: 'reveal', label: m.revealInFinder, enabled: path !== undefined },
     { type: 'item', id: 'copy-path', label: m.copyPath, enabled: path !== undefined },
@@ -272,6 +282,7 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
   ]
   const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'
+  if (choice === 'panel:terminal' || choice === 'panel:simulator') useWorkspace.getState().togglePanelView(choice === 'panel:terminal' ? 'terminal' : 'simulator')
   if (choice === 'same-task') openSameTask(sessionId)
   if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)

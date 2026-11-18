@@ -98,9 +98,12 @@ test.describe('F15 archive', () => {
 
   test('归档 stops the session, runs the archive script, keeps the work on a private ref and folds the worktree away', async () => {
     // A shell in the right panel's 终端 view, left running with the panel closed: archiving ends it too.
-    const panelIcon = () => page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '终端' })
+    const openTerminal = async (): Promise<void> => {
+      await page.locator('header').getByRole('button', { name: '会话菜单' }).click()
+      await page.getByRole('menuitemradio', { name: '终端' }).click()
+    }
     const pidFile = join(repo.root, 'panel-shell.pid')
-    await panelIcon().click()
+    await openTerminal()
     await expect
       .poll(
         async () => {
@@ -123,7 +126,7 @@ test.describe('F15 archive', () => {
       }
     }
     expect(alive()).toBe(true)
-    await panelIcon().click()
+    await openTerminal()
 
     await sidebar().locator('[data-session-id="s-nav"]').click({ button: 'right' })
     await page.getByRole('menu').getByRole('menuitem', { name: '归档 worktree…' }).click()
