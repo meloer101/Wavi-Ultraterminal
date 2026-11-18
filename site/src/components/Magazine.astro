@@ -8,7 +8,7 @@ import { Image } from 'astro:assets'
 import mirror from '../assets/magazine/still-mirror.webp'
 import windows from '../assets/magazine/still-windows.webp'
 import { copy, otherPath, roman, type Lang } from '../i18n'
-import { gh, withBase } from '../site'
+import { dmg, gh, withBase } from '../site'
 import Ctas from './Ctas.astro'
 import Items from './Items.astro'
 import Plate from './Plate.astro'
@@ -31,7 +31,7 @@ const plate = (n: number) => ({ src: pic(`plate-${two(n)}`), plate: t.plates[n -
 /** Where each chapter starts, and where each plate is printed: page number and the spread it sits on. */
 const chapterAt: [string, string][] = [['04', 'board'], ['08', 'hand'], ['14', 'threads'], ['16', 'ship'], ['20', 'wardrobe']]
 const plateAt: [string, string][] = [['01', 'cover'], ['06', 'plate-02'], ['09', 'hand'], ['10', 'plate-04'], ['12', 'teams'], ['12', 'teams'], ['14', 'threads'], ['17', 'ship'], ['18', 'chain'], ['21', 'wardrobe']]
-const download = gh('/releases/latest')
+const download = dmg('arm64')
 ---
 
 <main id="main" class="book" data-book>
@@ -44,7 +44,7 @@ const download = gh('/releases/latest')
         <a class="bar-section" href="#threads">{t.bar.threads}</a>
         <a class="bar-section" href="#ship">{t.bar.ship}</a>
         <a class="bar-section" href="#wardrobe">{t.bar.wardrobe}</a>
-        <a href={download} rel="noopener">{t.bar.download}</a>
+        <a href={download} data-intel={dmg('x64')} rel="noopener">{t.bar.download}</a>
         <a href={withBase(otherPath(lang))} hreflang={lang === 'en' ? 'zh-CN' : 'en'} aria-label={t.bar.otherLabel}>{t.bar.other}</a>
       </nav>
     </header>

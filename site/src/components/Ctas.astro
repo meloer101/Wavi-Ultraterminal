@@ -1,6 +1,6 @@
 ---
 /* "Download for macOS" and "GitHub", each with its mark (Figma W7, paths as exported). Used on the cover and the back cover. */
-import { gh } from '../site'
+import { dmg, gh } from '../site'
 
 interface Props {
   download: string
@@ -13,6 +13,20 @@ const octocat = 'M7 0.173279C3.1325 0.173279 0 3.30753 0 7.17328C0 10.2667 2.005
 ---
 
 <p class:list={['ctas', extra]}>
-  <a class="cta" href={gh('/releases/latest')} rel="noopener"><svg viewBox="0 0 14 14" aria-hidden="true"><path d={apple}></path></svg>{download}</a>
+  <a class="cta" href={dmg('arm64')} data-intel={dmg('x64')} rel="noopener"><svg viewBox="0 0 14 14" aria-hidden="true"><path d={apple}></path></svg>{download}</a>
   <a class="cta" href={gh()} rel="noopener"><svg viewBox="0 0 14 14" aria-hidden="true"><path d={octocat}></path></svg>{github}</a>
 </p>
+
+<script>
+  // Every download link starts the Apple silicon dmg. Chromium browsers report the chip through client hints, so an
+  // Intel Mac there gets the x64 dmg instead; Safari and Firefox do not report it and keep the Apple silicon one.
+  type Hints = { getHighEntropyValues(hints: string[]): Promise<{ architecture?: string }> }
+  const hints = (navigator as Navigator & { userAgentData?: Hints }).userAgentData
+  hints
+    ?.getHighEntropyValues(['architecture'])
+    .then(({ architecture }) => {
+      if (architecture !== 'x86') return
+      for (const link of document.querySelectorAll<HTMLAnchorElement>('a[data-intel]')) link.href = link.dataset.intel ?? link.href
+    })
+    .catch(() => undefined) // no answer: the Apple silicon link stays, which is the right one for most Macs
+</script>
