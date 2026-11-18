@@ -11,6 +11,7 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
+import { CLAUDE_MODE_OF, type GuiPermission } from './gui-chat'
 import { defineMessages, LANGS, pick, type Lang } from './i18n'
 import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
@@ -558,19 +559,34 @@ export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'Multi
 /** The Codex permission profile a leader runs with: read-only, its own WAVI_DIR writable (§6.14 v1.198). */
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
+/** The 权限 a leader launches at (PRD F21 v1.209), and so what its children start at until it reports another. */
+export const LEADER_PERMISSION = 'auto' satisfies GuiPermission
+
 /**
- * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.198). Claude: the default
- * permission mode, named so a `defaultMode` in the user's settings.json (bypassPermissions, acceptEdits) cannot let a
- * write from the shell through without asking (§6.14 v1.198 ② measured with it), and its editing tools off; it wins
- * over any other `--permission-mode` of the launch (`agentArgv`). Codex: a profile that extends `:read-only` and lets
- * it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout. Empty for an agent that
+ * The launch arguments of a leader, after its binary (PRD F21 v1.198 / v1.209): it runs at 自动, so it asks the user
+ * nothing its agent judges safe, and without a way to edit files itself. Claude: `auto`, named so it wins over a
+ * `defaultMode` in the user's settings.json and over any other `--permission-mode` of the launch (`agentArgv`), and its
+ * editing tools off; a write from the shell is the auto classifier's to judge (the author took that, 2026-11-18).
+ * Codex: a profile that extends `:read-only` and lets it write only `waviDir` (where `wavi` puts its requests; without
+ * one, read-only throughout), with its requests to go beyond it reviewed by Codex's own reviewer — set as config, not
+ * `--approve-for-me`, which also switches the sandbox to workspace-write (codex 0.167 --help). Empty for an agent that
  * cannot lead.
  */
 export function leaderLaunchArgs(kind: AgentKind, waviDir: string | null): string[] {
-  if (kind === 'claude') return ['--permission-mode', 'default', '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
+  if (kind === 'claude') return ['--permission-mode', CLAUDE_MODE_OF[LEADER_PERMISSION], '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
   if (kind !== 'codex') return []
   const filesystem = waviDir ? `, filesystem={${tomlBasic(waviDir)}="write"}` : ''
-  return ['-c', `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`, '-c', `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`]
+  return [
+    '-c',
+    `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`,
+    '-c',
+    `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`,
+    // Codex's 自动 (LEADER_PERMISSION), as main/gui/codex-app-server.ts CODEX_APPROVAL has it.
+    '-c',
+    'approval_policy="on-request"',
+    '-c',
+    'approvals_reviewer="auto_review"'
+  ]
 }
 
 /** How each CLI takes an extra system prompt for one launch, as arguments after its binary; null when it has none. */

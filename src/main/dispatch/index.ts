@@ -125,8 +125,9 @@ export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent,
 }
 
 /**
- * The arguments that keep a leader session from changing files (PRD F21 v1.198 · 不改代码), with or without dispatch:
- * a leader never runs unrestricted. Its WAVI_DIR stays writable for `wavi` when dispatch is on; a Codex leader whose
+ * A leader session's own launch (PRD F21 v1.198 · 不改代码, v1.209), with or without dispatch: 自动, without its editing
+ * tools (Claude) or in a read-only profile (Codex); a write from its shell is Claude's auto classifier's or Codex's
+ * reviewer's to judge (measured for Claude: let through, §6.14 v1.209). Its WAVI_DIR stays writable for `wavi` when dispatch is on; a Codex leader whose
  * config.toml sets `sandbox_mode` is read-only throughout (`codexLeaderSandboxArgs`). Empty for any other launch.
  */
 export async function leaderArgsFor(agent: DispatchAgent, leader: boolean, dispatch: DispatchLaunch | null): Promise<string[]> {

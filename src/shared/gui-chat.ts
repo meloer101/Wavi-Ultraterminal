@@ -88,6 +88,19 @@ export interface GuiConfigOption {
  */
 export const GUI_PERMISSIONS = ['ask', 'accept-edits', 'auto', 'full-access'] as const
 export type GuiPermission = (typeof GUI_PERMISSIONS)[number]
+
+/**
+ * Figma 56: Wavi's permission levels as Claude's permission modes, for its GUI, its terminal launch flag and what its
+ * hooks report. 完全访问 is `bypassPermissions` (PRD v1.205): a GUI Claude is launched with
+ * `--allow-dangerously-skip-permissions` (main/gui/launch.ts) so it can be switched to mid-session.
+ */
+export const CLAUDE_MODE_OF: Readonly<Record<GuiPermission, string>> = { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }
+
+/** The level a Claude permission mode stands for; `plan` stands for the level it returns to (`before`), any other mode 询问. */
+export function claudeLevel(mode: string | undefined, before: GuiPermission | undefined): GuiPermission {
+  if (mode === 'plan') return before ?? 'ask'
+  return mode === 'acceptEdits' ? 'accept-edits' : mode === 'auto' ? 'auto' : mode === 'bypassPermissions' ? 'full-access' : 'ask'
+}
 export const isGuiPermission = (value: unknown): value is GuiPermission => (GUI_PERMISSIONS as readonly unknown[]).includes(value)
 /** A 权限 a terminal session can be launched with (PRD F24 v1.205): the CLI's own flag or variable (agent-launch.ts). */
 export type CliPermission = GuiPermission
