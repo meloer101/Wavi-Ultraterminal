@@ -2,5 +2,5 @@
 export const REPO = 'meloer101/Wavi-Ultraterminal'
 export const gh = (path = ''): string => `https://github.com/${REPO}${path}`
 
-/** A path under the site's base (Vercel serves at "/", GitHub Pages under "/terminal-reborn/"). */
+/** A path under the site's base (Vercel serves at "/", GitHub Pages under "/Wavi-Ultraterminal/"). */
 export const withBase = (path: string): string => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
