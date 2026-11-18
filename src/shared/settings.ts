@@ -117,8 +117,6 @@ export interface AppearanceSettings {
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
 export interface PortSettings {
   base: number
-  /** 设置 · Worktree · 端口 (PRD F17): a port that starts listening in the session on screen opens in the right panel's browser. */
-  autoOpen: boolean
 }
 
 /** 设置 · 自动化 · 代码审阅 (PRD F13). Every switch starts off: a review spends the user's own quota. */
@@ -266,7 +264,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     backgroundImage: '',
     backgroundBlur: 0
   },
-  ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
+  ports: { base: DEFAULT_PORT_BASE },
   review: {
     beforePush: false,
     afterTurnWithCommits: false,
@@ -391,8 +389,7 @@ function appearance(value: unknown): AppearanceSettings {
 function ports(value: unknown): PortSettings {
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return {
-    base: Math.round(num(v.base, DEFAULT_PORT_BASE, PORT_BASE_LIMITS)),
-    autoOpen: typeof v.autoOpen === 'boolean' ? v.autoOpen : DEFAULT_SETTINGS.ports.autoOpen
+    base: Math.round(num(v.base, DEFAULT_PORT_BASE, PORT_BASE_LIMITS))
   }
 }
 
