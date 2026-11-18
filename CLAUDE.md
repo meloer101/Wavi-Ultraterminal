@@ -62,3 +62,43 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - Security: `contextIsolation` + `sandbox` stay on; renderer reaches the system only through `window.tr`. Validate every IPC payload in main. Folder roots from the renderer must be workspace folders (`isWorkspaceDir` / `isProjectRoot`); the renderer declares those folders, so this keeps a wrong path out and is no boundary against a renderer that is not ours. Every agent runs as the same user, so the hook socket token only keeps other users out, not one session's agent from another's.
 - Never write to the user's global agent config (`~/.claude/settings.json`, `~/.codex/*`). Hooks are injected per launch (PRD §6.2).
 - Adapted third-party code: MIT / Apache-2.0 / BSD / ISC only, attribute in file header and `THIRD_PARTY_NOTICES.md`.
+
+## Model roles
+
+Three models work on this repo. Your role comes from how you were started, not from what the task looks like.
+
+| Role | Model | Started as | Owns | Does not |
+|---|---|---|---|---|
+| Commander | Fable | the session the user talks to | requirements, acceptance criteria, the plan, briefs, every decision, Figma work, checking each result, the report to the user | write the code of a change larger than small; pass on a report it has not checked |
+| Executor | Pi | `wavi run pi` (own worktree and branch) | the implementation its brief describes, the checks the brief names, commits on its branch, `wavi report` | decide product or scope questions, touch files outside the brief, merge or push |
+| Reviewer / searcher | Sonnet | the Agent tool with `model: "sonnet"` (`Explore` or `general-purpose` to search, `architecture-reviewer` to review) | code search, web research with sources, an independent review of a diff | edit files, answer with a redesign in place of findings |
+
+Who does which work:
+
+- A small change (1–2 files, no change to an interface, a data model or a dependency direction): the commander makes it itself, since a brief costs more than the change. Anything larger goes to Pi, after the user has confirmed the plan.
+- A search with a known target (one file, one symbol, one page): the commander. A broad one (many files, several sources, the web): Sonnet.
+- Review: Sonnet, once before a branch merges into main. It adds a second read; it does not replace the commander reading the diff and running the checks.
+
+The loop:
+
+1. Commander: acceptance criteria as commands or observable behaviour, then the plan. Sonnet gathers context first when the search is broad.
+2. Commander: commit what Pi needs (`--base head` copies no uncommitted change), `wavi run pi` with the brief, end the turn.
+3. Pi: implement, run the brief's checks, commit, `wavi report`.
+4. Commander: `wavi read <id>`, read the diff, run the acceptance checks itself in that worktree.
+5. Sonnet: review the diff.
+6. Commander: open the lines each finding cites, drop the ones that do not hold, send the rest to Pi in one `wavi send <id>`; back to 4.
+7. Commander: the merge checks in Commands, then the report to the user. The merge itself is the user's, in Wavi.
+
+Hand-offs. Pi and Sonnet see nothing of the commander's conversation, so each one stands alone:
+
+- Brief to Pi: the goal in one sentence with its PRD section or Figma node; the approach already decided (what to reuse, where new code goes), so Pi does not decide it again; files in scope and files off limits; the exact check commands and their expected results; done means committed on its branch, the `docs/ROADMAP.md` line included, and a `wavi report` with what changed, each check's output and open questions; when the approach does not work or needs a file outside the scope, Pi reports the question and ends the turn instead of working around it.
+- Search request to Sonnet: the question; what is already known or ruled out; where to look; the answer comes back conclusion first, each claim with `path:line` or a URL, anything not found or inferred marked as such, within a stated length.
+- Review request to Sonnet: the commit range, the acceptance criteria, the docs that bind the change. Not the plan's reasoning and not the commander's opinion of the diff. Findings come back most severe first, each with `path:line` and the input that gives the wrong result.
+
+Rules:
+
+- A report is a claim. The record is the diff and the checks the commander ran itself.
+- One Pi session per independent deliverable; a correction goes through `wavi send`, never a second session. Parallel sessions only for parts that share no files and do not depend on each other.
+- After two correction rounds that fail the same check, the commander stops sending: it rewrites the plan or writes the change itself, and tells the user which and why.
+- When a decision rests on one fact from a search, the commander reads that source itself.
+- Pi and Sonnet put their questions in their report. Only the commander asks the user.
