@@ -1,7 +1,8 @@
 // The page itself is a native view main lays over this element's rectangle: it draws above all DOM. So the slot
 // reports its rectangle on every layout change and takes the page away whenever it cannot be shown — the slot is
-// gone (pane closed, overview), too small (narrow window), or a menu / modal dialog is open (then a snapshot of
-// the page stands in, so the scrim still has something to dim).
+// gone (pane closed, overview), too small (narrow window), or a menu / modal dialog is open or the slot is inert —
+// the right panel while it closes (then a snapshot of the page stands in, so the scrim still has something to dim and
+// the closing panel carries the page out with it instead of leaving it floating until the panel unmounts).
 import { useEffect, useState, type RefObject } from 'react'
 
 /** Below this the page is not worth showing. */
@@ -9,9 +10,9 @@ const MIN_SIDE = 80
 /** DOM that must stay above the page (popovers opt in with data-covers-page, e.g. the session header's todo / usage). */
 const COVER_SELECTOR = '[role="menu"], [role="dialog"][aria-modal="true"], [data-covers-page]'
 
-/** Whether something that must draw above the page is open. */
-function covered(): boolean {
-  return document.querySelector(COVER_SELECTOR) !== null
+/** Whether something that must draw above the page is open, or the slot sits in an inert (closing) drawer. */
+function covered(element: HTMLElement): boolean {
+  return element.closest('[inert]') !== null || document.querySelector(COVER_SELECTOR) !== null
 }
 
 /**
@@ -35,7 +36,7 @@ export function usePageSlot(ref: RefObject<HTMLElement | null>, worktree: string
     const sync = () => {
       frame = 0
       if (disposed) return
-      if (covered()) {
+      if (covered(element)) {
         if (isCovered) return
         isCovered = true
         last = ''
@@ -66,9 +67,9 @@ export function usePageSlot(ref: RefObject<HTMLElement | null>, worktree: string
     const resize = new ResizeObserver(schedule)
     resize.observe(element)
     resize.observe(document.documentElement)
-    // Menus and dialogs mount anywhere in the document.
+    // Menus and dialogs mount anywhere in the document; a closing drawer turns inert.
     const mutations = new MutationObserver(schedule)
-    mutations.observe(document.body, { childList: true, subtree: true })
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert'] })
     window.addEventListener('resize', schedule)
     return () => {
       disposed = true
