@@ -5,6 +5,7 @@ import { isActiveStatus } from '@shared/lifecycle'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
+import { rangeBetween, togglePicked } from '@shared/batch-actions'
 
 const M = defineMessages({
   zh: {
@@ -260,6 +261,27 @@ export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
 
 /** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */
 export const COLLAPSED = ''
+
+/**
+ * ⇧ / ⌘ click on a worktree row (PRD v1.216): ⇧ adds every row between the anchor and the clicked one in drawn order,
+ * across groups; ⌘ toggles one. Unlike the sidebar, a row that is only expanded because it holds the active session is
+ * not part of it: only rows clicked here count. Returned in drawn order; keys no longer drawn drop out. The main
+ * checkout is never in `ordered`.
+ */
+export function pickRows(input: {
+  ordered: readonly string[]
+  picked: readonly string[]
+  anchor: string | null
+  id: string
+  how: 'range' | 'toggle'
+}): string[] {
+  const { ordered, anchor, id, how } = input
+  const drawn = (x: string | null): x is string => x !== null && ordered.includes(x)
+  const start = input.picked.filter(drawn)
+  const next = how === 'range' ? [...start, ...rangeBetween(ordered, drawn(anchor) ? anchor : null, id)] : togglePicked(start, id)
+  const set = new Set(next)
+  return ordered.filter((key) => set.has(key))
+}
 
 /** The row to show expanded: the user's pick while it still exists, else the active session's worktree (unless collapsed). */
 export function selectedRow(rows: readonly WorktreeRow[], picked: string | null, activeWorktreeId: WorktreeId | null): WorktreeRow | null {

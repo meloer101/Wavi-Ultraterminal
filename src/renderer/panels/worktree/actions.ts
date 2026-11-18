@@ -13,7 +13,7 @@ import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { closeWorktreeTabs } from '../terminal/actions'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, COLLAPSED, deleteBlocker, fitLines, keptText, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, COLLAPSED, deleteBlocker, fitLines, keptText, pickRows, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const M = defineMessages({
@@ -51,6 +51,12 @@ const M = defineMessages({
     hasSession: '有会话',
     cleanedPartly: (removed: number, failed: string) => `已清理 ${removed} 个；没删掉：${failed}`,
     cleaned: (removed: number) => `已清理 ${removed} 个 worktree`,
+    deleteManyMessage: (count: number) => `删除 ${count} 个 worktree？`,
+    deleteManyMenu: (count: number) => `删除 ${count} 个 worktree…`,
+    deletedManyPartly: (removed: number, failed: string) => `已删除 ${removed} 个；没删掉：${failed}`,
+    deletedMany: (removed: number) => `已删除 ${removed} 个 worktree`,
+    nothingToDeleteList: (skipped: string) => `没有可以删除的：${skipped}`,
+    nothingToDelete: '没有可以删除的 worktree',
     copyPath: '复制路径',
     restore: '恢复归档',
     archive: '归档…',
@@ -91,6 +97,12 @@ const M = defineMessages({
     hasSession: 'has a session',
     cleanedPartly: (removed: number, failed: string) => `Cleaned up ${removed}; not deleted: ${failed}`,
     cleaned: (removed: number) => `Cleaned up ${removed} ${removed === 1 ? 'worktree' : 'worktrees'}`,
+    deleteManyMessage: (count: number) => `Delete ${count} ${count === 1 ? 'worktree' : 'worktrees'}?`,
+    deleteManyMenu: (count: number) => `Delete ${count} ${count === 1 ? 'worktree' : 'worktrees'}…`,
+    deletedManyPartly: (removed: number, failed: string) => `Deleted ${removed}; not deleted: ${failed}`,
+    deletedMany: (removed: number) => `Deleted ${removed} ${removed === 1 ? 'worktree' : 'worktrees'}`,
+    nothingToDeleteList: (skipped: string) => `Nothing to delete: ${skipped}`,
+    nothingToDelete: 'No worktrees to delete',
     copyPath: 'Copy path',
     restore: 'Restore archive',
     archive: 'Archive…',
@@ -101,18 +113,33 @@ const M = defineMessages({
 
 /**
  * Click on a row: show it expanded, and switch to its most urgent session (a worktree without one only expands).
- * Clicking the row that is already expanded collapses it.
+ * Clicking the row that is already expanded collapses it. A plain click also drops any ⇧ / ⌘ pick and starts a new
+ * range there.
  */
 export function selectRow(root: string, row: WorktreeRow, expanded: boolean): void {
   if (expanded) {
-    patchRoot(root, { picked: COLLAPSED, notice: null })
+    patchRoot(root, { picked: COLLAPSED, notice: null, selection: [], anchor: row.key })
     return
   }
-  patchRoot(root, { picked: row.key, notice: null })
+  patchRoot(root, { picked: row.key, notice: null, selection: [], anchor: row.key })
   const state = useWorkspace.getState()
   const active = state.sessions.find((s) => s.id === state.activeSessionId)
   const target = row.sessions[0]
   if (target && !(active && row.worktreeIds.includes(active.worktreeId))) state.setActiveSession(target.id)
+}
+
+/**
+ * ⇧ / ⌘ click on a row: picks it for a later 删除, shows nothing else. `ordered` is every pickable row as drawn (the
+ * main checkout left out); it never switches sessions and never touches which row is expanded.
+ */
+export function pickRow(root: string, ordered: readonly string[], row: WorktreeRow, how: 'range' | 'toggle'): void {
+  if (row.info.isMain) return
+  const state = worktreesOf(root)
+  patchRoot(root, {
+    selection: pickRows({ ordered, picked: state.selection, anchor: state.anchor, id: row.key, how }),
+    anchor: row.key,
+    notice: null
+  })
 }
 
 export function startSessionIn(projectId: ProjectId, row: WorktreeRow, kind: AgentKind): void {
@@ -231,28 +258,52 @@ function listWithin(items: readonly string[], separator: string, budget: number)
 }
 
 /**
- * 可清理 › 清理: one confirmation listing what goes (and what stays and why), then remove them one by one. Rows with a
- * session are never part of it (cleanupPlan), checked again after the dialog. The dialog lists as many as fit; the
- * count in its message is always all of them.
+ * 可清理 › 清理 (wording 'clean'), or the picked rows' 删除 (wording 'delete'): one confirmation listing what goes (and
+ * what stays and why), then remove them one by one. Rows with a session are never part of it (cleanupPlan), checked
+ * again after the dialog. The dialog lists as many as fit; the count in its message is always all of them. Resolves to
+ * whether the confirmation was given (the caller drops its pick then).
  */
-export async function cleanUpInteractive(root: string, rows: readonly WorktreeRow[], refresh: () => Promise<void>): Promise<void> {
+export async function cleanUpInteractive(
+  root: string,
+  rows: readonly WorktreeRow[],
+  refresh: () => Promise<void>,
+  wording: 'clean' | 'delete' = 'clean'
+): Promise<boolean> {
   const m = pick(M)
+  const words =
+    wording === 'delete'
+      ? {
+          message: m.deleteManyMessage,
+          confirm: m.delete,
+          nothingList: m.nothingToDeleteList,
+          nothing: m.nothingToDelete,
+          done: m.deletedMany,
+          partly: m.deletedManyPartly
+        }
+      : {
+          message: m.cleanMessage,
+          confirm: m.clean,
+          nothingList: m.nothingToCleanList,
+          nothing: m.nothingToClean,
+          done: m.cleaned,
+          partly: m.cleanedPartly
+        }
   const plan = cleanupPlan(rows)
   const skipped = plan.skip.map(({ row, reason }) => m.skipped(row.name, reason))
   if (plan.remove.length === 0) {
-    patchRoot(root, { notice: skipped.length > 0 ? m.nothingToCleanList(skipped.join(m.listSeparator)) : m.nothingToClean })
-    return
+    patchRoot(root, { notice: skipped.length > 0 ? words.nothingList(skipped.join(m.listSeparator)) : words.nothing })
+    return false
   }
   const skippedShort = listWithin(skipped, m.listSeparator, SKIPPED_MAX)
   const lines = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.openPath, window.tr.homeDir)}`)
   const listed = listWithin(lines, '\n', DETAIL_MAX - m.cleanDetail('', m.ignoredFiles, skippedShort).length)
   const confirmed = await window.tr.ui.confirm({
-    message: m.cleanMessage(plan.remove.length),
+    message: words.message(plan.remove.length),
     detail: m.cleanDetail(listed, m.ignoredFiles, skippedShort),
-    confirmLabel: m.clean,
+    confirmLabel: words.confirm,
     destructive: true
   })
-  if (!confirmed) return
+  if (!confirmed) return false
   patchRoot(root, { busy: true, notice: null })
   const failed: string[] = []
   let removed = 0
@@ -270,10 +321,35 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
   } finally {
     patchRoot(root, {
       busy: false,
-      notice: failed.length > 0 ? m.cleanedPartly(removed, failed.join(m.listSeparator)) : m.cleaned(removed)
+      notice: failed.length > 0 ? words.partly(removed, failed.join(m.listSeparator)) : words.done(removed)
     })
     await refresh()
   }
+  return true
+}
+
+/** ⇧ / ⌘ pick + 删除: the same rule as 清理 (only rows without a session; never `--force`), one confirmation. */
+export async function deletePickedInteractive(
+  root: string,
+  rows: readonly WorktreeRow[],
+  refresh: () => Promise<void>
+): Promise<void> {
+  if (worktreesOf(root).busy) return
+  const confirmed = await cleanUpInteractive(root, rows, refresh, 'delete')
+  if (confirmed) patchRoot(root, { selection: [] })
+}
+
+/** The menu a picked row opens: one 删除 N 个 worktree… and nothing else (PRD v1.216 ③). */
+export async function openPickedMenu(
+  root: string,
+  rows: readonly WorktreeRow[],
+  anchor: MenuAnchor,
+  refresh: () => Promise<void>
+): Promise<void> {
+  const m = pick(M)
+  const label = rows.length === 1 ? m.deleteWorktree : m.deleteManyMenu(rows.length)
+  const choice = await popupMenu([{ type: 'item', id: 'delete', label }], anchor)
+  if (choice === 'delete') await deletePickedInteractive(root, rows, refresh)
 }
 
 /** The selected row's 更多: 在此新建会话 · 复制路径 · 归档… (or 恢复归档) · 删除 worktree…. */

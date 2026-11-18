@@ -271,4 +271,78 @@ test.describe('F17 right panel · Worktree', () => {
     expect(asked[0]!.detail).toMatch(/…还有 \d+ 个/)
     for (const path of paths) expect(existsSync(path)).toBe(false)
   })
+
+  test('⇧ / ⌘ click picks several worktrees and ⌫ deletes them at once, under the same guards as 全部清理 (PRD v1.216, Figma 99A)', async () => {
+    // Three unmerged session-less worktrees with a commit each, and one more with an uncommitted file: they all land in
+    // 没有会话, after the detached one.
+    const made = ['jacob/idle-0', 'jacob/idle-1', 'jacob/idle-2', 'jacob/idle-dirty'].map((branch) => ({ branch, path: join(repo.project, '..', `wt-${branch.slice(6)}`) }))
+    for (const { branch, path } of made) {
+      git(repo.project, 'worktree', 'add', '-q', '-b', branch, path)
+      commitIn(path, `${branch.slice(6)}.ts`)
+      real.set(path, realpathSync(path))
+    }
+    writeFileSync(join(made[3]!.path, 'wip.ts'), 'export const wip = 1\n')
+    await expect(idle().locator(':scope > li')).toHaveCount(5, WITHIN)
+
+    // Git lists them by path: the detached one, idle-0, idle-1, idle-2, idle-dirty.
+    const rows = idle().locator(':scope > li')
+    const names = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.path ?? ''))
+    const from = names.indexOf(real.get(made[0]!.path)!)
+    const to = names.indexOf(real.get(made[3]!.path)!)
+    expect(from).toBeGreaterThanOrEqual(0)
+    expect(to).toBeGreaterThan(from)
+    const pickedCount = to - from + 1
+    const title = await page.locator('header h1').textContent()
+
+    // 1. Plain click, then ⇧ click: every row in between is picked, nothing expands, no session switches.
+    await item(made[0]!.path).locator('button[aria-expanded]').click()
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(pickedCount)
+    for (let i = from; i <= to; i++) await expect(rows.nth(i)).toHaveAttribute('data-picked', 'true')
+    await expect(panel().locator('li[data-picked="true"] button[aria-expanded="true"]')).toHaveCount(0)
+    await expect(page.locator('header h1')).toHaveText(title!)
+
+    // 2. ⌘ click takes one row out of the pick and puts it back.
+    await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'false')
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(pickedCount - 1)
+    await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'true')
+
+    // 3. A picked row's right-click menu holds one item and nothing else.
+    await item(made[0]!.path).locator('button[aria-expanded]').click({ button: 'right' })
+    const entries = page.getByRole('menuitem')
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toHaveText(`删除 ${pickedCount} 个 worktree…`)
+    await shoot('99a-worktree-picked')
+    await expect(entries).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(entries).toHaveCount(0)
+
+    // 4. ⌫ asks once — the same rule as 清理: the one with uncommitted work is skipped and says why. The count in
+    // the title is what will actually go (as 清理 counts), the dirty one is listed under 跳过.
+    const before = (await dialogs()).length
+    await page.keyboard.press('Backspace')
+    await expect(panel().getByRole('status')).toHaveText(`已删除 ${pickedCount - 1} 个 worktree`, { timeout: 30_000 })
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe(`删除 ${pickedCount - 1} 个 worktree？`)
+    expect(asked[0]!.detail).toContain('跳过')
+    expect(asked[0]!.detail).toContain('jacob/idle-dirty')
+    for (const { path } of made.slice(0, 3)) expect(existsSync(path)).toBe(false)
+    expect(existsSync(made[3]!.path)).toBe(true)
+    // The folders go, the branches stay.
+    for (const { branch } of made.slice(0, 3)) expect(execFileSync('git', ['branch', '--list', branch], { cwd: repo.project }).toString()).toContain(branch)
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
+    await expect(idle().locator(':scope > li')).toHaveCount(2)
+
+    // 5. Esc drops a pick without asking anything.
+    const quiet = (await dialogs()).length
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(2)
+    await page.keyboard.press('Escape')
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
+    expect((await dialogs()).length).toBe(quiet)
+  })
 })

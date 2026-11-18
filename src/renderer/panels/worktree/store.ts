@@ -13,9 +13,13 @@ export interface ProjectWorktrees {
   notice: string | null
   /** A delete or cleanup is running. */
   busy: boolean
+  /** Rows picked with ⇧ / ⌘ click (resolved paths, in drawn order) for deleting several at once (PRD v1.216). */
+  selection: string[]
+  /** Where a ⇧ click starts: the row last clicked in this view, plain, ⇧ or ⌘. Not the expanded one. */
+  anchor: string | null
 }
 
-const EMPTY: ProjectWorktrees = { listing: undefined, failed: false, picked: null, notice: null, busy: false }
+const EMPTY: ProjectWorktrees = { listing: undefined, failed: false, picked: null, notice: null, busy: false, selection: [], anchor: null }
 
 export const useWorktrees = create<{ roots: Record<string, ProjectWorktrees> }>()(() => ({ roots: {} }))
 

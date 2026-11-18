@@ -12,6 +12,7 @@ import {
   keptText,
   mergeListing,
   COLLAPSED,
+  pickRows,
   rowLabels,
   selectedRow,
   tildePath
@@ -259,5 +260,35 @@ describe('selectedRow', () => {
 
   it('shows nothing expanded once the user collapsed the row', () => {
     expect(selectedRow(working, COLLAPSED, 'w-main')).toBeNull()
+  })
+})
+
+describe('pickRows', () => {
+  // As drawn: the working rows (the main checkout left out), then 可清理, then 没有会话.
+  const ordered = ['/wt/a', '/wt/b', '/wt/c', '/wt/d']
+
+  it('⌘ click adds one row and takes it out again', () => {
+    expect(pickRows({ ordered, picked: [], anchor: null, id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
+    expect(pickRows({ ordered, picked: ['/wt/b'], anchor: '/wt/b', id: '/wt/b', how: 'toggle' })).toEqual([])
+    expect(pickRows({ ordered, picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'toggle' })).toEqual(['/wt/a', '/wt/c'])
+  })
+
+  it('⇧ click picks the rows between the anchor and the clicked one, across groups, in drawn order', () => {
+    expect(pickRows({ ordered, picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/c'])
+    expect(pickRows({ ordered, picked: ['/wt/d'], anchor: '/wt/d', id: '/wt/b', how: 'range' })).toEqual(['/wt/b', '/wt/c', '/wt/d'])
+  })
+
+  it('⇧ click without an anchor (or with one no longer drawn) picks only the clicked row', () => {
+    expect(pickRows({ ordered, picked: [], anchor: null, id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
+    expect(pickRows({ ordered, picked: [], anchor: '/wt/gone', id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
+  })
+
+  it('⇧ click keeps what was already picked', () => {
+    expect(pickRows({ ordered, picked: ['/wt/d'], anchor: '/wt/a', id: '/wt/b', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/d'])
+  })
+
+  it('drops keys that are no longer drawn', () => {
+    expect(pickRows({ ordered: ['/wt/b', '/wt/c'], picked: ['/wt/a', '/wt/b'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/b', '/wt/c'])
+    expect(pickRows({ ordered: ['/wt/b'], picked: ['/wt/a', '/wt/c'], anchor: '/wt/c', id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
   })
 })

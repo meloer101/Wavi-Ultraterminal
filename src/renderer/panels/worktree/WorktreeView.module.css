@@ -45,6 +45,12 @@
   background: var(--bg-hover);
 }
 
+/* Picked with ⇧ / ⌘ click to delete several at once (PRD v1.216 ②): the selected tint, also while hovered. */
+.item[data-picked='true'] .row,
+.item[data-picked='true'] .row:hover {
+  background: var(--bg-selected);
+}
+
 .row:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
