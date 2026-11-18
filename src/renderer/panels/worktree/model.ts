@@ -83,9 +83,12 @@ export interface WorktreeRow {
 export interface WorktreeGroups {
   /** The main checkout and every worktree that has a session. */
   working: WorktreeRow[]
-  /** No session, and merged into the base or the folder is gone: 清理 removes these in one go. */
+  /**
+   * No session, merged into the base or the folder is gone, and deleting it is not refused: 清理 removes these in one
+   * go, so the group's count is what 全部清理 will delete (v1.217).
+   */
   cleanable: WorktreeRow[]
-  /** No session, not merged: deleted one by one from 更多, never in bulk (could be hand-made or unfinished work). */
+  /** No session, but either not merged or deleting it would be refused: deleted one by one from 更多, never in bulk. */
   idle: WorktreeRow[]
 }
 
@@ -132,10 +135,17 @@ export function rowLabels(name: string, sessions: readonly Session[], info: GitW
   return { title: name, where: notes.join(' · ') }
 }
 
-/** Which group a worktree goes in. Any session keeps it in the working list. */
-export function groupOf(info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable'>, sessionCount: number): keyof WorktreeGroups {
+/**
+ * Which group a worktree goes in. Any session keeps it in the working list. 可清理 only holds what deleting would
+ * really remove: merged (or the folder is gone) and not refused by the delete guard (`blocked`).
+ */
+export function groupOf(
+  info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable'>,
+  sessionCount: number,
+  blocked: boolean
+): keyof WorktreeGroups {
   if (info.isMain || sessionCount > 0) return 'working'
-  return info.merged || info.prunable !== null ? 'cleanable' : 'idle'
+  return (info.merged || info.prunable !== null) && !blocked ? 'cleanable' : 'idle'
 }
 
 /**
@@ -182,7 +192,7 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
     const ids = new Set(matched.map((w) => w.id))
     const inside = sessions.filter((s) => ids.has(s.worktreeId)).sort(compareByUrgency)
     const name = info.branch ?? info.rebasing ?? shortSha(info.head)
-    const group = groupOf(info, inside.length)
+    const group = groupOf(info, inside.length, deleteBlocker({ info, sessions: inside }) !== null)
     groups[group].push({
       key: info.realPath,
       info,

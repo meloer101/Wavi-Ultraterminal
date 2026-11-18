@@ -101,6 +101,43 @@ describe('buildRows', () => {
     expect(groups.idle[0]!.status).toBeNull()
   })
 
+  // PRD v1.217 ②: 可清理 holds only what 全部清理 would really remove, so its count is that number.
+  it('leaves a merged worktree out of 可清理 when deleting it would be refused, and says 已合并 on the row', () => {
+    const merged = (name: string, patch: Partial<GitWorktreeInfo> = {}) => info({ path: `/wt/${name}`, branch: 'jacob/x', merged: true, ...patch })
+    const odd = buildRows(
+      {
+        ...listing,
+        worktrees: [
+          merged('clean'),
+          merged('dirty', { dirtyCount: 1, dirtyFiles: ['a.ts'] }),
+          merged('locked', { locked: true }),
+          merged('undetailed', { detailed: false, dirtyCount: null })
+        ]
+      },
+      [],
+      []
+    )
+    expect(odd.cleanable.map((r) => r.name)).toEqual(['jacob/x'])
+    expect(odd.cleanable[0]!.key).toBe('/wt/clean')
+    expect(odd.cleanable[0]!.ahead).toBe('')
+    expect(odd.idle.map((r) => r.key)).toEqual(['/wt/dirty', '/wt/locked', '/wt/undetailed'])
+    // Not in 可清理 any more, the row says merged itself.
+    expect(odd.idle.map((r) => r.ahead)).toEqual(['已合并', '已合并', '已合并'])
+    expect(odd.idle[0]!.diff).toBe('+0 −0')
+  })
+
+  it('still cleans up a worktree whose folder is gone, and never one with a session', () => {
+    const gone = buildRows({ ...listing, worktrees: [info({ path: '/wt/gone', branch: 'jacob/gone', prunable: 'gone' })] }, [], [])
+    expect(gone.cleanable.map((r) => r.name)).toEqual(['jacob/gone'])
+    const busy = buildRows(
+      { ...listing, worktrees: [info({ path: '/wt/busy', branch: 'jacob/busy', merged: true })] },
+      [{ id: 'w-busy', projectId: 'p', branch: 'jacob/busy', path: '/wt/busy', isMain: false }],
+      [session('s', 'w-busy')]
+    )
+    expect(busy.working.map((r) => r.name)).toEqual(['jacob/busy'])
+    expect(busy.cleanable).toEqual([])
+  })
+
   it('never offers the main checkout for cleanup, even without sessions', () => {
     expect(buildRows(listing, [], []).working.map((r) => r.name)).toEqual(['main'])
   })
@@ -175,7 +212,9 @@ describe('cleanupPlan', () => {
       worktrees,
       sessions
     )
-    const plan = cleanupPlan(groups.cleanable)
+    // A merged row with uncommitted work is in 没有会话 since v1.217: the plan still says why it stays.
+    const dirty = groups.idle.find((r) => r.name === 'dirty')!
+    const plan = cleanupPlan([...groups.cleanable, dirty])
     expect(plan.remove.map((r) => r.name)).toEqual(['jacob/merged', 'jacob/gone'])
     expect(plan.skip.map((s) => [s.row.name, s.reason])).toEqual([['dirty', '有 1 个未提交的改动，先提交或丢弃']])
   })

@@ -38,9 +38,12 @@ export interface GitWorktreeInfo {
   /** Uncommitted line stats vs HEAD (`git diff --numstat HEAD`; untracked files are not counted). */
   added: number
   removed: number
-  /** Uncommitted paths (tracked changes and untracked files), at most MAX_DIRTY_FILES. */
+  /** Uncommitted paths (tracked changes and untracked files), at most MAX_DIRTY_FILES. Not an untracked symlink. */
   dirtyFiles: string[]
-  /** All uncommitted paths; null when `git status` failed (unknown is never treated as clean). */
+  /**
+   * All uncommitted paths; null when `git status` failed (unknown is never treated as clean). An untracked symbolic
+   * link is not counted (v1.217): it holds no content, so removing the worktree only drops the link.
+   */
   dirtyCount: number | null
   /** False when this listing skipped the per-worktree details (a partial refresh); keep the previous ones. */
   detailed: boolean

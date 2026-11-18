@@ -1,10 +1,11 @@
 // F17 right panel · Worktree view on a real repository: a main checkout plus linked worktrees — one with a session and
 // uncommitted work, one merged into main without a session, one merged but still with a session, one detached with a
 // commit no branch has. Checks the rows and groups, switching sessions, the selected row's details, the delete guards
-// and that 可清理 › 全部清理 never touches a worktree with a session. Screenshots in both themes go to test-results/right-panel/ (compare with Figma 85B″).
+// and that 可清理 › 全部清理 never touches a worktree with a session, and one whose only change is an untracked
+// symlink can be cleaned up while one with a real untracked file cannot (v1.217). Screenshots in both themes go to test-results/right-panel/ (compare with Figma 85B″).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launchApp, setWindowSize } from './launch'
@@ -262,7 +263,17 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(cleanable().locator(':scope > li')).toHaveCount(12, WITHIN)
     const before = (await dialogs()).length
     await panel().getByRole('button', { name: '全部清理' }).click()
+    // A long run says how far it is, and rows can be picked meanwhile; the pick is still there when it ends.
+    await expect(panel().getByRole('status')).toHaveText(/^正在清理 \d+ \/ 12…$/, WITHIN)
+    // The detached row is still expanded from the test before: its 更多 button carries aria-expanded too.
+    const detachedRow = item(repo.detached).locator('button[aria-expanded]').first()
+    await detachedRow.click({ modifiers: ['Meta'] })
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
     await expect(panel().getByRole('status')).toHaveText('已清理 12 个 worktree', { timeout: 30_000 })
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
+    await detachedRow.focus()
+    await page.keyboard.press('Escape')
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
     const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)
     expect(asked[0]!.message).toBe('清理 12 个 worktree？')
@@ -368,7 +379,8 @@ test.describe('F17 right panel · Worktree', () => {
     await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
     await expect(picked).toHaveCount(pickedCount)
     const before = (await dialogs()).length
-    await page.keyboard.press('Backspace')
+    // ⇧ is the key that picked the range: it is often still down when ⌫ is pressed.
+    await page.keyboard.press('Shift+Backspace')
     await expect(panel().getByRole('status')).toHaveText(`已删除 ${pickedCount - 1} 个 worktree`, { timeout: 30_000 })
     const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)
@@ -410,5 +422,51 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
     await page.keyboard.press('Escape')
     await expect(picked).toHaveCount(0)
+  })
+
+  test('a worktree whose only change is an untracked symlink is cleanable; an untracked file keeps its worktree (PRD v1.217)', async () => {
+    // Two merged worktrees without a session. The first gains an untracked symlink `node_modules` (a repository that
+    // ignores `node_modules/` only matches folders, so git reports the link as an untracked file); the second gains an
+    // untracked file. The links and files go in before the merge, so the refresh the merge triggers reads them.
+    const outside = join(repo.project, '..', 'wt-shared-deps')
+    mkdirSync(outside, { recursive: true })
+    writeFileSync(join(outside, 'dep.js'), 'export const dep = 1\n')
+    const linked = join(repo.project, '..', 'wt-linked')
+    const filed = join(repo.project, '..', 'wt-untracked-file')
+    for (const [path, branch, change] of [
+      [linked, 'jacob/linked', () => symlinkSync(outside, join(linked, 'node_modules'))],
+      [filed, 'jacob/untracked-file', () => writeFileSync(join(filed, 'wip.ts'), 'export const wip = 1\n')]
+    ] as const) {
+      git(repo.project, 'worktree', 'add', '-q', '-b', branch, path)
+      commitIn(path, `${branch.slice(6)}.ts`)
+      change()
+      git(repo.project, 'merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch)
+      real.set(path, realpathSync(path))
+    }
+
+    // The link holds no content: the row is clean, and the group's count is what 全部清理 will remove.
+    await expect(cleanable().locator(':scope > li')).toHaveCount(1, WITHIN)
+    await expect(item(linked)).toContainText('jacob/linked')
+    await expect(item(linked)).not.toContainText('+0 −0')
+    await expect(panel().locator('section[aria-label="可清理"] h3 + span')).toHaveText('1')
+    // The real untracked file still counts: that worktree stays in 没有会话 and keeps its uncommitted mark.
+    await expect(idle().locator(`li[data-path="${real.get(filed)}"]`)).toHaveCount(1, WITHIN)
+    await expect(item(filed)).toContainText('+0 −0')
+
+    const before = (await dialogs()).length
+    await panel().getByRole('button', { name: '全部清理' }).click()
+    await expect(panel().getByRole('status')).toHaveText('已清理 1 个 worktree')
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe('清理 1 个 worktree？')
+    expect(asked[0]!.detail).toContain('jacob/linked')
+    expect(asked[0]!.detail).not.toContain('jacob/untracked-file')
+    // The folder goes, the branch stays, and what the link pointed at is untouched.
+    expect(existsSync(linked)).toBe(false)
+    expect(execFileSync('git', ['branch', '--list', 'jacob/linked'], { cwd: repo.project }).toString()).toContain('jacob/linked')
+    expect(readFileSync(join(outside, 'dep.js'), 'utf8')).toBe('export const dep = 1\n')
+    // The one with a real change is still there, nothing was forced.
+    expect(existsSync(filed)).toBe(true)
+    expect(existsSync(join(filed, 'wip.ts'))).toBe(true)
   })
 })

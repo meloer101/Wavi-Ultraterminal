@@ -4,9 +4,9 @@
 //
 // Removal never trusts a failed check: when git cannot say whether a worktree has uncommitted work or orphaned
 // commits, it is not removed. `--force` is only for git's submodule refusal (as VS Code's git extension does).
-import { watch, type FSWatcher } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { watch, type FSWatcher, type Stats } from 'node:fs'
+import { lstat, readFile, readlink, realpath, stat, symlink, unlink } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { ipcMain, type WebContents } from 'electron'
 import { IPC } from '@shared/ipc'
 import {
@@ -108,17 +108,44 @@ async function resolveCommit(cwd: string, ref: string): Promise<string | null> {
 
 type Dirty = Pick<GitWorktreeInfo, 'added' | 'removed' | 'dirtyFiles' | 'dirtyCount'>
 
-/** Uncommitted state of one worktree. Throws when git cannot tell (timeout, dubious ownership, …). */
-async function dirtyState(path: string): Promise<Dirty> {
+/** Main's own view of the dirty state: the payload's four fields plus the untracked links they leave out (v1.217). */
+interface DirtyState extends Dirty {
+  /** Untracked symbolic links, relative to the worktree: a link holds no content, so removing the worktree drops it. */
+  untrackedLinks: string[]
+}
+
+/** True only for a symbolic link; a failed `lstat` says no, which keeps the path counted as dirty (unknown is never clean). */
+async function isSymlink(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Uncommitted state of one worktree. Throws when git cannot tell (timeout, dubious ownership, …).
+ * An untracked symbolic link is not uncommitted work: git reports it like an untracked file (a `.gitignore` entry
+ * `node_modules/` only matches folders), but the link itself holds nothing. It is returned apart, never counted.
+ * An untracked folder still counts whatever is inside it, links included.
+ */
+async function dirtyState(path: string): Promise<DirtyState> {
   const changes = parseGitStatus(await git(path, ['status', '--porcelain=v2', '-z', '--untracked-files=normal'])).changes
-  const files = Object.keys(changes).sort()
+  const files: string[] = []
+  const untrackedLinks: string[] = []
+  for (const file of Object.keys(changes).sort()) {
+    // Untracked folders come as `dir/`: only a plain path can be a link, and only an untracked one. A tracked
+    // symlink that changed is letter 'M' and stays dirty.
+    if (changes[file] === 'U' && !file.endsWith('/') && (await isSymlink(join(path, file)))) untrackedLinks.push(file)
+    else files.push(file)
+  }
   // Untracked files ('U') have no lines in `diff HEAD`: skip the second process when nothing tracked changed.
   const tracked = files.some((file) => changes[file] !== 'U')
   const lines = tracked ? parseNumstat(await orEmpty(git(path, ['diff', '--no-ext-diff', '--numstat', 'HEAD']))) : { added: 0, removed: 0 }
-  return { ...lines, dirtyFiles: files.slice(0, MAX_DIRTY_FILES), dirtyCount: files.length }
+  return { ...lines, dirtyFiles: files.slice(0, MAX_DIRTY_FILES), dirtyCount: files.length, untrackedLinks }
 }
 
-const UNKNOWN_DIRTY: Dirty = { added: 0, removed: 0, dirtyFiles: [], dirtyCount: null }
+const UNKNOWN_DIRTY: DirtyState = { added: 0, removed: 0, dirtyFiles: [], dirtyCount: null, untrackedLinks: [] }
 
 /** Commits of `head` that no branch, tag or remote has. Throws when git cannot tell. */
 async function unreachableCommits(realRoot: string, head: string): Promise<number> {
@@ -221,7 +248,10 @@ async function details(realRoot: string, entry: PorcelainWorktree, info: BaseInf
     ahead: counts?.ahead ?? null,
     behind: counts?.behind ?? null,
     merged: isMergedInto(counts?.ahead ?? null, ownCommits),
-    ...dirty,
+    added: dirty.added,
+    removed: dirty.removed,
+    dirtyFiles: dirty.dirtyFiles,
+    dirtyCount: dirty.dirtyCount,
     detailed: true
   }
 }
@@ -265,7 +295,10 @@ export async function listWorktrees(root: unknown, knownPaths: unknown, only?: u
           ahead: null,
           behind: null,
           merged: false,
-          ...UNKNOWN_DIRTY,
+          added: 0,
+          removed: 0,
+          dirtyFiles: [],
+          dirtyCount: null,
           detailed: false
         }
       }
@@ -291,6 +324,86 @@ export async function listWorktrees(root: unknown, knownPaths: unknown, only?: u
 /** git's own words (worktree-files' git rejects with what git printed). */
 const gitMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error)).trim().split('\n').slice(-2).join(' ').slice(0, 500)
 
+/** `child` is `parent` itself or sits under it. Both are absolute, resolved paths. */
+function isInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+/**
+ * Whether the folder a link sits in really is inside the worktree (v1.217). A path string inside the worktree can still
+ * lead out through a symlinked folder in the middle, so the parent's real path is compared with the worktree's real
+ * path. A parent that cannot be resolved is not inside.
+ */
+export async function parentInsideWorktree(realWorktree: string, target: string): Promise<boolean> {
+  try {
+    return isInside(realWorktree, await realpath(dirname(target)))
+  } catch {
+    return false
+  }
+}
+
+/** A link that went, and where it pointed (as `readlink` printed it, so a relative link goes back relative). */
+interface RemovedLink {
+  path: string
+  target: string
+}
+
+/**
+ * Removes the untracked symbolic links `dirtyState` left out, before git takes the folder (v1.217). Each one is read
+ * again and only unlinked while it still is a link inside the worktree; a link's target is never touched. Returns the
+ * links that went (to put back if the worktree stays) and the reason it stopped, or null.
+ */
+async function unlinkUntrackedLinks(path: string, links: readonly string[]): Promise<{ removed: RemovedLink[]; error: string | null }> {
+  const removed: RemovedLink[] = []
+  const root = resolve(path)
+  let realRoot: string
+  try {
+    realRoot = await realpath(root)
+  } catch (error) {
+    return { removed, error: gitMessage(error) }
+  }
+  for (const link of links) {
+    const target = resolve(root, link)
+    if (!isInside(root, target) || !(await parentInsideWorktree(realRoot, target))) {
+      return { removed, error: `refusing to remove ${link}: outside the worktree` }
+    }
+    let stats: Stats
+    try {
+      stats = await lstat(target)
+    } catch (error) {
+      // Gone already: nothing to remove, and git finds nothing to refuse.
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      return { removed, error: gitMessage(error) }
+    }
+    if (!stats.isSymbolicLink()) continue
+    let pointsAt: string
+    try {
+      pointsAt = await readlink(target)
+    } catch (error) {
+      return { removed, error: gitMessage(error) }
+    }
+    try {
+      await unlink(target)
+    } catch (error) {
+      return { removed, error: gitMessage(error) }
+    }
+    removed.push({ path: target, target: pointsAt })
+  }
+  return { removed, error: null }
+}
+
+/** Puts the links that went back as they were, newest first. A link that cannot be put back does not change the result. */
+async function restoreLinks(removed: readonly RemovedLink[]): Promise<void> {
+  for (const link of [...removed].reverse()) {
+    try {
+      await symlink(link.target, link.path)
+    } catch {
+      // Best effort: a worktree that stays without one of its links is still better than its content going.
+    }
+  }
+}
+
 async function hasSubmodules(path: string): Promise<boolean> {
   try {
     return (await stat(join(path, '.gitmodules'))).isFile()
@@ -302,7 +415,9 @@ async function hasSubmodules(path: string): Promise<boolean> {
 /**
  * `git worktree remove` for one linked worktree of a project's repository. Refuses the main checkout and the project
  * folder; a worktree with uncommitted changes, a rebase in progress or a lock; a detached HEAD whose commits no branch,
- * tag or remote has; and anything git could not check. `force` only gets past git's submodule refusal.
+ * tag or remote has; and anything git could not check. Untracked symbolic links are not uncommitted changes: they are
+ * unlinked first, and only when nothing else is uncommitted, and put back whenever the worktree stays. `force` only gets
+ * past git's submodule refusal.
  * A worktree whose folder is already gone is removed by path (not a repository-wide prune).
  */
 export async function removeWorktree(root: unknown, path: unknown, force: unknown): Promise<WorktreeRemoveResult> {
@@ -330,20 +445,32 @@ export async function removeWorktree(root: unknown, path: unknown, force: unknow
   }
 
   const exists = entry.prunable === null && (await isDirectory(entry.path))
+  let untrackedLinks: readonly string[] = []
   if (exists) {
     if (entry.branch === null && (await rebasingBranch(entry.path))) return { ok: false, reason: 'busy' }
     try {
-      if ((await dirtyState(entry.path)).dirtyCount !== 0) return { ok: false, reason: 'dirty' }
+      const dirty = await dirtyState(entry.path)
+      if (dirty.dirtyCount !== 0) return { ok: false, reason: 'dirty' }
+      untrackedLinks = dirty.untrackedLinks
     } catch (error) {
       return { ok: false, reason: 'unverified', message: gitMessage(error) }
     }
   }
   const forced = force === true && exists && (await hasSubmodules(entry.path))
   if (force === true && !forced) return { ok: false, reason: 'git', message: 'force is only used for worktrees with submodules' }
+  // Only links are left: drop them, so git's own check does not see them as untracked work. The links go, never what
+  // they point at; a path that is no longer a link is left for git to refuse. Whenever the worktree stays — a link that
+  // cannot be unlinked, or git refusing — the links that went are put back where they pointed.
+  const unlinked = untrackedLinks.length > 0 ? await unlinkUntrackedLinks(entry.path, untrackedLinks) : { removed: [] as RemovedLink[], error: null }
+  if (unlinked.error) {
+    await restoreLinks(unlinked.removed)
+    return { ok: false, reason: 'git', message: unlinked.error }
+  }
   try {
     await git(realRoot, ['worktree', 'remove', ...(forced ? ['--force'] : []), '--', entry.path])
     return { ok: true }
   } catch (error) {
+    await restoreLinks(unlinked.removed)
     const message = gitMessage(error)
     return { ok: false, reason: classifyRemoveError(message), message }
   }
