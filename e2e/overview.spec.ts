@@ -149,8 +149,13 @@ test('a card opens the session in an overlay that Esc, the scrim and × close', 
   // Under the translucent terminal the window is glass, not the board: blurred, on the base layer's tint (PRD v1.185).
   const tile = await overlay()
     .locator('section[data-pane-id]')
-    .evaluate((el) => ({ filter: getComputedStyle(el).backdropFilter, background: getComputedStyle(el).backgroundColor }))
-  expect(tile.filter).toContain('blur(')
+    .evaluate((el) => ({
+      filter: getComputedStyle(el).backdropFilter,
+      background: getComputedStyle(el).backgroundColor,
+      reduced: matchMedia('(prefers-reduced-transparency: reduce)').matches
+    }))
+  // A Mac with 减弱透明度 on (the CI runner) gets the opaque tile and no blur.
+  expect(tile.filter).toContain(tile.reduced ? 'none' : 'blur(')
   expect(tile.background).not.toBe('rgba(0, 0, 0, 0)')
   await shoot('board-overlay')
   await page.keyboard.press('Escape')
