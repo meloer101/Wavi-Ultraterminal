@@ -10,7 +10,7 @@ import { basename, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { classifyGitFailure } from '@shared/git-failures'
 import { IPC } from '@shared/ipc'
-import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_AUTHOR_NAME, SNAPSHOT_SUBJECT, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
+import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_AUTHOR_NAME, SNAPSHOT_COMMITTER_EMAIL, SNAPSHOT_COMMITTER_NAME, SNAPSHOT_SUBJECT, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
 import {
   branchPrefix,
   MAX_INCLUDE_LISTED,
@@ -262,8 +262,8 @@ async function snapshotCommit(from: string): Promise<string> {
     const ident = {
       GIT_AUTHOR_NAME: SNAPSHOT_AUTHOR_NAME,
       GIT_AUTHOR_EMAIL: SNAPSHOT_AUTHOR_EMAIL,
-      GIT_COMMITTER_NAME: SNAPSHOT_AUTHOR_NAME,
-      GIT_COMMITTER_EMAIL: SNAPSHOT_AUTHOR_EMAIL
+      GIT_COMMITTER_NAME: SNAPSHOT_COMMITTER_NAME,
+      GIT_COMMITTER_EMAIL: SNAPSHOT_COMMITTER_EMAIL
     }
     return (await git(from, ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', SNAPSHOT_SUBJECT], { env: ident })).trim()
   } finally {

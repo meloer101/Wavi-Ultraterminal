@@ -231,10 +231,11 @@ test.describe('F17 right panel · Worktree', () => {
     await expect.poll(async () => (await dialogs()).length).toBe(before + 1)
     const asked = (await dialogs())[before]!
     expect(asked.message).toBe('丢弃未提交的改动并删除「jacob/feature」？')
-    expect(asked.detail).toContain('1 个文件的未提交改动会丢失，找不回来：')
+    expect(asked.detail).toContain('1 项未提交的改动会丢失，找不回来：')
     expect(asked.detail).toContain('README.md')
-    // Cancelled: the folder and its one change stay.
+    // Cancelled: the folder, and the one change the dialog named, stay.
     expect(existsSync(repo.feature)).toBe(true)
+    expect(readFileSync(join(repo.feature, 'README.md'), 'utf8')).toContain('work in progress')
     await answerDialogs(true)
   })
 
@@ -540,9 +541,11 @@ test.describe('F17 right panel · Worktree', () => {
     const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)
     expect(asked[0]!.message).toBe('丢弃未提交的改动并删除「jacob/discard」？')
-    expect(asked[0]!.detail).toContain('1 个文件的未提交改动会丢失，找不回来：')
+    expect(asked[0]!.detail).toContain('1 项未提交的改动会丢失，找不回来：')
     expect(asked[0]!.detail).toContain('wip.ts')
     expect(asked[0]!.detail).toContain('分支 jacob/discard 保留')
+    // Main refuses a detail over 500 characters: this one must fit.
+    expect(asked[0]!.detail!.length).toBeLessThanOrEqual(500)
     expect(existsSync(path)).toBe(false)
     expect(execFileSync('git', ['branch', '--list', 'jacob/discard'], { cwd: repo.project }).toString()).toContain('jacob/discard')
   })

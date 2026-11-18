@@ -290,6 +290,41 @@ export function listWithin(items: readonly string[], separator: string, budget: 
   return [...shown, ...(left > 0 ? [more(left)] : [])].join(separator)
 }
 
+/** The longest path a list line draws in full; longer ones keep their last characters, where the file name is. */
+export const MAX_LISTED_PATH = 100
+
+/** One line of the uncommitted list: `· path`, a path over the limit cut to its last characters behind `…`. */
+export function uncommittedLine(file: string): string {
+  return `· ${file.length > MAX_LISTED_PATH ? `…${file.slice(-(MAX_LISTED_PATH - 1))}` : file}`
+}
+
+/**
+ * The uncommitted paths a 丢弃并删除 confirmation lists: as many lines as fit `budget` characters, then — whenever fewer
+ * are shown than `total` — `more(left)`. `dirtyFiles` holds at most 50 paths while `dirtyCount` counts them all, and an
+ * untracked folder is one entry, so the count is entries and the suffix says how many did not fit. Never longer than
+ * `budget`: a suffix that cannot fit at all leaves an empty list (the caller cuts the whole detail to its own limit).
+ */
+export function uncommittedList(files: readonly string[], total: number, budget: number, more: (left: number) => string): string {
+  const items = Math.max(total, files.length)
+  const lines = files.map(uncommittedLine)
+  const shown: string[] = []
+  let used = 0
+  for (const line of lines) {
+    const left = items - (shown.length + 1)
+    const suffix = left > 0 ? `\n${more(left)}` : ''
+    const next = line.length + (shown.length > 0 ? 1 : 0)
+    if (used + next + suffix.length > budget) break
+    shown.push(line)
+    used += next
+  }
+  const left = items - shown.length
+  if (left <= 0) return shown.join('\n')
+  const suffix = more(left)
+  if (shown.length === 0) return suffix.length <= budget ? suffix : ''
+  // The last line was added only because room for this suffix was there (it is no longer than the one reserved).
+  return `${shown.join('\n')}\n${suffix}`
+}
+
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
   return info.branch ? pick(M).branchKept(info.branch) : pick(M).commitsElsewhere

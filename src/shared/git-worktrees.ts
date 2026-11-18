@@ -10,9 +10,13 @@ export const WAVI_WORKTREES_DIR = ['.tr', 'worktrees'] as const
 /**
  * Wavi's own snapshot commits (PRD F21 `--base snapshot`, F17 v1.218): a commit-tree of a working tree, on no branch
  * by construction. Main does not count them as commits removal would orphan (worktree-create makes them with these).
+ * The committer counts too: `git commit --amend` in a snapshot worktree keeps the author and the subject but sets the
+ * committer to whoever amended, so the amended commit is the user's work and not a snapshot.
  */
 export const SNAPSHOT_AUTHOR_NAME = 'Wavi'
 export const SNAPSHOT_AUTHOR_EMAIL = 'wavi@localhost'
+export const SNAPSHOT_COMMITTER_NAME = SNAPSHOT_AUTHOR_NAME
+export const SNAPSHOT_COMMITTER_EMAIL = SNAPSHOT_AUTHOR_EMAIL
 export const SNAPSHOT_SUBJECT = 'Wavi snapshot'
 
 export interface GitWorktreeInfo {
@@ -37,8 +41,8 @@ export interface GitWorktreeInfo {
    */
   unreachableCommits: number | null
   /**
-   * Detached at a commit Wavi made as a snapshot (author, email and subject all match): its working tree is a copy, so
-   * removing it orphans nothing of the user's (PRD F17 v1.218). False in every other case.
+   * Detached at a commit Wavi made as a snapshot (author, committer and subject all match): its working tree is a copy,
+   * so removing it orphans nothing of the user's (PRD F17 v1.218). False in every other case.
    */
   snapshot: boolean
   /** Branch the ahead / behind and merged state compare with; null for the base itself or when there is none. */
@@ -77,6 +81,8 @@ export type WorktreeRemoveRefusal =
   | 'unverified'
   /** a detached HEAD with commits no branch / tag / remote has */
   | 'unreachable-commits'
+  /** the uncommitted changes are no longer the ones the discard dialog named: nothing was removed */
+  | 'changed'
   /** a rebase is in progress there */
   | 'busy'
   | 'locked'
@@ -90,6 +96,17 @@ export type WorktreeRemoveRefusal =
   | 'git'
 
 export type WorktreeRemoveResult = { ok: true } | { ok: false; reason: WorktreeRemoveRefusal; message?: string }
+
+/**
+ * What a 丢弃并删除 confirmation showed: how many uncommitted paths and which (the row's `dirtyCount` / `dirtyFiles`).
+ * Main removes only the work that this names — a change made after the dialog is not silently lost (PRD v1.218).
+ */
+export interface WorktreeDiscard {
+  /** Every uncommitted path the dialog counted (`dirtyCount`). */
+  count: number
+  /** The paths it listed, in the order it listed them (`dirtyFiles`). */
+  files: string[]
+}
 
 export const MAX_DIRTY_FILES = 50
 
@@ -133,8 +150,9 @@ export function parseWorktreePorcelain(output: string): PorcelainWorktree[] {
 }
 
 /**
- * `git log --format=%an%x00%ae%x00%s <head> --not --branches --tags --remotes`: how many commits are not Wavi snapshot
- * commits, and whether the first line (HEAD) is one. Throws when git printed something else: unknown is never safe.
+ * `git log --format=%an%x00%ae%x00%cn%x00%ce%x00%s <head> --not --branches --tags --remotes`: how many commits are not
+ * Wavi snapshot commits, and whether the first line (HEAD) is one. All five fields must match — an amend keeps the
+ * author and the subject but not the committer. Throws when git printed something else: unknown is never safe.
  */
 export function parseUnreachableLog(output: string): { commits: number; headIsSnapshot: boolean } {
   const lines = output.split('\n')
@@ -143,9 +161,13 @@ export function parseUnreachableLog(output: string): { commits: number; headIsSn
   let headIsSnapshot = false
   for (const [index, line] of lines.entries()) {
     const fields = line.split('\0')
-    if (fields.length !== 3) throw new Error('unexpected git log output')
+    if (fields.length !== 5) throw new Error('unexpected git log output')
     const snapshot =
-      fields[0] === SNAPSHOT_AUTHOR_NAME && fields[1] === SNAPSHOT_AUTHOR_EMAIL && fields[2] === SNAPSHOT_SUBJECT
+      fields[0] === SNAPSHOT_AUTHOR_NAME &&
+      fields[1] === SNAPSHOT_AUTHOR_EMAIL &&
+      fields[2] === SNAPSHOT_COMMITTER_NAME &&
+      fields[3] === SNAPSHOT_COMMITTER_EMAIL &&
+      fields[4] === SNAPSHOT_SUBJECT
     if (index === 0) headIsSnapshot = snapshot
     if (!snapshot) commits++
   }

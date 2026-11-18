@@ -339,6 +339,18 @@ describe('Wavi’s own snapshot worktrees (PRD v1.218)', () => {
     const otherMessage = detachedAt('snapshot-message', snapshotCommit(root, 'Wavi snapshot (but not)'))
     expect(await byPath(root, otherMessage)).toMatchObject({ unreachableCommits: 1, snapshot: false })
   })
+
+  it('counts an amended snapshot commit, whose committer is someone else', async () => {
+    // `git commit --amend` keeps the author and the subject but sets the committer to whoever amended: that is the
+    // user's (or an agent's) work, so removing the worktree would lose it.
+    const path = detachedAt('snapshot-amended', snapshotCommit(root))
+    writeFileSync(join(path, 'mine.ts'), 'export const mine = 1\n')
+    git(path, 'add', 'mine.ts')
+    git(path, 'commit', '-q', '--amend', '--no-edit')
+    expect(await byPath(root, path)).toMatchObject({ unreachableCommits: 1, snapshot: false })
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'unreachable-commits', message: '1' })
+    expect(existsSync(path)).toBe(true)
+  })
 })
 
 describe('discard and delete (PRD v1.218)', () => {
@@ -347,46 +359,94 @@ describe('discard and delete (PRD v1.218)', () => {
     root = repo('discard-repo')
   })
 
-  it('is refused without discard and removes a modified tracked file and an untracked one with it, branch kept', async () => {
+  it('is refused without discard and removes what the dialog named, branch kept', async () => {
     const path = join(base, 'discard-me')
     git(root, 'worktree', 'add', '-q', '-b', 'jacob/discard', path)
     writeFileSync(join(path, 'README.md'), '# changed\n')
     writeFileSync(join(path, 'wip.ts'), 'export const wip = 1\n')
     expect(await byPath(root, path)).toMatchObject({ dirtyCount: 2, dirtyFiles: ['README.md', 'wip.ts'] })
     expect(await removeWorktree(root, path, false)).toEqual({ ok: false, reason: 'dirty' })
-    expect(await removeWorktree(root, path, false, true)).toEqual({ ok: true })
+    expect(await removeWorktree(root, path, false, { count: 2, files: ['README.md', 'wip.ts'] })).toEqual({ ok: true })
     expect(existsSync(path)).toBe(false)
     expect(git(root, 'branch', '--list', 'jacob/discard')).toContain('jacob/discard')
   })
 
+  it('removes nothing when the changes are no longer the ones the dialog named', async () => {
+    const path = join(base, 'discard-changed')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/changed', path)
+    writeFileSync(join(path, 'wip.ts'), 'wip\n')
+    expect(await byPath(root, path)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['wip.ts'] })
+    // A file made after the dialog was built: one more entry than the dialog counted.
+    writeFileSync(join(path, 'later.ts'), 'made after the dialog\n')
+    expect(await removeWorktree(root, path, false, { count: 1, files: ['wip.ts'] })).toEqual({ ok: false, reason: 'changed' })
+    expect(existsSync(join(path, 'wip.ts'))).toBe(true)
+    expect(existsSync(join(path, 'later.ts'))).toBe(true)
+    // The count right, another path: still not the list the dialog showed.
+    expect(await removeWorktree(root, path, false, { count: 2, files: ['wip.ts', 'other.ts'] })).toEqual({ ok: false, reason: 'changed' })
+    expect(existsSync(path)).toBe(true)
+  })
+
+  it('rejects a discard payload that is not the shape the dialog sends, and deletes nothing', async () => {
+    const path = join(base, 'discard-invalid')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/invalid', path)
+    writeFileSync(join(path, 'wip.ts'), 'wip\n')
+    for (const value of [
+      true,
+      'true',
+      1,
+      null,
+      {},
+      { count: 0, files: [] },
+      { count: 1.5, files: ['wip.ts'] },
+      { count: 1, files: [1] },
+      { count: 1, files: [''] }
+    ]) {
+      await expect(removeWorktree(root, path, false, value)).rejects.toThrow()
+    }
+    expect(existsSync(path)).toBe(true)
+    // undefined is the old "no discard", and still refuses the dirty worktree.
+    expect(await removeWorktree(root, path, false, undefined)).toEqual({ ok: false, reason: 'dirty' })
+    expect(existsSync(path)).toBe(true)
+  })
+
   it('does not get past a lock, the main checkout, or a detached HEAD with a commit of the user’s', async () => {
+    const discard = { count: 1, files: ['wip.ts'] }
     const locked = join(base, 'discard-locked')
     git(root, 'worktree', 'add', '-q', '-b', 'jacob/locked', locked)
     writeFileSync(join(locked, 'wip.ts'), 'wip\n')
     git(root, 'worktree', 'lock', locked)
-    expect(await removeWorktree(root, locked, false, true)).toEqual({ ok: false, reason: 'locked' })
+    expect(await removeWorktree(root, locked, false, discard)).toEqual({ ok: false, reason: 'locked' })
     git(root, 'worktree', 'unlock', locked)
     expect(existsSync(locked)).toBe(true)
 
     writeFileSync(join(root, 'README.md'), '# changed\n')
-    expect(await removeWorktree(root, root, false, true)).toEqual({ ok: false, reason: 'main' })
+    expect(await removeWorktree(root, root, false, { count: 1, files: ['README.md'] })).toEqual({ ok: false, reason: 'main' })
     git(root, 'checkout', '--', 'README.md')
 
     const detached = join(base, 'discard-detached')
     git(root, 'worktree', 'add', '-q', '--detach', detached)
     git(detached, 'commit', '-q', '--allow-empty', '-m', 'only here')
     writeFileSync(join(detached, 'wip.ts'), 'wip\n')
-    expect(await removeWorktree(root, detached, false, true)).toMatchObject({ ok: false, reason: 'unreachable-commits' })
+    expect(await removeWorktree(root, detached, false, discard)).toMatchObject({ ok: false, reason: 'unreachable-commits' })
     expect(existsSync(detached)).toBe(true)
   })
 
-  it('ignores anything but the literal true, as force does', async () => {
-    const path = join(base, 'discard-literal')
-    git(root, 'worktree', 'add', '-q', '-b', 'jacob/literal', path)
+  it('still asks for the submodule confirmation before --force takes the submodules', async () => {
+    repo('discard-sub-source')
+    const withSub = repo('discard-sub')
+    git(withSub, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', '../discard-sub-source', 'dep')
+    git(withSub, 'commit', '-q', '-m', 'add the submodule')
+    const path = join(base, 'discard-submodule')
+    git(withSub, 'worktree', 'add', '-q', '-b', 'jacob/submodule', path)
+    git(path, '-c', 'protocol.file.allow=always', 'submodule', 'update', '--init', '-q')
     writeFileSync(join(path, 'wip.ts'), 'wip\n')
-    for (const value of ['true', 1, {}] as const) {
-      expect(await removeWorktree(root, path, false, value)).toEqual({ ok: false, reason: 'dirty' })
-    }
-    expect(existsSync(path)).toBe(true)
+    const discard = { count: 1, files: ['wip.ts'] }
+    expect(await byPath(withSub, path)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['wip.ts'] })
+    // Discard would pass --force, which takes the submodule folder too: without the second confirmation, nothing goes.
+    expect(await removeWorktree(withSub, path, false, discard)).toEqual({ ok: false, reason: 'submodules' })
+    expect(existsSync(join(path, 'dep'))).toBe(true)
+    expect(await removeWorktree(withSub, path, true, discard)).toEqual({ ok: true })
+    expect(existsSync(path)).toBe(false)
+    expect(git(withSub, 'branch', '--list', 'jacob/submodule')).toContain('jacob/submodule')
   })
 })

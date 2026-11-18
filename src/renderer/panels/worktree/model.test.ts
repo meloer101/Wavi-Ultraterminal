@@ -13,12 +13,14 @@ import {
   groupOf,
   keptText,
   listWithin,
+  MAX_LISTED_PATH,
   mergeListing,
   COLLAPSED,
   pickRows,
   rowLabels,
   selectedRow,
-  tildePath
+  tildePath,
+  uncommittedList
 } from './model'
 
 function info(patch: Partial<GitWorktreeInfo> & { path: string }): GitWorktreeInfo {
@@ -261,6 +263,42 @@ describe('discardable', () => {
     expect(discardable(row({ dirtyCount: 1, detailed: false }))).toBe(false)
     expect(discardable(row({ dirtyCount: 1, branch: null, unreachableCommits: 2 }))).toBe(false)
     expect(discardable(row({ dirtyCount: 1, branch: null, unreachableCommits: null }))).toBe(false)
+  })
+})
+
+describe('uncommittedList', () => {
+  const more = (left: number) => `…还有 ${left} 个`
+
+  it('lists every path when they all fit and adds nothing', () => {
+    expect(uncommittedList(['a.ts', 'b/c.ts'], 2, 200, more)).toBe('· a.ts\n· b/c.ts')
+  })
+
+  it('says how many did not fit when dirtyFiles holds fewer paths than dirtyCount counts', () => {
+    const files = Array.from({ length: 50 }, (_, i) => `file-${i}.ts`)
+    const out = uncommittedList(files, 120, 2000, more)
+    expect(out.split('\n')).toHaveLength(51)
+    expect(out.endsWith('…还有 70 个')).toBe(true)
+    expect(out.length).toBeLessThanOrEqual(2000)
+  })
+
+  it('adds the suffix even when every listed path fits but the total is larger', () => {
+    expect(uncommittedList(['a.ts'], 3, 200, more)).toBe('· a.ts\n…还有 2 个')
+  })
+
+  it('shortens a path over the limit and still ends with its file name', () => {
+    const long = `${'x'.repeat(290)}/the-file.ts`
+    const out = uncommittedList([long], 1, 400, more)
+    expect(out).toBe(`· …${long.slice(-(MAX_LISTED_PATH - 1))}`)
+    expect(out.endsWith('the-file.ts')).toBe(true)
+  })
+
+  it('never exceeds the budget, and leaves no list when not even the suffix fits', () => {
+    const files = Array.from({ length: 50 }, (_, i) => `dir/file-${i}.ts`)
+    for (const budget of [40, 80, 120, 200, 400]) {
+      const out = uncommittedList(files, 60, budget, more)
+      expect(out.length).toBeLessThanOrEqual(budget)
+    }
+    expect(uncommittedList(['a.ts'], 2, 3, more)).toBe('')
   })
 })
 

@@ -15,6 +15,8 @@ import {
   pickMainBranch,
   SNAPSHOT_AUTHOR_EMAIL,
   SNAPSHOT_AUTHOR_NAME,
+  SNAPSHOT_COMMITTER_EMAIL,
+  SNAPSHOT_COMMITTER_NAME,
   SNAPSHOT_SUBJECT
 } from './git-worktrees'
 
@@ -67,20 +69,26 @@ describe('parseNumstat', () => {
 })
 
 describe('parseUnreachableLog', () => {
-  const line = (name: string, email: string, subject: string) => `${name}\0${email}\0${subject}`
-  const snapshot = line(SNAPSHOT_AUTHOR_NAME, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_SUBJECT)
+  const line = (an: string, ae: string, cn: string, ce: string, subject: string) => `${an}\0${ae}\0${cn}\0${ce}\0${subject}`
+  const wavi = (subject = SNAPSHOT_SUBJECT) => line(SNAPSHOT_AUTHOR_NAME, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_COMMITTER_NAME, SNAPSHOT_COMMITTER_EMAIL, subject)
+  const user = (subject = 'only here') => line('t', 't@t', 't', 't@t', subject)
+  const snapshot = wavi()
 
   it('counts the commits that are not Wavi snapshots and says whether HEAD is one', () => {
     expect(parseUnreachableLog(`${snapshot}\n`)).toEqual({ commits: 0, headIsSnapshot: true })
     // A user's commit on top of Wavi's snapshot: the snapshot is not counted, the user's commit is.
-    expect(parseUnreachableLog(`${line('t', 't@t', 'only here')}\n${snapshot}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
-    expect(parseUnreachableLog(`${snapshot}\n${line('t', 't@t', 'only here')}\n`)).toEqual({ commits: 1, headIsSnapshot: true })
+    expect(parseUnreachableLog(`${user()}\n${snapshot}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    expect(parseUnreachableLog(`${snapshot}\n${user()}\n`)).toEqual({ commits: 1, headIsSnapshot: true })
   })
 
-  it('needs author name, author email and subject to all match', () => {
-    expect(parseUnreachableLog(`${line('t', 't@t', SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
-    expect(parseUnreachableLog(`${line(SNAPSHOT_AUTHOR_NAME, 't@t', SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
-    expect(parseUnreachableLog(`${line(SNAPSHOT_AUTHOR_NAME, SNAPSHOT_AUTHOR_EMAIL, 'other')}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+  it('needs author name, author email, committer name, committer email and subject to all match', () => {
+    expect(parseUnreachableLog(`${user(SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    expect(parseUnreachableLog(`${line('t', 't@t', SNAPSHOT_COMMITTER_NAME, SNAPSHOT_COMMITTER_EMAIL, SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    expect(parseUnreachableLog(`${line(SNAPSHOT_AUTHOR_NAME, 't@t', SNAPSHOT_COMMITTER_NAME, SNAPSHOT_COMMITTER_EMAIL, SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    // An amend keeps the author and the subject but the committer is whoever amended: that is the user's work.
+    expect(parseUnreachableLog(`${line(SNAPSHOT_AUTHOR_NAME, SNAPSHOT_AUTHOR_EMAIL, 't', 't@t', SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    expect(parseUnreachableLog(`${line(SNAPSHOT_AUTHOR_NAME, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_COMMITTER_NAME, 't@t', SNAPSHOT_SUBJECT)}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
+    expect(parseUnreachableLog(`${wavi('other')}\n`)).toEqual({ commits: 1, headIsSnapshot: false })
   })
 
   it('nothing listed is nothing unreachable', () => {
