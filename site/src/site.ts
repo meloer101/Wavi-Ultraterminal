@@ -2,7 +2,7 @@
 export const REPO = 'meloer101/Wavi-Ultraterminal'
 export const gh = (path = ''): string => `https://github.com/${REPO}${path}`
 
-/** A path under the site's base (Vercel serves at "/", GitHub Pages under "/Wavi-Ultraterminal/"). */
+/** A path under the site's base ("/" on Vercel; SITE_BASE in astro.config.mjs moves it). */
 export const withBase = (path: string): string => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
 
 /**

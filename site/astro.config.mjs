@@ -1,9 +1,8 @@
 // @ts-check
 import { defineConfig } from 'astro/config'
 
-// One build per host. Vercel serves the site at the root; GitHub Pages serves it under /Wavi-Ultraterminal/,
-// so the Pages workflow sets SITE_BASE (and SITE_URL) and every asset and link follows import.meta.env.BASE_URL.
-// On Vercel the production domain comes from its system variable, so link previews get an absolute og:image.
+// Vercel serves the site at the root of https://wavi.autos. Its production domain comes from a system variable, so
+// canonical, hreflang, sitemap and og:image get absolute URLs; SITE_URL overrides it, SITE_BASE builds under a sub-path.
 const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL
 export default defineConfig({
   site: process.env.SITE_URL || (vercel ? `https://${vercel}` : undefined),
