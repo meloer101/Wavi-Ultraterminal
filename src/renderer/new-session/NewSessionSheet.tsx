@@ -564,7 +564,7 @@ function Sheet() {
           </button>
           <button type="button" className={styles.primary} disabled={!canCreate} onClick={create}>
             {sends ? m.createAndSend : m.create}
-            <span className={styles.shortcut}>⌘↵</span>
+            <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>
       </div>

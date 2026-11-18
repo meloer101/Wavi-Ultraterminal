@@ -37,7 +37,7 @@ async function showTab(settings: Page, tab: AppearanceTab): Promise<void> {
   await expect(settings.getByTestId(PREVIEW[tab])).toBeVisible()
 }
 
-const TABS = ['外观', '终端', '对话', '智能体', '额度', 'Worktree', '自动化', '手机']
+const TABS = ['外观', '终端', '对话', '智能体', '额度', 'Worktree', '自动化', '手机', '快捷键']
 
 const readSettings = (page: Page) => page.evaluate(() => (globalThis as unknown as TrWindow).tr.settings.get())
 
@@ -203,6 +203,52 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   expect(Math.round(box!.x)).toBe(Math.round(row!.x))
   await settings.keyboard.press('Escape')
   await expect(panel).toHaveCount(0)
+  await app.close()
+})
+
+test('shortcut hints show on hover only; 设置 · 快捷键 lists them all (PRD v1.209, Figma 97)', async () => {
+  const app = await launchApp()
+  const page = await app.firstWindow()
+  await page.waitForSelector('[data-region="sidebar"]')
+  const sidebar = page.locator('[data-region="sidebar"]')
+  const jump = sidebar.getByRole('button', { name: /跳转到/ })
+  const hint = jump.locator('[data-shortcut-hint]')
+  await expect(hint).toHaveText('⌘K')
+  const opacity = () => hint.evaluate((el) => getComputedStyle(el).opacity)
+  // The pointer on another row: this one's hint is hidden.
+  await sidebar.getByRole('button', { name: /打开项目/ }).hover()
+  await expect.poll(opacity).toBe('0')
+  const width = (await jump.boundingBox())!.width
+  // Hovered again on each try: one hover right after launch left the hint hidden in about 1 run of 6.
+  await expect
+    .poll(async () => {
+      await jump.hover()
+      return opacity()
+    })
+    .toBe('1')
+  expect((await jump.boundingBox())!.width).toBe(width)
+  const shot = process.env.TR_SCREENSHOT_DIR
+  if (shot) await sidebar.screenshot({ path: `${shot}/sidebar-hover-jump.png` })
+
+  const settings = await openSettings(app)
+  await settings.getByRole('tab', { name: '快捷键', exact: true }).click()
+  const pane = settings.locator('#settings-pane')
+  await expect(pane.getByRole('heading', { name: '快捷键', level: 1 })).toBeVisible()
+  await expect(pane.locator('section')).toHaveCount(7)
+  const row = (label: string) => pane.locator('dl > div').filter({ has: settings.getByText(label, { exact: true }) })
+  await expect(row('Git · 变更的主按钮（合并、推送、创建 PR…）')).toContainText('⇧⌘M')
+  await expect(row('切换到第 1–9 个会话')).toContainText('⌘1 – ⌘9')
+  await expect(row('链接用系统浏览器或默认编辑器打开')).toContainText('⌘ 点击')
+  if (shot) {
+    for (const [theme, name] of [['dark', '深色'], ['light', '浅色']] as const) {
+      await showTab(settings, '外观')
+      await settings.getByRole('radio', { name }).click()
+      await expect(settings.locator('html')).toHaveAttribute('data-theme', theme)
+      await settings.getByRole('tab', { name: '快捷键', exact: true }).click()
+      await settings.waitForTimeout(400)
+      await settings.screenshot({ path: `${shot}/settings-${theme}-快捷键.png` })
+    }
+  }
   await app.close()
 })
 

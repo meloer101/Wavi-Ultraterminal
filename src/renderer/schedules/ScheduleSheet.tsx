@@ -598,7 +598,7 @@ function Sheet({ state }: { state: SheetState }) {
           </button>
           <button type="button" className={sheet.primary} disabled={!draft || saving} onClick={() => void save()}>
             {m.save}
-            <span className={sheet.shortcut}>⌘↵</span>
+            <span data-shortcut-hint className={sheet.shortcut}>⌘↵</span>
           </button>
         </footer>
       </div>

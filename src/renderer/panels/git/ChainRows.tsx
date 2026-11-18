@@ -75,7 +75,7 @@ export function ChainButtons({
       onClick={() => run(move.id)}
     >
       {move.label}
-      {primary && shortcut && <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>}
+      {primary && shortcut && <span data-shortcut-hint className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>}
     </button>
   )
   const entries: MenuEntry[] = zoneMenu(chain).map((item) => ({

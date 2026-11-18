@@ -153,7 +153,7 @@ function Sheet({ target }: { target: ArchiveTarget }) {
           </button>
           <button type="button" className={styles.primary} disabled={busy || blocker !== null} onClick={primary}>
             {busy ? m.archiving : phase.kind === 'script-failed' ? m.archiveAnyway : m.archive}
-            <span className={styles.shortcut}>⌘↵</span>
+            <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>
       </div>

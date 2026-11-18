@@ -2,8 +2,8 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import styles from './NavItem.module.css'
 
 /**
- * Figma component `NavItem` (11:81): 32px row, 16px icon, label, ⌘ hint on the right (none for 更新). `badge` (Figma
- * `Show count`) replaces the hint, e.g. 看板's glyph + count of sessions that need the user.
+ * Figma component `NavItem` (11:81): 32px row, 16px icon, label, ⌘ hint on the right while hovered (Figma 97B; none
+ * for 更新). `badge` (Figma `Show count`) replaces the hint, e.g. 看板's glyph + count of sessions that need the user.
  */
 export function NavItem({
   icon,
@@ -17,7 +17,7 @@ export function NavItem({
     <button type="button" className={styles.item} aria-keyshortcuts={shortcut} aria-current={selected ? 'page' : undefined} data-selected={selected} {...rest}>
       <span className={styles.icon}>{icon}</span>
       <span className={styles.label}>{label}</span>
-      {badge ? <span className={styles.badge}>{badge}</span> : shortcut && <kbd className={styles.kbd}>{shortcut}</kbd>}
+      {badge ? <span className={styles.badge}>{badge}</span> : shortcut && <kbd data-shortcut-hint className={styles.kbd}>{shortcut}</kbd>}
     </button>
   )
 }

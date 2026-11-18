@@ -291,7 +291,7 @@ function Row({ row, selected, cleanable = false, projectId, root, refresh }: Row
                   openMergeSheet({ projectId, root, worktreePath: info.path, worktreeIds: row.worktreeIds, isMain: info.isMain })
                 }
               >
-                {m.mergeInto(info.base)}<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+                {m.mergeInto(info.base)}<span data-shortcut-hint className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
               </button>
             )}
             <button
