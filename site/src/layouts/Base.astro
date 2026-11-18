@@ -27,7 +27,7 @@ const app = JSON.stringify({
   operatingSystem: 'macOS',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   image: ogImage
-})
+}).replace(/</g, '\\u003c') // keeps a `</script>` in copy from ending the tag
 ---
 
 <!doctype html>
