@@ -2,6 +2,9 @@
 export const REPO = 'meloer101/Wavi-Ultraterminal'
 export const gh = (path = ''): string => `https://github.com/${REPO}${path}`
 
+/** The newest release's dmg for one chip; the release workflow uploads these version-free copies. */
+export const dmg = (arch: 'arm64' | 'x64'): string => gh(`/releases/latest/download/Wavi-${arch}.dmg`)
+
 /** A path under the site's base ("/" on Vercel; SITE_BASE in astro.config.mjs moves it). */
 export const withBase = (path: string): string => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
 

@@ -135,7 +135,11 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then echo "Wavi $version" > release-notes.md; fi
-          files=(release/$version/Wavi-$version-arm64.dmg release/$version/Wavi-$version-arm64.zip release/$version/Wavi-$version-x64.dmg release/$version/Wavi-$version-x64.zip)
+          # Copies of the notarized dmgs without the version, so the website can link
+          # releases/latest/download/Wavi-<arch>.dmg and always start the newest download.
+          cp "release/$version/Wavi-$version-arm64.dmg" "release/$version/Wavi-arm64.dmg"
+          cp "release/$version/Wavi-$version-x64.dmg" "release/$version/Wavi-x64.dmg"
+          files=(release/$version/Wavi-$version-arm64.dmg release/$version/Wavi-$version-arm64.zip release/$version/Wavi-$version-x64.dmg release/$version/Wavi-$version-x64.zip release/$version/Wavi-arm64.dmg release/$version/Wavi-x64.dmg)
           flags=(--draft --verify-tag --title "Wavi $version" --notes-file release-notes.md)
           case "$version" in *-*) flags+=(--prerelease) ;; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
