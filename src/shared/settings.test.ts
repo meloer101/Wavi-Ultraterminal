@@ -138,13 +138,9 @@ describe('archive settings (F15)', () => {
   })
 })
 
-describe('设置 · Worktree · 端口 · 自动打开 (PRD F17)', () => {
-  it('is on by default, takes a boolean only, and keeps the port base when only the switch changes', () => {
-    expect(DEFAULT_SETTINGS.ports.autoOpen).toBe(true)
-    const off = applySettingsPatch(DEFAULT_SETTINGS, { ports: { autoOpen: false } })
-    expect(off.ports).toEqual({ base: DEFAULT_SETTINGS.ports.base, autoOpen: false })
-    expect(applySettingsPatch(off, { ports: { autoOpen: 'no' } }).ports.autoOpen).toBe(true)
-    expect(sanitizeSettings({ ports: { base: 42000 } }).ports.autoOpen).toBe(true)
+describe('设置 · Worktree · 端口 (PRD F17 v1.205: 自动打开 is gone)', () => {
+  it('drops the retired autoOpen switch a saved file still has', () => {
+    expect(sanitizeSettings({ ports: { base: 42000, autoOpen: true } }).ports).toEqual({ base: 42000 })
   })
 })
 

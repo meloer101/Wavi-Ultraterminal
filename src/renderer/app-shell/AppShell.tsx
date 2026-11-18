@@ -1,5 +1,4 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { startPortAutoOpen } from '../panels/browser/auto-open'
 import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
 import { startPullRequestBridge } from '../pull-requests/store'
@@ -111,7 +110,6 @@ export function AppShell() {
   useEffect(() => startTaskSources(), [])
   useEffect(() => startConflictRadarBridge(), [])
   useEffect(() => startBranchSync(), [])
-  useEffect(() => startPortAutoOpen(), [])
   // A pty-host crash marks the sessions it took down; their panes offer the recovery (lifecycle/EngineRestartedCard).
   useEffect(() => startHostRestartTracking(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,

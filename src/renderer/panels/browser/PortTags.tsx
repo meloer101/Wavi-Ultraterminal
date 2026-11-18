@@ -9,12 +9,10 @@ import styles from './PortTags.module.css'
 
 const M = defineMessages({
   zh: {
-    waiting: '新端口，切到这个会话时自动打开 · ',
     title: (url: string) => `在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`,
     open: (url: string) => `打开 ${url}`
   },
   en: {
-    waiting: 'New port, opens when you switch to this session · ',
     title: (url: string) => `Open ${url} in the built-in browser · ⌥-click to open in the system browser · Right-click to end the process`,
     open: (url: string) => `Open ${url}`
   }
@@ -24,27 +22,20 @@ const M = defineMessages({
 export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: number }) {
   const m = useMessages(M)
   const ports = useBrowser((s) => s.ports[sessionId])
-  // 自动打开 waits for the user to go to this worktree (auto-open.ts).
-  const pending = useBrowser((s) => s.pendingPorts[sessionId])
   if (!ports || ports.length === 0) return null
-  // A waiting port is never folded into +N.
-  const waiting = ports.find((p) => p.port === pending)
-  const first = ports.slice(0, max)
-  const shown = waiting && !first.includes(waiting) ? [...first.slice(0, max - 1), waiting] : first
-  const hidden = ports.filter((p) => !shown.includes(p))
+  const shown = ports.slice(0, max)
+  const hidden = ports.slice(max)
   const rest = hidden.length
   return (
     <span className={styles.ports} data-testid="port-tags">
       {shown.map((p) => {
         const url = portUrl(p)
-        const waiting = p.port === pending
         return (
           <button
             key={`${p.host}:${p.port}:${p.pid}`}
             type="button"
             className={styles.port}
-            data-pending={waiting || undefined}
-            title={`${waiting ? m.waiting : ''}${p.label ? `${p.label} · ` : ''}${m.title(url)}`}
+            title={`${p.label ? `${p.label} · ` : ''}${m.title(url)}`}
             aria-label={m.open(url)}
             onClick={(e) => {
               e.stopPropagation()

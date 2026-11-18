@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-17
+> 最后更新：2026-11-18
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：取消 F17 新端口自动打开浏览器（PRD v1.205）：删掉 `auto-open.ts`、端口标签的等待高亮和设置 · Worktree 的开关；右侧栏关闭时网页先换成截图，和面板一起滑出，不再晚 460 ms 单独消失（`page-slot.ts`，e2e `browser-panel.spec.ts`「covers the well」）。
 - 2026-11-16：图标全应用换成 Hugeicons（含手机端），GUI 对话的运行行和正在跑的工具行：左边是那件事的图标（思考是大脑），文字从左到右亮起，不再用蓝色转圈（PRD v1.204，Figma 94′）。桌面的图标只从 `src/renderer/ui/icons.tsx` 取，`lucide-react` 移除；手机端 `Assets.xcassets/Icons` 由 `phone-assets.test.ts` 生成。手机端的运行行未扫光（未定）。
 - 2026-11-16：窗口材质加第三项「实心玻璃」（PRD v1.203，Figma 93）：不透明，玻璃感只在边缘（卡片、菜单、sheet、同一个状态、主按钮、输入框），侧栏选中不走弹簧。`src/shared/settings.ts`（`'solid-glass'`、`isOpaqueMaterial`）、`renderer/appearance/map.ts`（`data-finish`）、`styles/tokens.css` 的 `[data-finish='glass']` 两组、新 token `--state-ring` / `--primary-finish` / `--field-finish`（IconButton、Segmented、MenuHost 和 14 条主按钮、13 条输入框的样式规则）；单元测试 + e2e `settings.spec.ts`。截图对过深浅两色；玻璃 / 实色和改动前逐像素对比只有转圈的状态图标和光标在变。没在作者的 Mac 上用过。
 - 2026-11-16：GUI 对话的七处可视化（PRD v1.201，Figma 90）：文件引用可点和悬停看行、网页搜索结果和网页标题、代码块和 diff 着色（新依赖 lowlight）、测试结果、依赖栈帧折叠、「↓ 回到最新」、Claude 会话的回退（对话 / 代码 / 两者）和改过的消息切换版本。e2e `gui-session.spec.ts` 加 4 个；回退文件用真 Claude（Haiku）实测过 `rewind_files`，界面里只用假 Claude 测过。
@@ -537,7 +538,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
   - [x] F14 端口检测（2026-10-19）：有会话时主进程仍用 `src/main/browser/ports.ts` 的 `ps` + `lsof`，大约每 3 秒扫每个 PTY 进程树（不再只在浏览器页签打开时扫）；窗口订阅每个会话的最近一次结果，所以侧栏会话行和总览在重载后也能显示 `:5173`，不必先打开浏览器页签；点击在右侧栏浏览器打开，⌥ 点击用系统浏览器打开，右键结束进程。主进程只结束该会话最近一次扫描里的 pid（`sessionListener`），没有通用的杀进程 IPC。同一会话超过 2 个端口时其余收成 `+N`；e2e 在 `browser-panel.spec.ts`（关着浏览器页签时侧栏和总览出现标签、⌥ 点击、右键确认后结束）。agent CLI 自己的监听（Claude Code 的本地 socket）不列（2026-10-28，PRD v1.85，`isAgentCli` 单测）
   - [x] F17 终端视图（2026-11-12，PRD v1.176，Figma 76A / 76B）：`src/renderer/panels/terminal/`、`src/shared/panel-terminal.ts`；PTY id `panel-<worktreeId>-<n>`，tab 从 pty 守护进程的 live 列表接回；worktree 离开工作区时结束它的 shell。e2e `terminal-panel.spec.ts`（pwd 是 worktree 路径、+ 和 tab 行、关 tab 结束 shell、按 worktree 分组、重载接回、文件链接），单测 `panel-terminal.test.ts`、`store.test.ts`
   - [x] F17 iOS 模拟器视图（2026-11-12，PRD v1.176，Figma 76C / 76D）：`src/main/simulator/`、`src/shared/simulator.ts`、`src/renderer/panels/simulator/`，依赖 `serve-sim@0.1.49`。单测 `simulator.test.ts`（simctl 解析、MJPEG 拆帧、按键映射、坐标和旋转）、`validate.test.ts`；在构建出的 app 里用 Playwright 驱动真模拟器验过点按打开设置、滚动、打字、主屏幕、四次旋转、关面板后 helper 留 60 s、退出后不留进程。打包产物（`dist:dir`，Developer ID + hardened runtime）里同样验过，serve-sim 的 `.node` 和 5 个可执行文件都签成本 Team ID、`codesign --verify --deep --strict` 通过。没有 e2e（CI 没有模拟器）。以后：公证后的下载版、Xcode 27 Device Hub、构建运行按钮
-  - [x] F17 新端口自动打开浏览器（2026-11-08，PRD v1.162）：`src/renderer/panels/browser/auto-open.ts` 跟着端口扫描，每个端口一次、重启后刷新，其他 worktree 等切过去；设置 · Worktree · 端口的开关；e2e `browser-panel.spec.ts`「opens the panel by itself」。以后再做：agent 写出的 `.html` 预览（限定在 worktree 内的协议）
+  - ~~F17 新端口自动打开浏览器~~（2026-11-18 PRD v1.205 取消，作者不要自动打开）（2026-11-08，PRD v1.162）：`src/renderer/panels/browser/auto-open.ts` 跟着端口扫描，每个端口一次、重启后刷新，其他 worktree 等切过去；设置 · Worktree · 端口的开关；e2e `browser-panel.spec.ts`「opens the panel by itself」。以后再做：agent 写出的 `.html` 预览（限定在 worktree 内的协议）
   - [x] F17 浏览器页签（2026-10-17）：`WebContentsView`（每个 worktree 一个 `persist:tr-browser:<哈希>` 分区、无 preload、只允许 http(s)、新窗口要有用户操作）、每个 worktree 一个页面并记住 URL、地址框（纯数字 = localhost 端口）、worktree 内所有会话的端口条、375 手机视口、控制台错误 / 警告计数和“发给 Claude”（只放进输入行，不按回车）、页面里的应用快捷键和右键菜单、空状态 13E；菜单和对话框打开时用截图代替页面；e2e `browser-panel.spec.ts`。以后再做：截图闪烁 / MutationObserver 范围、本机自签名证书、缩放后的坐标、隐藏时暂停端口扫描、闲置页面回收、触摸和移动端 UA、按 cwd 找后台服务的端口
   - [x] 终端里的链接优先在内置浏览器打开（2026-10-18，PRD v1.16）：单击 = 右侧栏浏览器、导航到会话所在 worktree 的页面；⌘ 单击 = 系统浏览器；右键链接 = 在内置浏览器打开 · 用系统浏览器打开 · 复制链接；OSC 8 超链接同样处理，悬停显示真实地址；e2e 在 `browser-panel.spec.ts`。以后再做：设置里改默认打开方式
   - [x] 内置浏览器能登录外部网站（2026-10-18，PRD v1.18）：外部网站共用一个分区（本机 / 局域网仍按 worktree 隔离，跨类跳转换视图）；登录弹窗开成 Wavi 里的小窗口并保留 `window.opener`，⌘W 只关弹窗；页面 UA 去掉 `Electron/…` 和应用名；e2e 用 `--host-resolver-rules` 把 `site.example` 指到本机。真实 Google 登录已验证（第一次弹窗报 Google 400，第二次成功，原因未查明）
