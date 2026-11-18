@@ -284,8 +284,22 @@ test.describe('F17 right panel · 浏览器', () => {
     await page.keyboard.press('Escape')
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([true])
 
-    // Closing the pane takes the page away; reopening brings the same page back.
+    // Closing the pane takes the page away; reopening brings the same page back. The native page ignores CSS, so
+    // while the panel slides out a snapshot stands in for it and leaves with the panel, not after it.
     await page.keyboard.press('Meta+Shift+KeyB')
+    await expect
+      .poll(
+        async () => {
+          const dom = await page.evaluate(() => {
+            const aside = document.querySelector('[data-region="panel"]')
+            return { phase: aside?.getAttribute('data-phase') ?? null, snapshot: aside?.querySelector('[data-testid="browser-page"] img') !== null }
+          })
+          return { ...dom, visible: (await views()).map((v) => v.visible) }
+        },
+        { intervals: [20] }
+      )
+      .toEqual({ phase: 'closing', snapshot: true, visible: [false] })
+    await expect(panel()).toHaveCount(0)
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([false])
     await page.keyboard.press('Meta+Shift+KeyB')
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([true])
