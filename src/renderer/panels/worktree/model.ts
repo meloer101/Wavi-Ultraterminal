@@ -237,6 +237,22 @@ export function cleanupPlan(rows: readonly WorktreeRow[]): CleanupPlan {
   return plan
 }
 
+/**
+ * The first of `lines` that fit in `budget` characters once joined (`gap` = the separator's length), and how many
+ * were left out. Main refuses a confirmation whose text is too long, so a list of any length has to be cut to fit.
+ */
+export function fitLines(lines: readonly string[], budget: number, gap = 1): { shown: string[]; left: number } {
+  const shown: string[] = []
+  let used = 0
+  for (const line of lines) {
+    const next = used + line.length + (shown.length > 0 ? gap : 0)
+    if (next > budget) break
+    shown.push(line)
+    used = next
+  }
+  return { shown, left: lines.length - shown.length }
+}
+
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
 export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
   return info.branch ? pick(M).branchKept(info.branch) : pick(M).commitsElsewhere

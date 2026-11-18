@@ -17,6 +17,14 @@ interface DialogHook {
   answer: boolean
 }
 
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd })
+const commitIn = (cwd: string, file: string) => {
+  writeFileSync(join(cwd, file), `export const x = '${file}'\n`)
+  git(cwd, 'add', '.')
+  git(cwd, 'commit', '-q', '-m', file)
+}
+
 /**
  * main · feature (1 commit ahead, behind after the merges, one uncommitted line) · merged (merged with --no-ff, no
  * session) · busy (merged, but a session works there) · detached (a commit that only it has).
@@ -28,13 +36,6 @@ function makeRepo(): { project: string; feature: string; merged: string; busy: s
   const merged = join(base, 'wt-merged')
   const busy = join(base, 'wt-busy')
   const detached = join(base, 'wt-detached')
-  const git = (cwd: string, ...args: string[]) =>
-    execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd })
-  const commitIn = (cwd: string, file: string) => {
-    writeFileSync(join(cwd, file), `export const x = '${file}'\n`)
-    git(cwd, 'add', '.')
-    git(cwd, 'commit', '-q', '-m', file)
-  }
   execFileSync('mkdir', ['-p', project])
   writeFileSync(join(project, 'README.md'), '# demo\n')
   git(project, 'init', '-q', '-b', 'main')
@@ -248,5 +249,26 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(working().locator(':scope > li')).toHaveCount(3)
     // The branch is kept.
     expect(execFileSync('git', ['branch', '--list', 'jacob/merged'], { cwd: repo.project }).toString()).toContain('jacob/merged')
+  })
+
+  test('清理 with more worktrees than its confirmation can list still asks once and removes them all', async () => {
+    // Twelve merged worktrees: their lines alone are over the 500 characters main accepts as a confirmation's detail.
+    const paths = Array.from({ length: 12 }, (_, i) => join(repo.project, '..', `wt-finished-${i}`))
+    paths.forEach((path, i) => {
+      git(repo.project, 'worktree', 'add', '-q', '-b', `jacob/finished-${i}`, path)
+      commitIn(path, `finished-${i}.ts`)
+      git(repo.project, 'merge', '-q', '--no-ff', '-m', `merge finished-${i}`, `jacob/finished-${i}`)
+    })
+    await expect(cleanable().locator(':scope > li')).toHaveCount(12, WITHIN)
+    const before = (await dialogs()).length
+    await panel().getByRole('button', { name: '全部清理' }).click()
+    await expect(panel().getByRole('status')).toHaveText('已清理 12 个 worktree', { timeout: 30_000 })
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe('清理 12 个 worktree？')
+    expect(asked[0]!.detail!.length).toBeLessThanOrEqual(500)
+    expect(asked[0]!.detail).toContain('jacob/finished-0')
+    expect(asked[0]!.detail).toMatch(/…还有 \d+ 个/)
+    for (const path of paths) expect(existsSync(path)).toBe(false)
   })
 })

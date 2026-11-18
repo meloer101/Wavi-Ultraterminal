@@ -13,7 +13,7 @@ import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { closeWorktreeTabs } from '../terminal/actions'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, COLLAPSED, deleteBlocker, fitLines, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const M = defineMessages({
@@ -42,6 +42,7 @@ const M = defineMessages({
     error: '出错了',
     skipped: (name: string, reason: string) => `${name}（${reason}）`,
     listSeparator: '；',
+    more: (count: number) => `…还有 ${count} 个`,
     nothingToCleanList: (skipped: string) => `没有可以清理的：${skipped}`,
     nothingToClean: '没有可以清理的 worktree',
     cleanMessage: (count: number) => `清理 ${count} 个 worktree？`,
@@ -80,6 +81,7 @@ const M = defineMessages({
     error: 'something went wrong',
     skipped: (name: string, reason: string) => `${name} (${reason})`,
     listSeparator: '; ',
+    more: (count: number) => `…and ${count} more`,
     nothingToCleanList: (skipped: string) => `Nothing to clean up: ${skipped}`,
     nothingToClean: 'No worktrees to clean up',
     cleanMessage: (count: number) => `Clean up ${count} ${count === 1 ? 'worktree' : 'worktrees'}?`,
@@ -216,9 +218,22 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
   }
 }
 
+/** Main refuses a confirmation whose detail is over 500 characters (confirm-spec), and then nothing is asked. */
+const DETAIL_MAX = 480
+/** Of those, what the skipped worktrees may take. */
+const SKIPPED_MAX = 120
+
+/** `items` joined by `separator` in at most `budget` characters: the ones that do not fit become “…还有 N 个”. */
+function listWithin(items: readonly string[], separator: string, budget: number): string {
+  const more = pick(M).more
+  const { shown, left } = fitLines(items, budget - more(items.length).length - separator.length, separator.length)
+  return [...shown, ...(left > 0 ? [more(left)] : [])].join(separator)
+}
+
 /**
  * 可清理 › 清理: one confirmation listing what goes (and what stays and why), then remove them one by one. Rows with a
- * session are never part of it (cleanupPlan), checked again after the dialog.
+ * session are never part of it (cleanupPlan), checked again after the dialog. The dialog lists as many as fit; the
+ * count in its message is always all of them.
  */
 export async function cleanUpInteractive(root: string, rows: readonly WorktreeRow[], refresh: () => Promise<void>): Promise<void> {
   const m = pick(M)
@@ -228,10 +243,12 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
     patchRoot(root, { notice: skipped.length > 0 ? m.nothingToCleanList(skipped.join(m.listSeparator)) : m.nothingToClean })
     return
   }
-  const listed = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.openPath, window.tr.homeDir)}`).join('\n')
+  const skippedShort = listWithin(skipped, m.listSeparator, SKIPPED_MAX)
+  const lines = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.openPath, window.tr.homeDir)}`)
+  const listed = listWithin(lines, '\n', DETAIL_MAX - m.cleanDetail('', m.ignoredFiles, skippedShort).length)
   const confirmed = await window.tr.ui.confirm({
     message: m.cleanMessage(plan.remove.length),
-    detail: m.cleanDetail(listed, m.ignoredFiles, skipped.join(m.listSeparator)),
+    detail: m.cleanDetail(listed, m.ignoredFiles, skippedShort),
     confirmLabel: m.clean,
     destructive: true
   })

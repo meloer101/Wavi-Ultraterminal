@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：Worktree 视图「全部清理」在可清理的 worktree 多时点了没反应：确认框把每个 worktree 列一行，超过主进程对确认框文字的 500 字上限（`confirm-spec.ts`）时 IPC 抛错，没有确认框也没有提示（作者的仓库有 33 个已合并的 worktree）。确认框现在只列放得下的几行，其余写「…还有 N 个」，标题里的数量仍是全部；跳过的清单同样截短。`panels/worktree/model.ts` `fitLines`、`actions.ts` `listWithin`；单测 `model.test.ts`，e2e `worktree-panel.spec.ts`（12 个已合并的 worktree，修复前失败）。真实 app 里还没看过；多选删除还没做。
 - 2026-11-18：链接版里 iOS 模拟器连不上（PRD v1.215）：serve-sim 的路径在链接版里指向 `Wavi.app` 里不存在的 `node_modules`，改为取它运行的 checkout 的（`src/main/simulator/helper.ts` `serveSimCliPath`，单测 `validate.test.ts`）。合并后要在主 checkout 跑 `npm run build` 并重启 Wavi 才生效；真实 app 里还没看过。
 - 2026-11-18：Claude 会话的标题更早换成 agent 起的名字（PRD v1.214）：会话还没有 `ai-title` 时，prompt 后 1.5 / 3 / 4.5 / 6 / 8 / 12 / 20 s、Stop 后 0 / 3 / 8 s 读 transcript；原来第一轮比起名请求先结束时，首条消息要留到下一轮。`src/main/hooks/agent-title.ts`，单测 `agent-title.test.ts`。没有自己标题的 agent（Codex app-server、Pi、部分 ACP、其余 CLI）不变。
 - 2026-11-18：F17 终端和 iOS 模拟器的入口挪进会话头「…」菜单最上面两项（PRD v1.213）：视图图标回到 4 个，打开的视图在菜单里带 ✓，「…」在它们显示时为 Active 底色；`terminal-panel.spec.ts`、`archive.spec.ts` 改成从菜单打开。

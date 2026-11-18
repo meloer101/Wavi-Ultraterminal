@@ -6,6 +6,7 @@ import {
   buildRows,
   cleanupPlan,
   deleteBlocker,
+  fitLines,
   formatAhead,
   formatDiff,
   keptText,
@@ -182,6 +183,20 @@ describe('cleanupPlan', () => {
     const plan = cleanupPlan([row!])
     expect(plan.remove).toEqual([])
     expect(plan.skip[0]!.reason).toBe('有会话')
+  })
+})
+
+describe('fitLines', () => {
+  it('keeps every line that fits, counting the separators', () => {
+    expect(fitLines(['ab', 'cd', 'ef'], 8)).toEqual({ shown: ['ab', 'cd', 'ef'], left: 0 })
+    expect(fitLines(['ab', 'cd', 'ef'], 7)).toEqual({ shown: ['ab', 'cd'], left: 1 })
+    expect(fitLines(['ab', 'cd', 'ef'], 9, 2)).toEqual({ shown: ['ab', 'cd'], left: 1 })
+  })
+
+  it('stops at the first line that does not fit, and shows none when even the first is too long', () => {
+    expect(fitLines(['ab', 'a long one', 'c'], 5)).toEqual({ shown: ['ab'], left: 2 })
+    expect(fitLines(['a long one', 'c'], 5)).toEqual({ shown: [], left: 2 })
+    expect(fitLines([], 5)).toEqual({ shown: [], left: 0 })
   })
 })
 
