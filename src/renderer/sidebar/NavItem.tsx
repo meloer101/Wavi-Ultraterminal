@@ -17,7 +17,7 @@ export function NavItem({
     <button type="button" className={styles.item} aria-keyshortcuts={shortcut} aria-current={selected ? 'page' : undefined} data-selected={selected} {...rest}>
       <span className={styles.icon}>{icon}</span>
       <span className={styles.label}>{label}</span>
-      {badge ? <span className={styles.badge}>{badge}</span> : shortcut && <kbd data-shortcut-hint className={styles.kbd}>{shortcut}</kbd>}
+      {badge ? <span className={styles.badge}>{badge}</span> : shortcut && <kbd data-shortcut-hint="edge" className={styles.kbd}>{shortcut}</kbd>}
     </button>
   )
 }
