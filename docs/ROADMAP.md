@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：Claude 会话的标题更早换成 agent 起的名字（PRD v1.214）：会话还没有 `ai-title` 时，prompt 后 1.5 / 3 / 4.5 / 6 / 8 / 12 / 20 s、Stop 后 0 / 3 / 8 s 读 transcript；原来第一轮比起名请求先结束时，首条消息要留到下一轮。`src/main/hooks/agent-title.ts`，单测 `agent-title.test.ts`。没有自己标题的 agent（Codex app-server、Pi、部分 ACP、其余 CLI）不变。
 - 2026-11-18：F17 终端和 iOS 模拟器的入口挪进会话头「…」菜单最上面两项（PRD v1.213）：视图图标回到 4 个，打开的视图在菜单里带 ✓，「…」在它们显示时为 Active 底色；`terminal-panel.spec.ts`、`archive.spec.ts` 改成从菜单打开。
 - 2026-11-18：官网的链接分享封面（X 等的大图卡片）：Figma「官网·时尚杂志风」section `OG · 分享封面`（9 个方向，作者选 F′ `1685:8788`，窗口按当前 app 重画成组件 `1684:8676`），导出成 `site/public/og.png`（2400×1260）；`Base.astro` 加 `og:image` / `twitter:card=summary_large_image` / `twitter:image`，中英文两页同一张；`astro.config.mjs` 在 Vercel 上用 `VERCEL_PROJECT_PRODUCTION_URL` 作 `site`，图片地址是绝对 URL。
 - 2026-11-18：你的消息从输入框「递交」上屏（PRD v1.212，Figma 98 / 98′）：桌面 GUI 会话里输入框的字变成气泡、沿 `--motion-spring` 飞到落点，底色和头像随后淡入，上面的对话跟着同一条弹簧让位，落点随对话滚动；超过 6 行、只有图片、减少动态效果时在落点淡入；「回复」落定后才出现。`renderer/gui/Feed.tsx` `flyIn`、`model.ts` `flightOf` / `PendingSend.from`、`Composer.tsx`（起飞点、占位字）、`ChatPane.tsx`、`Chat.module.css` `.flyer`；手机 `Flight.swift`、`SessionView.swift` `FlyingCopy` / `SendingRow` / `UserBubble`、`Composer.swift`、`AppModel.launch`。单测 `model.test.ts`、iOS `FlightTests`；e2e `gui-session.spec.ts`「flies in from the composer」（0 / 120 / 380 ms 两种主题截图）。手机端没在连着 Mac 的真会话里看过动起来的样子。
