@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：官网的链接分享封面（X 等的大图卡片）：Figma「官网·时尚杂志风」section `OG · 分享封面`（9 个方向，作者选 F′ `1685:8788`，窗口按当前 app 重画成组件 `1684:8676`），导出成 `site/public/og.png`（2400×1260）；`Base.astro` 加 `og:image` / `twitter:card=summary_large_image` / `twitter:image`，中英文两页同一张；`astro.config.mjs` 在 Vercel 上用 `VERCEL_PROJECT_PRODUCTION_URL` 作 `site`，图片地址是绝对 URL。
 - 2026-11-18：你的消息从输入框「递交」上屏（PRD v1.212，Figma 98 / 98′）：桌面 GUI 会话里输入框的字变成气泡、沿 `--motion-spring` 飞到落点，底色和头像随后淡入，上面的对话跟着同一条弹簧让位，落点随对话滚动；超过 6 行、只有图片、减少动态效果时在落点淡入；「回复」落定后才出现。`renderer/gui/Feed.tsx` `flyIn`、`model.ts` `flightOf` / `PendingSend.from`、`Composer.tsx`（起飞点、占位字）、`ChatPane.tsx`、`Chat.module.css` `.flyer`；手机 `Flight.swift`、`SessionView.swift` `FlyingCopy` / `SendingRow` / `UserBubble`、`Composer.swift`、`AppModel.launch`。单测 `model.test.ts`、iOS `FlightTests`；e2e `gui-session.spec.ts`「flies in from the composer」（0 / 120 / 380 ms 两种主题截图）。手机端没在连着 Mac 的真会话里看过动起来的样子。
 - 2026-11-18：带快捷键的按钮标签始终居中（PRD v1.211）：`styles/base.css` 把带 `data-shortcut-hint` 的按钮排成 `1fr auto 1fr` 三列，左边是和快捷键同宽的空位；侧栏行标 `edge` 不参与，PromptStrip 的前置快捷键标 `lead`；e2e `settings.spec.ts` 量 设置 · 自动化「打开定时任务…」的标签离中心不到 1.5 px、悬停前后宽度相同。
 - 2026-11-18：快捷键只在悬停时出现 + 设置 · 快捷键（PRD v1.210，Figma 97C′ / 97E）：侧栏和 24 处按钮上的快捷键标 `data-shortcut-hint`，`styles/base.css` 一条规则让它在按钮没被悬停、没有键盘焦点时透明（仍占位）；设置最后一项「快捷键」（`settings/ShortcutsPane.tsx`、`shortcut-list.ts`），7 组 43 条，单测 `shortcut-list.test.ts` 保证 `SHORTCUTS` / `FILE_SHORTCUTS` 都列上；e2e `settings.spec.ts`「shortcut hints show on hover only」。

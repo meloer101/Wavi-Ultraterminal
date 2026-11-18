@@ -14,6 +14,8 @@ const { lang } = Astro.props
 const t = copy[lang]
 const self = withBase(lang === 'en' ? '' : 'zh/')
 const other = withBase(otherPath(lang))
+// Link previews (X, Slack, iMessage) need an absolute URL; without a configured site (local dev) it stays a path.
+const ogImage = Astro.site ? new URL(withBase('og.png'), Astro.site).href : withBase('og.png')
 ---
 
 <!doctype html>
@@ -28,6 +30,12 @@ const other = withBase(otherPath(lang))
     <meta property="og:title" content={t.meta.title} />
     <meta property="og:description" content={t.meta.description} />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="2400" />
+    <meta property="og:image:height" content="1260" />
+    <meta property="og:image:alt" content={t.meta.title} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
     <link rel="alternate" hreflang={lang === 'en' ? 'en' : 'zh-CN'} href={self} />
     <link rel="alternate" hreflang={lang === 'en' ? 'zh-CN' : 'en'} href={other} />
     <link rel="icon" type="image/png" sizes="64x64" href={withBase('icon-64.png')} />
