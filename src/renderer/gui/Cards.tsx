@@ -90,7 +90,7 @@ function Button({ label, shortcut, primary = false, disabled, onClick, title }: 
   return (
     <button type="button" className={styles.button} data-primary={primary} disabled={disabled} onClick={onClick} title={title}>
       <span>{label}</span>
-      {shortcut && <span className={styles.buttonShortcut}>{shortcut}</span>}
+      {shortcut && <span data-shortcut-hint className={styles.buttonShortcut}>{shortcut}</span>}
     </button>
   )
 }

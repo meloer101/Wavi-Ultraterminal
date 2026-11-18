@@ -276,7 +276,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
             {canRetry && (
               <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
                 {m.retry}
-                {showFields && <span className={styles.shortcut}>⌘↵</span>}
+                {showFields && <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>}
               </button>
             )}
           </>
@@ -284,7 +284,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
           state.stage === 'glance' && (
             <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
               {submitLabel(state.kind)}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           )
         )}

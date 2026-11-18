@@ -68,6 +68,8 @@ export const SHORTCUTS = {
   'focus-pane-down': 'Alt+CmdOrCtrl+Down',
   'open-project-in-window': 'Shift+CmdOrCtrl+O',
   settings: 'CmdOrCtrl+,',
+  // 退出并结束所有会话 (the app menu; ⌘Q quits and leaves the sessions running).
+  'quit-ending-sessions': 'Alt+CmdOrCtrl+Q',
   'open-usage': 'Shift+CmdOrCtrl+U',
   'open-schedules': 'Shift+CmdOrCtrl+T',
   'font-bigger': 'CmdOrCtrl+Plus',

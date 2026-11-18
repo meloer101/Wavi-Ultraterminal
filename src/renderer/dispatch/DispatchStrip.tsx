@@ -132,7 +132,7 @@ function Strip({ parentId, pending, active }: { parentId: string; pending: reado
         </button>
         <button type="button" className={styles.primary} onClick={() => decideConfirms(parentId, true)} data-testid="dispatch-start">
           {m.start(count)}
-          <span className={styles.shortcut}>⌘↵</span>
+          <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
         </button>
       </div>
     </div>

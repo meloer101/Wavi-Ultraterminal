@@ -98,7 +98,7 @@ function Strip({ sessionId, pending, active }: { sessionId: string; pending: rea
         </button>
         <button type="button" className={styles.primary} onClick={() => decide(sessionId, true)} data-testid="schedule-start">
           {m.start}
-          <span className={styles.shortcut}>⌘↵</span>
+          <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
         </button>
       </div>
     </div>

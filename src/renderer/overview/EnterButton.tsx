@@ -19,7 +19,7 @@ export function EnterButton({ sessionId }: { sessionId: SessionId }) {
       }}
     >
       {m.enter}
-      <span className={styles.key} aria-hidden>
+      <span data-shortcut-hint className={styles.key} aria-hidden>
         ↵
       </span>
     </button>

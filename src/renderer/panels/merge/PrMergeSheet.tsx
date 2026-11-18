@@ -210,12 +210,12 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
           {phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
               {t.done}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           ) : (
             <button type="button" className={styles.primary} disabled={blocked || busy} onClick={() => void merge()}>
               {busy ? t.merging : view.waitForChecks ? t.mergeWhenGreen : t.mergePr(pr.number)}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           )}
         </footer>

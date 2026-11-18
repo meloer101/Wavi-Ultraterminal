@@ -335,7 +335,7 @@ function Dialog() {
           </button>
           <button type="button" className={sheet.primary} disabled={!plan?.members} onClick={send}>
             {attemptButtonLabel(total)}
-            <span className={sheet.shortcut}>⌘↵</span>
+            <span data-shortcut-hint className={sheet.shortcut}>⌘↵</span>
           </button>
         </footer>
       </div>

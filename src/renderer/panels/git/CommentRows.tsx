@@ -160,7 +160,7 @@ export function CommentEditor({ top, split = false, end = false }: { top: number
         </button>
         <button type="button" className={styles.commentSave} disabled={draft.id === null && draft.text.trim() === ''} onClick={() => saveDraft()}>
           {draft.id === null ? m.add : m.save}
-          <span className={styles.shortcut}>⌘↵</span>
+          <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
         </button>
       </div>
     </div>

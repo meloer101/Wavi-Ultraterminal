@@ -27,7 +27,7 @@ export function PromptStrip({ question, detail, actions, testId }: { question: R
       <div className={styles.options}>
         {actions.map((action) => (
           <button key={action.label} type="button" className={styles.option} disabled={action.disabled} onClick={action.onClick}>
-            {action.keys && <span className={styles.key}>{action.keys}</span>}
+            {action.keys && <span data-shortcut-hint className={styles.key}>{action.keys}</span>}
             {action.label}
           </button>
         ))}

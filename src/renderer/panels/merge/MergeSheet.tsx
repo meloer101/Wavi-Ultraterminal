@@ -395,24 +395,24 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
           {settled ? (
             <button type="button" className={styles.close} onClick={() => closeMergeSheet(true)}>
               {m.close}
-              <span className={styles.shortcut}>esc</span>
+              <span data-shortcut-hint className={styles.shortcut}>esc</span>
             </button>
           ) : phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
               {m.done}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           ) : conflicts.length > 0 && !shown?.blocker ? (
             agent && (
               <button type="button" className={styles.primary} disabled={handing} onClick={() => void handToAgent()}>
                 {handing ? m.handingOff(agentLabel(agent.kind)) : m.handOff(agentLabel(agent.kind))}
-                <span className={styles.shortcut}>⌘↵</span>
+                <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
               </button>
             )
           ) : (
             <button type="button" className={styles.primary} disabled={!mergeable || busy} onClick={() => void merge()}>
               {busy ? m.merging : m.merge}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           )}
         </footer>

@@ -254,7 +254,7 @@ export function AutomationPane({
           <Row label={m.allSchedules}>
             {/* Over the settings: closing it comes back here. */}
             <Button onClick={() => openSchedules()}>
-              {m.openSchedules} <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['open-schedules'])}</span>
+              {m.openSchedules} <span data-shortcut-hint className={styles.shortcut}>{formatAccelerator(SHORTCUTS['open-schedules'])}</span>
             </Button>
           </Row>
         </Section>

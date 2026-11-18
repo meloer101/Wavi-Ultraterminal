@@ -298,7 +298,7 @@ export function EmptyMain() {
           <div className={styles.next} data-entrance-rest>
             <button type="button" className={styles.open} onClick={() => void openProjectInteractive(kind)}>
               {m.openProject}
-              <kbd className={styles.kbd}>{formatAccelerator(SHORTCUTS['open-project'])}</kbd>
+              <kbd data-shortcut-hint className={styles.kbd}>{formatAccelerator(SHORTCUTS['open-project'])}</kbd>
             </button>
             <span className={styles.dropHint}>{m.dropHint}</span>
           </div>

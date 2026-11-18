@@ -1,6 +1,6 @@
 // Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
 import { useRef, type KeyboardEvent } from 'react'
-import { Bot, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
+import { Bot, Command, Gauge, GitBranch, MessageSquare, Palette, Smartphone, SquareTerminal, Workflow, X, type IconComponent } from '../ui/icons'
 import { create } from 'zustand'
 import { defineMessages } from '@shared/i18n'
 import { IconButton } from '../ui/IconButton'
@@ -10,16 +10,17 @@ import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'
 import { ChatPane } from './ChatPane'
 import { PhonePane } from './PhonePane'
+import { ShortcutsPane } from './ShortcutsPane'
 import { TerminalPane } from './TerminalPane'
 import { UsagePane } from './UsagePane'
 import { useSettings } from './useSettings'
 import { WorktreePane } from './WorktreePane'
 import styles from './SettingsApp.module.css'
 
-// 通用 / 快捷键 come back with their content; an empty "即将推出" pane is a dead end (B11). The version and 检查更新
+// 通用 comes back with its content; an empty "即将推出" pane is a dead end (B11). The version and 检查更新
 // moved from 关于 to the sidebar's 更新 (Figma 36G, PRD v1.93). 外观 / 终端 / 对话 are three pages (Figma 66): the
-// window, the CLI sessions' terminal, the GUI sessions' chat.
-export type SettingsPaneId = 'appearance' | 'terminal' | 'chat' | 'agents' | 'usage' | 'worktree' | 'automation' | 'phone'
+// window, the CLI sessions' terminal, the GUI sessions' chat. 快捷键 lists every shortcut (Figma 97E, PRD v1.210).
+export type SettingsPaneId = 'appearance' | 'terminal' | 'chat' | 'agents' | 'usage' | 'worktree' | 'automation' | 'phone' | 'shortcuts'
 type PaneId = SettingsPaneId
 
 /** The pane on show; openSettings('usage') (the sidebar's 额度, ⇧⌘U) sets it. */
@@ -30,12 +31,12 @@ const M = defineMessages({
   zh: {
     settings: '设置',
     close: '关闭设置（Esc）',
-    nav: { appearance: '外观', terminal: '终端', chat: '对话', agents: '智能体', usage: '额度', worktree: 'Worktree', automation: '自动化', phone: '手机' }
+    nav: { appearance: '外观', terminal: '终端', chat: '对话', agents: '智能体', usage: '额度', worktree: 'Worktree', automation: '自动化', phone: '手机', shortcuts: '快捷键' }
   },
   en: {
     settings: 'Settings',
     close: 'Close settings (Esc)',
-    nav: { appearance: 'Appearance', terminal: 'Terminal', chat: 'Chat', agents: 'Agents', usage: 'Usage', worktree: 'Worktree', automation: 'Automation', phone: 'Phone' }
+    nav: { appearance: 'Appearance', terminal: 'Terminal', chat: 'Chat', agents: 'Agents', usage: 'Usage', worktree: 'Worktree', automation: 'Automation', phone: 'Phone', shortcuts: 'Shortcuts' }
   }
 })
 
@@ -47,7 +48,8 @@ const NAV: ReadonlyArray<{ id: PaneId; Icon: IconComponent }> = [
   { id: 'usage', Icon: Gauge },
   { id: 'worktree', Icon: GitBranch },
   { id: 'automation', Icon: Workflow },
-  { id: 'phone', Icon: Smartphone }
+  { id: 'phone', Icon: Smartphone },
+  { id: 'shortcuts', Icon: Command }
 ]
 
 export function SettingsApp({ onClose }: { onClose(): void }) {
@@ -123,6 +125,7 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
         )}
         {pane === 'phone' && loaded && <PhonePane remote={settings.remote} update={updateRemote} />}
         {pane === 'agents' && <AgentsPane />}
+        {pane === 'shortcuts' && <ShortcutsPane />}
         {pane === 'usage' && <UsagePane alerts={loaded ? settings.alerts : null} updateAlerts={updateAlerts} />}
       </main>
     </div>

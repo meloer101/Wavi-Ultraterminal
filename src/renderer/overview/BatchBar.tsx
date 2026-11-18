@@ -214,7 +214,7 @@ export function BatchBar({ ids, onClear, onSettled }: { ids: readonly SessionId[
               onClick={() => void run('send')}
             >
               {busy === 'send' ? m.sending : batchButtonLabel('send', send.targets.length)}
-              <span className={styles.shortcut}>⌘↵</span>
+              <span data-shortcut-hint className={styles.shortcut}>⌘↵</span>
             </button>
           </div>
         </div>

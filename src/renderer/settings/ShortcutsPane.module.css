@@ -1,0 +1,54 @@
+/* 设置 · 快捷键 (Figma 97E): the settings column, rows 28 high (the ship zone's rhythm), no lines. */
+.page {
+  display: flex;
+  justify-content: center;
+  padding: var(--titlebar-height) var(--space-40) var(--space-40);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 560px;
+  min-width: 360px;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.list {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  height: 28px;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.keys {
+  display: flex;
+  gap: var(--space-8);
+  flex-shrink: 0;
+  margin: 0;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.key {
+  font: inherit;
+}
