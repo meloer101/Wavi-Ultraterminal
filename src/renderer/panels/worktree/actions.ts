@@ -1,7 +1,7 @@
 // Worktree view commands: switching to a worktree's session, the row's 更多 menu, delete and 清理. Every removal is
 // confirmed and refused whenever work could be lost (see deleteBlocker; main checks again). `--force` is offered in a
 // second confirmation only for git's submodule refusal.
-import type { WorktreeRemoveResult } from '@shared/git-worktrees'
+import type { WorktreeDiscard, WorktreeRemoveResult } from '@shared/git-worktrees'
 import type { AgentKind, ProjectId, WorktreeId } from '@shared/types'
 import { defineMessages, pick } from '@shared/i18n'
 import { restoreArchivedWorktree } from '../../archive/actions'
@@ -13,7 +13,7 @@ import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { closeWorktreeTabs } from '../terminal/actions'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, listWithin, pickRows, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, COLLAPSED, deleteBlocker, discardable, keptText, listWithin, pickRows, tildePath, uncommittedList, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const M = defineMessages({
@@ -33,6 +33,10 @@ const M = defineMessages({
     closing: (count: number) => `这里的 ${count} 个会话会一起关闭。`,
     deleteMessage: (name: string) => `删除 worktree「${name}」？`,
     deleteDetail: (folder: string, kept: string, ignored: string, closing: string) => `会删除文件夹 ${folder}，${kept}。${ignored}${closing}`,
+    discardMessage: (name: string) => `丢弃未提交的改动并删除「${name}」？`,
+    discardIntro: (count: number) => `${count} 项未提交的改动会丢失，找不回来：`,
+    discardAndDelete: '丢弃并删除',
+    changed: '改动和确认时不一样了，没有删除，再点一次删除',
     delete: '删除',
     submodulesMessage: (name: string) => `「${name}」含有子模块，git 不肯直接删除`,
     submodulesDetail: (ignored: string) => `已确认没有未提交的改动。强制删除会连同子模块的文件夹一起删掉。${ignored}`,
@@ -57,6 +61,7 @@ const M = defineMessages({
     deletedMany: (removed: number) => `已删除 ${removed} 个 worktree`,
     nothingToDeleteList: (skipped: string) => `没有可以删除的：${skipped}`,
     nothingToDelete: '没有可以删除的 worktree',
+    nothingToDeleteMenu: '没有可以删除的',
     cleaning: (done: number, total: number) => `正在清理 ${done} / ${total}…`,
     deletingMany: (done: number, total: number) => `正在删除 ${done} / ${total}…`,
     stillRunning: '上一次删除还没结束',
@@ -81,6 +86,10 @@ const M = defineMessages({
     closing: (count: number) => ` The ${count === 1 ? 'session' : `${count} sessions`} here will close too.`,
     deleteMessage: (name: string) => `Delete worktree "${name}"?`,
     deleteDetail: (folder: string, kept: string, ignored: string, closing: string) => `Deletes the folder ${folder}. ${kept}. ${ignored}${closing}`,
+    discardMessage: (name: string) => `Discard uncommitted changes and delete "${name}"?`,
+    discardIntro: (count: number) => `${count} uncommitted ${count === 1 ? 'item' : 'items'} will be lost for good:`,
+    discardAndDelete: 'Discard and delete',
+    changed: 'The changes are no longer what you confirmed. Nothing was deleted; choose Delete again',
     delete: 'Delete',
     submodulesMessage: (name: string) => `"${name}" contains submodules, so git won't delete it directly`,
     submodulesDetail: (ignored: string) => `There are no uncommitted changes. Force deleting removes the submodule folders too. ${ignored}`,
@@ -106,6 +115,7 @@ const M = defineMessages({
     deletedMany: (removed: number) => `Deleted ${removed} ${removed === 1 ? 'worktree' : 'worktrees'}`,
     nothingToDeleteList: (skipped: string) => `Nothing to delete: ${skipped}`,
     nothingToDelete: 'No worktrees to delete',
+    nothingToDeleteMenu: 'Nothing to delete',
     cleaning: (done: number, total: number) => `Cleaning up ${done} of ${total}…`,
     deletingMany: (done: number, total: number) => `Deleting ${done} of ${total}…`,
     stillRunning: 'The previous delete is still running',
@@ -160,6 +170,8 @@ export function removeFailureText(result: Exclude<WorktreeRemoveResult, { ok: tr
       return m.dirty
     case 'unverified':
       return m.unverified
+    case 'changed':
+      return m.changed
     case 'unreachable-commits':
       return m.unreachable(result.message ?? '')
     case 'busy':
@@ -191,14 +203,15 @@ export async function removeWorktreeWithSessions(
   root: string,
   path: string,
   worktreeIds: readonly WorktreeId[],
-  force = false
+  force = false,
+  discard?: WorktreeDiscard
 ): Promise<WorktreeRemoveResult> {
   const ids = new Set(worktreeIds)
   const sessions = useWorkspace.getState().sessions.filter((s) => ids.has(s.worktreeId))
   for (const session of sessions) disposeTerminal(session.id, true)
   // The 终端 view's shells in it too.
   await closeWorktreeTabs(worktreeIds)
-  const result = await window.tr.gitWorktrees.remove(root, path, force)
+  const result = await window.tr.gitWorktrees.remove(root, path, force, discard)
   const state = useWorkspace.getState()
   if (result.ok) state.forgetWorktrees([...worktreeIds])
   // Their terminals are gone either way (the confirmation said they close); the folder's record stays if it does.
@@ -206,34 +219,73 @@ export async function removeWorktreeWithSessions(
   return result
 }
 
-const removeOne = (root: string, row: WorktreeRow, force = false): Promise<WorktreeRemoveResult> =>
-  removeWorktreeWithSessions(root, row.info.path, row.worktreeIds, force)
+const removeOne = (root: string, row: WorktreeRow, force = false, discard?: WorktreeDiscard): Promise<WorktreeRemoveResult> =>
+  removeWorktreeWithSessions(root, row.info.path, row.worktreeIds, force, discard)
 
-/** 更多 › 删除 worktree…: guard → confirm → guard again → `git worktree remove` → (submodules) second confirm → `--force`. */
+/** Main refuses a confirmation whose detail is over 500 characters (confirm-spec), and then nothing is asked. */
+const DETAIL_MAX = 480
+
+/** Keeps a confirmation detail within what main accepts; only ever cuts from the end, with an ellipsis. */
+function withinBudget(detail: string): string {
+  return detail.length <= DETAIL_MAX ? detail : `${detail.slice(0, DETAIL_MAX - 1)}…`
+}
+
+/**
+ * What 丢弃并删除 will lose, then the ordinary delete sentence: the paths that go, one per line, as many as fit in the
+ * confirmation's detail (v1.218). The count and the list are the row's own, which the removal then must match.
+ */
+function discardDetail(row: WorktreeRow, closing: string): string {
+  const m = pick(M)
+  const count = row.info.dirtyCount ?? 0
+  const intro = m.discardIntro(count)
+  const tail = m.deleteDetail(tildePath(row.openPath, window.tr.homeDir), keptText(row.info), m.ignoredFiles, closing)
+  const files = uncommittedList(row.info.dirtyFiles, count, Math.max(0, DETAIL_MAX - intro.length - tail.length - 2), m.more)
+  return withinBudget(files ? `${intro}\n${files}\n\n${tail}` : `${intro}\n${tail}`)
+}
+
+/**
+ * 更多 › 删除 worktree…: guard → confirm → guard again → `git worktree remove` → (submodules) second confirm → `--force`.
+ * When the only thing in the way is uncommitted work, the one confirmation offers 丢弃并删除 instead of a notice
+ * (v1.218); every other refusal is still a notice.
+ */
 export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, refresh: () => Promise<void>): Promise<void> {
   const m = pick(M)
   const blocker = deleteBlocker(row)
-  if (blocker) {
+  const discarding = discardable(row)
+  if (blocker && !discarding) {
     patchRoot(root, { notice: m.cannotDelete(row.name, blocker) })
     return
   }
   const closing = row.sessions.length > 0 ? m.closing(row.sessions.length) : ''
-  const confirmed = await window.tr.ui.confirm({
-    message: m.deleteMessage(row.name),
-    detail: m.deleteDetail(tildePath(row.openPath, window.tr.homeDir), keptText(row.info), m.ignoredFiles, closing),
-    confirmLabel: m.delete,
-    destructive: true
-  })
+  const confirmed = discarding
+    ? await window.tr.ui.confirm({
+        message: m.discardMessage(row.name),
+        detail: discardDetail(row, closing),
+        confirmLabel: m.discardAndDelete,
+        destructive: true
+      })
+    : await window.tr.ui.confirm({
+        message: m.deleteMessage(row.name),
+        detail: withinBudget(m.deleteDetail(tildePath(row.openPath, window.tr.homeDir), keptText(row.info), m.ignoredFiles, closing)),
+        confirmLabel: m.delete,
+        destructive: true
+      })
   if (!confirmed) return
   const current = freshRow(row)
-  const late = deleteBlocker(current)
-  if (late) {
-    patchRoot(root, { notice: m.cannotDelete(row.name, late) })
-    return
+  // A dialog can sit open for a while: the user may have committed, or the session may have started to wait on them.
+  const stillDiscarding = discarding && discardable(current)
+  if (!stillDiscarding) {
+    const late = deleteBlocker(current)
+    if (late) {
+      patchRoot(root, { notice: m.cannotDelete(row.name, late) })
+      return
+    }
   }
   patchRoot(root, { busy: true, notice: null })
+  // The payload main removes against: the same count and list the dialog showed.
+  const discard = stillDiscarding ? { count: row.info.dirtyCount ?? 0, files: row.info.dirtyFiles } : undefined
   try {
-    let result = await removeOne(root, current)
+    let result = await removeOne(root, current, false, discard)
     if (!result.ok && result.reason === 'submodules') {
       const force = await window.tr.ui.confirm({
         message: m.submodulesMessage(row.name),
@@ -241,7 +293,7 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
         confirmLabel: m.forceDelete,
         destructive: true
       })
-      if (force) result = await removeOne(root, current, true)
+      if (force) result = await removeOne(root, current, true, discard)
     }
     patchRoot(root, { notice: result.ok ? m.deleted(row.name) : m.notDeleted(row.name, removeFailureText(result)) })
   } catch {
@@ -252,10 +304,10 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
   }
 }
 
-/** Main refuses a confirmation whose detail is over 500 characters (confirm-spec), and then nothing is asked. */
-const DETAIL_MAX = 480
 /** Of those, what the skipped worktrees may take. */
 const SKIPPED_MAX = 120
+/** What a notice may take when nothing can be cleaned up or deleted at all (v1.218: not all reasons). */
+const NOTHING_MAX = 200
 
 /**
  * 可清理 › 清理 (wording 'clean'), or the picked rows' 删除 (wording 'delete'): one confirmation listing what goes (and
@@ -293,7 +345,7 @@ export async function cleanUpInteractive(
   const plan = cleanupPlan(rows)
   const skipped = plan.skip.map(({ row, reason }) => m.skipped(row.name, reason))
   if (plan.remove.length === 0) {
-    patchRoot(root, { notice: skipped.length > 0 ? words.nothingList(skipped.join(m.listSeparator)) : words.nothing })
+    patchRoot(root, { notice: skipped.length > 0 ? words.nothingList(listWithin(skipped, m.listSeparator, NOTHING_MAX, m.more)) : words.nothing })
     return false
   }
   const skippedShort = listWithin(skipped, m.listSeparator, SKIPPED_MAX, m.more)
@@ -301,7 +353,7 @@ export async function cleanUpInteractive(
   const listed = listWithin(lines, '\n', DETAIL_MAX - m.cleanDetail('', m.ignoredFiles, skippedShort).length, m.more)
   const confirmed = await window.tr.ui.confirm({
     message: words.message(plan.remove.length),
-    detail: m.cleanDetail(listed, m.ignoredFiles, skippedShort),
+    detail: withinBudget(m.cleanDetail(listed, m.ignoredFiles, skippedShort)),
     confirmLabel: words.confirm,
     destructive: true
   })
@@ -349,7 +401,8 @@ export async function deletePickedInteractive(
   patchRoot(root, { selection: worktreesOf(root).selection.filter((key) => !done.has(key)) })
 }
 
-/** The menu a picked row opens: one 删除 N 个 worktree… and nothing else (PRD v1.216 ③), ⌫ on its right. */
+/** The menu a picked row opens: one 删除 N 个 worktree… (N = what will really go) and nothing else (PRD v1.216 ③),
+ * ⌫ on its right; with nothing deletable in the pick, a disabled 没有可以删除的 (v1.218). */
 export async function openPickedMenu(
   root: string,
   rows: readonly WorktreeRow[],
@@ -357,8 +410,11 @@ export async function openPickedMenu(
   refresh: () => Promise<void>
 ): Promise<void> {
   const m = pick(M)
+  const count = cleanupPlan(rows).remove.length
   const choice = await popupMenu(
-    [{ type: 'item', id: 'delete', label: m.deleteManyMenu(rows.length), enabled: !worktreesOf(root).busy, accelerator: 'Backspace' }],
+    count > 0
+      ? [{ type: 'item', id: 'delete', label: m.deleteManyMenu(count), enabled: !worktreesOf(root).busy, accelerator: 'Backspace' }]
+      : [{ type: 'item', id: 'delete', label: m.nothingToDeleteMenu, enabled: false, accelerator: 'Backspace' }],
     anchor
   )
   if (choice === 'delete') await deletePickedInteractive(root, rows, refresh)

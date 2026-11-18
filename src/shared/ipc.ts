@@ -25,7 +25,7 @@ import type { AgentKind, SessionId } from './types'
 import type { WindowKey, WindowStateEvent } from './window-layout'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
-import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
+import type { GitWorktreeListing, WorktreeDiscard, WorktreeRemoveResult } from './git-worktrees'
 import type { DispatchApi } from './dispatch'
 import type { RemoteApi } from './remote'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
@@ -237,8 +237,12 @@ export interface GitWorktreesApi {
    * `only` (resolved paths) limits the per-worktree details to those; the others come back with `detailed: false`.
    */
   list(root: string, knownPaths: string[], only?: string[]): Promise<GitWorktreeListing | null>
-  /** `git worktree remove`, refused whenever work could be lost; `force` only after git's submodule refusal. */
-  remove(root: string, path: string, force: boolean): Promise<WorktreeRemoveResult>
+  /**
+   * `git worktree remove`, refused whenever work could be lost; `force` only after git's submodule refusal. `discard`
+   * (one worktree, after the user confirmed losing what it names) drops exactly the uncommitted work the dialog named,
+   * with `--force`; a dirty state that no longer matches it is refused as `changed`.
+   */
+  remove(root: string, path: string, force: boolean, discard?: WorktreeDiscard): Promise<WorktreeRemoveResult>
   /** Starts / stops watching the repository's worktrees and branches for this window; changes arrive through onChanged. */
   watch(root: string): void
   unwatch(root: string): void

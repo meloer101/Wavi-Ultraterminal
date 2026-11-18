@@ -21,11 +21,13 @@ import {
   parseForEachRefAheadBehind,
   parseNumstat,
   parseRebaseHeadName,
+  parseUnreachableLog,
   parseWorktreePorcelain,
   pickMainBranch,
   type GitWorktreeInfo,
   type GitWorktreeListing,
   type PorcelainWorktree,
+  type WorktreeDiscard,
   type WorktreeRemoveResult
 } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
@@ -147,12 +149,24 @@ async function dirtyState(path: string): Promise<DirtyState> {
 
 const UNKNOWN_DIRTY: DirtyState = { added: 0, removed: 0, dirtyFiles: [], dirtyCount: null, untrackedLinks: [] }
 
-/** Commits of `head` that no branch, tag or remote has. Throws when git cannot tell. */
-async function unreachableCommits(realRoot: string, head: string): Promise<number> {
-  const out = await git(realRoot, ['rev-list', '--count', head, '--not', '--branches', '--tags', '--remotes'])
-  const count = Number.parseInt(out.trim(), 10)
-  if (!Number.isFinite(count)) throw new Error('unexpected rev-list output')
-  return count
+/**
+ * Commits of `head` that no branch, tag or remote has, Wavi's snapshot commits aside, and whether HEAD is a snapshot.
+ * `log.showSignature=false` keeps a user's gpg lines out of the shape this parses. Throws when git cannot tell, or
+ * printed something this does not understand.
+ */
+async function unreachableCommits(realRoot: string, head: string): Promise<{ commits: number; headIsSnapshot: boolean }> {
+  const out = await git(realRoot, [
+    '-c',
+    'log.showSignature=false',
+    'log',
+    '--format=%an%x00%ae%x00%cn%x00%ce%x00%s',
+    head,
+    '--not',
+    '--branches',
+    '--tags',
+    '--remotes'
+  ])
+  return parseUnreachableLog(out)
 }
 
 /** The branch a rebase in this worktree works on (porcelain shows such a worktree as detached), else null. */
@@ -235,7 +249,7 @@ async function details(realRoot: string, entry: PorcelainWorktree, info: BaseInf
   const [dirty, rebasing, unreachable] = await Promise.all([
     exists ? dirtyState(entry.path).catch(() => UNKNOWN_DIRTY) : Promise.resolve({ ...UNKNOWN_DIRTY, dirtyCount: 0 }),
     exists && entry.branch === null ? rebasingBranch(entry.path) : Promise.resolve(null),
-    entry.branch === null && entry.head ? unreachableCommits(realRoot, entry.head).catch(() => null) : Promise.resolve(0)
+    entry.branch === null && entry.head ? unreachableCommits(realRoot, entry.head).catch(() => null) : Promise.resolve({ commits: 0, headIsSnapshot: false })
   ])
   return {
     head: entry.head,
@@ -243,7 +257,8 @@ async function details(realRoot: string, entry: PorcelainWorktree, info: BaseInf
     locked: entry.locked,
     prunable: exists ? null : (entry.prunable ?? 'folder is missing'),
     rebasing,
-    unreachableCommits: unreachable,
+    unreachableCommits: unreachable?.commits ?? null,
+    snapshot: unreachable?.headIsSnapshot === true,
     base: baseSha ? base : null,
     ahead: counts?.ahead ?? null,
     behind: counts?.behind ?? null,
@@ -291,6 +306,7 @@ export async function listWorktrees(root: unknown, knownPaths: unknown, only?: u
           prunable: entry.prunable,
           rebasing: null,
           unreachableCommits: null,
+          snapshot: false,
           base: null,
           ahead: null,
           behind: null,
@@ -413,16 +429,37 @@ async function hasSubmodules(path: string): Promise<boolean> {
 }
 
 /**
+ * The discard payload the renderer sent (what its dialog showed), or null when it asked for none. Anything else — not an
+ * object, a count that is not an integer of at least 1, files that are not at most MAX_DIRTY_FILES paths — is an
+ * invalid payload and throws, as an invalid path does: a discard is never made to mean "whatever is there".
+ */
+function parseDiscard(value: unknown): WorktreeDiscard | null {
+  if (value === undefined) return null
+  if (typeof value !== 'object' || value === null) throw new Error('invalid discard')
+  const { count, files } = value as { count?: unknown; files?: unknown }
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) throw new Error('invalid discard')
+  if (!Array.isArray(files) || files.length > MAX_DIRTY_FILES) throw new Error('invalid discard')
+  if (!files.every((file): file is string => typeof file === 'string' && file.length > 0 && file.length <= MAX_PATH && !file.includes('\0'))) {
+    throw new Error('invalid discard')
+  }
+  return { count, files: [...files] }
+}
+
+const sameList = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, index) => item === b[index])
+
+/**
  * `git worktree remove` for one linked worktree of a project's repository. Refuses the main checkout and the project
  * folder; a worktree with uncommitted changes, a rebase in progress or a lock; a detached HEAD whose commits no branch,
- * tag or remote has; and anything git could not check. Untracked symbolic links are not uncommitted changes: they are
- * unlinked first, and only when nothing else is uncommitted, and put back whenever the worktree stays. `force` only gets
- * past git's submodule refusal.
+ * tag or remote has (Wavi's own snapshot commits aside); and anything git could not check. Untracked symbolic links are
+ * not uncommitted changes: they are unlinked first, and only when nothing else is uncommitted, and put back whenever the
+ * worktree stays. `force` only gets past git's submodule refusal; `discard` (one worktree, `--force`) also gets past
+ * uncommitted changes — exactly the ones its dialog named — and skips the untracked-link step since git takes them.
  * A worktree whose folder is already gone is removed by path (not a repository-wide prune).
  */
-export async function removeWorktree(root: unknown, path: unknown, force: unknown): Promise<WorktreeRemoveResult> {
+export async function removeWorktree(root: unknown, path: unknown, force: unknown, discard?: unknown): Promise<WorktreeRemoveResult> {
   const realRoot = await projectRoot(root)
   if (!isPath(path)) throw new Error('invalid worktree path')
+  const wanted = parseDiscard(discard)
   const entries = await readPorcelain(realRoot)
   if (!entries) return { ok: false, reason: 'unknown' }
   const target = await realOrSelf(path)
@@ -437,7 +474,7 @@ export async function removeWorktree(root: unknown, path: unknown, force: unknow
   if (entry.branch === null && entry.head) {
     let unreachable: number
     try {
-      unreachable = await unreachableCommits(realRoot, entry.head)
+      unreachable = (await unreachableCommits(realRoot, entry.head)).commits
     } catch (error) {
       return { ok: false, reason: 'unverified', message: gitMessage(error) }
     }
@@ -448,10 +485,18 @@ export async function removeWorktree(root: unknown, path: unknown, force: unknow
   let untrackedLinks: readonly string[] = []
   if (exists) {
     if (entry.branch === null && (await rebasingBranch(entry.path))) return { ok: false, reason: 'busy' }
+    // A discard removal passes --force, which takes submodule folders too: it still needs the submodule confirmation.
+    if (wanted && force !== true && (await hasSubmodules(entry.path))) return { ok: false, reason: 'submodules' }
     try {
       const dirty = await dirtyState(entry.path)
-      if (dirty.dirtyCount !== 0) return { ok: false, reason: 'dirty' }
-      untrackedLinks = dirty.untrackedLinks
+      // 丢弃并删除: the uncommitted work the dialog named is what the user chose to lose; an unreadable state stays
+      // `unverified`, and a state that changed since the dialog is not silently dropped.
+      if (!wanted) {
+        if (dirty.dirtyCount !== 0) return { ok: false, reason: 'dirty' }
+        untrackedLinks = dirty.untrackedLinks
+      } else if (dirty.dirtyCount !== wanted.count || !sameList(dirty.dirtyFiles, wanted.files)) {
+        return { ok: false, reason: 'changed' }
+      }
     } catch (error) {
       return { ok: false, reason: 'unverified', message: gitMessage(error) }
     }
@@ -467,7 +512,7 @@ export async function removeWorktree(root: unknown, path: unknown, force: unknow
     return { ok: false, reason: 'git', message: unlinked.error }
   }
   try {
-    await git(realRoot, ['worktree', 'remove', ...(forced ? ['--force'] : []), '--', entry.path])
+    await git(realRoot, ['worktree', 'remove', ...(forced || wanted ? ['--force'] : []), '--', entry.path])
     return { ok: true }
   } catch (error) {
     await restoreLinks(unlinked.removed)
@@ -529,7 +574,7 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
 export function registerGitWorktreeHandlers(): void {
   addWorkspaceDirSource(listedWorktreePaths)
   ipcMain.handle(IPC.gitWorktreesList, (_event, root: unknown, knownPaths: unknown, only: unknown) => listWorktrees(root, knownPaths, only))
-  ipcMain.handle(IPC.gitWorktreesRemove, (_event, root: unknown, path: unknown, force: unknown) => removeWorktree(root, path, force))
+  ipcMain.handle(IPC.gitWorktreesRemove, (_event, root: unknown, path: unknown, force: unknown, discard: unknown) => removeWorktree(root, path, force, discard))
   ipcMain.on(IPC.gitWorktreesWatch, (event, root: unknown) =>
     void startWatch(event.sender, root).catch((error: unknown) => console.error('[git-worktrees] could not watch the worktree list:', error))
   )

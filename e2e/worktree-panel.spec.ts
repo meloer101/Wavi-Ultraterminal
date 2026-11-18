@@ -78,6 +78,9 @@ test.describe('F17 right panel · Worktree', () => {
   const real = new Map([repo.project, repo.feature, repo.merged, repo.busy, repo.detached].map((p) => [p, realpathSync(p)]))
   const item = (path: string) => panel().locator(`li[data-path="${real.get(path) ?? path}"]`)
   const dialogs = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: DialogHook }).__trDialogs.requests.map((r) => ({ ...r })))
+  /** What the next confirmation is answered with (the hook's default is yes). */
+  const answerDialogs = (value: boolean) =>
+    app.evaluate((_app, v) => ((globalThis as unknown as { __trDialogs: { answer: boolean } }).__trDialogs.answer = v), value)
   const setTheme = async (theme: 'dark' | 'light') => {
     await page.evaluate(
       (t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }),
@@ -219,29 +222,40 @@ test.describe('F17 right panel · Worktree', () => {
     expect(existsSync(repo.busy)).toBe(true)
   })
 
-  test('deleting a worktree with uncommitted changes is refused before any confirmation', async () => {
+  test('deleting a worktree with uncommitted changes asks once to discard them; cancelling keeps it (PRD v1.218)', async () => {
     await item(repo.feature).locator('button[aria-expanded]').click()
     await item(repo.feature).getByRole('button', { name: '更多' }).click()
+    await answerDialogs(false)
+    const before = (await dialogs()).length
     await page.getByRole('menuitem', { name: '删除 worktree…' }).click()
-    await expect(panel().getByRole('status')).toHaveText('不能删除 jacob/feature：有 1 个未提交的改动，先提交或丢弃')
-    expect(await dialogs()).toEqual([])
+    await expect.poll(async () => (await dialogs()).length).toBe(before + 1)
+    const asked = (await dialogs())[before]!
+    expect(asked.message).toBe('丢弃未提交的改动并删除「jacob/feature」？')
+    expect(asked.detail).toContain('1 项未提交的改动会丢失，找不回来：')
+    expect(asked.detail).toContain('README.md')
+    // Cancelled: the folder, and the one change the dialog named, stay.
     expect(existsSync(repo.feature)).toBe(true)
+    expect(readFileSync(join(repo.feature, 'README.md'), 'utf8')).toContain('work in progress')
+    await answerDialogs(true)
   })
 
   test('deleting a detached worktree whose commit no branch has is refused', async () => {
     await item(repo.detached).locator('button[aria-expanded]').click()
     await expect(item(repo.detached)).toContainText('1 个提交不在分支上')
     await item(repo.detached).getByRole('button', { name: '更多' }).click()
+    const before = (await dialogs()).length
     await page.getByRole('menuitem', { name: '删除 worktree…' }).click()
     await expect(panel().getByRole('status')).toHaveText(/^不能删除 .+：有 1 个提交不在任何分支上，先给它建一个分支$/)
-    expect(await dialogs()).toEqual([])
+    // Refused before any confirmation.
+    expect((await dialogs()).length).toBe(before)
     expect(existsSync(repo.detached)).toBe(true)
   })
 
   test('清理 asks once, removes only the session-less merged worktree, never one with a session', async () => {
+    const before = (await dialogs()).length
     await panel().getByRole('button', { name: '全部清理' }).click()
     await expect(panel().getByRole('status')).toHaveText('已清理 1 个 worktree')
-    const asked = await dialogs()
+    const asked = (await dialogs()).slice(before)
     expect(asked).toHaveLength(1)
     expect(asked[0]!.message).toBe('清理 1 个 worktree？')
     expect(asked[0]!.detail).toContain('jacob/merged')
@@ -344,11 +358,12 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
     await expect(picked).toHaveCount(pickedCount)
 
-    // 4. A picked row's right-click menu holds one item, with ⌫ on its right.
+    // 4. A picked row's right-click menu holds one item, with ⌫ on its right; the number is what will really go, so
+    // the dirty row in the pick does not count (v1.218).
     await item(made[0]!.path).locator('button[aria-expanded]').click({ button: 'right' })
     const entries = page.getByRole('menuitem')
     await expect(entries).toHaveCount(1)
-    await expect(entries).toContainText(`删除 ${pickedCount} 个 worktree…`)
+    await expect(entries).toContainText(`删除 ${pickedCount - 1} 个 worktree…`)
     await expect(entries).toContainText('⌫')
     await shoot('99a-worktree-picked')
     await expect(entries).toHaveCount(1)
@@ -394,16 +409,18 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(picked).toHaveCount(0)
     await expect(idle().locator(':scope > li')).toHaveCount(2)
 
-    // 8. One picked row says 删除 1 个 worktree… (the batch flow, so not 更多 › 删除 worktree…).
+    // 8. One picked dirty row has nothing deletable, so the batch item is disabled and says so (v1.218).
     await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
     await expect(picked).toHaveCount(1)
     await item(made[3]!.path).locator('button[aria-expanded]').click({ button: 'right' })
     await expect(entries).toHaveCount(1)
-    await expect(entries).toContainText('删除 1 个 worktree…')
+    await expect(entries).toContainText('没有可以删除的')
+    await expect(entries).toHaveAttribute('aria-disabled', 'true')
     await expect(entries).toContainText('⌫')
     await page.keyboard.press('Escape')
     await expect(entries).toHaveCount(0)
-
+    // The pick is still there for step 9, which adds one row to it.
+    await expect(picked).toHaveCount(1)
     // 9. Esc drops a pick without asking anything.
     const quiet = (await dialogs()).length
     await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
@@ -468,5 +485,109 @@ test.describe('F17 right panel · Worktree', () => {
     // The one with a real change is still there, nothing was forced.
     expect(existsSync(filed)).toBe(true)
     expect(existsSync(join(filed, 'wip.ts'))).toBe(true)
+  })
+
+  // PRD v1.218 ②: a snapshot's commit is Wavi's own, on no branch by construction; its worktree is 可清理 material.
+  test('a session-less worktree at a Wavi snapshot commit is in 可清理, and 全部清理 removes it', async () => {
+    const snapshot = join(repo.project, '..', 'wt-snapshot')
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo.project }).toString().trim()
+    const sha = execFileSync(
+      'git',
+      ['-c', 'commit.gpgsign=false', 'commit-tree', tree, '-p', 'HEAD', '-m', 'Wavi snapshot'],
+      {
+        cwd: repo.project,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: 'Wavi',
+          GIT_AUTHOR_EMAIL: 'wavi@localhost',
+          GIT_COMMITTER_NAME: 'Wavi',
+          GIT_COMMITTER_EMAIL: 'wavi@localhost'
+        }
+      }
+    )
+      .toString()
+      .trim()
+    git(repo.project, 'worktree', 'add', '-q', '--detach', snapshot, sha)
+    real.set(snapshot, realpathSync(snapshot))
+
+    await expect(cleanable().locator(':scope > li')).toHaveCount(1, WITHIN)
+    // Detached, but with nothing of the user's on it: no 提交不在分支上 note.
+    await expect(item(snapshot)).toContainText('分离的 HEAD')
+    await expect(item(snapshot)).not.toContainText('不在分支上')
+
+    const before = (await dialogs()).length
+    await panel().getByRole('button', { name: '全部清理' }).click()
+    await expect(panel().getByRole('status')).toHaveText('已清理 1 个 worktree')
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe('清理 1 个 worktree？')
+    expect(existsSync(snapshot)).toBe(false)
+  })
+
+  // PRD v1.218 ①: the only thing in the way is uncommitted work, so the row's own 更多 offers to discard it.
+  test('a session-less worktree with uncommitted changes asks once to discard them, then goes', async () => {
+    const path = join(repo.project, '..', 'wt-discard')
+    git(repo.project, 'worktree', 'add', '-q', '-b', 'jacob/discard', path)
+    commitIn(path, 'discard.ts')
+    writeFileSync(join(path, 'wip.ts'), 'export const wip = 1\n')
+    real.set(path, realpathSync(path))
+    await expect(idle().locator(`li[data-path="${real.get(path)}"]`)).toHaveCount(1, WITHIN)
+
+    await item(path).locator('button[aria-expanded]').click()
+    await item(path).getByRole('button', { name: '更多' }).click()
+    const before = (await dialogs()).length
+    await page.getByRole('menuitem', { name: '删除 worktree…' }).click()
+    await expect(panel().getByRole('status')).toHaveText('已删除 jacob/discard')
+    const asked = (await dialogs()).slice(before)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.message).toBe('丢弃未提交的改动并删除「jacob/discard」？')
+    expect(asked[0]!.detail).toContain('1 项未提交的改动会丢失，找不回来：')
+    expect(asked[0]!.detail).toContain('wip.ts')
+    expect(asked[0]!.detail).toContain('分支 jacob/discard 保留')
+    // Main refuses a detail over 500 characters: this one must fit.
+    expect(asked[0]!.detail!.length).toBeLessThanOrEqual(500)
+    expect(existsSync(path)).toBe(false)
+    expect(execFileSync('git', ['branch', '--list', 'jacob/discard'], { cwd: repo.project }).toString()).toContain('jacob/discard')
+  })
+
+  // PRD v1.218 ③: the pick's menu says how many it will really delete, and says so when that is none.
+  test('the pick’s menu counts what will go, and reads 没有可以删除的 (disabled) when nothing can', async () => {
+    const count = join(repo.project, '..', 'wt-count')
+    git(repo.project, 'worktree', 'add', '-q', '-b', 'jacob/count', count)
+    commitIn(count, 'count.ts')
+    git(repo.project, 'merge', '-q', '--no-ff', '-m', 'merge jacob/count', 'jacob/count')
+    real.set(count, realpathSync(count))
+    await expect(cleanable().locator(':scope > li')).toHaveCount(1, WITHIN)
+
+    // One deletable row and one that is refused: the menu counts the one that goes.
+    await item(count).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(2)
+    await item(count).locator('button[aria-expanded]').click({ button: 'right' })
+    const entries = page.getByRole('menuitem')
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toContainText('删除 1 个 worktree…')
+    await page.keyboard.press('Escape')
+    await expect(entries).toHaveCount(0)
+
+    // Two rows that are both refused: nothing to delete, and the item cannot be chosen.
+    const filed = join(repo.project, '..', 'wt-untracked-file')
+    real.set(filed, realpathSync(filed))
+    await item(count).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await item(filed).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(2)
+    const before = (await dialogs()).length
+    await item(filed).locator('button[aria-expanded]').click({ button: 'right' })
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toContainText('没有可以删除的')
+    await expect(entries).toHaveAttribute('aria-disabled', 'true')
+    // Disabled: clicking it does nothing (the menu stays open), so no confirmation and the pick stays where it was.
+    await entries.dispatchEvent('click')
+    await expect(entries).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    expect((await dialogs()).length).toBe(before)
+    expect(existsSync(count)).toBe(true)
+    expect(existsSync(filed)).toBe(true)
+    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(2)
   })
 })

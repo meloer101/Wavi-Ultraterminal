@@ -137,15 +137,16 @@ export function rowLabels(name: string, sessions: readonly Session[], info: GitW
 
 /**
  * Which group a worktree goes in. Any session keeps it in the working list. 可清理 only holds what deleting would
- * really remove: merged (or the folder is gone) and not refused by the delete guard (`blocked`).
+ * really remove: merged, the folder is gone, or (v1.218) Wavi's own snapshot, and not refused by the delete guard
+ * (`blocked`).
  */
 export function groupOf(
-  info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable'>,
+  info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable' | 'snapshot'>,
   sessionCount: number,
   blocked: boolean
 ): keyof WorktreeGroups {
   if (info.isMain || sessionCount > 0) return 'working'
-  return (info.merged || info.prunable !== null) && !blocked ? 'cleanable' : 'idle'
+  return (info.merged || info.prunable !== null || info.snapshot) && !blocked ? 'cleanable' : 'idle'
 }
 
 /**
@@ -232,6 +233,17 @@ export function deleteBlocker(row: Pick<WorktreeRow, 'info' | 'sessions'>): stri
   return null
 }
 
+/**
+ * Whether 更多 › 删除 worktree… may offer 丢弃并删除 (v1.218): the only thing in the way is uncommitted work, which the
+ * user can choose to lose. Every other refusal stands — an unknown dirty state, the main checkout, an active session, a
+ * lock, a rebase, an undetailed row, a detached HEAD with commits of its own on no branch.
+ */
+export function discardable(row: Pick<WorktreeRow, 'info' | 'sessions'>): boolean {
+  const { dirtyCount } = row.info
+  if (dirtyCount === null || dirtyCount <= 0) return false
+  return deleteBlocker({ sessions: row.sessions, info: { ...row.info, dirtyCount: 0 } }) === null
+}
+
 export interface CleanupPlan {
   remove: WorktreeRow[]
   skip: { row: WorktreeRow; reason: string }[]
@@ -276,6 +288,41 @@ export function listWithin(items: readonly string[], separator: string, budget: 
   const roomiest = more(items.length).length
   const { shown, left } = fitLines(items, budget - roomiest - separator.length, separator.length)
   return [...shown, ...(left > 0 ? [more(left)] : [])].join(separator)
+}
+
+/** The longest path a list line draws in full; longer ones keep their last characters, where the file name is. */
+export const MAX_LISTED_PATH = 100
+
+/** One line of the uncommitted list: `· path`, a path over the limit cut to its last characters behind `…`. */
+export function uncommittedLine(file: string): string {
+  return `· ${file.length > MAX_LISTED_PATH ? `…${file.slice(-(MAX_LISTED_PATH - 1))}` : file}`
+}
+
+/**
+ * The uncommitted paths a 丢弃并删除 confirmation lists: as many lines as fit `budget` characters, then — whenever fewer
+ * are shown than `total` — `more(left)`. `dirtyFiles` holds at most 50 paths while `dirtyCount` counts them all, and an
+ * untracked folder is one entry, so the count is entries and the suffix says how many did not fit. Never longer than
+ * `budget`: a suffix that cannot fit at all leaves an empty list (the caller cuts the whole detail to its own limit).
+ */
+export function uncommittedList(files: readonly string[], total: number, budget: number, more: (left: number) => string): string {
+  const items = Math.max(total, files.length)
+  const lines = files.map(uncommittedLine)
+  const shown: string[] = []
+  let used = 0
+  for (const line of lines) {
+    const left = items - (shown.length + 1)
+    const suffix = left > 0 ? `\n${more(left)}` : ''
+    const next = line.length + (shown.length > 0 ? 1 : 0)
+    if (used + next + suffix.length > budget) break
+    shown.push(line)
+    used += next
+  }
+  const left = items - shown.length
+  if (left <= 0) return shown.join('\n')
+  const suffix = more(left)
+  if (shown.length === 0) return suffix.length <= budget ? suffix : ''
+  // The last line was added only because room for this suffix was there (it is no longer than the one reserved).
+  return `${shown.join('\n')}\n${suffix}`
 }
 
 /** What deleting keeps: the branch, or (detached) nothing, since its commits are all on other branches already. */
