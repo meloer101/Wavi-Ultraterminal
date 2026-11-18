@@ -5,7 +5,7 @@ vi.mock('../state/workspace', () => ({ useWorkspace: { getState: () => ({ sessio
 vi.mock('../state/persistence', () => ({ drafts: { get: () => '', set: () => undefined } }))
 vi.mock('../lifecycle/launch-issues', () => ({ reportLaunchIssue: () => undefined }))
 
-const { forgetGuiSessions, setGuiState, useGuiSessions } = await import('./store')
+const { forgetGuiSessions, setGuiState, setMessageExpanded, useGuiSessions } = await import('./store')
 
 describe('forgetGuiSessions', () => {
   it('returns every closed GUI session, also one never opened in this app run (its process may still run)', () => {
@@ -18,5 +18,18 @@ describe('forgetGuiSessions', () => {
     expect(useGuiSessions.getState().states).toEqual({})
     // A terminal session that closes is not a GUI session to stop.
     expect(forgetGuiSessions([])).toEqual([])
+  })
+})
+
+describe('setMessageExpanded (Figma 96A)', () => {
+  it('keeps the long messages you opened, per session, until the session closes', () => {
+    setGuiState('g3', emptyGuiState())
+    forgetGuiSessions([{ id: 'g3', ui: 'gui' }])
+    setMessageExpanded('g3', 'm1', true)
+    setMessageExpanded('g3', 'm2', true)
+    setMessageExpanded('g3', 'm1', false)
+    expect([...(useGuiSessions.getState().expanded['g3'] ?? [])]).toEqual(['m2'])
+    forgetGuiSessions([])
+    expect(useGuiSessions.getState().expanded['g3']).toBeUndefined()
   })
 })

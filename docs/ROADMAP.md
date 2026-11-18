@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：你的长消息默认折叠（PRD v1.208，Figma 96A / 96′）：桌面 GUI 会话超过 10 行只显示前 10 行、最后两行渐隐、气泡里「展开 / 收起」，点后按钮不动；手机会话页同样（8 行）。藏起不到 3 行时不折叠；展开状态按消息记在 store 里（桌面 `useGuiSessions.expanded`，手机 `AppModel.openMessages`），app 运行期间保留。`renderer/gui/Feed.tsx` `BubbleBody`、`model.ts` `foldsMessage`、`store.ts` `setMessageExpanded`、`Chat.module.css`；手机 `SessionView.swift` `UserText`。单测 `model.test.ts`、`store.test.ts`，iOS `LocalizationTests`；e2e `gui-session.spec.ts`。手机端只在测试宿主里渲染截图核对过，没在连着 Mac 的真会话里看过。
 - 2026-11-18：取消 F17 新端口自动打开浏览器（PRD v1.207）：删掉 `auto-open.ts`、端口标签的等待高亮和设置 · Worktree 的开关；右侧栏关闭时网页先换成截图，和面板一起滑出，不再晚 460 ms 单独消失（`page-slot.ts`，e2e `browser-panel.spec.ts`「covers the well」）。
 - 2026-11-18：实心玻璃下看板的状态卡片也画玻璃边缘（PRD v1.206，Figma 95A）：新 token `--tile-edge`（其他材质什么都不画），`overview/Overview.module.css` 的 `.card`。
 - 2026-11-17：所有 agent 加「完全访问」（PRD v1.205）：GUI 模式菜单在最后加一档（Claude `bypassPermissions`、Codex `never` + 无沙箱、Pi 和 ACP 由 Wavi 全部放行），定时任务的终端会话按 agent 列它能设的档（`CLI_PERMISSIONS`），终端 Pi 的询问 / 接受编辑由独立的门控扩展 `resources/hooks/wavi-pi-gate.js` 在 Pi 的 TUI 里问（hook server 不可用时也加载）。没出 Figma 稿（当时账号是 View 席位）。单测 `agent-launch.test.ts`、`host.test.ts`（Codex 切回后沙箱恢复、Pi 完全访问不问）、`acp.test.ts`、`claude-stream.test.ts`、`codex-app-server.test.ts`、`launch.test.ts`、`session-settings.test.ts`、`hooks/pi-gate.test.ts`；e2e `gui-session.spec.ts`、`gui-pi.spec.ts`。待作者确认：真 Claude / Codex GUI 会话里切到完全访问后不再弹卡片，终端 Pi 的确认框。

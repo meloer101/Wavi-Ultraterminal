@@ -238,6 +238,39 @@
   overflow-wrap: anywhere;
 }
 
+/* Figma 96A: a long message folded to its first --fold-rows lines (FOLD_ROWS, model.ts), the last two fading into the
+   bubble; a mask, not a colour over the words, so it holds on every window material and opacity. */
+.bubbleBody[data-folded] {
+  max-height: calc(var(--fold-rows) * var(--chat-line));
+  /* clip, not hidden: no scroll container, so tabbing to a link in the hidden lines cannot scroll the words inside. */
+  overflow: clip;
+  mask-image: linear-gradient(to bottom, black calc(100% - 2 * var(--chat-line)), transparent);
+}
+
+/* 「展开」 / 「收起」 at the bubble's foot, on the left: the words' colour, a chevron after it. */
+.foldToggle {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.foldToggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.foldToggle:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .block {
   min-width: 0;
 }

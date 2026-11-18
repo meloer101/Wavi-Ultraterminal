@@ -6,6 +6,7 @@ import {
   cardKey,
   composerKey,
   feedBlocks,
+  foldsMessage,
   permissionBody,
   permissionButtons,
   permissionPrimary,
@@ -726,5 +727,19 @@ describe('runClock (Figma 91D)', () => {
     expect(runClock(65_000)).toBe('1m 05s')
     expect(runClock(3_725_000)).toBe('1h 02m')
     expect(runClock(-5)).toBe('0.0s')
+  })
+})
+
+describe('foldsMessage (Figma 96A)', () => {
+  const line = 22
+  it('folds a message that would hide 3 or more of its lines under the first 10', () => {
+    expect(foldsMessage(13 * line, line, 10)).toBe(true)
+    expect(foldsMessage(40 * line, line, 10)).toBe(true)
+  })
+  it('shows it whole when 2 lines or fewer would be hidden, or it is not laid out yet', () => {
+    expect(foldsMessage(10 * line, line, 10)).toBe(false)
+    expect(foldsMessage(12 * line, line, 10)).toBe(false)
+    expect(foldsMessage(0, line, 10)).toBe(false)
+    expect(foldsMessage(40 * line, 0, 10)).toBe(false)
   })
 })
