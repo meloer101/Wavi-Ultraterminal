@@ -296,7 +296,7 @@ export function installAppMenu(): void {
         { type: 'separator' },
         // Sessions keep running in the pty daemon after ⌘Q; this one ends them too.
         { role: 'quit', label: m.quit(app.name) },
-        { label: m.quitEndingSessions, accelerator: 'Alt+CmdOrCtrl+Q', click: () => quitEndingSessions(getMainWindow) }
+        { label: m.quitEndingSessions, accelerator: SHORTCUTS['quit-ending-sessions'], click: () => quitEndingSessions(getMainWindow) }
       ]
     },
     {

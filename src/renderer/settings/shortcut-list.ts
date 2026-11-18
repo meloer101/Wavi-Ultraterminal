@@ -37,8 +37,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'toggle-overview', keys: [S['toggle-overview']] },
       { id: 'find', keys: [S.find] },
       { id: 'merge-worktree', keys: [S['merge-worktree']] },
-      // The app menu's 退出并结束所有会话 (main/windows.ts).
-      { id: 'quit-all', keys: ['Alt+CmdOrCtrl+Q'] }
+      { id: 'quit-all', keys: [S['quit-ending-sessions']] }
     ]
   },
   {

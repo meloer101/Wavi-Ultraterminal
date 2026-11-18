@@ -3,11 +3,17 @@ import { SHORTCUTS } from '@shared/shortcuts'
 import { FILE_SHORTCUTS } from '../panels/files/keys'
 import { SHORTCUT_GROUPS, keyText } from './shortcut-list'
 
-const listed = SHORTCUT_GROUPS.flatMap((group) => group.rows.flatMap((row) => row.keys))
+const keysIn = (groups: readonly string[]) =>
+  SHORTCUT_GROUPS.filter((group) => groups.includes(group.id)).flatMap((group) => group.rows.flatMap((row) => row.keys))
 
 describe('设置 · 快捷键', () => {
-  it('lists every app shortcut and every file shortcut', () => {
-    for (const [id, accelerator] of Object.entries({ ...SHORTCUTS, ...FILE_SHORTCUTS })) expect(listed, id).toContain(accelerator)
+  // Each table is checked against the groups it belongs in, so a key that also appears elsewhere (↵, ⌘↵ in the
+  // sheets and chat rows) cannot stand in for a row that was dropped.
+  it('lists every app shortcut in the app groups and every file shortcut under 文件', () => {
+    const app = keysIn(['sessions', 'window', 'split'])
+    for (const [id, accelerator] of Object.entries(SHORTCUTS)) expect(app, id).toContain(accelerator)
+    const files = keysIn(['files'])
+    for (const [id, accelerator] of Object.entries(FILE_SHORTCUTS)) expect(files, id).toContain(accelerator)
   })
 
   it('gives every row an id of its own', () => {
