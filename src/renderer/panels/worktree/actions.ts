@@ -13,7 +13,7 @@ import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { closeWorktreeTabs } from '../terminal/actions'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, COLLAPSED, deleteBlocker, fitLines, keptText, pickRows, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, listWithin, pickRows, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const M = defineMessages({
@@ -129,14 +129,16 @@ export function selectRow(root: string, row: WorktreeRow, expanded: boolean): vo
 }
 
 /**
- * ⇧ / ⌘ click on a row: picks it for a later 删除, shows nothing else. `ordered` is every pickable row as drawn (the
- * main checkout left out); it never switches sessions and never touches which row is expanded.
+ * ⇧ / ⌘ click on a row: picks it for a later 删除, shows nothing else. `ordered` is every row as drawn and `never` the
+ * ones a range may span but never hold (the main checkout); it never switches sessions, never touches which row is
+ * expanded, and nothing can be picked while a delete is running (the pick would be wiped when it ends).
  */
-export function pickRow(root: string, ordered: readonly string[], row: WorktreeRow, how: 'range' | 'toggle'): void {
+export function pickRow(root: string, ordered: readonly string[], never: readonly string[], row: WorktreeRow, how: 'range' | 'toggle'): void {
   if (row.info.isMain) return
   const state = worktreesOf(root)
+  if (state.busy) return
   patchRoot(root, {
-    selection: pickRows({ ordered, picked: state.selection, anchor: state.anchor, id: row.key, how }),
+    selection: pickRows({ ordered, picked: state.selection, anchor: state.anchor, id: row.key, how, never }),
     anchor: row.key,
     notice: null
   })
@@ -250,13 +252,6 @@ const DETAIL_MAX = 480
 /** Of those, what the skipped worktrees may take. */
 const SKIPPED_MAX = 120
 
-/** `items` joined by `separator` in at most `budget` characters: the ones that do not fit become “…还有 N 个”. */
-function listWithin(items: readonly string[], separator: string, budget: number): string {
-  const more = pick(M).more
-  const { shown, left } = fitLines(items, budget - more(items.length).length - separator.length, separator.length)
-  return [...shown, ...(left > 0 ? [more(left)] : [])].join(separator)
-}
-
 /**
  * 可清理 › 清理 (wording 'clean'), or the picked rows' 删除 (wording 'delete'): one confirmation listing what goes (and
  * what stays and why), then remove them one by one. Rows with a session are never part of it (cleanupPlan), checked
@@ -294,9 +289,9 @@ export async function cleanUpInteractive(
     patchRoot(root, { notice: skipped.length > 0 ? words.nothingList(skipped.join(m.listSeparator)) : words.nothing })
     return false
   }
-  const skippedShort = listWithin(skipped, m.listSeparator, SKIPPED_MAX)
+  const skippedShort = listWithin(skipped, m.listSeparator, SKIPPED_MAX, m.more)
   const lines = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.openPath, window.tr.homeDir)}`)
-  const listed = listWithin(lines, '\n', DETAIL_MAX - m.cleanDetail('', m.ignoredFiles, skippedShort).length)
+  const listed = listWithin(lines, '\n', DETAIL_MAX - m.cleanDetail('', m.ignoredFiles, skippedShort).length, m.more)
   const confirmed = await window.tr.ui.confirm({
     message: words.message(plan.remove.length),
     detail: m.cleanDetail(listed, m.ignoredFiles, skippedShort),
@@ -339,7 +334,7 @@ export async function deletePickedInteractive(
   if (confirmed) patchRoot(root, { selection: [] })
 }
 
-/** The menu a picked row opens: one 删除 N 个 worktree… and nothing else (PRD v1.216 ③). */
+/** The menu a picked row opens: one 删除 N 个 worktree… and nothing else (PRD v1.216 ③), ⌫ on its right. */
 export async function openPickedMenu(
   root: string,
   rows: readonly WorktreeRow[],
@@ -347,8 +342,10 @@ export async function openPickedMenu(
   refresh: () => Promise<void>
 ): Promise<void> {
   const m = pick(M)
-  const label = rows.length === 1 ? m.deleteWorktree : m.deleteManyMenu(rows.length)
-  const choice = await popupMenu([{ type: 'item', id: 'delete', label }], anchor)
+  const choice = await popupMenu(
+    [{ type: 'item', id: 'delete', label: m.deleteManyMenu(rows.length), enabled: !worktreesOf(root).busy, accelerator: 'Backspace' }],
+    anchor
+  )
   if (choice === 'delete') await deletePickedInteractive(root, rows, refresh)
 }
 

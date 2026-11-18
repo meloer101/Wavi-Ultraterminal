@@ -292,35 +292,81 @@ test.describe('F17 right panel · Worktree', () => {
     expect(from).toBeGreaterThanOrEqual(0)
     expect(to).toBeGreaterThan(from)
     const pickedCount = to - from + 1
-    const title = await page.locator('header h1').textContent()
+    const picked = panel().locator('li[data-picked="true"]')
+    const expanded = panel().locator('button[aria-expanded="true"]')
 
-    // 1. Plain click, then ⇧ click: every row in between is picked, nothing expands, no session switches.
+    // A row expanded only because it is the active session's worktree does not count as picked: ⌘ click on another row
+    // picks that one alone. Switching away and back puts the expansion on following the active session again (the row
+    // an earlier test clicked is no longer the one open).
+    await page.locator('[data-region="sidebar"] [data-session-id="s-busy"]').click()
+    await page.locator('[data-region="sidebar"] [data-session-id="s-feature"]').click()
+    await expect(expanded).toHaveCount(1)
+    const title = await page.locator('header h1').textContent()
+    await expect(item(repo.feature).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(1)
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(0)
+
+    // 1. Plain click, then ⇧ click: every row in between is picked, nothing in the panel expands, no session switches.
     await item(made[0]!.path).locator('button[aria-expanded]').click()
     await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
-    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(pickedCount)
+    await expect(picked).toHaveCount(pickedCount)
     for (let i = from; i <= to; i++) await expect(rows.nth(i)).toHaveAttribute('data-picked', 'true')
-    await expect(panel().locator('li[data-picked="true"] button[aria-expanded="true"]')).toHaveCount(0)
+    await expect(expanded).toHaveCount(0)
     await expect(page.locator('header h1')).toHaveText(title!)
+    // Expanded earlier, but not picked: still no menu on it.
+    await expect(item(repo.detached)).toHaveAttribute('data-picked', 'false')
+    await item(repo.detached).locator('button[aria-expanded]').click({ button: 'right' })
+    await expect(page.getByRole('menuitem')).toHaveCount(0)
 
     // 2. ⌘ click takes one row out of the pick and puts it back.
     await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
     await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'false')
-    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(pickedCount - 1)
+    await expect(picked).toHaveCount(pickedCount - 1)
     await item(made[1]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
     await expect(item(made[1]!.path)).toHaveAttribute('data-picked', 'true')
 
-    // 3. A picked row's right-click menu holds one item and nothing else.
+    // 3. The main checkout can never be picked by ⌘ (a ⇧ range from it is checked at the end).
+    await item(repo.project).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
+    await expect(picked).toHaveCount(pickedCount)
+
+    // 4. A picked row's right-click menu holds one item, with ⌫ on its right.
     await item(made[0]!.path).locator('button[aria-expanded]').click({ button: 'right' })
     const entries = page.getByRole('menuitem')
     await expect(entries).toHaveCount(1)
-    await expect(entries).toHaveText(`删除 ${pickedCount} 个 worktree…`)
+    await expect(entries).toContainText(`删除 ${pickedCount} 个 worktree…`)
+    await expect(entries).toContainText('⌫')
     await shoot('99a-worktree-picked')
     await expect(entries).toHaveCount(1)
     await page.keyboard.press('Escape')
     await expect(entries).toHaveCount(0)
+    await expect(picked).toHaveCount(pickedCount)
 
-    // 4. ⌫ asks once — the same rule as 清理: the one with uncommitted work is skipped and says why. The count in
-    // the title is what will actually go (as 清理 counts), the dirty one is listed under 跳过.
+    // 5. Switching the session from the sidebar drops the pick (the rows' menu acts on worktrees, not on sessions).
+    await page.locator('[data-region="sidebar"] [data-session-id="s-busy"]').click()
+    await expect(picked).toHaveCount(0)
+    await expect(page.locator('header h1')).toHaveText('还在看的')
+
+    // 6. Expansion comes back: plain-click a row to expand it, ⌘ click two others, Esc puts its expansion back.
+    await item(made[1]!.path).locator('button[aria-expanded]').click()
+    await expect(item(made[1]!.path).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(2)
+    await expect(expanded).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
+    await expect(expanded).toHaveCount(1)
+    await expect(item(made[1]!.path).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+
+    // 7. ⌫ asks once — the same rule as 清理: the one with uncommitted work is skipped and says why. The count in the
+    // title is what will actually go (as 清理 counts), the dirty one is listed under 跳过.
+    await item(made[0]!.path).locator('button[aria-expanded]').click()
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(pickedCount)
     const before = (await dialogs()).length
     await page.keyboard.press('Backspace')
     await expect(panel().getByRole('status')).toHaveText(`已删除 ${pickedCount - 1} 个 worktree`, { timeout: 30_000 })
@@ -333,16 +379,36 @@ test.describe('F17 right panel · Worktree', () => {
     expect(existsSync(made[3]!.path)).toBe(true)
     // The folders go, the branches stay.
     for (const { branch } of made.slice(0, 3)) expect(execFileSync('git', ['branch', '--list', branch], { cwd: repo.project }).toString()).toContain(branch)
-    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
+    await expect(picked).toHaveCount(0)
     await expect(idle().locator(':scope > li')).toHaveCount(2)
 
-    // 5. Esc drops a pick without asking anything.
+    // 8. One picked row says 删除 1 个 worktree… (the batch flow, so not 更多 › 删除 worktree…).
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
+    await expect(picked).toHaveCount(1)
+    await item(made[3]!.path).locator('button[aria-expanded]').click({ button: 'right' })
+    await expect(entries).toHaveCount(1)
+    await expect(entries).toContainText('删除 1 个 worktree…')
+    await expect(entries).toContainText('⌫')
+    await page.keyboard.press('Escape')
+    await expect(entries).toHaveCount(0)
+
+    // 9. Esc drops a pick without asking anything.
     const quiet = (await dialogs()).length
     await item(repo.detached).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
-    await item(made[3]!.path).locator('button[aria-expanded]').click({ modifiers: ['Meta'] })
-    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(2)
+    await expect(picked).toHaveCount(2)
     await page.keyboard.press('Escape')
-    await expect(panel().locator('li[data-picked="true"]')).toHaveCount(0)
+    await expect(picked).toHaveCount(0)
     expect((await dialogs()).length).toBe(quiet)
+
+    // 10. A ⇧ range that starts on the main checkout starts with the row below it and never picks main.
+    await item(repo.project).locator('button[aria-expanded]').click()
+    await expect(item(repo.project).locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    const below = working().locator(':scope > li').nth(1)
+    await below.locator('button[aria-expanded]').click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(1)
+    await expect(below).toHaveAttribute('data-picked', 'true')
+    await expect(item(repo.project)).toHaveAttribute('data-picked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
   })
 })

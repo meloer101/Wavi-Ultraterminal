@@ -149,24 +149,36 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
     }
   }, [root, refreshAll])
 
-  // Switching sessions anywhere else moves the selection to the new session's worktree.
-  useEffect(() => patchRoot(root, { picked: null }), [root, activeWorktreeId])
+  // Switching sessions anywhere else moves the selection to the new session's worktree, and drops the pick (its menu
+  // acts on the foldouts, not on sessions). The anchor stays: a plain click on a row with a session sets it and
+  // switches in the same step.
+  useEffect(() => patchRoot(root, { picked: null, selection: [] }), [root, activeWorktreeId])
+  // A pick belongs to the view it was made in: it starts empty when the view opens or the project changes, and goes
+  // with it when it closes.
+  useEffect(() => {
+    patchRoot(root, { anchor: null, selection: [] })
+    return () => patchRoot(root, { selection: [] })
+  }, [root])
 
   const allRows = useMemo(() => (groups ? [...groups.working, ...groups.cleanable, ...groups.idle] : []), [groups])
-  // What a ⇧ range counts through: every row as drawn except the main checkout.
-  const pickable = useMemo(() => allRows.filter((row) => !row.info.isMain).map((row) => row.key), [allRows])
+  // Every row as drawn: a ⇧ range counts through all of them, the main checkout included.
+  const ordered = useMemo(() => allRows.map((row) => row.key), [allRows])
+  // ...but the main checkout is only an anchor: a range that starts there does not pick it.
+  const never = useMemo(() => allRows.filter((row) => row.info.isMain).map((row) => row.key), [allRows])
   // Rows picked with ⇧ / ⌘ (PRD v1.216); one that left the listing (deleted, folded away) drops out of the pick.
-  const drawnKeys = useMemo(() => new Set(allRows.map((row) => row.key)), [allRows])
+  const drawnKeys = useMemo(() => new Set(ordered), [ordered])
   const selection = useMemo(() => state.selection.filter((key) => drawnKeys.has(key)), [state.selection, drawnKeys])
   const pickedSet = useMemo(() => new Set(selection), [selection])
   const pickedRows = useMemo(() => allRows.filter((row) => pickedSet.has(row.key)), [allRows, pickedSet])
-  const onPick = useCallback((row: WorktreeRow, how: 'range' | 'toggle') => pickRow(root, pickable, row, how), [root, pickable])
+  const onPick = useCallback((row: WorktreeRow, how: 'range' | 'toggle') => pickRow(root, ordered, never, row, how), [root, ordered, never])
   const onPickedMenu = useCallback(
     (anchor: MenuAnchor) => void openPickedMenu(root, pickedRows, anchor, refreshAll),
     [root, pickedRows, refreshAll]
   )
   const onBodyKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (selection.length === 0) return
+    // Only the bare key: a shortcut with a modifier is something else, and a held key must not delete.
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return
     // Esc drops the pick; ⌫ / ⌦ delete the picked worktrees, as the picked row's menu does.
     if (e.key === 'Escape') {
       e.preventDefault()

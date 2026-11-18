@@ -10,6 +10,7 @@ import {
   formatAhead,
   formatDiff,
   keptText,
+  listWithin,
   mergeListing,
   COLLAPSED,
   pickRows,
@@ -266,29 +267,73 @@ describe('selectedRow', () => {
 describe('pickRows', () => {
   // As drawn: the working rows (the main checkout left out), then 可清理, then 没有会话.
   const ordered = ['/wt/a', '/wt/b', '/wt/c', '/wt/d']
+  // `never` empty: the main checkout is not drawn at all in these.
+  const pick = (input: {
+    ordered?: readonly string[]
+    picked?: readonly string[]
+    anchor?: string | null
+    id: string
+    how: 'range' | 'toggle'
+    never?: readonly string[]
+  }) => pickRows({ ordered, picked: [], anchor: null, ...input, never: input.never ?? [] })
 
   it('⌘ click adds one row and takes it out again', () => {
-    expect(pickRows({ ordered, picked: [], anchor: null, id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
-    expect(pickRows({ ordered, picked: ['/wt/b'], anchor: '/wt/b', id: '/wt/b', how: 'toggle' })).toEqual([])
-    expect(pickRows({ ordered, picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'toggle' })).toEqual(['/wt/a', '/wt/c'])
+    expect(pick({ id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
+    expect(pick({ picked: ['/wt/b'], anchor: '/wt/b', id: '/wt/b', how: 'toggle' })).toEqual([])
+    expect(pick({ picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'toggle' })).toEqual(['/wt/a', '/wt/c'])
   })
 
   it('⇧ click picks the rows between the anchor and the clicked one, across groups, in drawn order', () => {
-    expect(pickRows({ ordered, picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/c'])
-    expect(pickRows({ ordered, picked: ['/wt/d'], anchor: '/wt/d', id: '/wt/b', how: 'range' })).toEqual(['/wt/b', '/wt/c', '/wt/d'])
+    expect(pick({ picked: ['/wt/a'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/c'])
+    expect(pick({ picked: ['/wt/d'], anchor: '/wt/d', id: '/wt/b', how: 'range' })).toEqual(['/wt/b', '/wt/c', '/wt/d'])
   })
 
   it('⇧ click without an anchor (or with one no longer drawn) picks only the clicked row', () => {
-    expect(pickRows({ ordered, picked: [], anchor: null, id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
-    expect(pickRows({ ordered, picked: [], anchor: '/wt/gone', id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
+    expect(pick({ id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
+    expect(pick({ anchor: '/wt/gone', id: '/wt/c', how: 'range' })).toEqual(['/wt/c'])
   })
 
   it('⇧ click keeps what was already picked', () => {
-    expect(pickRows({ ordered, picked: ['/wt/d'], anchor: '/wt/a', id: '/wt/b', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/d'])
+    expect(pick({ picked: ['/wt/d'], anchor: '/wt/a', id: '/wt/b', how: 'range' })).toEqual(['/wt/a', '/wt/b', '/wt/d'])
   })
 
   it('drops keys that are no longer drawn', () => {
-    expect(pickRows({ ordered: ['/wt/b', '/wt/c'], picked: ['/wt/a', '/wt/b'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/b', '/wt/c'])
-    expect(pickRows({ ordered: ['/wt/b'], picked: ['/wt/a', '/wt/c'], anchor: '/wt/c', id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
+    expect(pick({ ordered: ['/wt/b', '/wt/c'], picked: ['/wt/a', '/wt/b'], anchor: '/wt/a', id: '/wt/c', how: 'range' })).toEqual(['/wt/b', '/wt/c'])
+    expect(pick({ ordered: ['/wt/b'], picked: ['/wt/a', '/wt/c'], anchor: '/wt/c', id: '/wt/b', how: 'toggle' })).toEqual(['/wt/b'])
+  })
+
+  it('ranges from a `never` row (the main checkout) without ever picking it', () => {
+    const withMain = ['/repo', '/wt/a', '/wt/b', '/wt/c']
+    expect(pickRows({ ordered: withMain, picked: [], anchor: '/repo', id: '/wt/b', how: 'range', never: ['/repo'] })).toEqual(['/wt/a', '/wt/b'])
+    // Even a range that starts and ends on it leaves it out.
+    expect(pickRows({ ordered: withMain, picked: [], anchor: '/repo', id: '/repo', how: 'range', never: ['/repo'] })).toEqual([])
+    expect(pickRows({ ordered: withMain, picked: ['/wt/c'], anchor: null, id: '/repo', how: 'toggle', never: ['/repo'] })).toEqual(['/wt/c'])
+  })
+})
+
+describe('listWithin', () => {
+  const more = (left: number) => `…还有 ${left} 个`
+
+  it('leaves a list that fits unchanged, even exactly at the budget', () => {
+    expect(listWithin(['ab', 'cd'], ';', 5, more)).toBe('ab;cd')
+    expect(listWithin(['ab'], ';', 5, more)).toBe('ab')
+    // A long line that fits keeps all of it: no room is reserved for a suffix it does not need.
+    expect(listWithin(['x'.repeat(115)], ';', 120, more)).toBe('x'.repeat(115))
+  })
+
+  it('cuts what does not fit and says how many are left, never over the budget', () => {
+    const items = ['a'.repeat(20), 'b'.repeat(20), 'c'.repeat(20)]
+    expect(listWithin(items, ';', 50, more)).toBe(`${'a'.repeat(20)};${'b'.repeat(20)};…还有 1 个`)
+    expect(listWithin(items, ';', 50, more).length).toBeLessThanOrEqual(50)
+  })
+
+  it('counts a two-character separator', () => {
+    const plus = (left: number) => `+${left}`
+    expect(listWithin(['aa', 'bb', 'cc'], '、、', 10, plus)).toBe('aa、、bb、、cc')
+    expect(listWithin(['aa', 'bb', 'cc'], '、、', 9, plus)).toBe('aa、、+2')
+  })
+
+  it('shows only the suffix when not even one item fits', () => {
+    expect(listWithin(['a'.repeat(40), 'b'], ';', 20, more)).toBe('…还有 2 个')
   })
 })
