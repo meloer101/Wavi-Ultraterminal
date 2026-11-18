@@ -7,6 +7,14 @@
 /** Where Wavi puts new worktrees, under the home folder: `~/.tr/worktrees/<repo folder name>/<name>` (PRD F4). */
 export const WAVI_WORKTREES_DIR = ['.tr', 'worktrees'] as const
 
+/**
+ * Wavi's own snapshot commits (PRD F21 `--base snapshot`, F17 v1.218): a commit-tree of a working tree, on no branch
+ * by construction. Main does not count them as commits removal would orphan (worktree-create makes them with these).
+ */
+export const SNAPSHOT_AUTHOR_NAME = 'Wavi'
+export const SNAPSHOT_AUTHOR_EMAIL = 'wavi@localhost'
+export const SNAPSHOT_SUBJECT = 'Wavi snapshot'
+
 export interface GitWorktreeInfo {
   /** Path as `git worktree list` prints it. */
   path: string
@@ -24,10 +32,15 @@ export interface GitWorktreeInfo {
   /** Branch being rebased in this worktree (it shows as detached meanwhile), else null. */
   rebasing: string | null
   /**
-   * Detached only: commits of HEAD that no branch, tag or remote has (removing the worktree would orphan them);
-   * null when that could not be checked. Always 0 on a branch.
+   * Detached only: commits of HEAD that no branch, tag or remote has (removing the worktree would orphan them), Wavi's
+   * own snapshot commits aside; null when that could not be checked. Always 0 on a branch.
    */
   unreachableCommits: number | null
+  /**
+   * Detached at a commit Wavi made as a snapshot (author, email and subject all match): its working tree is a copy, so
+   * removing it orphans nothing of the user's (PRD F17 v1.218). False in every other case.
+   */
+  snapshot: boolean
   /** Branch the ahead / behind and merged state compare with; null for the base itself or when there is none. */
   base: string | null
   /** Commits on HEAD that `base` does not have (null without a base). */
@@ -117,6 +130,26 @@ export function parseWorktreePorcelain(output: string): PorcelainWorktree[] {
     else if (key === 'prunable') current.prunable = value
   }
   return result
+}
+
+/**
+ * `git log --format=%an%x00%ae%x00%s <head> --not --branches --tags --remotes`: how many commits are not Wavi snapshot
+ * commits, and whether the first line (HEAD) is one. Throws when git printed something else: unknown is never safe.
+ */
+export function parseUnreachableLog(output: string): { commits: number; headIsSnapshot: boolean } {
+  const lines = output.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  let commits = 0
+  let headIsSnapshot = false
+  for (const [index, line] of lines.entries()) {
+    const fields = line.split('\0')
+    if (fields.length !== 3) throw new Error('unexpected git log output')
+    const snapshot =
+      fields[0] === SNAPSHOT_AUTHOR_NAME && fields[1] === SNAPSHOT_AUTHOR_EMAIL && fields[2] === SNAPSHOT_SUBJECT
+    if (index === 0) headIsSnapshot = snapshot
+    if (!snapshot) commits++
+  }
+  return { commits, headIsSnapshot }
 }
 
 /**

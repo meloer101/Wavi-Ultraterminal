@@ -372,6 +372,15 @@ test.describe('派活与回报 · wavi', () => {
     expect(readdirSync(worktreesDir)).toHaveLength(3)
   })
 
+  // PRD v1.218 ②: the snapshot's commit is Wavi's own and on no branch, so the last session closing takes the worktree.
+  test('closing the snapshot child’s session removes its worktree folder', async () => {
+    await sidebar().locator(`[data-session-id="${ids.review}"]`).click()
+    await page.keyboard.press('Meta+KeyW')
+    await expect.poll(() => existsSync(dirs.review), WITHIN).toBe(false)
+    await expect(sidebar().locator(`[data-session-id="${ids.review}"]`)).toHaveCount(0)
+    expect(readdirSync(worktreesDir)).toHaveLength(2)
+  })
+
   test('the child’s header names its dispatcher, and the overview lists them together', async () => {
     await sidebar().locator(`[data-session-id="${ids.fix}"]`).click()
     const link = page.getByTestId('dispatched-by').first()

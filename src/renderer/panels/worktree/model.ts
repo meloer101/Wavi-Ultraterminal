@@ -137,15 +137,16 @@ export function rowLabels(name: string, sessions: readonly Session[], info: GitW
 
 /**
  * Which group a worktree goes in. Any session keeps it in the working list. 可清理 only holds what deleting would
- * really remove: merged (or the folder is gone) and not refused by the delete guard (`blocked`).
+ * really remove: merged, the folder is gone, or (v1.218) Wavi's own snapshot, and not refused by the delete guard
+ * (`blocked`).
  */
 export function groupOf(
-  info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable'>,
+  info: Pick<GitWorktreeInfo, 'isMain' | 'merged' | 'prunable' | 'snapshot'>,
   sessionCount: number,
   blocked: boolean
 ): keyof WorktreeGroups {
   if (info.isMain || sessionCount > 0) return 'working'
-  return (info.merged || info.prunable !== null) && !blocked ? 'cleanable' : 'idle'
+  return (info.merged || info.prunable !== null || info.snapshot) && !blocked ? 'cleanable' : 'idle'
 }
 
 /**
@@ -230,6 +231,17 @@ export function deleteBlocker(row: Pick<WorktreeRow, 'info' | 'sessions'>): stri
     if (info.unreachableCommits > 0) return m.unreachable(info.unreachableCommits)
   }
   return null
+}
+
+/**
+ * Whether 更多 › 删除 worktree… may offer 丢弃并删除 (v1.218): the only thing in the way is uncommitted work, which the
+ * user can choose to lose. Every other refusal stands — an unknown dirty state, the main checkout, an active session, a
+ * lock, a rebase, an undetailed row, a detached HEAD with commits of its own on no branch.
+ */
+export function discardable(row: Pick<WorktreeRow, 'info' | 'sessions'>): boolean {
+  const { dirtyCount } = row.info
+  if (dirtyCount === null || dirtyCount <= 0) return false
+  return deleteBlocker({ sessions: row.sessions, info: { ...row.info, dirtyCount: 0 } }) === null
 }
 
 export interface CleanupPlan {

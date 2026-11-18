@@ -4,6 +4,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_AUTHOR_NAME, SNAPSHOT_SUBJECT } from '@shared/git-worktrees'
 
 const roots = new Set<string>()
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
@@ -269,5 +270,123 @@ describe('a bare repository with worktrees', () => {
     // The project folder itself is still never removed from under the project.
     expect(await removeWorktree(first, first, false)).toEqual({ ok: false, reason: 'main' })
     expect(await removeWorktree(first, second, false)).toEqual({ ok: true })
+  })
+})
+
+describe('Wavi’s own snapshot worktrees (PRD v1.218)', () => {
+  let root: string
+  beforeAll(() => {
+    root = repo('snapshot-repo')
+  })
+
+  /** `commit-tree` on HEAD's tree, made the way `wavi run --base snapshot` makes one (Wavi as author and committer). */
+  const snapshotCommit = (
+    cwd: string,
+    message = SNAPSHOT_SUBJECT,
+    author = { name: SNAPSHOT_AUTHOR_NAME, email: SNAPSHOT_AUTHOR_EMAIL }
+  ): string =>
+    execFileSync(
+      'git',
+      ['-c', 'commit.gpgsign=false', 'commit-tree', git(cwd, 'rev-parse', 'HEAD^{tree}').trim(), '-p', 'HEAD', '-m', message],
+      {
+        cwd,
+        env: {
+          ...env,
+          GIT_AUTHOR_NAME: author.name,
+          GIT_AUTHOR_EMAIL: author.email,
+          GIT_COMMITTER_NAME: author.name,
+          GIT_COMMITTER_EMAIL: author.email
+        }
+      }
+    )
+      .toString()
+      .trim()
+
+  const detachedAt = (name: string, commit: string): string => {
+    const path = join(base, name)
+    git(root, 'worktree', 'add', '-q', '--detach', path, commit)
+    return path
+  }
+
+  it('lists a worktree detached at a snapshot commit with nothing unreachable, and removes it', async () => {
+    const path = detachedAt('snapshot', snapshotCommit(root))
+    expect(await byPath(root, path)).toMatchObject({ branch: null, unreachableCommits: 0, snapshot: true, dirtyCount: 0 })
+    expect(await removeWorktree(root, path, false)).toEqual({ ok: true })
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('still counts and refuses a user’s own commit on no branch', async () => {
+    const path = detachedAt('own-commit', git(root, 'rev-parse', 'HEAD').trim())
+    git(path, 'commit', '-q', '--allow-empty', '-m', 'only here')
+    expect(await byPath(root, path)).toMatchObject({ unreachableCommits: 1, snapshot: false })
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'unreachable-commits', message: '1' })
+    expect(existsSync(path)).toBe(true)
+  })
+
+  it('counts the user’s commit on top of a snapshot, and refuses', async () => {
+    const path = detachedAt('snapshot-plus-own', snapshotCommit(root))
+    git(path, 'commit', '-q', '--allow-empty', '-m', 'mine on top')
+    expect(await byPath(root, path)).toMatchObject({ unreachableCommits: 1, snapshot: false })
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'unreachable-commits', message: '1' })
+    expect(existsSync(path)).toBe(true)
+  })
+
+  it('counts a commit whose subject is Wavi snapshot but whose author is someone else', async () => {
+    const path = detachedAt('snapshot-subject-only', snapshotCommit(root, SNAPSHOT_SUBJECT, { name: 't', email: 't@t' }))
+    expect(await byPath(root, path)).toMatchObject({ unreachableCommits: 1, snapshot: false })
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'unreachable-commits' })
+    // A snapshot whose author matches but subject does not is no snapshot either.
+    const otherMessage = detachedAt('snapshot-message', snapshotCommit(root, 'Wavi snapshot (but not)'))
+    expect(await byPath(root, otherMessage)).toMatchObject({ unreachableCommits: 1, snapshot: false })
+  })
+})
+
+describe('discard and delete (PRD v1.218)', () => {
+  let root: string
+  beforeAll(() => {
+    root = repo('discard-repo')
+  })
+
+  it('is refused without discard and removes a modified tracked file and an untracked one with it, branch kept', async () => {
+    const path = join(base, 'discard-me')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/discard', path)
+    writeFileSync(join(path, 'README.md'), '# changed\n')
+    writeFileSync(join(path, 'wip.ts'), 'export const wip = 1\n')
+    expect(await byPath(root, path)).toMatchObject({ dirtyCount: 2, dirtyFiles: ['README.md', 'wip.ts'] })
+    expect(await removeWorktree(root, path, false)).toEqual({ ok: false, reason: 'dirty' })
+    expect(await removeWorktree(root, path, false, true)).toEqual({ ok: true })
+    expect(existsSync(path)).toBe(false)
+    expect(git(root, 'branch', '--list', 'jacob/discard')).toContain('jacob/discard')
+  })
+
+  it('does not get past a lock, the main checkout, or a detached HEAD with a commit of the user’s', async () => {
+    const locked = join(base, 'discard-locked')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/locked', locked)
+    writeFileSync(join(locked, 'wip.ts'), 'wip\n')
+    git(root, 'worktree', 'lock', locked)
+    expect(await removeWorktree(root, locked, false, true)).toEqual({ ok: false, reason: 'locked' })
+    git(root, 'worktree', 'unlock', locked)
+    expect(existsSync(locked)).toBe(true)
+
+    writeFileSync(join(root, 'README.md'), '# changed\n')
+    expect(await removeWorktree(root, root, false, true)).toEqual({ ok: false, reason: 'main' })
+    git(root, 'checkout', '--', 'README.md')
+
+    const detached = join(base, 'discard-detached')
+    git(root, 'worktree', 'add', '-q', '--detach', detached)
+    git(detached, 'commit', '-q', '--allow-empty', '-m', 'only here')
+    writeFileSync(join(detached, 'wip.ts'), 'wip\n')
+    expect(await removeWorktree(root, detached, false, true)).toMatchObject({ ok: false, reason: 'unreachable-commits' })
+    expect(existsSync(detached)).toBe(true)
+  })
+
+  it('ignores anything but the literal true, as force does', async () => {
+    const path = join(base, 'discard-literal')
+    git(root, 'worktree', 'add', '-q', '-b', 'jacob/literal', path)
+    writeFileSync(join(path, 'wip.ts'), 'wip\n')
+    for (const value of ['true', 1, {}] as const) {
+      expect(await removeWorktree(root, path, false, value)).toEqual({ ok: false, reason: 'dirty' })
+    }
+    expect(existsSync(path)).toBe(true)
   })
 })

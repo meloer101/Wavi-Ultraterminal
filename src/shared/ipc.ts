@@ -237,8 +237,11 @@ export interface GitWorktreesApi {
    * `only` (resolved paths) limits the per-worktree details to those; the others come back with `detailed: false`.
    */
   list(root: string, knownPaths: string[], only?: string[]): Promise<GitWorktreeListing | null>
-  /** `git worktree remove`, refused whenever work could be lost; `force` only after git's submodule refusal. */
-  remove(root: string, path: string, force: boolean): Promise<WorktreeRemoveResult>
+  /**
+   * `git worktree remove`, refused whenever work could be lost; `force` only after git's submodule refusal. `discard`
+   * (one worktree, after the user confirmed losing it) drops the uncommitted changes too, with `--force`.
+   */
+  remove(root: string, path: string, force: boolean, discard?: boolean): Promise<WorktreeRemoveResult>
   /** Starts / stops watching the repository's worktrees and branches for this window; changes arrive through onChanged. */
   watch(root: string): void
   unwatch(root: string): void

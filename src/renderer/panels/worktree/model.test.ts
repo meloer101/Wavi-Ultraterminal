@@ -6,9 +6,11 @@ import {
   buildRows,
   cleanupPlan,
   deleteBlocker,
+  discardable,
   fitLines,
   formatAhead,
   formatDiff,
+  groupOf,
   keptText,
   listWithin,
   mergeListing,
@@ -29,6 +31,7 @@ function info(patch: Partial<GitWorktreeInfo> & { path: string }): GitWorktreeIn
     prunable: null,
     rebasing: null,
     unreachableCommits: 0,
+    snapshot: false,
     base: 'main',
     ahead: 0,
     behind: 0,
@@ -149,6 +152,19 @@ describe('buildRows', () => {
       ['jacob/x', '变基中']
     ])
   })
+
+  // PRD v1.218 ②: Wavi's own snapshot commits are on no branch by construction, so its worktree is safe to remove.
+  it('puts a session-less Wavi snapshot in 可清理, a session in it keeps it working', () => {
+    const snap = info({ path: '/wt/snap', branch: null, head: '0123456789ab', snapshot: true, base: null, ahead: null, behind: null })
+    const rows = buildRows({ ...listing, worktrees: [snap] }, [], [])
+    expect(rows.cleanable.map((r) => [r.title, r.where])).toEqual([['0123456', '分离的 HEAD']])
+    const busy = buildRows({ ...listing, worktrees: [snap] }, [{ id: 'w-snap', projectId: 'p', branch: '', path: '/wt/snap', isMain: false }], [session('s', 'w-snap')])
+    expect(busy.working.map((r) => r.title)).toEqual(['s'])
+    expect(busy.cleanable).toEqual([])
+    // A snapshot with uncommitted work is refused by the delete guard, so it waits in 没有会话 like any other.
+    const dirty = buildRows({ ...listing, worktrees: [{ ...snap, dirtyCount: 1, dirtyFiles: ['a.ts'] }] }, [], [])
+    expect(dirty.idle.map((r) => r.title)).toEqual(['0123456'])
+  })
 })
 
 describe('branchesOf', () => {
@@ -202,6 +218,49 @@ describe('deleteBlocker', () => {
   it('refuses a detached worktree with commits no branch has', () => {
     expect(blocker({ branch: null, unreachableCommits: 2 })).toBe('有 2 个提交不在任何分支上，先给它建一个分支')
     expect(blocker({ branch: null, unreachableCommits: 0 })).toBeNull()
+  })
+})
+
+describe('groupOf', () => {
+  const plain = { isMain: false, merged: false, prunable: null }
+
+  it('puts a session-less snapshot in 可清理, unless deleting it would be refused', () => {
+    expect(groupOf({ ...plain, snapshot: true }, 0, false)).toBe('cleanable')
+    expect(groupOf({ ...plain, snapshot: true }, 1, false)).toBe('working')
+    expect(groupOf({ ...plain, snapshot: true }, 0, true)).toBe('idle')
+    expect(groupOf({ ...plain, snapshot: false }, 0, false)).toBe('idle')
+  })
+})
+
+describe('discardable', () => {
+  const row = (patch: Partial<GitWorktreeInfo> = {}, sessions: Session[] = []) => ({
+    info: info({ path: '/wt/x', branch: 'jacob/x', ...patch }),
+    sessions
+  })
+
+  it('is true when uncommitted work is the only thing in the way', () => {
+    expect(discardable(row({ dirtyCount: 3, dirtyFiles: ['a.ts', 'b.ts'] }))).toBe(true)
+    // A detached snapshot with uncommitted work too: its commits are Wavi's own, so only the dirty state stands.
+    expect(discardable(row({ branch: null, snapshot: true, unreachableCommits: 0, dirtyCount: 1 }))).toBe(true)
+    // A session that is not running or waiting does not stand in the way either.
+    expect(discardable(row({ dirtyCount: 1 }, [session('s', 'w', { status: 'done_unread' })]))).toBe(true)
+  })
+
+  it('is false without uncommitted work, or when the dirty state is unknown', () => {
+    expect(discardable(row())).toBe(false)
+    expect(discardable(row({ dirtyCount: 0 }))).toBe(false)
+    expect(discardable(row({ dirtyCount: null }))).toBe(false)
+  })
+
+  it('is false for every other reason a delete is refused', () => {
+    expect(discardable(row({ isMain: true, dirtyCount: 1 }))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1 }, [session('s', 'w', { status: 'running' })]))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1 }, [session('s', 'w', { status: 'needs_you' })]))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1, locked: true }))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1, branch: null, rebasing: 'x' }))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1, detailed: false }))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1, branch: null, unreachableCommits: 2 }))).toBe(false)
+    expect(discardable(row({ dirtyCount: 1, branch: null, unreachableCommits: null }))).toBe(false)
   })
 })
 

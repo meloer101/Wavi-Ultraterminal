@@ -190,7 +190,7 @@ async function closeSessionNow(sessionId: SessionId): Promise<boolean> {
   const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
   // A read-only snapshot of a dispatcher's working tree (PRD F21 --base snapshot) goes with its last session.
   if (session.dispatchBase === 'snapshot' && worktree && project && !worktree.isMain && !state.sessions.some((s) => s.id !== sessionId && s.worktreeId === worktree.id)) {
-    const removed = await removeWorktreeWithSessions(project.rootPath, worktree.path, [worktree.id], true)
+    const removed = await removeWorktreeWithSessions(project.rootPath, worktree.path, [worktree.id], false)
     if (removed.ok) return true
   }
   useWorkspace.getState().closeSession(sessionId)

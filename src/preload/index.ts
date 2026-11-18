@@ -186,7 +186,7 @@ const api: TrApi = {
   },
   gitWorktrees: {
     list: (root, knownPaths, only) => ipcRenderer.invoke(IPC.gitWorktreesList, root, knownPaths, only),
-    remove: (root, path, force) => ipcRenderer.invoke(IPC.gitWorktreesRemove, root, path, force),
+    remove: (root, path, force, discard) => ipcRenderer.invoke(IPC.gitWorktreesRemove, root, path, force, discard),
     watch: (root) => ipcRenderer.send(IPC.gitWorktreesWatch, root),
     unwatch: (root) => ipcRenderer.send(IPC.gitWorktreesUnwatch, root),
     onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener),

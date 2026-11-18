@@ -10,7 +10,7 @@ import { basename, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { classifyGitFailure } from '@shared/git-failures'
 import { IPC } from '@shared/ipc'
-import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
+import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, SNAPSHOT_AUTHOR_EMAIL, SNAPSHOT_AUTHOR_NAME, SNAPSHOT_SUBJECT, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
 import {
   branchPrefix,
   MAX_INCLUDE_LISTED,
@@ -259,8 +259,13 @@ async function snapshotCommit(from: string): Promise<string> {
     if (head) await git(from, ['read-tree', head], { env: index, timeout: ADD_TIMEOUT_MS })
     await git(from, ['add', '-A'], { env: index, timeout: ADD_TIMEOUT_MS })
     const tree = (await git(from, ['write-tree'], { env: index })).trim()
-    const ident = { GIT_AUTHOR_NAME: 'Wavi', GIT_AUTHOR_EMAIL: 'wavi@localhost', GIT_COMMITTER_NAME: 'Wavi', GIT_COMMITTER_EMAIL: 'wavi@localhost' }
-    return (await git(from, ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', 'Wavi snapshot'], { env: ident })).trim()
+    const ident = {
+      GIT_AUTHOR_NAME: SNAPSHOT_AUTHOR_NAME,
+      GIT_AUTHOR_EMAIL: SNAPSHOT_AUTHOR_EMAIL,
+      GIT_COMMITTER_NAME: SNAPSHOT_AUTHOR_NAME,
+      GIT_COMMITTER_EMAIL: SNAPSHOT_AUTHOR_EMAIL
+    }
+    return (await git(from, ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', SNAPSHOT_SUBJECT], { env: ident })).trim()
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
