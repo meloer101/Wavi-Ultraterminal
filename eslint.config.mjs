@@ -6,8 +6,6 @@ import globals from 'globals'
 export default tseslint.config(
   {
     ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/', 'site/dist/', 'site/.astro/',
-      // Launch films: HyperFrames compositions rendered to video (browser scripts, vendored libraries), not app code.
-      'launch-videos/',
       // iPhone app (PRD F22): Swift, tested with `xcodebuild test` inside ios/ (its build folder holds package sources).
       'ios/']
   },

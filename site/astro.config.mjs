@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config'
 
-// One build per host. Vercel serves the site at the root; GitHub Pages serves it under /terminal-reborn/,
+// One build per host. Vercel serves the site at the root; GitHub Pages serves it under /Wavi-Ultraterminal/,
 // so the Pages workflow sets SITE_BASE (and SITE_URL) and every asset and link follows import.meta.env.BASE_URL.
 // On Vercel the production domain comes from its system variable, so link previews get an absolute og:image.
 const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL
