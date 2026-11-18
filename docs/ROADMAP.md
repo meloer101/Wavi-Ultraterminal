@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-18：快捷键只在悬停时出现 + 设置 · 快捷键（PRD v1.209，Figma 97C′ / 97E）：侧栏和 24 处按钮上的快捷键标 `data-shortcut-hint`，`styles/base.css` 一条规则让它在按钮没被悬停、没有键盘焦点时透明（仍占位）；设置最后一项「快捷键」（`settings/ShortcutsPane.tsx`、`shortcut-list.ts`），7 组 43 条，单测 `shortcut-list.test.ts` 保证 `SHORTCUTS` / `FILE_SHORTCUTS` 都列上；e2e `settings.spec.ts`「shortcut hints show on hover only」。
+- 2026-11-18：快捷键只在悬停时出现 + 设置 · 快捷键（PRD v1.210，Figma 97C′ / 97E）：侧栏和 24 处按钮上的快捷键标 `data-shortcut-hint`，`styles/base.css` 一条规则让它在按钮没被悬停、没有键盘焦点时透明（仍占位）；设置最后一项「快捷键」（`settings/ShortcutsPane.tsx`、`shortcut-list.ts`），7 组 43 条，单测 `shortcut-list.test.ts` 保证 `SHORTCUTS` / `FILE_SHORTCUTS` 都列上；e2e `settings.spec.ts`「shortcut hints show on hover only」。
 - 2026-11-18：你的长消息默认折叠（PRD v1.208，Figma 96A / 96′）：桌面 GUI 会话超过 10 行只显示前 10 行、最后两行渐隐、气泡里「展开 / 收起」，点后按钮不动；手机会话页同样（8 行）。藏起不到 3 行时不折叠；展开状态按消息记在 store 里（桌面 `useGuiSessions.expanded`，手机 `AppModel.openMessages`），app 运行期间保留。`renderer/gui/Feed.tsx` `BubbleBody`、`model.ts` `foldsMessage`、`store.ts` `setMessageExpanded`、`Chat.module.css`；手机 `SessionView.swift` `UserText`。单测 `model.test.ts`、`store.test.ts`，iOS `LocalizationTests`；e2e `gui-session.spec.ts`。手机端只在测试宿主里渲染截图核对过，没在连着 Mac 的真会话里看过。
 - 2026-11-18：取消 F17 新端口自动打开浏览器（PRD v1.207）：删掉 `auto-open.ts`、端口标签的等待高亮和设置 · Worktree 的开关；右侧栏关闭时网页先换成截图，和面板一起滑出，不再晚 460 ms 单独消失（`page-slot.ts`，e2e `browser-panel.spec.ts`「covers the well」）。
 - 2026-11-18：实心玻璃下看板的状态卡片也画玻璃边缘（PRD v1.206，Figma 95A）：新 token `--tile-edge`（其他材质什么都不画），`overview/Overview.module.css` 的 `.card`。

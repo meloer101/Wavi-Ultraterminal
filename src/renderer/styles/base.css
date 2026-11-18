@@ -41,7 +41,7 @@ select {
   outline-offset: -2px;
 }
 
-/* A button's shortcut hint shows only while the button is hovered or has keyboard focus (PRD v1.209, Figma 97C′);
+/* A button's shortcut hint shows only while the button is hovered or has keyboard focus (PRD v1.210, Figma 97C′);
    设置 · 快捷键 lists them all. The hint keeps its room when hidden, so the button never changes width and its
    neighbours stay put. Two :not()s outweigh a module's `.button[data-primary] .hint` opacity. Hints outside a button
    (menus, ⌘K, the welcome page's line) are not marked and always show. */

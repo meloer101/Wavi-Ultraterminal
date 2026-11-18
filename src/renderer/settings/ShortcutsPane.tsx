@@ -1,5 +1,5 @@
 // 设置 · 快捷键 (Figma 97E): every shortcut, grouped by where it works; the action on the left, the keys on the right.
-// Read-only (no rebinding). Elsewhere the hints show only on hover (PRD v1.209), so this page is where they are all seen.
+// Read-only (no rebinding). Elsewhere the hints show only on hover (PRD v1.210), so this page is where they are all seen.
 import { Fragment } from 'react'
 import { defineMessages } from '@shared/i18n'
 import { useMessages } from '../ui/i18n'

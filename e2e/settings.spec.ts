@@ -206,7 +206,7 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   await app.close()
 })
 
-test('shortcut hints show on hover only; 设置 · 快捷键 lists them all (PRD v1.209, Figma 97)', async () => {
+test('shortcut hints show on hover only; 设置 · 快捷键 lists them all (PRD v1.210, Figma 97)', async () => {
   const app = await launchApp()
   const page = await app.firstWindow()
   await page.waitForSelector('[data-region="sidebar"]')

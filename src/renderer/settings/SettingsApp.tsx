@@ -19,7 +19,7 @@ import styles from './SettingsApp.module.css'
 
 // 通用 comes back with its content; an empty "即将推出" pane is a dead end (B11). The version and 检查更新
 // moved from 关于 to the sidebar's 更新 (Figma 36G, PRD v1.93). 外观 / 终端 / 对话 are three pages (Figma 66): the
-// window, the CLI sessions' terminal, the GUI sessions' chat. 快捷键 lists every shortcut (Figma 97E, PRD v1.209).
+// window, the CLI sessions' terminal, the GUI sessions' chat. 快捷键 lists every shortcut (Figma 97E, PRD v1.210).
 export type SettingsPaneId = 'appearance' | 'terminal' | 'chat' | 'agents' | 'usage' | 'worktree' | 'automation' | 'phone' | 'shortcuts'
 type PaneId = SettingsPaneId
 
