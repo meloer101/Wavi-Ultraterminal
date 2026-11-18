@@ -1,6 +1,6 @@
 // Real git repositories in a temp folder: what the Worktree view lists and what removal refuses.
 import { execFileSync } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 const roots = new Set<string>()
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
 
-const { listedWorktreePaths, listWorktrees, removeWorktree } = await import('./git-worktrees')
+const { listedWorktreePaths, listWorktrees, parentInsideWorktree, removeWorktree } = await import('./git-worktrees')
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-git-worktrees-')))
 const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -182,6 +182,72 @@ describe('untracked symbolic links are not uncommitted work (PRD v1.217)', () =>
     expect(await byPath(root, folder)).toMatchObject({ dirtyCount: 1, dirtyFiles: ['cache/'] })
     expect(await removeWorktree(root, folder, false)).toEqual({ ok: false, reason: 'dirty' })
     expect(lstatSync(join(folder, 'cache', 'deps')).isSymbolicLink()).toBe(true)
+  })
+})
+
+describe('a worktree that stays keeps its untracked links (PRD v1.217 review)', () => {
+  let root: string
+  let outside: string
+  beforeAll(() => {
+    // A checked-out submodule is the simplest way to make `git worktree remove` refuse after every check passed: git
+    // will not remove a working tree that contains one without --force, which Wavi only offers for its own refusal.
+    repo('sub-source')
+    root = repo('sub-repo')
+    git(root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', '../sub-source', 'dep')
+    git(root, 'commit', '-q', '-m', 'add the submodule')
+    outside = join(base, 'sub-outside')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'dep.js'), 'export const dep = 1\n')
+  })
+
+  /** A worktree of `root` with its submodule checked out, ready to be refused (branches are unique per test). */
+  const submoduleWorktree = (name: string): string => {
+    const path = join(base, name)
+    git(root, 'worktree', 'add', '-q', '-b', `jacob/${name}`, path)
+    git(path, '-c', 'protocol.file.allow=always', 'submodule', 'update', '--init', '-q')
+    return path
+  }
+
+  it('a git refusal after the links went puts them back', async () => {
+    const path = submoduleWorktree('refused-one')
+    symlinkSync(outside, join(path, 'node_modules'))
+    expect((await byPath(root, path)).dirtyCount).toBe(0)
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'submodules' })
+    expect(existsSync(path)).toBe(true)
+    expect(readlinkSync(join(path, 'node_modules'))).toBe(outside)
+  })
+
+  it('every link of several comes back, not only the first that went', async () => {
+    const path = submoduleWorktree('refused-two')
+    symlinkSync(outside, join(path, 'node_modules'))
+    symlinkSync(join(outside, 'dep.js'), join(path, 'deps.js'))
+    expect((await byPath(root, path)).dirtyCount).toBe(0)
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'submodules' })
+    expect(readlinkSync(join(path, 'node_modules'))).toBe(outside)
+    expect(readlinkSync(join(path, 'deps.js'))).toBe(join(outside, 'dep.js'))
+  })
+
+  it('a relative link target stays relative', async () => {
+    const path = submoduleWorktree('refused-relative')
+    symlinkSync('../sub-outside', join(path, 'node_modules'))
+    expect((await byPath(root, path)).dirtyCount).toBe(0)
+    expect(await removeWorktree(root, path, false)).toMatchObject({ ok: false, reason: 'submodules' })
+    // readlink gives the string git saw: put back as it was, not resolved.
+    expect(readlinkSync(join(path, 'node_modules'))).toBe('../sub-outside')
+  })
+
+  it('refuses a link whose parent folder really sits outside the worktree', async () => {
+    // Git never reports a path under a symlinked folder (it lists the folder's link instead), so the guard is checked
+    // on its own. `removeWorktree` uses exactly this answer before it unlinks anything.
+    const worktree = join(base, 'guard-wt')
+    mkdirSync(worktree)
+    const real = realpathSync(worktree)
+    expect(await parentInsideWorktree(real, join(worktree, 'node_modules'))).toBe(true)
+    symlinkSync(outside, join(worktree, 'sub'))
+    // The path string is inside; the folder it sits in is a link out of the worktree.
+    expect(await parentInsideWorktree(real, join(worktree, 'sub', 'node_modules'))).toBe(false)
+    // A parent that cannot be resolved is not inside either.
+    expect(await parentInsideWorktree(real, join(worktree, 'missing', 'node_modules'))).toBe(false)
   })
 })
 
