@@ -3,6 +3,7 @@
 // 开始 in the strip under its terminal (unless 设置 · 自动化 · 派活 says otherwise), and the user's answer reaches the
 // agent later as a message; one a dispatched session starts begins right away. Children start in new worktrees — a
 // branch off the dispatcher's, or a snapshot of its working tree — with Wavi's brief as their first message (§6.14).
+import { childPermission, dispatcherPermission } from '@shared/agent-launch'
 import { CLI_AGENTS } from '@shared/agents'
 import { diffSummary, diffSummaryText, groupOfSession } from '@shared/attempt-groups'
 import {
@@ -35,6 +36,7 @@ import { defineMessages, pick } from '@shared/i18n'
 import { DEFAULT_SETTINGS, type DispatchSettings } from '@shared/settings'
 import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
+import { useSessionMeta } from '../session-meta/store'
 import { binaryInstalled } from '../new-session/model'
 import { interruptAgent } from '../session-io'
 import { useAttemptGroups } from '../state/attempt-groups'
@@ -436,19 +438,33 @@ function launch(caller: Place, plan: ChildPlan, childId: SessionId, base: string
   const snapshot = plan.item.base === 'snapshot'
   const workspace = useWorkspace.getState()
   const target = { path: plan.path, branch: plan.branch, ...(snapshot ? {} : { baseBranch: base }) }
-  const id = workspace.addBackgroundSession(caller.project.id, target, plan.item.agent, childId, plan.item.ui ?? 'cli')
+  const ui = plan.item.ui ?? 'cli'
+  const id = workspace.addBackgroundSession(caller.project.id, target, plan.item.agent, childId, ui)
   if (!id) return null
+  // It starts at the dispatcher's 权限 as it is now (PRD F21 v1.209): a GUI child's picker, a terminal child's launch flag.
+  const { kind, ui: callerUi, guiPermission, guiPlan } = caller.session
+  const reported = useSessionMeta.getState().bySession[caller.session.id]?.settings?.permission
+  const level = dispatcherPermission({
+    kind,
+    ui: callerUi ?? 'cli',
+    ...(guiPermission ? { guiPermission } : {}),
+    ...(guiPlan ? { guiPlan } : {}),
+    ...(reported !== undefined ? { reported } : {}),
+    leader: isLeaderSession(caller.session.id)
+  })
+  const permission = childPermission(level, plan.item.agent, ui)
   useWorkspace.getState().patchSession(id, {
     title: plan.item.title,
     titleSource: 'prompt',
     dispatchedBy: caller.session.id,
     dispatchTask: plan.item.task,
     ...(snapshot ? { dispatchBase: 'snapshot' as const } : {}),
-    ...(plan.item.model ? { dispatchModel: plan.item.model } : {})
+    ...(plan.item.model ? { dispatchModel: plan.item.model } : {}),
+    ...(ui === 'gui' && permission ? { guiPermission: permission } : {})
   })
   const parentAgent = caller.session.kind === 'shell' ? 'claude' : caller.session.kind
   const brief = childBrief({ task: plan.item.task, parentTitle: caller.session.title, parentAgent, depth, branch: plan.branch, base, snapshot, leader: isLeaderSession(caller.session.id) })
-  setLaunch(id, { initialPrompt: brief, ...(plan.item.model ? { model: plan.item.model } : {}) })
+  setLaunch(id, { initialPrompt: brief, ...(plan.item.model ? { model: plan.item.model } : {}), ...(ui === 'cli' && permission ? { permission } : {}) })
   holdForWorktree(id)
   startEagerly(id)
   void createWorktreeFor(id, plan.item.agent, plan.request)

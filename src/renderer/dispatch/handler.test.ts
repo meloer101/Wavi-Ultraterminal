@@ -196,6 +196,15 @@ describe('wavi in a window (PRD F21)', () => {
     expect(addBackgroundSession.mock.calls[1]?.[4]).toBe('gui')
   })
 
+  it('starts a GUI child at its GUI dispatcher’s 权限 (PRD F21 v1.209)', async () => {
+    sessions[1] = { ...sessions[1]!, ui: 'gui', guiPermission: 'full-access' }
+    patchSession.mockClear()
+    await call('child', runCmd('Check the types', { agent: 'codex' }))
+    const id = addBackgroundSession.mock.calls[0]?.[3]
+    expect(patchSession).toHaveBeenCalledWith(id, expect.objectContaining({ guiPermission: 'full-access' }))
+    expect(useDispatch.getState().launches[id!]?.permission).toBeUndefined()
+  })
+
   it('follows --ui, and tells the dispatcher when the GUI it asked for cannot be', async () => {
     const tr = (window as unknown as { tr: { app: { detectAgents: () => Promise<unknown> } } }).tr
     tr.app.detectAgents = async () => ({ claude: true, codex: true, crush: true })
@@ -249,6 +258,22 @@ describe('wavi for a project’s leader (PRD F21 v1.198)', () => {
   afterEach(() => {
     leaderSessions = {}
     vi.unstubAllGlobals()
+  })
+
+  it('starts the leader’s sessions at its 自动: 完全访问 for an agent without one, as a launch flag (PRD F21 v1.209)', async () => {
+    const tr = (window as unknown as { tr: { app: { detectAgents: () => Promise<unknown> } } }).tr
+    tr.app.detectAgents = async () => ({ claude: true, codex: true, gemini: true })
+    await call('lead', runCmd('Fix the login form', { agent: 'claude' }))
+    await call('lead', runCmd('Write the tests', { agent: 'gemini' }))
+    const [a, b] = useDispatch.getState().confirms
+    decideConfirms('lead', true)
+    expect(useDispatch.getState().launches[a!.childId]?.permission).toBe('auto')
+    expect(useDispatch.getState().launches[b!.childId]?.permission).toBe('full-access')
+    // Not a leader, nothing reported: the agent's own default.
+    await call('top', runCmd('Another thing', { agent: 'claude' }))
+    const [c] = useDispatch.getState().confirms
+    decideConfirms('top', true)
+    expect(useDispatch.getState().launches[c!.childId]?.permission).toBeUndefined()
   })
 
   it('lists every other agent session of the project, mine or the user’s, telling a permission from a question', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentArgv, agentShellArgs, CLI_PERMISSIONS, cliPermissionHasDefault, cliPermissionLevels, cliPlainPermission, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
+import { agentArgv, agentShellArgs, childPermission, CLI_PERMISSIONS, cliPermissionHasDefault, cliPermissionLevels, cliPlainPermission, CONTINUE_LATEST, dispatcherPermission, parseAgentMarker, shellQuote } from './agent-launch'
 import { CLI_AGENTS } from './agents'
 
 describe('shellQuote', () => {
@@ -261,5 +261,36 @@ describe('other agent CLIs (agents.ts rows)', () => {
     const script = agentShellArgs('cursor', '/w', '/bin/zsh')[3] ?? ''
     expect(script).toContain('command -v cursor-agent >/dev/null 2>&1')
     expect(script).toContain(`'cursor-agent'`)
+  })
+})
+
+describe('a child starts at its dispatcher\'s 权限 (PRD F21 v1.209)', () => {
+  it('reads the dispatcher: a GUI session its picker, Claude in a terminal its reported mode, a leader 自动 until it reports', () => {
+    expect(dispatcherPermission({ kind: 'claude', ui: 'gui', guiPermission: 'accept-edits', leader: false })).toBe('accept-edits')
+    expect(dispatcherPermission({ kind: 'codex', ui: 'gui', guiPermission: 'full-access', guiPlan: true, leader: false })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'gui', leader: false })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'bypassPermissions', leader: false })).toBe('full-access')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'default', leader: false })).toBe('ask')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'acceptEdits', leader: true })).toBe('accept-edits')
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', reported: 'plan', leader: true })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'claude', ui: 'cli', leader: true })).toBe('auto')
+    // Codex in a terminal always reports "default" (measured), so only a leader's launch says what it runs at.
+    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default', leader: true })).toBe('auto')
+    expect(dispatcherPermission({ kind: 'codex', ui: 'cli', reported: 'default', leader: false })).toBeUndefined()
+    expect(dispatcherPermission({ kind: 'gemini', ui: 'cli', leader: false })).toBeUndefined()
+  })
+
+  it('gives the child that level when its agent has it there, 完全访问 for a 自动 it lacks, else its own default', () => {
+    expect(childPermission('auto', 'claude', 'cli')).toBe('auto')
+    expect(childPermission('auto', 'codex', 'gui')).toBe('auto')
+    expect(childPermission('auto', 'pi', 'cli')).toBe('full-access')
+    expect(childPermission('auto', 'gemini', 'cli')).toBe('full-access')
+    expect(childPermission('auto', 'pi', 'gui')).toBe('full-access')
+    expect(childPermission('accept-edits', 'pi', 'cli')).toBe('accept-edits')
+    expect(childPermission('accept-edits', 'cursor', 'cli')).toBeUndefined()
+    expect(childPermission('ask', 'opencode', 'cli')).toBeUndefined()
+    expect(childPermission(undefined, 'claude', 'cli')).toBeUndefined()
+    // No launch flag at all (Droid, Auggie): their default, whatever the dispatcher runs at.
+    expect(childPermission('auto', 'droid', 'cli')).toBeUndefined()
   })
 })

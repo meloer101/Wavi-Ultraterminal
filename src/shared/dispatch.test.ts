@@ -443,15 +443,19 @@ describe('leader session (PRD F21 v1.198)', () => {
     expect(adopt({ toolsOn: false })).toMatchObject({ failure: 'not_allowed', text: expect.stringContaining('turned off') })
   })
 
-  it('keeps a leader from changing files: Claude without its editing tools, Codex read-only but for its WAVI_DIR', () => {
-    expect(leaderLaunchArgs('claude', '/tmp/w')).toEqual(['--permission-mode', 'default', '--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
+  it('starts a leader at 自动 and keeps it from changing files: Claude without its editing tools, Codex read-only but for its WAVI_DIR', () => {
+    expect(leaderLaunchArgs('claude', '/tmp/w')).toEqual(['--permission-mode', 'auto', '--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
+    const codexAuto = ['-c', 'approval_policy="on-request"', '-c', 'approvals_reviewer="auto_review"']
     expect(leaderLaunchArgs('codex', '/private/tmp/wavi-501-x/s-1')).toEqual([
       '-c',
       'default_permissions="wavi-leader"',
       '-c',
-      'permissions.wavi-leader={extends=":read-only", filesystem={"/private/tmp/wavi-501-x/s-1"="write"}}'
+      'permissions.wavi-leader={extends=":read-only", filesystem={"/private/tmp/wavi-501-x/s-1"="write"}}',
+      ...codexAuto
     ])
-    expect(leaderLaunchArgs('codex', null)).toEqual(['-c', 'default_permissions="wavi-leader"', '-c', 'permissions.wavi-leader={extends=":read-only"}'])
+    expect(leaderLaunchArgs('codex', null)).toEqual(['-c', 'default_permissions="wavi-leader"', '-c', 'permissions.wavi-leader={extends=":read-only"}', ...codexAuto])
+    // Not `--approve-for-me`: it also switches the sandbox to workspace-write (codex 0.167 --help).
+    expect(leaderLaunchArgs('codex', '/w')).not.toContain('--approve-for-me')
     expect(leaderLaunchArgs('gemini', '/tmp/w')).toEqual([])
   })
 
@@ -462,20 +466,20 @@ describe('leader session (PRD F21 v1.198)', () => {
     expect(claude.slice(at, at + 6)).toEqual(['--disallowedTools', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', '--append-system-prompt'])
     expect(claude.slice(-2)).toEqual(['--', 'Plan it'])
     expect(claude.filter((a) => a === '--permission-mode')).toHaveLength(1)
-    expect(claude[claude.indexOf('--permission-mode') + 1]).toBe('default')
+    expect(claude[claude.indexOf('--permission-mode') + 1]).toBe('auto')
     const codex = agentArgv('codex', '/code/acme', { extraArgs: [...leaderLaunchArgs('codex', '/w'), ...systemPromptArgs('codex', WAVI_LEADER_PROMPT)!] })
     expect(codex).toContain('default_permissions="wavi-leader"')
     expect(codex.some((a) => a.startsWith('developer_instructions='))).toBe(true)
     expect(codex).not.toContain('-s')
   })
 
-  it("keeps the leader's default permission mode over a 定时任务's 权限 and when resuming", () => {
+  it("keeps the leader's own permission mode over a 定时任务's 权限 and when resuming", () => {
     const leader = leaderLaunchArgs('claude', '/w')
     const modes = (argv: string[]) => argv.flatMap((a, i) => (a === '--permission-mode' ? [argv[i + 1]] : []))
-    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, permission: 'auto', initialPrompt: 'go' }))).toEqual(['default'])
-    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, resumeAgentSessionId: '0b8c7c8e-1f4e-4a77-9a3e-0c4f2b1e5d6a' }))).toEqual(['default'])
+    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, permission: 'full-access', initialPrompt: 'go' }))).toEqual(['auto'])
+    expect(modes(agentArgv('claude', '/code/acme', { extraArgs: leader, resumeAgentSessionId: '0b8c7c8e-1f4e-4a77-9a3e-0c4f2b1e5d6a' }))).toEqual(['auto'])
     // Not a leader: the 定时任务's 权限 as before.
-    expect(modes(agentArgv('claude', '/code/acme', { permission: 'auto', initialPrompt: 'go' }))).toEqual(['auto'])
+    expect(modes(agentArgv('claude', '/code/acme', { permission: 'full-access', initialPrompt: 'go' }))).toEqual(['bypassPermissions'])
   })
 
   it('tells the leader its job in the prompt and the skill, and its sessions to ask in their reply', () => {

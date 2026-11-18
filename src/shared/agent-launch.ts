@@ -2,7 +2,8 @@
 // Pure: the pty-host supplies the shell and the real cwd.
 import { AGENT_SPECS, hasOwnAdapter, type ClaudeOrCodex, type CliAgent } from './agents'
 import { GUI_PERMISSIONS, type CliPermission, type GuiPermission } from './gui-chat'
-import type { AgentKind } from './types'
+import { guiPermissionLevels } from './gui-agents'
+import type { AgentKind, SessionUi } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
 
 /** Single-quotes a word for POSIX shells. */
@@ -83,6 +84,38 @@ export function cliPlainPermission(kind: CliAgent): GuiPermission | undefined {
     const launch = CLI_PERMISSIONS[kind][level]
     return !launch?.args?.length && !launch?.env
   })
+}
+
+/** Claude's `permission_mode` (its hooks, §6.16) as a level; none for plan, dontAsk and anything else. */
+const CLAUDE_MODE_LEVEL: Readonly<Record<string, GuiPermission>> = {
+  default: 'ask',
+  manual: 'ask',
+  acceptEdits: 'accept-edits',
+  auto: 'auto',
+  bypassPermissions: 'full-access'
+}
+
+/**
+ * The 权限 a dispatching session runs at now, as far as Wavi knows it (PRD F21 v1.209): a GUI session's picker (none
+ * while planning); a terminal Claude's last reported `permission_mode`; a leader's 自动 until it reports (Codex never
+ * reports its own, measured). None otherwise: its children start at their agent's default.
+ */
+export function dispatcherPermission(d: { kind: AgentKind; ui: SessionUi; guiPermission?: GuiPermission; guiPlan?: boolean; reported?: string; leader: boolean }): GuiPermission | undefined {
+  if (d.ui === 'gui') return d.guiPlan ? undefined : d.guiPermission
+  const reported = d.kind === 'claude' && d.reported !== undefined ? d.reported : undefined
+  if (reported !== undefined) return Object.hasOwn(CLAUDE_MODE_LEVEL, reported) ? CLAUDE_MODE_LEVEL[reported] : undefined
+  return d.leader ? 'auto' : undefined
+}
+
+/**
+ * The 权限 a dispatched session starts at (PRD F21 v1.209): its dispatcher's, when its agent has that level in its
+ * 界面; 完全访问 for a 自动 it lacks (the author, 2026-11-18: no asking); its agent's default otherwise.
+ */
+export function childPermission(level: GuiPermission | undefined, agent: CliAgent, ui: SessionUi): GuiPermission | undefined {
+  if (!level) return undefined
+  const levels = ui === 'gui' ? guiPermissionLevels(agent) : cliPermissionLevels(agent)
+  if (levels.includes(level)) return level
+  return level === 'auto' && levels.includes('full-access') ? 'full-access' : undefined
 }
 
 /** Whether no level is the CLI's plain launch: the 定时任务 form then offers 默认 (nothing passed) first. */
@@ -167,7 +200,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
   const prompt = !resumeId && options.initialPrompt?.trim() ? ['--', options.initialPrompt] : []
   if (!hasOwnAdapter(kind)) return otherAgentArgv(kind, resumeId, model, options)
   if (kind === 'claude') {
-    // A leader's own `--permission-mode default` (dispatch.ts `leaderLaunchArgs`) wins over a 定时任务's 权限.
+    // A leader's own `--permission-mode auto` (dispatch.ts `leaderLaunchArgs`) wins over a 定时任务's 权限.
     const ownMode = options.extraArgs?.includes('--permission-mode') === true
     return [
       'claude',

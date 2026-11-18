@@ -559,18 +559,29 @@ export const LEADER_CLAUDE_DISALLOWED = ['Edit', 'Write', 'NotebookEdit', 'Multi
 export const LEADER_CODEX_PROFILE = 'wavi-leader'
 
 /**
- * The launch arguments that keep a leader from changing files, after its binary (PRD F21 v1.198). Claude: the default
- * permission mode, named so a `defaultMode` in the user's settings.json (bypassPermissions, acceptEdits) cannot let a
- * write from the shell through without asking (§6.14 v1.198 ② measured with it), and its editing tools off; it wins
- * over any other `--permission-mode` of the launch (`agentArgv`). Codex: a profile that extends `:read-only` and lets
- * it write only `waviDir` (where `wavi` puts its requests); without one, read-only throughout. Empty for an agent that
+ * The launch arguments of a leader, after its binary (PRD F21 v1.198 / v1.209): it runs at 自动, so it asks the user
+ * nothing its agent judges safe, and without a way to edit files itself. Claude: `auto`, named so it wins over a
+ * `defaultMode` in the user's settings.json and over any other `--permission-mode` of the launch (`agentArgv`), and its
+ * editing tools off; a write from the shell is the auto classifier's to judge (the author took that, 2026-11-18).
+ * Codex: a profile that extends `:read-only` and lets it write only `waviDir` (where `wavi` puts its requests; without
+ * one, read-only throughout), with its requests to go beyond it reviewed by Codex's own reviewer — set as config, not
+ * `--approve-for-me`, which also switches the sandbox to workspace-write (codex 0.167 --help). Empty for an agent that
  * cannot lead.
  */
 export function leaderLaunchArgs(kind: AgentKind, waviDir: string | null): string[] {
-  if (kind === 'claude') return ['--permission-mode', 'default', '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
+  if (kind === 'claude') return ['--permission-mode', 'auto', '--disallowedTools', ...LEADER_CLAUDE_DISALLOWED]
   if (kind !== 'codex') return []
   const filesystem = waviDir ? `, filesystem={${tomlBasic(waviDir)}="write"}` : ''
-  return ['-c', `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`, '-c', `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`]
+  return [
+    '-c',
+    `default_permissions=${tomlBasic(LEADER_CODEX_PROFILE)}`,
+    '-c',
+    `permissions.${LEADER_CODEX_PROFILE}={extends=":read-only"${filesystem}}`,
+    '-c',
+    'approval_policy="on-request"',
+    '-c',
+    'approvals_reviewer="auto_review"'
+  ]
 }
 
 /** How each CLI takes an extra system prompt for one launch, as arguments after its binary; null when it has none. */

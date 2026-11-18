@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：派出的会话跟派活方的权限走，leader 默认「自动」（PRD v1.209）：`src/shared/dispatch.ts` `dispatcherPermission` / `childPermission`（子 agent 没有「自动」时用「完全访问」）、`leaderLaunchArgs`（Claude `--permission-mode auto`，Codex 只读 profile + `approvals_reviewer="auto_review"`），`renderer/dispatch/handler.ts` `launch()` 给 GUI 子会话写 `guiPermission`、终端子会话加启动参数。单测 `dispatch.test.ts`、`handler.test.ts`。实测 auto 下 Claude leader 在 shell 里写文件被放行（PRD §6.14 v1.209）。待作者在 Wavi 里看：leader 的 TUI 是 auto mode、子会话按派活方的档启动。
 - 2026-11-18：你的长消息默认折叠（PRD v1.208，Figma 96A / 96′）：桌面 GUI 会话超过 10 行只显示前 10 行、最后两行渐隐、气泡里「展开 / 收起」，点后按钮不动；手机会话页同样（8 行）。藏起不到 3 行时不折叠；展开状态按消息记在 store 里（桌面 `useGuiSessions.expanded`，手机 `AppModel.openMessages`），app 运行期间保留。`renderer/gui/Feed.tsx` `BubbleBody`、`model.ts` `foldsMessage`、`store.ts` `setMessageExpanded`、`Chat.module.css`；手机 `SessionView.swift` `UserText`。单测 `model.test.ts`、`store.test.ts`，iOS `LocalizationTests`；e2e `gui-session.spec.ts`。手机端只在测试宿主里渲染截图核对过，没在连着 Mac 的真会话里看过。
 - 2026-11-18：取消 F17 新端口自动打开浏览器（PRD v1.207）：删掉 `auto-open.ts`、端口标签的等待高亮和设置 · Worktree 的开关；右侧栏关闭时网页先换成截图，和面板一起滑出，不再晚 460 ms 单独消失（`page-slot.ts`，e2e `browser-panel.spec.ts`「covers the well」）。
 - 2026-11-18：实心玻璃下看板的状态卡片也画玻璃边缘（PRD v1.206，Figma 95A）：新 token `--tile-edge`（其他材质什么都不画），`overview/Overview.module.css` 的 `.card`。
