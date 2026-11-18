@@ -9,6 +9,7 @@ import { effortLabel, permissionOption, type GuiAnswer, type GuiCommand, type Gu
 import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, keptImages, lineDiff, rel, toolArg, type ChatItem, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { clip, isRec, str, tail, type Rec } from './driver'
 import { defineMessages, pick } from '@shared/i18n'
+import { guiPermissionLevels } from '@shared/gui-agents'
 
 const M = defineMessages({
   zh: {
@@ -50,8 +51,11 @@ export const piToolName = (name: string): string => TOOL_NAMES[name] ?? name
 /** Tools that change files: 接受编辑 lets them through without asking (T3 Code's PI_FILE_CHANGE_TOOLS). */
 export const PI_FILE_CHANGE_TOOLS: ReadonlySet<string> = new Set(['edit', 'write'])
 
-/** Figma 56: Pi can neither judge a step itself nor plan, so 询问 and 接受编辑 only (T3 Code maps auto to approval). */
-export const PI_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits']
+/**
+ * Figma 56: Pi can neither judge a step itself nor plan, so no 自动 (T3 Code leaves it out too); 完全访问 lets every call
+ * through without asking (PRD v1.205).
+ */
+export const PI_LEVELS: readonly GuiPermission[] = guiPermissionLevels('pi')
 
 // --- pickers ------------------------------------------------------------------------------------------------------
 

@@ -353,7 +353,7 @@ test.describe('F17 right panel · 浏览器', () => {
     const tag = page.locator('[data-region="sidebar"]').getByTestId('port-tags').getByRole('button', { name: `打开 http://localhost:${own}` })
     await expect(tag).toBeVisible({ timeout: 15_000 })
     await expect(tag).toHaveText(`:${own}`)
-    // A new port never opens the panel by itself (PRD v1.205).
+    // A new port never opens the panel by itself (PRD v1.207).
     await expect(panel()).toHaveCount(0)
     await shoot('F14-sidebar-tag')
 

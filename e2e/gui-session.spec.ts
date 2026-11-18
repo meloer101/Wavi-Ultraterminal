@@ -635,12 +635,12 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch under it (Figma 65E / 78A)', async () => {
+  test('模式 lists 询问 / 接受编辑 / 自动 / 完全访问 / 计划 in one menu; 快速 is a switch under it (Figma 65E / 78A)', async () => {
     const mode = composer().locator('[data-picker="permission+plan"]')
     await expect(mode).toHaveText('询问', WITHIN)
     await mode.click()
     const menu = page.getByRole('dialog', { name: '模式' })
-    await expect(menu.getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '自动', '计划'])
+    await expect(menu.getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '自动', '完全访问', '计划'])
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

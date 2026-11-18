@@ -87,6 +87,22 @@ export function launchPermissionOf(agent: CliAgent): { auto: boolean; plan: bool
   return spec ? { auto: !!spec.auto, plan: !!spec.plan } : undefined
 }
 
+/**
+ * The 权限 levels a GUI session of this agent offers, least to most access (Figma 56, PRD v1.205): 自动 only where the
+ * agent judges steps itself (Claude, Codex, an ACP agent with an `auto` launch mode); 完全访问 for every agent (Claude
+ * `bypassPermissions`, Codex `never` without a sandbox, Wavi answering the rest's requests itself).
+ */
+export function guiPermissionLevels(agent: CliAgent): readonly GuiPermission[] {
+  const protocol = AGENT_GUI[agent]?.protocol
+  if (!protocol) return []
+  if (protocol === 'claude-stream' || protocol === 'codex-app-server') return ['ask', 'accept-edits', 'auto', 'full-access']
+  if (protocol === 'pi-rpc') return ['ask', 'accept-edits', 'full-access']
+  return acpPermissionLevels(launchPermissionOf(agent)?.auto === true)
+}
+
+/** An ACP agent's levels: 询问, 接受编辑 and 完全访问 (Wavi answers its requests), 自动 when its launch has one. */
+export const acpPermissionLevels = (auto: boolean): readonly GuiPermission[] => ['ask', 'accept-edits', ...(auto ? (['auto'] as const) : []), 'full-access']
+
 export function guiProtocolOf(agent: CliAgent): GuiProtocol | null {
   return AGENT_GUI[agent]?.protocol ?? null
 }

@@ -83,20 +83,22 @@ export interface GuiConfigOption {
 /**
  * Figma 56: how far an agent goes before asking. 询问 asks before edits and commands; 接受编辑 edits without asking;
  * 自动 lets the agent judge each step itself (Claude `auto`, Codex `auto_review`, Grok `auto`) — offered only by an
- * agent that can. There is no level that never asks.
+ * agent that can; 完全访问 never asks (Claude `bypassPermissions`, Codex `never` + no sandbox, and Wavi answering every
+ * request itself for Pi and ACP agents; PRD v1.205). Least to most access, the order every picker lists them in.
  */
-export type GuiPermission = 'ask' | 'accept-edits' | 'auto'
-export const isGuiPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
-/** A 权限 a terminal session can be launched with (Claude's `--permission-mode`, PRD F24); 询问 is every CLI's default. */
-export type CliPermission = Exclude<GuiPermission, 'ask'>
-export const isCliPermission = (value: unknown): value is CliPermission => value === 'accept-edits' || value === 'auto'
+export const GUI_PERMISSIONS = ['ask', 'accept-edits', 'auto', 'full-access'] as const
+export type GuiPermission = (typeof GUI_PERMISSIONS)[number]
+export const isGuiPermission = (value: unknown): value is GuiPermission => (GUI_PERMISSIONS as readonly unknown[]).includes(value)
+/** A 权限 a terminal session can be launched with (PRD F24 v1.205): the CLI's own flag or variable (agent-launch.ts). */
+export type CliPermission = GuiPermission
+export const isCliPermission = isGuiPermission
 
 /** A model (or effort) id as an agent names it, safe to pass on a command line and to keep in the workspace file. */
 export const GUI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = localized(
   defineMessages<Record<GuiPermission, string>>({
-    zh: { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' },
-    en: { ask: 'Ask', 'accept-edits': 'Accept edits', auto: 'Auto' }
+    zh: { ask: '询问', 'accept-edits': '接受编辑', auto: '自动', 'full-access': '完全访问' },
+    en: { ask: 'Ask', 'accept-edits': 'Accept edits', auto: 'Auto', 'full-access': 'Full access' }
   })
 )
 

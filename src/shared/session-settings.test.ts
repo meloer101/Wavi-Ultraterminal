@@ -17,6 +17,14 @@ describe('guiSettings', () => {
     expect(s?.items[2]?.current).toBe('ask')
   })
 
+  it('puts 计划 before 完全访问 for an agent without 自动 (PRD v1.205)', () => {
+    const pi: GuiConfigOption[] = [
+      { id: 'permission', category: 'permission', label: '权限', current: 'ask', values: [{ value: 'ask', label: '询问' }, { value: 'accept-edits', label: '接受编辑' }, { value: 'full-access', label: '完全访问' }] },
+      { id: 'plan', category: 'plan', label: '计划', current: 'off', values: [{ value: 'off', label: '关' }, { value: 'on', label: '开' }] }
+    ]
+    expect(guiSettings(pi)?.items[0]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '计划', '完全访问'])
+  })
+
   it('reads plan on as the current permission', () => {
     const on = claude.map((o) => (o.id === 'plan' ? { ...o, current: 'on' } : o))
     expect(guiSettings(on)?.items[2]?.current).toBe(PLAN_VALUE)

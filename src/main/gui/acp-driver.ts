@@ -11,6 +11,7 @@ import { acpAnswerResult, acpAutoAllow, acpConfig, acpConfigRequest, acpPickers,
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
 import { defineMessages, pick } from '@shared/i18n'
+import { acpPermissionLevels } from '@shared/gui-agents'
 
 const M = defineMessages({
   zh: {
@@ -42,7 +43,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
   let config: GuiConfigOption[] = []
   const launch = options.launchPermission
   const picks: AcpPickerState = {
-    levels: ['ask', 'accept-edits', ...(launch?.auto ? (['auto'] as const) : [])],
+    levels: acpPermissionLevels(launch?.auto === true),
     permission: options.permission ?? 'ask',
     ...(launch?.plan ? { launchPlan: options.plan ?? false } : {})
   }

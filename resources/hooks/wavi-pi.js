@@ -133,6 +133,10 @@ export default function wavi(pi) {
     if (lastError) void post('StopFailure', { error: lastError, last_assistant_message: lastText })
     else void post('Stop', { last_assistant_message: lastText })
   })
+  // A confirm in Pi's TUI (wavi-pi-gate.js asking for a call, PRD F24 v1.205) waits on the user, as a permission dialog.
+  pi.on('ui_prompt_start', (event) => {
+    if (event.kind === 'confirm') void post('Notification', { notification_type: 'permission_prompt', message: typeof event.title === 'string' ? event.title : '' })
+  })
   pi.on('session_shutdown', async (event) => {
     await post('SessionEnd', { reason: event.reason }, 1000)
   })

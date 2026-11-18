@@ -91,9 +91,9 @@ export function guiSettings(config: readonly GuiConfigOption[]): SessionSettings
   if (permission) {
     const plan = byCategory(config, 'plan')
     const values = [...permission.values]
-    // 计划 before 自动 (64C), at the end when there is no 自动.
-    const auto = values.findIndex((x) => x.value === 'auto')
-    if (plan) values.splice(auto < 0 ? values.length : auto, 0, { value: PLAN_VALUE, label: pick(M).plan })
+    // 计划 before 自动 (64C), else before 完全访问, at the end when there is neither.
+    const before = values.findIndex((x) => x.value === 'auto' || x.value === 'full-access')
+    if (plan) values.splice(before < 0 ? values.length : before, 0, { value: PLAN_VALUE, label: pick(M).plan })
     items.push({ kind: 'permission', current: plan?.current === 'on' ? PLAN_VALUE : permission.current, values })
   }
   return items.length > 0 ? { items } : undefined

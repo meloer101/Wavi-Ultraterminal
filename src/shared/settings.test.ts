@@ -138,7 +138,7 @@ describe('archive settings (F15)', () => {
   })
 })
 
-describe('设置 · Worktree · 端口 (PRD F17 v1.205: 自动打开 is gone)', () => {
+describe('设置 · Worktree · 端口 (PRD F17 v1.207: 自动打开 is gone)', () => {
   it('drops the retired autoOpen switch a saved file still has', () => {
     expect(sanitizeSettings({ ports: { base: 42000, autoOpen: true } }).ports).toEqual({ base: 42000 })
   })

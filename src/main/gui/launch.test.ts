@@ -6,13 +6,13 @@ describe('guiArgv', () => {
     const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: { model: 'opus' }, resume: 'abc-1', claudeSettingsPath: '/h/settings.json', extraArgs: ['--append-system-prompt', 'x'] })
     expect(argv).toEqual([
       'claude', '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-      '--replay-user-messages', '--permission-prompt-tool', 'stdio', '--resume', 'abc-1', '--settings', '/h/settings.json',
+      '--replay-user-messages', '--permission-prompt-tool', 'stdio', '--allow-dangerously-skip-permissions', '--resume', 'abc-1', '--settings', '/h/settings.json',
       '--append-system-prompt', 'x', '--model', 'opus'
     ])
   })
 
   it('Claude: a saved 权限 or 计划 as --permission-mode; 询问 is its default and passes none (Figma 56)', () => {
-    const mode = (launch: { permission?: 'ask' | 'accept-edits' | 'auto'; plan?: boolean }) => {
+    const mode = (launch: { permission?: 'ask' | 'accept-edits' | 'auto' | 'full-access'; plan?: boolean }) => {
       const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch })!
       const at = argv.indexOf('--permission-mode')
       return at < 0 ? null : argv[at + 1]
@@ -21,6 +21,7 @@ describe('guiArgv', () => {
     expect(mode({ permission: 'ask' })).toBeNull()
     expect(mode({ permission: 'accept-edits' })).toBe('acceptEdits')
     expect(mode({ permission: 'auto' })).toBe('auto')
+    expect(mode({ permission: 'full-access' })).toBe('bypassPermissions')
     expect(mode({ permission: 'auto', plan: true })).toBe('plan')
   })
 

@@ -342,6 +342,19 @@ describe('GuiHost · Codex app-server', () => {
     await until(() => !stateOf(h, 'x1').busy)
     expect(texts(stateOf(h, 'x1')).at(-1)).toBe('text:Done ({"turnId":"turn-2","model":"gpt-b","effort":"medium","approvalPolicy":"on-request","approvalsReviewer":"auto_review"})')
 
+    // 完全访问 (PRD v1.205): never asks, no sandbox; a later level puts workspace-write back.
+    const turn = async (text: string) => {
+      await h.host.send('x1', { text, attachments: [] })
+      await until(() => stateOf(h, 'x1').prompts.length === 1)
+      h.host.answer('x1', { kind: 'permission', id: stateOf(h, 'x1').prompts[0]!.id, optionId: 'accept' })
+      await until(() => !stateOf(h, 'x1').busy)
+      return texts(stateOf(h, 'x1')).at(-1)
+    }
+    expect(await h.host.setConfig('x1', 'permission', 'full-access')).toBe(true)
+    expect(await turn('go full')).toBe('text:Done ({"turnId":"turn-3","model":"gpt-b","effort":"medium","approvalPolicy":"never","approvalsReviewer":"user","sandboxPolicy":{"type":"dangerFullAccess"}})')
+    expect(await h.host.setConfig('x1', 'permission', 'accept-edits')).toBe(true)
+    expect(await turn('go back')).toBe('text:Done ({"turnId":"turn-4","model":"gpt-b","effort":"medium","approvalPolicy":"on-request","approvalsReviewer":"user","sandboxPolicy":{"type":"workspaceWrite"}})')
+
     await h.host.send('x1', { text: 'fail', attachments: [] })
     await until(() => h.status.at(-1)?.type === 'stop-failure')
     expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'quota exceeded' })
@@ -352,6 +365,17 @@ describe('GuiHost · Codex app-server', () => {
     expect(stateOf(h, 'x1').items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
     await settle()
     expect(h.view('x1')).toEqual(stateOf(h, 'x1'))
+  }, 30_000)
+
+  it('a resumed thread that runs without a sandbox gets workspace-write back on its next turn below 完全访问 (PRD v1.205)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x8', { resumeAgentSessionId: 'thr-full', permission: 'accept-edits' }), h.owner)
+    await ready(h, 'x8')
+    await h.host.send('x8', { text: 'go', attachments: [] })
+    await until(() => stateOf(h, 'x8').prompts.length === 1)
+    h.host.answer('x8', { kind: 'permission', id: stateOf(h, 'x8').prompts[0]!.id, optionId: 'accept' })
+    await until(() => !stateOf(h, 'x8').busy)
+    expect(texts(stateOf(h, 'x8')).at(-1)).toContain('"sandboxPolicy":{"type":"workspaceWrite"}')
   }, 30_000)
 
   it('reports the thread’s name as the session title: a resumed thread’s, and each thread/name/updated for it (PRD F2)', async () => {
@@ -486,9 +510,9 @@ describe('GuiHost · ACP', () => {
     await ready(h, 'g1')
     const shown = () => stateOf(h, 'g1').config.map((c) => `${c.category}:${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`)
     // The model list comes flat out of its group; plan leaves the mode list for 计划; no 自动 (Gemini has none).
-    expect(shown()).toEqual(['model:model=m1[M1/M2]', 'thought_level:reasoning_effort=high[高/低]', 'mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑]', 'plan:plan=off[关/开]'])
+    expect(shown()).toEqual(['model:model=m1[M1/M2]', 'thought_level:reasoning_effort=high[高/低]', 'mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑/完全访问]', 'plan:plan=off[关/开]'])
     expect(await h.host.setConfig('g1', 'plan', 'on')).toBe(true)
-    expect(shown().slice(2)).toEqual(['mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑]', 'plan:plan=on[关/开]'])
+    expect(shown().slice(2)).toEqual(['mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑/完全访问]', 'plan:plan=on[关/开]'])
     await h.host.send('g1', { text: 'slow', attachments: [] })
     await until(() => stateOf(h, 'g1').live?.kind === 'text' && stateOf(h, 'g1').live!.text.includes('plan'))
     h.host.interrupt('g1')
@@ -515,14 +539,14 @@ describe('GuiHost · ACP', () => {
     await h.host.open(launchOf('grok', 'k1'), h.owner)
     await ready(h, 'k1')
     const pick = () => stateOf(h, 'k1').config.flatMap((c) => (c.category === 'permission' || c.category === 'plan' ? [`${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`] : []))
-    expect(pick()).toEqual(['permission=ask[询问/接受编辑/自动]', 'plan=off[关/开]'])
+    expect(pick()).toEqual(['permission=ask[询问/接受编辑/自动/完全访问]', 'plan=off[关/开]'])
     // 询问 ↔ 接受编辑 is Wavi's: no restart.
     expect(await h.host.setConfig('k1', 'permission', 'accept-edits')).toBe(true)
     expect(prepared.length).toBe(1)
     expect(await h.host.setConfig('k1', 'permission', 'auto')).toBe(true)
     expect(prepared.at(-1)).toMatchObject({ permission: 'auto', plan: false, resumeAgentSessionId: 'acp-session-1' })
     await until(() => stateOf(h, 'k1').config.length > 0 && texts(stateOf(h, 'k1')).includes('user:earlier question'))
-    expect(pick()).toEqual(['permission=auto[询问/接受编辑/自动]', 'plan=off[关/开]'])
+    expect(pick()).toEqual(['permission=auto[询问/接受编辑/自动/完全访问]', 'plan=off[关/开]'])
     expect(await h.host.setConfig('k1', 'plan', 'on')).toBe(true)
     expect(prepared.at(-1)).toMatchObject({ permission: 'auto', plan: true })
     await until(() => stateOf(h, 'k1').config.some((c) => c.id === 'plan' && c.current === 'on'))
@@ -610,7 +634,7 @@ describe('GuiHost · Pi rpc (PRD F23 v1.160)', () => {
     await ready(h, 'p1')
     expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'fake-pi-session' })
     const shown = () => stateOf(h, 'p1').config.map((c) => `${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`)
-    expect(shown()).toEqual(['model=deepseek/deepseek-v4-flash[DeepSeek V4 Flash/DeepSeek V4 Pro]', 'effort=high[关/高/最高]', 'permission=ask[询问/接受编辑]'])
+    expect(shown()).toEqual(['model=deepseek/deepseek-v4-flash[DeepSeek V4 Flash/DeepSeek V4 Pro]', 'effort=high[关/高/最高]', 'permission=ask[询问/接受编辑/完全访问]'])
     expect(stateOf(h, 'p1').commands.map((c) => `${c.name}:${c.kind}`)).toEqual(['review:command', 'skill:lark:skill'])
 
     await h.host.send('p1', { text: 'hello', attachments: ['/tmp/a.png'] })
@@ -692,6 +716,17 @@ describe('GuiHost · Pi rpc (PRD F23 v1.160)', () => {
     await until(() => !stateOf(h, 'p4').busy)
     expect(stateOf(h, 'p4').prompts).toEqual([])
     expect(stateOf(h, 'p4').items.filter((i) => i.kind === 'tool').at(-1)).toMatchObject({ name: 'Edit', state: 'ok' })
+  }, 30_000)
+
+  it('完全访问 lets every call through without asking, from the launch on (PRD v1.205)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('pi', 'p5', { permission: 'full-access' }), h.owner)
+    await ready(h, 'p5')
+    expect(stateOf(h, 'p5').config.find((c) => c.id === 'permission')?.current).toBe('full-access')
+    await h.host.send('p5', { text: 'bash please', attachments: [] })
+    await until(() => !stateOf(h, 'p5').busy && stateOf(h, 'p5').items.some((i) => i.kind === 'tool'))
+    expect(stateOf(h, 'p5').prompts).toEqual([])
+    expect(stateOf(h, 'p5').items.filter((i) => i.kind === 'tool').at(-1)).toMatchObject({ name: 'Bash', state: 'ok' })
   }, 30_000)
 
   it('a refused prompt ends the turn as failed; a resumed conversation comes from its session file', async () => {
