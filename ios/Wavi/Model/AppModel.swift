@@ -171,6 +171,7 @@ final class AppModel {
     heardAt = nil
     prompts = []
     receipts = [:]
+    openMessages = []
     listed = [:]
     answeredHere = []
     watching = nil

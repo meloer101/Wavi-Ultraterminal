@@ -242,7 +242,8 @@
    bubble; a mask, not a colour over the words, so it holds on every window material and opacity. */
 .bubbleBody[data-folded] {
   max-height: calc(var(--fold-rows) * var(--chat-line));
-  overflow: hidden;
+  /* clip, not hidden: no scroll container, so tabbing to a link in the hidden lines cannot scroll the words inside. */
+  overflow: clip;
   mask-image: linear-gradient(to bottom, black calc(100% - 2 * var(--chat-line)), transparent);
 }
 
