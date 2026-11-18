@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-17
+> 最后更新：2026-11-18
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-18：实心玻璃下看板的状态卡片也画玻璃边缘（PRD v1.206，Figma 95A）：新 token `--tile-edge`（其他材质什么都不画），`overview/Overview.module.css` 的 `.card`。
 - 2026-11-17：所有 agent 加「完全访问」（PRD v1.205）：GUI 模式菜单在最后加一档（Claude `bypassPermissions`、Codex `never` + 无沙箱、Pi 和 ACP 由 Wavi 全部放行），定时任务的终端会话按 agent 列它能设的档（`CLI_PERMISSIONS`），终端 Pi 的询问 / 接受编辑由独立的门控扩展 `resources/hooks/wavi-pi-gate.js` 在 Pi 的 TUI 里问（hook server 不可用时也加载）。没出 Figma 稿（当时账号是 View 席位）。单测 `agent-launch.test.ts`、`host.test.ts`（Codex 切回后沙箱恢复、Pi 完全访问不问）、`acp.test.ts`、`claude-stream.test.ts`、`codex-app-server.test.ts`、`launch.test.ts`、`session-settings.test.ts`、`hooks/pi-gate.test.ts`；e2e `gui-session.spec.ts`、`gui-pi.spec.ts`。待作者确认：真 Claude / Codex GUI 会话里切到完全访问后不再弹卡片，终端 Pi 的确认框。
 - 2026-11-16：图标全应用换成 Hugeicons（含手机端），GUI 对话的运行行和正在跑的工具行：左边是那件事的图标（思考是大脑），文字从左到右亮起，不再用蓝色转圈（PRD v1.204，Figma 94′）。桌面的图标只从 `src/renderer/ui/icons.tsx` 取，`lucide-react` 移除；手机端 `Assets.xcassets/Icons` 由 `phone-assets.test.ts` 生成。手机端的运行行未扫光（未定）。
 - 2026-11-16：窗口材质加第三项「实心玻璃」（PRD v1.203，Figma 93）：不透明，玻璃感只在边缘（卡片、菜单、sheet、同一个状态、主按钮、输入框），侧栏选中不走弹簧。`src/shared/settings.ts`（`'solid-glass'`、`isOpaqueMaterial`）、`renderer/appearance/map.ts`（`data-finish`）、`styles/tokens.css` 的 `[data-finish='glass']` 两组、新 token `--state-ring` / `--primary-finish` / `--field-finish`（IconButton、Segmented、MenuHost 和 14 条主按钮、13 条输入框的样式规则）；单元测试 + e2e `settings.spec.ts`。截图对过深浅两色；玻璃 / 实色和改动前逐像素对比只有转圈的状态图标和光标在变。没在作者的 Mac 上用过。
