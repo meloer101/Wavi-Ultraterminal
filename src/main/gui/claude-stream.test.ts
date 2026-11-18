@@ -174,7 +174,7 @@ describe('claudeConfig', () => {
       ['plan', 'off']
     ])
     expect(config[1]?.values.map((v) => v.label)).toEqual(['低', '中', '高', '更高', '最高'])
-    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动'])
+    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动', '完全访问'])
   })
 
   it('reads Claude’s permission mode as a level, and plan as 计划 on with the level it returns to', () => {
@@ -182,7 +182,7 @@ describe('claudeConfig', () => {
     expect(pick({ mode: 'acceptEdits' })).toEqual(['accept-edits', 'off'])
     expect(pick({ mode: 'auto' })).toEqual(['auto', 'off'])
     expect(pick({ mode: 'plan', level: 'accept-edits' })).toEqual(['accept-edits', 'on'])
-    expect(pick({ mode: 'bypassPermissions' })).toEqual(['ask', 'off'])
+    expect(pick({ mode: 'bypassPermissions' })).toEqual(['full-access', 'off'])
   })
 
   it('maps the resolved model a turn reports back to its alias (not to Default)', () => {
@@ -220,6 +220,7 @@ describe('claudeConfig', () => {
     expect(claudeConfigRequest('model', 'opus')).toEqual({ subtype: 'set_model', model: 'opus' })
     expect(claudeConfigRequest('permission', 'accept-edits')).toEqual({ subtype: 'set_permission_mode', mode: 'acceptEdits' })
     expect(claudeConfigRequest('permission', 'auto')).toEqual({ subtype: 'set_permission_mode', mode: 'auto' })
+    expect(claudeConfigRequest('permission', 'full-access')).toEqual({ subtype: 'set_permission_mode', mode: 'bypassPermissions' })
     expect(claudeConfigRequest('permission', 'bypass')).toBeNull()
     expect(claudeConfigRequest('plan', 'on', 'auto')).toEqual({ subtype: 'set_permission_mode', mode: 'plan' })
     expect(claudeConfigRequest('plan', 'off', 'accept-edits')).toEqual({ subtype: 'set_permission_mode', mode: 'acceptEdits' })

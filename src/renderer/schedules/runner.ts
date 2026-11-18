@@ -5,6 +5,7 @@
 import { AGENT_SPECS, usageVendor } from '@shared/agents'
 import { defineMessages, pick } from '@shared/i18n'
 import { isCliPermission } from '@shared/gui-chat'
+import { cliPermissionLevels } from '@shared/agent-launch'
 import { runBranch, runSessionTitle, type Schedule, type ScheduleFire, type ScheduleRun } from '@shared/schedule'
 import type { SessionId, SessionStatus } from '@shared/types'
 import { archiveTargetFor, archiveWorktree, blockerFor } from '../archive/actions'
@@ -105,8 +106,8 @@ async function openSession(schedule: Schedule, planned: number): Promise<Outcome
     scheduledBy: { id: schedule.id, name: schedule.name, planned },
     ...(ui === 'gui' && action.permission ? { guiPermission: action.permission } : {})
   })
-  // A terminal session takes the 权限 as a launch flag where its CLI has one (Claude); 询问 is every agent's default.
-  const cliPermission = ui === 'cli' && action.agent === 'claude' && isCliPermission(action.permission) ? action.permission : undefined
+  // A terminal session takes the 权限 as its CLI's launch flag or variable (PRD F24 v1.205); none is its own default.
+  const cliPermission = ui === 'cli' && isCliPermission(action.permission) && cliPermissionLevels(action.agent).includes(action.permission) ? action.permission : undefined
   setLaunch(id, { initialPrompt: schedule.prompt, ...(action.model ? { model: action.model } : {}), ...(cliPermission ? { permission: cliPermission } : {}) })
   holdForWorktree(id)
   void createWorktreeFor(id, action.agent, plan.request)

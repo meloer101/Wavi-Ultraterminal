@@ -1,7 +1,7 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
-import { AGENT_SPECS, hasOwnAdapter, type ClaudeOrCodex } from './agents'
-import type { CliPermission } from './gui-chat'
+import { AGENT_SPECS, hasOwnAdapter, type ClaudeOrCodex, type CliAgent } from './agents'
+import { GUI_PERMISSIONS, type CliPermission, type GuiPermission } from './gui-chat'
 import type { AgentKind } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
 
@@ -13,6 +13,92 @@ export function shellQuote(value: string): string {
 /** TOML basic string. */
 export function tomlString(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
+}
+
+/** How a terminal session starts at one 权限 level: arguments after the binary, and variables for this launch only. */
+export interface CliPermissionLaunch {
+  args?: readonly string[]
+  env?: Readonly<Record<string, string>>
+}
+
+const mode = (flag: string, values: Partial<Record<GuiPermission, string>>): Partial<Record<GuiPermission, CliPermissionLaunch>> =>
+  Object.fromEntries(Object.entries(values).map(([level, value]) => [level, { args: [flag, value] }]))
+
+/** Stands for Wavi's Pi gate extension (resources/hooks/wavi-pi-gate.js) until a launch puts its path in. */
+const PI_GATE = '{waviPiGate}'
+
+/**
+ * PRD F24 v1.205: the 权限 levels each CLI can be launched with, and how. A level is listed only where the CLI has a
+ * per-launch flag or variable for it (never a write to its config); `{}` is the CLI's own default with nothing passed.
+ * 自动 only where the CLI judges steps itself. Measured with `--help`: Claude 2.1.326, Codex 0.167, Cursor 2026.10.22,
+ * Grok 1.0.77, Pi 1.5.2 (no flags: Wavi's gate extension asks, resources/hooks/wavi-pi-gate.js). From each CLI's docs or source
+ * (2026-11-17, not run here): Qwen Code, Gemini CLI, OpenCode, Goose, Copilot CLI, Kimi Code, Kiro, Crush, Cline,
+ * Antigravity, CodeBuddy, Amp. Droid's levels are `droid exec` flags and Auggie's need its tool names: neither yet.
+ */
+export const CLI_PERMISSIONS: Readonly<Record<CliAgent, Partial<Record<GuiPermission, CliPermissionLaunch>>>> = {
+  claude: { ask: {}, ...mode('--permission-mode', { 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }) },
+  codex: {
+    ask: { args: ['-s', 'read-only', '-a', 'on-request'] },
+    'accept-edits': { args: ['-s', 'workspace-write', '-a', 'on-request'] },
+    auto: { args: ['--approve-for-me'] },
+    'full-access': { args: ['--dangerously-bypass-approvals-and-sandbox'] }
+  },
+  // `opencode --auto` (1.x and 2.x); its default allows everything in 1.x, and 2.x's rules are not per launch.
+  opencode: { 'full-access': { args: ['--auto'] } },
+  gemini: mode('--approval-mode', { ask: 'default', 'accept-edits': 'auto_edit', 'full-access': 'yolo' }),
+  qwen: mode('--approval-mode', { ask: 'default', 'accept-edits': 'auto-edit', auto: 'auto', 'full-access': 'yolo' }),
+  pi: {
+    ask: { args: ['-e', PI_GATE], env: { WAVI_PI_PERMISSION: 'ask' } },
+    'accept-edits': { args: ['-e', PI_GATE], env: { WAVI_PI_PERMISSION: 'accept-edits' } },
+    'full-access': {}
+  },
+  copilot: { ask: {}, 'accept-edits': { args: ['--allow-tool', 'write'] }, 'full-access': { args: ['--yolo'] } },
+  cursor: { ask: {}, auto: { args: ['--auto-review'] }, 'full-access': { args: ['--yolo'] } },
+  grok: mode('--permission-mode', { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' }),
+  // Kimi Code's `--yolo` is "Ask When Needed" by fixed rules, not a judge of its own: not 自动.
+  kimi: { ask: {}, 'full-access': { args: ['--auto'] } },
+  droid: {},
+  amp: { 'full-access': {} },
+  kiro: { ask: {}, 'full-access': { args: ['--trust-all-tools'] } },
+  crush: { ask: {}, 'full-access': { args: ['-y'] } },
+  goose: {
+    ask: { env: { GOOSE_MODE: 'approve' } },
+    auto: { env: { GOOSE_MODE: 'smart_approve' } },
+    'full-access': { env: { GOOSE_MODE: 'auto' } }
+  },
+  cline: { ask: { args: ['--auto-approve', 'false'] }, 'full-access': { args: ['--auto-approve', 'true'] } },
+  antigravity: { ask: {}, 'accept-edits': { args: ['--mode', 'accept-edits'] }, auto: { args: ['--mode', 'auto'] }, 'full-access': { args: ['--dangerously-skip-permissions'] } },
+  auggie: {},
+  codebuddy: mode('--permission-mode', { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto', 'full-access': 'bypassPermissions' })
+}
+
+/** The levels a terminal session of this CLI can be launched with, least to most access. */
+export function cliPermissionLevels(kind: CliAgent): readonly GuiPermission[] {
+  return GUI_PERMISSIONS.filter((level) => CLI_PERMISSIONS[kind][level] !== undefined)
+}
+
+/** The level that is the CLI's plain launch (nothing passed), if one is: what a 定时任务 without a 权限 runs at. */
+export function cliPlainPermission(kind: CliAgent): GuiPermission | undefined {
+  return cliPermissionLevels(kind).find((level) => {
+    const launch = CLI_PERMISSIONS[kind][level]
+    return !launch?.args?.length && !launch?.env
+  })
+}
+
+/** Whether no level is the CLI's plain launch: the 定时任务 form then offers 默认 (nothing passed) first. */
+export const cliPermissionHasDefault = (kind: CliAgent): boolean => cliPlainPermission(kind) === undefined
+
+/**
+ * The launch of a level for this CLI; none when it has no such level or the session resumes (its own default then).
+ * A level that needs Wavi's Pi gate fails without its path rather than start Pi asking nothing.
+ */
+function permissionLaunch(kind: Exclude<AgentKind, 'shell'>, options: AgentLaunchOptions): CliPermissionLaunch {
+  if (!options.permission || isSafeAgentSessionId(options.resumeAgentSessionId)) return {}
+  const launch = CLI_PERMISSIONS[kind][options.permission] ?? {}
+  if (!launch.args?.includes(PI_GATE)) return launch
+  const gate = options.piGatePath
+  if (!gate) throw new Error('the Pi permission gate (wavi-pi-gate.js) is missing')
+  return { ...launch, args: launch.args.map((arg) => (arg === PI_GATE ? gate : arg)) }
 }
 
 /**
@@ -49,10 +135,12 @@ export interface AgentLaunchOptions {
   /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
   model?: string
   /**
-   * A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming, and
-   * when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.198).
+   * A 定时任务's 权限 (PRD F24 v1.205): the CLI's flag or variable for it (CLI_PERMISSIONS); ignored for a level the
+   * CLI does not have, when resuming, and when `extraArgs` name a mode of their own (a leader's, PRD F21 v1.198).
    */
   permission?: CliPermission
+  /** Wavi's Pi gate extension (resources/hooks/wavi-pi-gate.js), loaded for Pi's 询问 / 接受编辑 whether or not hooks are. */
+  piGatePath?: string
   /**
    * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
    * Ignored when resuming.
@@ -87,7 +175,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
       ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : []),
       ...(options.extraArgs ?? []),
       ...(model ? ['--model', model] : []),
-      ...(options.permission && !resumeId && !ownMode ? ['--permission-mode', options.permission === 'auto' ? 'auto' : 'acceptEdits'] : []),
+      ...(ownMode ? [] : (permissionLaunch(kind, options).args ?? [])),
       ...prompt
     ]
   }
@@ -100,6 +188,8 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
     `projects={${tomlString(realCwd)}={trust_level="trusted"}}`,
     ...(options.codexConfig ?? []).flatMap((override) => ['-c', override]),
     ...(options.extraArgs ?? []),
+    // A leader's own permission profile (dispatch.ts `leaderLaunchArgs`) wins over a 定时任务's 权限.
+    ...(options.extraArgs?.some((arg) => arg.startsWith('default_permissions=')) ? [] : (permissionLaunch(kind, options).args ?? [])),
     ...(model ? ['-m', model] : []),
     ...prompt
   ]
@@ -127,6 +217,7 @@ function otherAgentArgv(kind: Exclude<AgentKind, 'shell' | ClaudeOrCodex>, resum
     spec.binary,
     ...(spec.baseArgs ?? []),
     ...(options.extraArgs ?? []),
+    ...(permissionLaunch(kind, options).args ?? []),
     ...resume,
     ...(model && spec.modelFlag ? [spec.modelFlag, model] : []),
     ...prompt
@@ -167,7 +258,9 @@ export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, 
   const path = options.pathPrefix && kind !== 'shell' ? (fish ? `set -gx PATH ${shellQuote(options.pathPrefix)} $PATH; ` : `PATH=${shellQuote(options.pathPrefix)}:"$PATH"; export PATH; `) : ''
   const before = `${path}${options.before ? `${options.before}; ` : ''}`
   if (kind === 'shell') return before ? ['-l', '-i', '-c', `${before}exec ${shellQuote(shell)} -l`] : ['-l']
-  const line = agentArgv(kind, realCwd, options).map(shellQuote).join(' ')
+  // A level's variables (Goose `GOOSE_MODE`, Pi's `WAVI_PI_PERMISSION`) through `env`, for this launch only (sh and fish alike).
+  const vars = Object.entries(permissionLaunch(kind, options).env ?? {}).map(([name, value]) => `${name}=${value}`)
+  const line = [...(vars.length > 0 ? ['env', ...vars] : []), ...agentArgv(kind, realCwd, options)].map(shellQuote).join(' ')
   const marker = (payload: string) => `printf '\\033]${AGENT_MARKER_OSC};${payload}\\007'`
   const check = `command -v ${AGENT_SPECS[kind].binary} >/dev/null 2>&1`
   const script = fish

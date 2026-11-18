@@ -5,6 +5,7 @@
 import { effortLabel, fastOption, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
 import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, inlineOfDataUrl, keptImages, rel, todosArg, todosOf, type ChatItem, type FileDiff, type InlineImage, type KeepImage } from '@shared/transcript-chat'
 import { defineMessages, localized, pick } from '@shared/i18n'
+import { guiPermissionLevels } from '@shared/gui-agents'
 
 const M = defineMessages({
   zh: {
@@ -36,17 +37,22 @@ const clip = (text: string, max: number): string => (text.length > max ? `${text
 const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
 
 /**
- * Figma 56: Wavi's permission levels as Codex's approval settings (each `turn/start` carries them; `never` is left out
- * on purpose). 询问 asks before anything it is not sure is safe; 接受编辑 works in the workspace without asking; 自动
- * routes what it would ask to Codex's own reviewer (`auto_review`, codex 0.166). The sandbox stays workspace-write.
+ * Figma 56: Wavi's permission levels as Codex's approval settings (each `turn/start` carries them). 询问 asks before
+ * anything it is not sure is safe; 接受编辑 works in the workspace without asking; 自动 routes what it would ask to
+ * Codex's own reviewer (`auto_review`, codex 0.166); 完全访问 never asks and lifts the sandbox (PRD v1.205: `never` +
+ * `dangerFullAccess`, which holds for later turns, so the driver puts `workspaceWrite` back after it). The sandbox is
+ * otherwise workspace-write.
  */
-export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: string; approvalsReviewer?: string }>> = {
+export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: string; approvalsReviewer?: string; sandboxPolicy?: Rec }>> = {
   ask: { approvalPolicy: 'untrusted' },
   'accept-edits': { approvalPolicy: 'on-request' },
   // Sent only for 自动 (an older app-server may not know the field); the driver sets `user` back after it.
-  auto: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' }
+  auto: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' },
+  'full-access': { approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' } }
 }
-const CODEX_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
+/** The sandbox a level starts a thread with (`thread/start`'s `sandbox`). */
+export const codexSandbox = (level: GuiPermission): string => (level === 'full-access' ? 'danger-full-access' : 'workspace-write')
+const CODEX_LEVELS: readonly GuiPermission[] = guiPermissionLevels('codex')
 export const isCodexLevel = (value: string): value is GuiPermission => (CODEX_LEVELS as readonly string[]).includes(value)
 
 /** Moved to @shared/transcript-chat (Pi's edit patches use it too); kept here for this module's callers. */

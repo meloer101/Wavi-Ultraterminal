@@ -19,7 +19,7 @@ describe('pickers', () => {
     expect(config.map((o) => [o.id, o.current])).toEqual([['model', 'deepseek/deepseek-v4-flash'], ['effort', 'max'], ['permission', 'accept-edits']])
     expect(config[0]!.values[1]).toEqual({ value: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' })
     expect(config[1]!.values.map((v) => v.label)).toEqual(['关', '高', '最高'])
-    expect(config[2]!.values.map((v) => v.label)).toEqual(['询问', '接受编辑'])
+    expect(config[2]!.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '完全访问'])
   })
 
   it('takes the levels Pi reports for the running model over the model’s map', () => {

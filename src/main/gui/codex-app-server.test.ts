@@ -238,7 +238,7 @@ describe('codexConfig / codexTurnParams', () => {
       ['effort', 'high'],
       ['permission', 'accept-edits']
     ])
-    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动'])
+    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动', '完全访问'])
     expect(codexTurnParams('th', 'hi', config, ['/a.png'])).toEqual({
       threadId: 'th',
       input: [{ type: 'text', text: 'hi', text_elements: [] }, { type: 'localImage', path: '/a.png' }],
@@ -248,10 +248,13 @@ describe('codexConfig / codexTurnParams', () => {
       approvalPolicy: 'on-request'
     })
     // 自动 is Codex's own reviewer; 询问 asks before anything it is not sure is safe.
-    const at = (permission: 'ask' | 'auto') => codexTurnParams('th', 'hi', codexConfig(models, { permission }))
+    const at = (permission: 'ask' | 'auto' | 'full-access') => codexTurnParams('th', 'hi', codexConfig(models, { permission }))
     expect(at('auto')).toMatchObject({ approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' })
     expect(at('ask')).toEqual(expect.objectContaining({ approvalPolicy: 'untrusted' }))
     expect(at('ask')).not.toHaveProperty('approvalsReviewer')
+    // 完全访问 never asks and lifts the sandbox (PRD v1.205); the other levels leave the sandbox to the driver.
+    expect(at('full-access')).toMatchObject({ approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' } })
+    expect(at('ask')).not.toHaveProperty('sandboxPolicy')
   })
 
   it('offers 快速 on a model with the priority service tier and sends it per turn (Figma 65)', () => {
