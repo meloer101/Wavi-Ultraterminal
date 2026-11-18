@@ -17,7 +17,7 @@ npm run check      # typecheck + lint + dependency rules (.dependency-cruiser.cj
 npm run test:e2e   # build + Playwright Electron smoke test — the full run, once before a release
 ```
 
-In a fresh worktree run `npm install` first. While developing, run `npm run typecheck`, `npm run lint` and only the tests of what changed (`npx vitest run <paths>`, `npx playwright test e2e/<spec> --project=parallel` after `npx electron-vite build`); before a branch merges into main, run the full `npm run check` and only the e2e specs of what changed. The full `npm run test:e2e` runs once before a release. A failure unrelated to the change (load timeouts in the git-heavy tests) is rerun alone, not with another full run.
+In a fresh worktree run `npm install` first. While developing, run `npm run typecheck`, `npm run lint` and only the tests of what changed (`npx vitest run <paths>`, `npx playwright test e2e/<spec> --project=parallel` after `npx electron-vite build`); before a branch merges into main, run the full `npm run check` and only the e2e specs of what changed. After the merge, run `npm run build` in the main checkout: the installed Wavi runs that checkout's `out/`, so a merge without a build leaves the app the user is looking at unchanged. The full `npm run test:e2e` runs once before a release. A failure unrelated to the change (load timeouts in the git-heavy tests) is rerun alone, not with another full run.
 
 ## Layout and ownership
 
