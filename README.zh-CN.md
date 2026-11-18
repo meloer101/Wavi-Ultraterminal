@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://wavi-pi.vercel.app/zh/"><img src="docs/assets/readme/banner.jpg" alt="Wavi" width="100%"></a>
+  <a href="https://wavi.autos/zh/"><img src="docs/assets/readme/banner.jpg" alt="Wavi" width="100%"></a>
 </p>
 
 <h3 align="center">一个人，多线程。</h3>
@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><b>下载 macOS 版</b></a>
-  &nbsp;·&nbsp; <a href="https://wavi-pi.vercel.app/zh/">官网</a>
+  &nbsp;·&nbsp; <a href="https://wavi.autos/zh/">官网</a>
   &nbsp;·&nbsp; <a href="CHANGELOG.md">更新记录</a>
   &nbsp;·&nbsp; <a href="docs/ROADMAP.md">路线图</a>
   &nbsp;·&nbsp; <a href="README.md">English</a>

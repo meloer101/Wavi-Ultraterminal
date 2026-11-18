@@ -2,7 +2,7 @@
   "name": "wavi-site",
   "private": true,
   "type": "module",
-  "description": "Wavi website (Astro). Deployed to Vercel (project root: site/) and GitHub Pages (.github/workflows/pages.yml).",
+  "description": "Wavi website (Astro). Deployed to Vercel (project root: site/), https://wavi.autos.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",

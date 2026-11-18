@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://wavi-pi.vercel.app"><img src="docs/assets/readme/banner.jpg" alt="Wavi" width="100%"></a>
+  <a href="https://wavi.autos"><img src="docs/assets/readme/banner.jpg" alt="Wavi" width="100%"></a>
 </p>
 
 <h3 align="center">One person, many threads.</h3>
@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><b>Download for macOS</b></a>
-  &nbsp;·&nbsp; <a href="https://wavi-pi.vercel.app">Website</a>
+  &nbsp;·&nbsp; <a href="https://wavi.autos">Website</a>
   &nbsp;·&nbsp; <a href="CHANGELOG.md">Changelog</a>
   &nbsp;·&nbsp; <a href="docs/ROADMAP.md">Roadmap</a>
   &nbsp;·&nbsp; <a href="README.zh-CN.md">简体中文</a>
