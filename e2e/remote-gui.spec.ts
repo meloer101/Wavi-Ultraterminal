@@ -87,6 +87,7 @@ test.describe('手机远程 · GUI sessions', () => {
     await expect(page.getByTestId('gui-composer')).toBeVisible(WITHIN)
   }
   const card = () => page.getByTestId('gui-permission')
+  const planCard = () => page.getByTestId('gui-plan')
   const feed = () => page.locator('[data-region="gui-feed"]')
   const send = (id: string, text: string) => phone.request({ type: 'send', session: id, text, photos: [] })
 
@@ -243,6 +244,37 @@ test.describe('手机远程 · GUI sessions', () => {
     await expect(card()).toHaveCount(0, SOON)
     await expect.poll(() => phonePrompts(), SOON).toEqual([])
     await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone approves a GUI plan (批准并自动接受编辑): the agent goes on and the Mac’s plan card closes', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'plan next')).toMatchObject({ ok: true })
+    const prompt = await waitPrompt(created, 'plan')
+    // The plan itself reaches the phone (Figma 100's sheet is not drawn yet; the data path is in place).
+    expect(prompt.plan).toContain('Set-Cookie')
+    expect(prompt.answerable).toBe(true)
+    await expect(planCard()).toBeVisible(WITHIN)
+    expect(await phone.request({ type: 'plan', prompt: prompt.id, decision: 'approve-auto' })).toMatchObject({ ok: true })
+    // Both cards go at once (the driver settles the ask), and the plan's mode switch took effect for the session.
+    await expect(planCard()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect.poll(() => current(created, 'permission'), WITHIN).toBe('accept-edits')
+    await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone keeps planning: the reason reaches the agent and the session stays in plan mode', async () => {
+    // Plan mode first, as the Mac's own 模式 menu would put it there.
+    expect(await phone.request({ type: 'set-setting', session: created, kind: 'permission', value: 'plan' })).toMatchObject({ ok: true })
+    await expect.poll(() => current(created, 'permission'), WITHIN).toBe('plan')
+    await showOnMac(created)
+    expect(await send(created, 'plan next again')).toMatchObject({ ok: true })
+    const prompt = await waitPrompt(created, 'plan')
+    expect(await phone.request({ type: 'plan', prompt: prompt.id, decision: 'keep-planning', message: '先把测试补上' })).toMatchObject({ ok: true })
+    await expect(planCard()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    // Still planning: 继续规划 leaves the mode alone.
+    expect(await current(created, 'permission')).toBe('plan')
+    await expect(feed()).toContainText('Refused', WITHIN)
   })
 
   test('a Codex GUI session’s approval is answered from the phone', async () => {

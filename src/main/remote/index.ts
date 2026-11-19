@@ -37,7 +37,7 @@ import { newSessionInfo } from '../worktree-create'
 import { identityFromPem, identityToPem, newIdentity, type Identity } from './crypto'
 import { DeviceStore, type StoredDevice } from './devices'
 import { FeedHub, type FeedSource } from './feed'
-import { GuiPrompts, optionFor, questionAnswer } from './gui-prompts'
+import { GuiPrompts, optionFor, planAnswer, questionAnswer } from './gui-prompts'
 import { PhotoError, savePhotos } from './photos'
 import { RemoteServer, type RemoteConnection } from './server'
 import { defineMessages, pick as pickLang } from '@shared/i18n'
@@ -320,6 +320,12 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       const prompt = prompts.get(request.prompt)
       if (!prompt || prompt.kind !== 'permission') return remoteFail(pickLang(M).handled)
       return (await respondFromRemote(request.prompt, request.decision)) ? { ok: true } : remoteFail(pickLang(M).handled)
+    }
+    case 'plan': {
+      const gui = guiPrompts.get(request.prompt)
+      if (!gui) return remoteFail(pickLang(M).handled)
+      const answer = planAnswer(gui.prompt, request.decision, request.message)
+      return answer && answerGuiPrompt(gui.sessionId, answer) ? { ok: true } : remoteFail(pickLang(M).handled)
     }
     case 'answer': {
       const gui = guiPrompts.get(request.prompt)

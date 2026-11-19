@@ -75,6 +75,8 @@ final class AppModel {
 
   /// A new list of prompts: the ones that left without an answer from here were answered on the Mac.
   private func promptsListed(_ list: [RemotePrompt]) {
+    // Figma 100: the phone's plan sheet is not drawn yet, so a plan waits on the Mac's own card instead of an empty sheet.
+    let list = list.filter { $0.kind != "plan" }
     let ids = Set(list.map(\.id))
     for (id, prompt) in listed where !ids.contains(id) && !answeredHere.contains(id) {
       addReceipt(prompt, onPhone: false, decision: nil)

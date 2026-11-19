@@ -175,9 +175,10 @@ struct AgentQuestion: Codable, Hashable, Sendable {
   let options: [QuestionOption]
 }
 
-/// A permission request or an AskUserQuestion the agent waits on; `answerable` while an answer from the phone reaches it.
+/// A permission request, an AskUserQuestion or a plan a GUI session waits on; `answerable` while an answer from the phone
+/// reaches it.
 struct RemotePrompt: Codable, Hashable, Sendable, Identifiable {
-  /// permission / question
+  /// permission / question / plan
   let kind: String
   let id: String
   let sessionId: String
@@ -189,6 +190,8 @@ struct RemotePrompt: Codable, Hashable, Sendable, Identifiable {
   var canAllowAlways: Bool? = nil
   var allowAlways: AllowAlwaysScope? = nil
   var questions: [AgentQuestion]? = nil
+  /// The plan, as Markdown (a GUI session's plan; the phone's sheet is Figma 100, not drawn yet).
+  var plan: String? = nil
 }
 
 struct GitFileChange: Codable, Hashable, Sendable {
@@ -274,6 +277,8 @@ enum PhoneCommand: Sendable {
   case send(session: String, text: String, photos: [RemotePhoto])
   case interrupt(session: String)
   case permission(prompt: String, decision: String)
+  /// 继续规划 / 批准，编辑时问我 / 批准并自动接受编辑 a GUI session's plan (PRD F22 v1.220 ①, the phone's sheet is Figma 100).
+  case plan(prompt: String, decision: String)
   case answer(prompt: String, answers: [String: String])
   case newSessionInfo(project: String)
   case newSession(project: String, workdir: String, agent: String, base: String?, branch: String?, prompt: String?, model: String?)
@@ -296,6 +301,7 @@ enum PhoneCommand: Sendable {
     case .send(let s, let text, let photos): return ["type": .string("send"), "session": .string(s), "text": .string(text), "photos": .from(photos)]
     case .interrupt(let s): return ["type": .string("interrupt"), "session": .string(s)]
     case .permission(let p, let d): return ["type": .string("permission"), "prompt": .string(p), "decision": .string(d)]
+    case .plan(let p, let d): return ["type": .string("plan"), "prompt": .string(p), "decision": .string(d)]
     case .answer(let p, let a): return ["type": .string("answer"), "prompt": .string(p), "answers": .object(a.mapValues { .string($0) })]
     case .newSessionInfo(let p): return ["type": .string("new-session-info"), "project": .string(p)]
     case .newSession(let project, let workdir, let agent, let base, let branch, let prompt, let model):

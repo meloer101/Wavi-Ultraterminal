@@ -2,7 +2,7 @@
 // the phone's answer becomes the GuiAnswer the desktop card would send.
 import { describe, expect, it } from 'vitest'
 import type { GuiPrompt } from '@shared/gui-chat'
-import { GuiPrompts, optionFor, questionAnswer, remotePromptOf } from './gui-prompts'
+import { GuiPrompts, optionFor, planAnswer, questionAnswer, remotePromptOf } from './gui-prompts'
 
 const AT = 1_730_000_000_000
 
@@ -62,8 +62,8 @@ describe('remotePromptOf', () => {
     expect(remotePromptOf(question, 's1', AT)).toEqual({ kind: 'question', id: 'req-q', sessionId: 's1', questions: question.questions, createdAt: AT, answerable: true })
   })
 
-  it('leaves a plan on the Mac until the phone has its own panel', () => {
-    expect(remotePromptOf(plan, 's1', AT)).toBeNull()
+  it('puts a GUI plan in the phone’s shape: its Markdown, answered with the plan command', () => {
+    expect(remotePromptOf(plan, 's1', AT)).toEqual({ kind: 'plan', id: 'req-plan', sessionId: 's1', plan: '先改登录，再改刷新', createdAt: AT, answerable: true })
   })
 })
 
@@ -90,6 +90,20 @@ describe('questionAnswer', () => {
   it('refuses an answer that names no open question, and a prompt that asks nothing', () => {
     expect(questionAnswer(question, { 用哪个数据库呢: 'Postgres' })).toBeNull()
     expect(questionAnswer(permission, { Bash: 'allow' })).toBeNull()
+  })
+})
+
+describe('planAnswer', () => {
+  it('answers a plan with the phone’s button, and carries the reason only when it keeps planning', () => {
+    expect(planAnswer(plan, 'approve-auto')).toEqual({ kind: 'plan', id: 'req-plan', decision: 'approve-auto' })
+    expect(planAnswer(plan, 'approve-ask', 'ignored')).toEqual({ kind: 'plan', id: 'req-plan', decision: 'approve-ask' })
+    expect(planAnswer(plan, 'keep-planning', '先把测试补上')).toEqual({ kind: 'plan', id: 'req-plan', decision: 'keep-planning', message: '先把测试补上' })
+    expect(planAnswer(plan, 'keep-planning')).toEqual({ kind: 'plan', id: 'req-plan', decision: 'keep-planning' })
+  })
+
+  it('refuses a prompt that is not a plan', () => {
+    expect(planAnswer(permission, 'approve-auto')).toBeNull()
+    expect(planAnswer(question, 'approve-ask')).toBeNull()
   })
 })
 

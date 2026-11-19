@@ -14,15 +14,18 @@ const OPTION_KIND: Readonly<Record<Extract<PhoneCommand, { type: 'permission' }>
 }
 export type PhoneDecision = keyof typeof OPTION_KIND
 
+/** 继续规划 / 批准，编辑时问我 / 批准并自动接受编辑 (the desktop plan card's three buttons, PRD F22 v1.220 ①). */
+export type PlanDecision = Extract<PhoneCommand, { type: 'plan' }>['decision']
+
 /**
  * A GUI prompt in the phone's list. A permission request keeps its tool and detail (the phone's sheet shows them, and the
  * built input the way `current-action.ts` reads it, as status.ts's `promptCall` does); a question keeps its questions,
- * keyed by the question text the phone answers with. A plan waits for the phone's own panel (ROADMAP 阶段 1 · 手机端),
- * which needs the phone to decode the plan text: until then it stays on the Mac rather than opening an empty sheet.
+ * keyed by the question text the phone answers with; a plan its Markdown, which the phone's sheet (Figma 100) shows as
+ * the Mac's plan card does.
  */
-export function remotePromptOf(prompt: GuiPrompt, sessionId: string, createdAt: number): RemotePrompt | null {
+export function remotePromptOf(prompt: GuiPrompt, sessionId: string, createdAt: number): RemotePrompt {
   if (prompt.kind === 'question') return { kind: 'question', id: prompt.id, sessionId, questions: prompt.questions, createdAt, answerable: true }
-  if (prompt.kind === 'plan') return null
+  if (prompt.kind === 'plan') return { kind: 'plan', id: prompt.id, sessionId, plan: prompt.plan, createdAt, answerable: true }
   return {
     kind: 'permission',
     id: prompt.id,
@@ -57,6 +60,12 @@ export function questionAnswer(prompt: GuiPrompt, answers: Record<string, string
   return Object.keys(kept).length > 0 ? { kind: 'question', id: prompt.id, answers: kept } : null
 }
 
+/** The phone's three plan buttons as a `GuiAnswer`; the message only travels with 继续规划 (the agent is told why). */
+export function planAnswer(prompt: GuiPrompt, decision: PlanDecision, message?: string): GuiAnswer | null {
+  if (prompt.kind !== 'plan') return null
+  return { kind: 'plan', id: prompt.id, decision, ...(message && decision === 'keep-planning' ? { message } : {}) }
+}
+
 interface Open {
   prompt: GuiPrompt
   remote: RemotePrompt
@@ -74,8 +83,7 @@ export class GuiPrompts {
     for (const prompt of prompts) {
       // The same ask, seen again (another one joined or left): it keeps the moment the phone first saw it.
       const createdAt = before.get(prompt.id)?.remote.createdAt ?? at
-      const remote = remotePromptOf(prompt, sessionId, createdAt)
-      if (remote) next.push({ prompt, remote })
+      next.push({ prompt, remote: remotePromptOf(prompt, sessionId, createdAt) })
     }
     for (const open of before.values()) if (!next.some((o) => o.prompt.id === open.prompt.id)) this.byId.delete(open.prompt.id)
     for (const open of next) this.byId.set(open.prompt.id, { ...open, sessionId })
