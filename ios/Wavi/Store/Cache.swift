@@ -1,7 +1,8 @@
 // What the Mac last said, kept on the phone (PRD F22 v1.220 ④; Figma 62B, 62F and 63B3): the session list as of when it
 // arrived, and per session the newest 200 items of its conversation, so opening the app while the Mac is off shows the
 // list and the conversation it showed before instead of nothing. Scoped to the pairing it belongs to (a digest of that
-// pairing's secret), so another Mac's data never shows and 取消配对 leaves nothing behind. The files hold a conversation:
+// pairing's secret), so another Mac's data never shows and 取消配对 leaves nothing behind. The Mac's full session list
+// prunes the conversations of sessions it no longer has. The files hold a conversation:
 // readable only after the first unlock (a background wake still reads the pairing) and never in a backup. Writes are
 // coalesced — a streamed frame does not write — and happen off the main actor; reads are small and taken on the main
 // actor, at a cold start and when a session opens.
@@ -100,8 +101,9 @@ final class PhoneCache: Sendable {
     sink.add(data, to: feedFile(scope, session))
   }
 
-  /// The pairing is gone (取消配对, or the Mac no longer knows this phone): its folder goes now, and a write still waiting
-  /// for it does not bring it back.
+  /// The pairing is gone (取消配对, the user's own action): its folder goes now, and a write still waiting for it does not
+  /// bring it back. A Mac that says it does not know this phone keeps its files — the pairing is kept then, the user
+  /// decides (PRD v1.223).
   func clear(_ scope: String) async {
     let folder = folder(scope)
     sink.discard(under: folder)
@@ -117,6 +119,21 @@ final class PhoneCache: Sendable {
 
   /// Writes what is waiting now and returns once it is on disk (a test waits for this; the app never has to).
   func flush() async { await Task.detached { [sink] in sink.drain() }.value }
+
+  /// The Mac's full list: sessions it no longer has cannot be opened again, so their cached conversations go (and a write
+  /// still waiting for one does not land).
+  func prune(_ list: RemoteSessionList, scope: String?) async {
+    guard let scope else { return }
+    let folder = folder(scope).appendingPathComponent("feed", isDirectory: true)
+    let keep = Set(list.sessions.map { PhoneCache.name($0.id) })
+    sink.discard(under: folder, except: keep)
+    await Task.detached {
+      guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
+      for name in names where !keep.contains(name) {
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+      }
+    }.value
+  }
 
   /// The writes not yet on disk, one per file, and the timer of the current burst. A lock rather than an actor: adding a
   /// write is synchronous, so one enqueued before 取消配对 cannot land after the folder was deleted.
@@ -149,8 +166,15 @@ final class PhoneCache: Sendable {
     }
 
     func discard(under folder: URL) {
+      discard(under: folder, except: [])
+    }
+
+    /// Drops what is waiting under `folder`, all of it or everything whose file name is not in `except`.
+    func discard(under folder: URL, except keep: Set<String>) {
       lock.lock()
-      pending = pending.filter { !$0.key.path.hasPrefix(folder.path) }
+      pending = pending.filter { url, _ in
+        !url.path.hasPrefix(folder.path) || keep.contains(url.lastPathComponent)
+      }
       if pending.isEmpty {
         timer?.cancel()
         timer = nil

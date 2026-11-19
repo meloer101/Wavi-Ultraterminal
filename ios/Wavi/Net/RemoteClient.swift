@@ -13,27 +13,39 @@ enum LinkState: Equatable, Sendable {
   case refused
 }
 
-/// How long the phone waits before dialling again while no address opens (PRD F22 v1.220 ④): doubles from 1 s to 30 s
-/// and stays there, and a link that opens starts the sequence over, so the Mac coming back is found within a second.
-/// Pure; WaviTests/CacheTests.swift.
+/// How long the phone waits before dialling again while no address opens (PRD v1.223, F22 v1.220 ④): a second, then two
+/// seconds for every attempt after it, so a Mac that comes back is seen within 3 s (acceptance ⑫) — a closed port fails in
+/// under 1.5 s, so retrying is cheap while the app is in the foreground (in the background iOS suspends it). A link that
+/// opens starts the sequence over. Pure; WaviTests/CacheTests.swift.
 struct Reconnect {
-  static let seconds: [Double] = [1, 2, 4, 8, 16, 30]
+  static let seconds: [Double] = [1, 2]
+  /// Nothing will open until someone acts (every address refused this phone, a protocol mismatch): the retries stay cheap
+  /// while that is said on screen.
+  static let slowestSeconds = 30.0
 
   /// Attempts made since the last open (or since a link that held was closed).
   private(set) var attempts = 0
+  /// Waiting for someone to act rather than for the Mac to come back.
+  private(set) var waiting = false
 
   /// How long to wait before the next attempt.
   mutating func next() -> Double {
+    guard !waiting else { return Self.slowestSeconds }
     defer { attempts += 1 }
     return Self.seconds[min(attempts, Self.seconds.count - 1)]
   }
 
   /// A link opened: a drop after it waits 1 s again.
-  mutating func opened() { attempts = 0 }
+  mutating func opened() {
+    attempts = 0
+    waiting = false
+  }
 
-  /// Nothing will open until someone acts (every address refused this phone, a protocol mismatch): keep the longest
-  /// wait, so the retries stay cheap while it is said on screen.
-  mutating func slowest() { attempts = Self.seconds.count }
+  /// Every address refused this phone, or the two sides disagree on the protocol: 30 s until it changes.
+  mutating func slowest() {
+    attempts = 0
+    waiting = true
+  }
 }
 
 enum PhoneEvent: Sendable {

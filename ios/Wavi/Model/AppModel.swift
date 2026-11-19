@@ -165,10 +165,12 @@ final class AppModel {
     turnStarts = nextTurnStarts([:], sessions: cached.list.sessions)
   }
 
-  /// Writes the list as it was just heard (debounced, off the main actor).
+  /// Writes the list as it was just heard (debounced, off the main actor), and drops the conversations of sessions the
+  /// Mac no longer lists (they cannot be opened again).
   private func cacheSessions() {
     guard let heardAt else { return }
     cache.saveSessions(sessions, heardAt: heardAt, scope: cacheScope)
+    Task { await cache.prune(sessions, scope: cacheScope) }
   }
 
   /// Writes a session's conversation as the phone has it (its newest items, see `PhoneCache.capped`).
@@ -420,9 +422,6 @@ final class AppModel {
   @ObservationIgnored private var pendingLink: LinkState?
 
   private func changed(_ state: LinkState) {
-    // The Mac no longer knows this phone (or that address is another machine now): the cache is this pairing's, and the
-    // pairing is over in practice.
-    if case .refused = state, let scope = cacheScope { Task { await cache.clear(scope) } }
     if case .open = state {
       grace?.cancel()
       grace = nil

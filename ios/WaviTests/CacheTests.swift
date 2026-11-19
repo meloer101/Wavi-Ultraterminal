@@ -1,6 +1,7 @@
-// The phone's offline copy of the Mac's list and conversations, and the reconnect backoff (PRD F22 v1.220 ④, Figma 62B /
-// 62F / 63B3): a cold start without the Mac shows what it last showed, scoped to the Mac it was paired with and gone when
-// the pairing is; the waits between reconnects double from 1 s to 30 s and start over after a link opens.
+// The phone's offline copy of the Mac's list and conversations, and the reconnect waits (PRD v1.223 / F22 v1.220 ④, Figma
+// 62B / 62F / 63B3): a cold start without the Mac shows what it last showed, scoped to the Mac it was paired with, pruned
+// to the sessions the Mac still has and gone only with 取消配对; between reconnects the phone waits 1 s, then 2 s each
+// time, and a link that opens starts over.
 import Foundation
 import Testing
 @testable import Wavi
@@ -96,6 +97,29 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     await cache.clearAll()
   }
 
+  @Test func theMacsFullListPrunesTheSessionsItNoLongerHas() async {
+    let cache = tempCache()
+    let scope = PhoneCache.scope(pairing(1))
+    cache.saveConversation(Feed(start: 0, items: [item(0)]), scope: scope, session: "s1")
+    cache.saveConversation(Feed(start: 0, items: [item(0)]), scope: scope, session: "s2")
+    await cache.flush()
+    // The Mac lists s1 only (s2 was archived): s2 cannot be opened again, so its conversation goes.
+    await cache.prune(RemoteSessionList(projects: list.projects, sessions: [session("s1")]), scope: scope)
+    #expect(cache.conversation(scope, "s1") != nil)
+    #expect(cache.conversation(scope, "s2") == nil)
+    // A write still waiting for a session that is not in the list does not land, and one for a session that is survives.
+    cache.saveConversation(Feed(start: 0, items: [item(1)]), scope: scope, session: "s3")
+    cache.saveConversation(Feed(start: 0, items: [item(0), item(2)]), scope: scope, session: "s1")
+    await cache.prune(RemoteSessionList(projects: list.projects, sessions: [session("s1")]), scope: scope)
+    await cache.flush()
+    #expect(cache.conversation(scope, "s3") == nil)
+    #expect(cache.conversation(scope, "s1")?.items.map(\.id) == ["i0", "i2"])
+    // A list with nothing in it prunes everything.
+    await cache.prune(.empty, scope: scope)
+    #expect(cache.conversation(scope, "s1") == nil)
+    await cache.clearAll()
+  }
+
   @Test func aFailedWriteLeavesNoHalfFileAndNoSessionNameOutsideTheFolder() async {
     let cache = tempCache()
     let scope = PhoneCache.scope(pairing(1))
@@ -110,28 +134,30 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
 }
 
 @Suite struct ReconnectTests {
-  @Test func theWaitsDoubleToThirtySecondsAndStayThere() {
+  @Test func theWaitsAreASecondThenTwoSecondsSoTheMacIsBackWithinThree() {
+    // Acceptance ⑫: Wavi reopening on the Mac reaches the phone within 3 s, so no wait may grow past what those two add up
+    // to; a closed port fails in under 1.5 s, so trying again is cheap.
     var reconnect = Reconnect()
-    #expect((0..<5).map { _ in reconnect.next() } == [1, 2, 4, 8, 16])
-    #expect(reconnect.next() == 30)
-    #expect(reconnect.next() == 30)
-    #expect(reconnect.next() == 30)
+    #expect((0..<6).map { _ in reconnect.next() } == [1, 2, 2, 2, 2, 2])
   }
 
   @Test func aLinkThatOpensStartsTheWaitsOver() {
     var reconnect = Reconnect()
     for _ in 0..<4 { _ = reconnect.next() }
-    #expect(reconnect.next() == 16)
+    #expect(reconnect.next() == 2)
     // Connected: the next drop waits a second, as it did the first time.
     reconnect.opened()
     #expect(reconnect.next() == 1)
     #expect(reconnect.next() == 2)
-    // Nothing will open until someone acts (revoked, a protocol mismatch): the longest wait, and no growth from it.
+    // Nothing will open until someone acts (revoked, a protocol mismatch): 30 s, and no growth from it.
     reconnect.slowest()
     #expect(reconnect.next() == 30)
     #expect(reconnect.next() == 30)
+    #expect(reconnect.next() == 30)
+    // Someone re-paired, or the Mac caught up: the fast waits are back.
     reconnect.opened()
     #expect(reconnect.next() == 1)
+    #expect(reconnect.next() == 2)
   }
 }
 
