@@ -16,7 +16,7 @@ const own = lang === 'en' ? 0 : 1
 ---
 
 <div class="appearance-row" id="appearance">
-  <div class="looks">
+  <div class="looks" data-reveal>
     {t.appearance.looks.map((caption, i) => (
       <figure class="look">
         <Image
@@ -32,9 +32,11 @@ const own = lang === 'en' ? 0 : 1
   </div>
 
   <div class="controls-col">
-    <Label value={t.appearance.label} />
-    <h2 class="display-s">{t.appearance.title[0]}<br />{t.appearance.title[1]}</h2>
-    <div class="groups">
+    <div data-reveal>
+      <Label value={t.appearance.label} />
+      <h2 class="display-s">{t.appearance.title[0]}<br />{t.appearance.title[1]}</h2>
+    </div>
+    <div class="groups" data-reveal>
       <div class="group">
         <h3>{t.appearance.groups[0][0]}</h3>
         <p>{t.appearance.groups[0][1]}</p>

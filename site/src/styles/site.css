@@ -70,6 +70,10 @@
   --serif: 'Source Serif 4', 'Noto Serif SC', Georgia, serif;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration: 120ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-enter: 500ms;
+  interpolate-size: allow-keywords;
   --pad: 72px;
   --h1: clamp(40px, 5vw, 72px);
   --h2: clamp(36px, 4.4vw, 64px);
@@ -188,18 +192,29 @@ h1 {
   color: var(--white);
 }
 
-/* Shortcuts written inside a sentence; the border takes the surface's hairline colour. */
-kbd {
+/* Shortcuts written inside a sentence; the border takes the surface's hairline colour. The board's ⌘J is a button
+   with the same look, so it keeps that shape and gains a pointer. */
+kbd,
+.keycap {
   padding: 0 4px;
   border: 1px solid rgb(11 11 20 / 0.22);
   border-radius: 2px;
+  background: none;
   font-family: var(--mono);
   font-size: 0.85em;
+  line-height: inherit;
   vertical-align: baseline;
   white-space: nowrap;
 }
+button.keycap {
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+}
 .section-ink kbd,
-.section-brand kbd {
+.section-ink .keycap,
+.section-brand kbd,
+.section-brand .keycap {
   border-color: var(--line-brand);
 }
 
@@ -263,6 +278,12 @@ kbd {
   display: block;
   width: 16px;
   height: 16px;
+  transition: transform var(--duration) var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover .chev {
+    transform: translateX(2px);
+  }
 }
 .chev svg {
   display: block;
@@ -366,7 +387,10 @@ kbd {
 /* ---------------------------------------------------------------- hero */
 
 .hero {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 72px);
+  padding-top: clamp(48px, 8svh, 120px);
   overflow: hidden;
   background: var(--brand);
   color: var(--white);
@@ -374,9 +398,12 @@ kbd {
 }
 .hero-content {
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: center;
-  padding-top: 80px;
+}
+.hero-line {
+  display: block;
 }
 .hero h1 em {
   font: 400 1em/1 var(--serif);
@@ -388,21 +415,32 @@ kbd {
   font: 400 18px/28px var(--sans);
   color: var(--white);
 }
-.hero .ctas {
+.hero-actions {
   margin-top: 32px;
 }
+/* The art takes the space under the text: 1/0.7 of it, so its lowest 30% runs past the hero's edge; 96vw is the
+   width limit, and then the max-height leaves it shorter and the auto margin keeps it on the bottom. */
 .hero-art {
-  position: absolute;
-  top: 360px;
-  left: 50%;
-  width: 960px;
-  transform: translateX(-50%);
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  min-height: 280px;
+  overflow: hidden;
   pointer-events: none;
+}
+.hero-art-media {
+  flex: none;
+  aspect-ratio: 3 / 2;
+  height: calc(100% / 0.7);
+  max-height: calc(96vw * 2 / 3);
+  max-width: 96vw;
+  margin-top: auto;
 }
 .hero-art img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
 /* ---------------------------------------------------------------- agent strip */
@@ -576,9 +614,19 @@ kbd {
   border-radius: 2px;
   background: rgb(255 255 255 / 0.04);
 }
+.card {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    outline-color 160ms var(--ease-out),
+    outline-offset 160ms var(--ease-out);
+}
 .card-needs {
   border-color: transparent;
   background: var(--brand);
+}
+.card.target {
+  outline-color: var(--white);
 }
 .card-top {
   display: flex;
@@ -682,41 +730,39 @@ kbd {
   min-width: 0;
   height: auto;
 }
-.steps-line {
+.steps {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
-  height: 32px;
   margin-top: 72px;
 }
-.steps-line::before {
+.steps::before {
   content: '';
   position: absolute;
-  top: 50%;
+  top: 16px;
   right: 0;
   left: 0;
   height: 1.5px;
   background: rgb(255 255 255 / 0.55);
-  transform: translateY(-50%);
+  transform-origin: left;
+}
+.step-col {
+  min-width: 0;
 }
 .step-mark {
-  position: relative;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding-left: 20px;
 }
 .step-dot {
-  position: absolute;
-  top: 50%;
-  left: 20px;
   width: 12px;
   height: 12px;
   border-radius: 50%;
   background: var(--white);
-  transform: translateY(-50%);
 }
 .step-disc {
-  position: absolute;
-  top: 50%;
-  left: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -725,21 +771,15 @@ kbd {
   border-radius: 50%;
   background: var(--white);
   color: var(--brand);
-  transform: translateY(-50%);
 }
 .step-disc svg {
   display: block;
   width: 12px;
   height: 12px;
 }
-.steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
 .step {
   min-width: 0;
+  margin-top: 12px;
   padding: 20px 20px 24px;
   border-radius: 2px;
   background: var(--white);
@@ -1009,10 +1049,10 @@ kbd {
   left: 37%;
   width: 12px;
   height: 12px;
+  margin: -6px 0 0 -6px;
   border: 1px solid var(--ink);
   border-radius: 50%;
   background: var(--white);
-  transform: translate(-50%, -50%);
 }
 .chip {
   display: inline-flex;
@@ -1068,21 +1108,52 @@ kbd {
 .faq summary::-webkit-details-marker {
   display: none;
 }
-.faq-plus {
+.faq-mark {
+  position: relative;
   display: inline-flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
   width: 20px;
   height: 24px;
-  color: var(--brand-text);
-  font: 400 20px/1 var(--sans);
 }
-.faq-plus::before {
-  content: '+';
+.faq-mark span {
+  position: absolute;
+  background: var(--brand-text);
 }
-details[open] .faq-plus::before {
-  content: '–';
+.faq-mark span:first-child {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 16px;
+  height: 1.5px;
+  margin-block: auto;
+}
+.faq-mark span:last-child {
+  top: 4px;
+  right: 0;
+  left: 0;
+  width: 1.5px;
+  height: 16px;
+  margin-inline: auto;
+  transition: transform 200ms var(--ease-out);
+  transform: rotate(0deg);
+}
+details[open] .faq-mark span:last-child {
+  transform: rotate(90deg);
+}
+.faq details::details-content {
+  block-size: 0;
+  overflow: hidden;
+  opacity: 0;
+  content-visibility: hidden;
+  transition:
+    block-size 250ms var(--ease-out),
+    opacity 250ms var(--ease-out),
+    content-visibility 250ms allow-discrete;
+}
+.faq details[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+  content-visibility: visible;
 }
 .faq-a {
   max-width: 700px;
@@ -1191,26 +1262,266 @@ details[open] .faq-plus::before {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------------------------------------------------------------- narrower screens */
+/* ---------------------------------------------------------------- motion (PRD v1.221) */
 
-@media (min-width: 1440px) {
-  .hero {
-    height: 820px;
+/* Everything below runs once, never loops, and moves only transform and opacity (plus named colour changes). Hidden
+   states exist only under html.js: without JavaScript the page shows every element. */
+
+html.js [data-reveal]:not([data-container]),
+html.js [data-hero] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * var(--stagger, 50ms)),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * var(--stagger, 50ms));
+}
+html.js [data-reveal].in,
+html.js [data-hero].in {
+  opacity: 1;
+  transform: none;
+}
+html.js .hero-art {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 700ms var(--ease-out) 240ms,
+    transform 700ms var(--ease-out) 240ms;
+}
+html.js .hero-art.in {
+  opacity: 1;
+  transform: none;
+}
+.strip-list {
+  --stagger: 30ms;
+}
+
+/* The board lights up: the needs-you cards start neutral, turn brand once the last card has landed, and the
+   notification follows 200ms later. */
+.board-wrap {
+  --land: 850ms;
+}
+html.js .card[data-reveal] {
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 50ms),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 50ms),
+    background-color 400ms var(--ease-out) calc(var(--land) + 400ms),
+    border-color 400ms var(--ease-out) calc(var(--land) + 400ms),
+    outline-color 160ms var(--ease-out),
+    outline-offset 160ms var(--ease-out);
+}
+html.js .card-needs[data-reveal] {
+  background: rgb(255 255 255 / 0.04);
+  border-color: rgb(255 255 255 / 0.16);
+}
+html.js .card-needs[data-reveal].in {
+  background: var(--brand);
+  border-color: transparent;
+}
+html.js .notice[data-reveal] {
+  transform: translateY(-8px);
+  transition:
+    opacity 300ms var(--ease-out) calc(var(--land) + 600ms),
+    transform 300ms var(--ease-out) calc(var(--land) + 600ms);
+}
+html.js .notice[data-reveal].in {
+  opacity: 1;
+  transform: none;
+}
+
+/* The GitHub line draws through the five steps; each dot, its card and the last check follow it. */
+html.js .steps::before {
+  transform: scaleX(0);
+  transition: transform 900ms var(--ease-in-out);
+}
+html.js .steps.in::before {
+  transform: scaleX(1);
+}
+html.js .step {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 180ms),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 180ms);
+}
+html.js .steps.in .step {
+  opacity: 1;
+  transform: none;
+}
+html.js .step-dot,
+html.js .step-disc {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 200ms var(--ease-out) calc(var(--i, 0) * 180ms),
+    transform 200ms var(--ease-out) calc(var(--i, 0) * 180ms),
+    scale 120ms var(--ease);
+}
+html.js .steps.in .step-dot,
+html.js .steps.in .step-disc {
+  opacity: 1;
+  transform: scale(1);
+}
+html.js .step-disc svg {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 200ms var(--ease-out) calc(var(--i, 0) * 180ms + 120ms),
+    transform 200ms var(--ease-out) calc(var(--i, 0) * 180ms + 120ms);
+}
+html.js .steps.in .step-disc svg {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .step-col:hover .step-dot,
+  .step-col:hover .step-disc,
+  .step-col:focus-within .step-dot,
+  .step-col:focus-within .step-disc {
+    scale: 1.25;
   }
 }
 
-@media (max-width: 1439px) {
-  .hero-art {
-    position: relative;
-    top: auto;
-    left: auto;
-    width: min(960px, 92vw);
-    margin: 48px auto 0;
-    aspect-ratio: 1920 / 853;
-    overflow: hidden;
+/* The four layout diagrams: each part moves once when its cell enters. */
+html.js .layout-split .divider {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 500ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-split .divider {
+  stroke-dashoffset: 0;
+}
+html.js .cell4.in .layout-split .d2 {
+  transition-delay: 80ms;
+}
+html.js .cell4.in .layout-split .d3 {
+  transition-delay: 160ms;
+}
+html.js .layout-split .pane {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 400ms;
+}
+html.js .cell4.in .layout-split .pane {
+  opacity: 1;
+}
+html.js .layout-tear-off .window {
+  transform: translate(-48px, -16px);
+  transition: transform 600ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-tear-off .window {
+  transform: none;
+}
+html.js .layout-tear-off .arrow {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 600ms;
+}
+html.js .cell4.in .layout-tear-off .arrow {
+  opacity: 1;
+}
+html.js .layout-running .arc {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 1200ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-running .arc {
+  transform: rotate(720deg);
+}
+html.js .layout-branch .branch {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 600ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-branch .branch {
+  stroke-dashoffset: 0;
+}
+html.js .cell4.in .layout-branch .b2 {
+  transition-delay: 120ms;
+}
+html.js .cell4.in .layout-branch .b3 {
+  transition-delay: 240ms;
+}
+html.js .layout-branch .node-red,
+html.js .layout-branch .link-red {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 720ms;
+}
+html.js .cell4.in .layout-branch .node-red,
+html.js .cell4.in .layout-branch .link-red {
+  opacity: 1;
+}
+
+/* Reduced motion: no transforms and no drawing, a 200ms opacity fade only, and the board and line in their final
+   state. */
+@media (prefers-reduced-motion: reduce) {
+  html.js [data-reveal],
+  html.js [data-hero],
+  html.js .hero-art {
+    transform: none !important;
+    transition: opacity 200ms linear !important;
+    transition-delay: 0ms !important;
+  }
+  html.js .card-needs[data-reveal] {
+    background: var(--brand);
+    border-color: transparent;
+  }
+  html.js .steps::before {
+    transform: none;
+    transition: none;
+  }
+  html.js .step,
+  html.js .step-dot,
+  html.js .step-disc,
+  html.js .step-disc svg {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .btn:active {
+    transform: none;
+  }
+  .step-col:hover .step-dot,
+  .step-col:hover .step-disc,
+  .step-col:focus-within .step-dot,
+  .step-col:focus-within .step-disc {
+    scale: none;
+  }
+  .faq-mark span:last-child,
+  details[open] .faq-mark span:last-child {
+    transform: none;
+    transition: none;
+  }
+  details[open] .faq-mark span:last-child {
+    opacity: 0;
+  }
+  html.js .layout-split .divider,
+  html.js .layout-branch .branch {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+  html.js .layout-split .pane,
+  html.js .layout-tear-off .arrow,
+  html.js .layout-branch .node-red,
+  html.js .layout-branch .link-red {
+    opacity: 1;
+    transition: none;
+  }
+  html.js .layout-tear-off .window,
+  html.js .layout-running .arc {
+    transform: none;
+    transition: none;
+  }
+  .faq-mark span,
+  .chev {
+    transition: none;
+  }
+  .faq details::details-content {
+    transition: opacity 200ms linear;
+  }
+  .btn:hover .chev {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------- narrower screens */
 
 @media (max-width: 1200px) {
   .notice {
@@ -1243,10 +1554,14 @@ details[open] .faq-plus::before {
     grid-template-columns: repeat(2, 1fr);
   }
   .steps {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .steps-line {
+  .steps::before,
+  .step-mark {
     display: none;
+  }
+  .step {
+    margin-top: 0;
   }
   .board {
     display: flex;

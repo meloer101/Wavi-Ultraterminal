@@ -1,6 +1,7 @@
 ---
-/* The hero: the headline with its one serif italic word, two lines of sub, the two buttons, and the dotted
-   cradle art whose bottom third is cut by the section's lower edge. */
+/* The hero: the two headline lines (the one serif italic word inside), the sub, the two buttons, and the dotted
+   cradle art in the rest of the first screen. Nav + hero are one viewport; the art is 1/0.7 of the leftover space,
+   centred and cut by the hero's lower edge, or capped at 96vw and then bottom-anchored. */
 import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
@@ -17,25 +18,21 @@ const t = copy[lang]
   <div class="wrap hero-content">
     <h1>
       {t.hero.title.map(([before, em, after], i) => (
-        <Fragment>
+        <span class="hero-line" data-hero style={`--i:${i}`}>
           {before}
           {em ? <em>{em}</em> : null}
           {after}
-          {i < t.hero.title.length - 1 ? <br /> : null}
-        </Fragment>
+        </span>
       ))}
     </h1>
-    <p class="hero-sub">{t.hero.sub[0]}<br />{t.hero.sub[1]}</p>
-    <Ctas download={t.hero.download} github={t.hero.github} />
+    <p class="hero-sub" data-hero style="--i:2">{t.hero.sub[0]}<br />{t.hero.sub[1]}</p>
+    <div class="hero-actions" data-hero style="--i:3">
+      <Ctas download={t.hero.download} github={t.hero.github} />
+    </div>
   </div>
   <div class="hero-art" aria-hidden="true">
-    <Image
-      src={pic(lang, 'hero-cradle.png')}
-      widths={[960, 1920]}
-      sizes="(min-width: 1044px) 960px, 92vw"
-      loading="eager"
-      fetchpriority="high"
-      alt=""
-    />
+    <div class="hero-art-media">
+      <Image src={pic(lang, 'hero-cradle.png')} widths={[960, 1920]} sizes="96vw" loading="eager" fetchpriority="high" alt="" />
+    </div>
   </div>
 </section>

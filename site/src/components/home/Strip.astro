@@ -15,8 +15,8 @@ const t = copy[lang]
   <div class="wrap">
     <p class="strip-title">{t.strip}</p>
     <ul class="strip-list">
-      {AGENT_ORDER.map((id) => (
-        <li><AgentMark id={id} /><span>{AGENT_NAMES[id]}</span></li>
+      {AGENT_ORDER.map((id, i) => (
+        <li data-reveal style={`--i:${i}`}><AgentMark id={id} /><span>{AGENT_NAMES[id]}</span></li>
       ))}
     </ul>
   </div>

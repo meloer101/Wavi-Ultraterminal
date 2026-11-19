@@ -15,14 +15,14 @@ const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same
 
 <section class="section section-light" id="agents">
   <div class="wrap">
-    <div class="head">
+    <div class="head" data-reveal>
       <div>
         <Label value={t.agents.label} />
         <h2 class="display">{t.agents.title[0]}<br />{t.agents.title[1]}</h2>
       </div>
       <p class="intro">{t.agents.intro}</p>
     </div>
-    <div class="agents-panel">
+    <div class="agents-panel" data-reveal>
       <Image
         src={pic(lang, 'dispatch.webp')}
         widths={[1250, 2500]}
@@ -33,7 +33,7 @@ const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same
     </div>
     <div class="cells3">
       {t.agents.cells.map(([label, text], i) => (
-        <div class="cell">
+        <div class="cell" data-reveal style={`--i:${i}`}>
           <Image
             class="cell-art"
             src={pic(lang, `diagram-${diagrams[i]}.svg`)}

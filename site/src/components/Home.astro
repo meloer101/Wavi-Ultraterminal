@@ -29,3 +29,51 @@ const { lang } = Astro.props
   <Faq lang={lang} />
 </main>
 <Footer lang={lang} />
+
+<script is:inline>
+  // Reveals and the ⌘J keycap (PRD v1.221). Hidden states live under html.js only, so the page shows everything
+  // without JavaScript; a browser without IntersectionObserver shows every element at once. Inline and classic so the
+  // js class lands before the first paint (a deferred module would flash the page first).
+  ;(function () {
+    var root = document.documentElement
+    var items = document.querySelectorAll('[data-reveal]')
+    var hero = document.querySelectorAll('[data-hero], .hero-art')
+    root.classList.add('js')
+    function show(list) {
+      for (var i = 0; i < list.length; i++) list[i].classList.add('in')
+    }
+    if (!('IntersectionObserver' in window)) {
+      show(items)
+      show(hero)
+    } else {
+      var io = new IntersectionObserver(
+        function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (!entries[i].isIntersecting) continue
+            entries[i].target.classList.add('in')
+            io.unobserve(entries[i].target)
+          }
+        },
+        { threshold: 0.2, rootMargin: '0px 0px -10% 0px' }
+      )
+      for (var j = 0; j < items.length; j++) io.observe(items[j])
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          show(hero)
+        })
+      })
+    }
+    var jump = document.querySelector('[data-jump]')
+    if (!jump) return
+    var cards = []
+    var at = -1
+    jump.addEventListener('click', function () {
+      if (!cards.length) cards = [].slice.call(document.querySelectorAll('.card-needs'))
+      if (!cards.length) return
+      if (at >= 0) cards[at].classList.remove('target')
+      at = (at + 1) % cards.length
+      cards[at].classList.add('target')
+      cards[at].scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+  })()
+</script>

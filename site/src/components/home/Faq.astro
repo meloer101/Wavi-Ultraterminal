@@ -12,14 +12,17 @@ const t = copy[lang]
 
 <section class="section section-light faq">
   <div class="wrap faq-row">
-    <div class="faq-left">
+    <div class="faq-left" data-reveal>
       <p class="label label-brand">{t.faq.label}</p>
       <h2 class="display-s">{t.faq.title}</h2>
     </div>
     <div class="faq-list">
       {t.faq.items.map(({ q, a }, i) => (
-        <details open={i === 0}>
-          <summary><span>{q}</span><span class="faq-plus" aria-hidden="true"></span></summary>
+        <details open={i === 0} data-reveal style={`--i:${i}`}>
+          <summary>
+            <span>{q}</span>
+            <span class="faq-mark" aria-hidden="true"><span></span><span></span></span>
+          </summary>
           <p class="faq-a"><Keycaps text={a} /></p>
         </details>
       ))}

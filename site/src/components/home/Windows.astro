@@ -1,35 +1,30 @@
 ---
 /* 04 Windows: four layout cells on paper, and the appearance block 128 below them in the same section. */
-import { Image } from 'astro:assets'
-import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
 import Appearance from './Appearance.astro'
 import Keycaps from './Keycaps.astro'
 import Label from './Label.astro'
+import LayoutDiagram, { type LayoutKind } from './LayoutDiagram.astro'
 
 interface Props {
   lang: Lang
 }
 const { lang } = Astro.props
 const t = copy[lang]
-const layouts = ['split', 'tear-off', 'running', 'branch']
+const layouts: LayoutKind[] = ['split', 'tear-off', 'running', 'branch']
 ---
 
 <section class="section section-paper">
   <div class="wrap">
     <div id="windows">
-      <Label value={t.windows.label} />
-      <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
+      <div data-reveal>
+        <Label value={t.windows.label} />
+        <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
+      </div>
       <div class="cells4">
         {t.windows.cells.map(([title, text], i) => (
-          <div class="cell4">
-            <Image
-              src={pic(lang, `layout-${layouts[i]}.svg`)}
-              width={276}
-              height={150}
-              loading="lazy"
-              alt=""
-            />
+          <div class="cell4" data-reveal style={`--i:${i}`}>
+            <LayoutDiagram kind={layouts[i]} />
             <h3>{title}</h3>
             <p><Keycaps text={text} /></p>
           </div>

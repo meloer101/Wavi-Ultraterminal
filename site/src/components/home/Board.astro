@@ -1,6 +1,7 @@
 ---
 /* 02 Board: the five columns drawn on the page, only "needs you" in brand, and a macOS notification for the first of
-   them. The head, board and facts sit on ink. */
+   them. The head, board and facts sit on ink. In the body, the ⌘J keycap is a button: each press rings the next
+   needs-you card. */
 import { copy, type Lang } from '../../i18n'
 import AgentMark from './AgentMark.astro'
 import BoardGlyph, { type GlyphKind } from './BoardGlyph.astro'
@@ -15,19 +16,23 @@ const { lang } = Astro.props
 const t = copy[lang]
 const kinds: GlyphKind[] = ['needs', 'error', 'review', 'running', 'idle']
 const notice = t.board.cards[0][0]
+/** A card's index across all five columns, for the reveal stagger. */
+const at = (column: number): number => t.board.cards.slice(0, column).reduce((n, cards) => n + cards.length, 0)
 ---
 
 <section class="section section-ink" id="board">
   <div class="wrap board-wrap">
-    <div class="head">
+    <div class="head" data-reveal>
       <div>
         <Label value={t.board.label} tone="white" />
         <h2 class="display">{t.board.title}</h2>
-        <p class="body board-body"><Keycaps text={t.board.body} /></p>
+        <p class="body board-body">
+          <Keycaps text={t.board.body} action={{ key: '⌘J', label: t.board.jump }} />
+        </p>
       </div>
     </div>
 
-    <aside class="notice">
+    <aside class="notice" data-reveal>
       <span class="notice-tile"><Logo /></span>
       <div class="notice-text">
         <p class="notice-top"><span>{notice.title}</span><span class="notice-time">{t.board.now}</span></p>
@@ -44,8 +49,8 @@ const notice = t.board.cards[0][0]
             <span class="col-count">{t.board.cards[i].length}</span>
           </p>
           <div class="col-cards">
-            {t.board.cards[i].map((card) => (
-              <article class:list={['card', i === 0 && 'card-needs']}>
+            {t.board.cards[i].map((card, j) => (
+              <article class:list={['card', i === 0 && 'card-needs']} data-reveal style={`--i:${at(i) + j}`}>
                 <p class="card-top">
                   <BoardGlyph kind={kinds[i]} />
                   <span class="card-title">{card.title}</span>
@@ -65,10 +70,10 @@ const notice = t.board.cards[0][0]
     </div>
 
     <ul class="facts">
-      {t.board.facts.map(([title, text]) => (
-        <li class="fact">
+      {t.board.facts.map(([title, text], i) => (
+        <li class="fact" data-reveal style={`--i:${i}`}>
           <h3>{title}</h3>
-          <p>{text}</p>
+          <p><Keycaps text={text} /></p>
         </li>
       ))}
     </ul>

@@ -83,6 +83,7 @@ const en = {
     title: 'Who’s waiting?',
     body: 'Running, done, stuck: each looks different, in shape and in words. Only the one waiting on you lights up, and ⌘J jumps there.',
     now: 'now',
+    jump: 'Jump to the next session that needs you',
     columns: ['Needs you', 'Error', 'To review', 'Running', 'Idle'],
     cards: [
       [
@@ -350,6 +351,7 @@ const zh: Copy = {
     title: '谁在等你？',
     body: '跑着的、做完的、卡住的，形状和文字都不一样。只有在等你的那一个会亮起来，按 ⌘J 跳过去。',
     now: '现在',
+    jump: '跳到下一个等你处理的会话',
     columns: ['等你处理', '出错', '待审阅', '运行中', '空闲'],
     cards: [
       [

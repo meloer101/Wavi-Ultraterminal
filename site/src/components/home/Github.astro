@@ -19,13 +19,14 @@ const f = t.github.fragments
 <section class="section section-brand" id="github">
   <div class="wrap">
     <div class="gh-head">
-      <div class="gh-copy">
+      <div class="gh-copy" data-reveal>
         <Label value={t.github.label} tone="white" />
         <h2 class="display">{t.github.title[0]}<br />{t.github.title[1]}</h2>
         <p class="gh-intro">{t.github.intro}</p>
       </div>
       <Image
         class="gh-shot"
+        data-reveal
         src={pic(lang, 'github.webp')}
         widths={[741, 1482]}
         sizes="741px"
@@ -34,33 +35,29 @@ const f = t.github.fragments
       />
     </div>
 
-    <div class="steps-line" aria-hidden="true">
-      {t.github.steps.map((_, i) => (
-        <span class="step-mark">
-          {i < t.github.steps.length - 1 ? (
-            <span class="step-dot"></span>
-          ) : (
-            <span class="step-disc">
-              <svg viewBox="0 0 14 14"
-                ><path
-                  d={CHECK_PATH}
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"></path
-                ></svg
-              >
-            </span>
-          )}
-        </span>
-      ))}
-    </div>
-
-    <ol class="steps">
+    <ol class="steps" data-reveal data-container>
       {t.github.steps.map((step, i) => (
-        <li class="step">
-          <p class="step-n">{String(i + 1).padStart(2, '0')}</p>
+        <li class="step-col" style={`--i:${i}`}>
+          <span class="step-mark" aria-hidden="true">
+            {i < t.github.steps.length - 1 ? (
+              <span class="step-dot"></span>
+            ) : (
+              <span class="step-disc">
+                <svg viewBox="0 0 14 14"
+                  ><path
+                    d={CHECK_PATH}
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"></path
+                  ></svg
+                >
+              </span>
+            )}
+          </span>
+          <article class="step" tabindex="0">
+            <p class="step-n">{String(i + 1).padStart(2, '0')}</p>
           <h3>{step}</h3>
           <div class="frag" aria-hidden="true">
             {i === 0 && (
@@ -132,6 +129,7 @@ const f = t.github.fragments
             )}
           </div>
           <p class="step-cap"><Keycaps text={t.github.captions[i]} /></p>
+          </article>
         </li>
       ))}
     </ol>
