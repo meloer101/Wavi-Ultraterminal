@@ -1,5 +1,5 @@
 ---
-/* The hero: badge, the headline with its one serif italic word, two lines of sub, the two buttons, and the dotted
+/* The hero: the headline with its one serif italic word, two lines of sub, the two buttons, and the dotted
    cradle art whose bottom third is cut by the section's lower edge. */
 import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
@@ -15,7 +15,6 @@ const t = copy[lang]
 
 <section class="hero">
   <div class="wrap hero-content">
-    <p class="badge">{t.hero.badge}<span class="badge-mark" aria-hidden="true"></span></p>
     <h1>
       {t.hero.title.map(([before, em, after], i) => (
         <Fragment>

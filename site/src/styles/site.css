@@ -8,7 +8,8 @@
  * page's own characters (fonts.test.ts checks them).
  *
  * Colour only for status and the brand blocks; hierarchy from type, hairlines and white space. Corners 2px except the
- * notification (16) and its icon tile (9).
+ * notification (16) and its icon tile (10). Every margin, padding, gap and fixed height is a multiple of 4; only the
+ * small controls (chips, segmented switch, slider) use a 2 px step.
  */
 
 @font-face {
@@ -67,6 +68,8 @@
   --sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, monospace;
   --serif: 'Source Serif 4', 'Noto Serif SC', Georgia, serif;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 120ms;
   --pad: 72px;
   --h1: clamp(40px, 5vw, 72px);
   --h2: clamp(36px, 4.4vw, 64px);
@@ -113,12 +116,20 @@ a {
   color: inherit;
   text-decoration: none;
 }
+a,
+button,
+summary {
+  transition:
+    color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
 img {
   max-width: 100%;
 }
 :focus-visible {
   outline: 2px solid currentColor;
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -168,11 +179,7 @@ h1 {
 }
 
 .label {
-  display: flex;
-  gap: 10px;
-  font: 500 13px/20px var(--sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 400 13px/20px var(--mono);
 }
 .label-brand {
   color: var(--brand-text);
@@ -181,12 +188,27 @@ h1 {
   color: var(--white);
 }
 
+/* Shortcuts written inside a sentence; the border takes the surface's hairline colour. */
+kbd {
+  padding: 0 4px;
+  border: 1px solid rgb(11 11 20 / 0.22);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.section-ink kbd,
+.section-brand kbd {
+  border-color: var(--line-brand);
+}
+
 .skip {
   position: absolute;
   top: 0;
   left: -9999px;
   z-index: 100;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: var(--white);
   color: var(--ink);
   font: 500 14px/1 var(--sans);
@@ -208,11 +230,16 @@ h1 {
   align-items: center;
   gap: 8px;
   height: 44px;
-  padding: 0 14px 0 18px;
+  padding: 0 16px 0 20px;
   border: 1px solid transparent;
   border-radius: 2px;
   font: 500 15px/1 var(--sans);
   white-space: nowrap;
+  transition:
+    color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
 }
 .btn-primary {
   background: var(--white);
@@ -224,7 +251,7 @@ h1 {
   border-color: rgb(255 255 255 / 0.9);
 }
 .btn:active {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
 .btn-primary:hover {
   background: #f4f4f6;
@@ -259,8 +286,8 @@ h1 {
 .mark {
   display: inline-flex;
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 .mark svg {
   display: block;
@@ -292,7 +319,7 @@ h1 {
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 28px;
   border-right: 1px solid var(--line-brand);
   font: 600 18px/1 var(--sans);
@@ -306,9 +333,7 @@ h1 {
 }
 .nav-links a,
 .nav-cell {
-  font: 500 13px/1 var(--sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 14px/20px var(--sans);
 }
 .nav-gap {
   flex: 1;
@@ -327,8 +352,8 @@ h1 {
 }
 .btn-nav {
   height: 36px;
-  padding: 0 10px 0 12px;
-  gap: 6px;
+  padding: 0 12px;
+  gap: 8px;
   background: var(--white);
   color: var(--ink);
 }
@@ -353,33 +378,13 @@ h1 {
   align-items: center;
   padding-top: 80px;
 }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  border: 1px solid var(--line-brand);
-  border-radius: 2px;
-  background: rgb(11 11 20 / 0.06);
-  font: 400 14px/20px var(--sans);
-}
-.badge-mark {
-  display: block;
-  width: 16px;
-  height: 11px;
-  background: var(--white);
-  border-radius: 2px;
-}
-.hero h1 {
-  margin-top: 28px;
-}
 .hero h1 em {
   font: 400 1em/1 var(--serif);
   font-style: italic;
   letter-spacing: 0;
 }
 .hero-sub {
-  margin-top: 22px;
+  margin-top: 24px;
   font: 400 18px/28px var(--sans);
   color: var(--white);
 }
@@ -388,7 +393,7 @@ h1 {
 }
 .hero-art {
   position: absolute;
-  top: 420px;
+  top: 360px;
   left: 50%;
   width: 960px;
   transform: translateX(-50%);
@@ -414,14 +419,14 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 26px 30px;
+  gap: 24px 32px;
   max-width: 1200px;
   margin: 40px auto 0;
 }
 .strip-list li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font: 500 16px/22px var(--sans);
 }
 
@@ -473,17 +478,12 @@ h1 {
   max-width: 384px;
   height: auto;
 }
-.cell-label {
-  display: flex;
-  gap: 10px;
+.cell-title {
   margin-top: 24px;
-  font: 500 13px/20px var(--sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink);
+  font: 500 17px/26px var(--sans);
 }
 .cell-text {
-  margin-top: 10px;
+  margin-top: 8px;
   font: 400 15px/23px var(--sans);
   color: var(--text-2);
 }
@@ -504,7 +504,7 @@ h1 {
   right: var(--pad);
   display: flex;
   gap: 12px;
-  padding: 12px 16px 14px 12px;
+  padding: 12px 16px 12px 12px;
   border-radius: 16px;
   background: rgb(255 255 255 / 0.96);
   color: var(--ink);
@@ -514,9 +514,9 @@ h1 {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 9px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   background: var(--ink);
   color: var(--white);
 }
@@ -551,7 +551,7 @@ h1 {
 .col-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line-ink);
   font: 500 14px/20px var(--sans);
@@ -563,15 +563,15 @@ h1 {
 .col-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
 }
 .card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid rgb(255 255 255 / 0.16);
   border-radius: 2px;
   background: rgb(255 255 255 / 0.04);
@@ -583,7 +583,7 @@ h1 {
 .card-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 .card-title {
@@ -621,8 +621,8 @@ h1 {
   color: var(--text-ink-3);
 }
 .card-foot .mark {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: var(--white);
 }
 .card-needs .card-age {
@@ -651,7 +651,7 @@ h1 {
   font: 500 17px/26px var(--sans);
 }
 .fact p {
-  margin-top: 6px;
+  margin-top: 8px;
   font: 400 15px/23px var(--sans);
   color: var(--text-ink-2);
 }
@@ -697,8 +697,8 @@ h1 {
   right: 0;
   left: 0;
   height: 1.5px;
-  margin-top: -0.75px;
   background: rgb(255 255 255 / 0.55);
+  transform: translateY(-50%);
 }
 .step-mark {
   position: relative;
@@ -709,9 +709,9 @@ h1 {
   left: 20px;
   width: 12px;
   height: 12px;
-  margin-top: -6px;
   border-radius: 50%;
   background: var(--white);
+  transform: translateY(-50%);
 }
 .step-disc {
   position: absolute;
@@ -720,12 +720,12 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-top: -11px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--white);
   color: var(--brand);
+  transform: translateY(-50%);
 }
 .step-disc svg {
   display: block;
@@ -740,7 +740,7 @@ h1 {
 }
 .step {
   min-width: 0;
-  padding: 20px 20px 22px;
+  padding: 20px 20px 24px;
   border-radius: 2px;
   background: var(--white);
   color: var(--ink);
@@ -750,7 +750,7 @@ h1 {
   color: var(--text-3);
 }
 .step h3 {
-  margin-top: 6px;
+  margin-top: 8px;
   font: 500 19px/26px var(--sans);
   letter-spacing: -0.01em;
 }
@@ -774,7 +774,7 @@ h1 {
 .frag-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   font: 400 12px/16px var(--sans);
 }
@@ -818,7 +818,7 @@ h1 {
   color: var(--white);
 }
 .frag-field {
-  padding: 6px 8px;
+  padding: 4px 8px;
   border: 1px solid rgb(11 11 20 / 0.14);
   border-radius: 2px;
   background: var(--white);
@@ -839,16 +839,16 @@ h1 {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--ink);
   color: var(--white);
 }
 .frag-disc svg {
   display: block;
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
 }
 
 /* ---------------------------------------------------------------- 04 windows */
@@ -879,7 +879,7 @@ h1 {
   font: 500 17px/26px var(--sans);
 }
 .cell4 p {
-  margin-top: 6px;
+  margin-top: 8px;
   font: 400 15px/23px var(--sans);
   color: var(--text-2);
 }
@@ -896,7 +896,7 @@ h1 {
   display: grid;
   flex: 0 1 744px;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px 22px;
+  gap: 24px;
   min-width: 0;
   padding: 40px;
   background: var(--brand);
@@ -907,7 +907,7 @@ h1 {
   height: auto;
 }
 .look figcaption {
-  margin-top: 9px;
+  margin-top: 8px;
   font: 400 13px/18px var(--sans);
   color: var(--white);
 }
@@ -925,7 +925,7 @@ h1 {
   background: var(--white);
 }
 .group {
-  padding: 20px 22px 22px;
+  padding: 20px 24px 24px;
 }
 .group + .group {
   border-top: 1px solid var(--line-light);
@@ -934,7 +934,7 @@ h1 {
   font: 500 16px/24px var(--sans);
 }
 .group p {
-  margin-top: 4px;
+  margin-top: 8px;
   font: 400 14px/21px var(--sans);
   color: var(--text-2);
 }
@@ -943,7 +943,7 @@ h1 {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .controls + .controls {
   margin-top: 8px;
@@ -960,7 +960,7 @@ h1 {
   border-radius: 2px;
 }
 .seg span {
-  padding: 5px 12px;
+  padding: 6px 12px;
   border-radius: 1px;
   font: 500 13px/18px var(--sans);
 }
@@ -1009,10 +1009,10 @@ h1 {
   left: 37%;
   width: 12px;
   height: 12px;
-  margin: -6px 0 0 -6px;
   border: 1px solid var(--ink);
   border-radius: 50%;
   background: var(--white);
+  transform: translate(-50%, -50%);
 }
 .chip {
   display: inline-flex;
@@ -1020,7 +1020,7 @@ h1 {
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  padding: 5px 10px;
+  padding: 6px 10px;
   border: 1px solid rgb(11 11 20 / 0.22);
   border-radius: 2px;
   font: 400 12px/16px var(--sans);
@@ -1050,7 +1050,7 @@ h1 {
   min-width: 0;
 }
 .faq details {
-  padding: 22px 0 24px;
+  padding: 24px 0;
   border-top: 1px solid var(--line-light);
 }
 .faq details:last-child {
@@ -1074,7 +1074,7 @@ h1 {
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 26px;
+  height: 24px;
   color: var(--brand-text);
   font: 400 20px/1 var(--sans);
 }
@@ -1086,7 +1086,7 @@ details[open] .faq-plus::before {
 }
 .faq-a {
   max-width: 700px;
-  margin-top: 10px;
+  margin-top: 12px;
   font: 400 16px/25px var(--sans);
   color: var(--text-2);
 }
@@ -1127,14 +1127,12 @@ details[open] .faq-plus::before {
 }
 .footer-col h3 {
   font: 500 13px/20px var(--sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .footer-col ul {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .footer-col a {
   display: block;
@@ -1173,7 +1171,7 @@ details[open] .faq-plus::before {
 .footer-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font: 600 18px/1 var(--sans);
 }
 .footer-end p {
@@ -1181,11 +1179,23 @@ details[open] .faq-plus::before {
   color: var(--white);
 }
 
+/* Figures line up: every mono span and the counts and ages use tabular numerals. This is after every `font`
+   shorthand, which would otherwise reset it. */
+.mono,
+.col-count,
+.card-age,
+.card-path,
+.card-diff,
+.step-n,
+.frag-field {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------- narrower screens */
 
 @media (min-width: 1440px) {
   .hero {
-    height: 880px;
+    height: 820px;
   }
 }
 

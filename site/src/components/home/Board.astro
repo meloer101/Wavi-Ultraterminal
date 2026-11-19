@@ -4,6 +4,7 @@
 import { copy, type Lang } from '../../i18n'
 import AgentMark from './AgentMark.astro'
 import BoardGlyph, { type GlyphKind } from './BoardGlyph.astro'
+import Keycaps from './Keycaps.astro'
 import Label from './Label.astro'
 import Logo from './Logo.astro'
 
@@ -22,7 +23,7 @@ const notice = t.board.cards[0][0]
       <div>
         <Label value={t.board.label} tone="white" />
         <h2 class="display">{t.board.title}</h2>
-        <p class="body board-body">{t.board.body}</p>
+        <p class="body board-body"><Keycaps text={t.board.body} /></p>
       </div>
     </div>
 

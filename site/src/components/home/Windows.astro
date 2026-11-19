@@ -4,6 +4,7 @@ import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
 import Appearance from './Appearance.astro'
+import Keycaps from './Keycaps.astro'
 import Label from './Label.astro'
 
 interface Props {
@@ -30,7 +31,7 @@ const layouts = ['split', 'tear-off', 'running', 'branch']
               alt=""
             />
             <h3>{title}</h3>
-            <p>{text}</p>
+            <p><Keycaps text={text} /></p>
           </div>
         ))}
       </div>

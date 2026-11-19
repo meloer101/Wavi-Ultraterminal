@@ -11,8 +11,6 @@ export type LinkTarget = Section | 'repo' | 'releases' | 'roadmap' | 'license' |
 
 /** A headline line: text, the one emphasised word drawn in the serif italic, then the rest. */
 export type Line = [before: string, em: string, after: string]
-/** A small heading label, drawn `+  01  AGENTS`: its number and its name. */
-export type Label = [number: string, name: string]
 /** A board card: title, age, path, status line, diff and the agent whose mark sits at its right. */
 export interface Card {
   title: string
@@ -47,7 +45,6 @@ const en = {
     download: 'Download'
   },
   hero: {
-    badge: 'Free and open source · MIT license',
     title: [
       ['Run ', 'ALL', ' coding agents'],
       ['on your Mac.', '', '']
@@ -61,7 +58,7 @@ const en = {
   },
   strip: 'Works with the 19 coding agents you already run',
   agents: {
-    label: ['01', 'Agents'] as Label,
+    label: '01 Agents',
     title: ['One task,', 'many hands.'],
     intro:
       'Dispatch, a leader, subagents, agent teams, workflows, or one task given to several agents. Wavi runs each of them and draws who is doing what.',
@@ -82,7 +79,7 @@ const en = {
     ]
   },
   board: {
-    label: ['02', 'Board'] as Label,
+    label: '02 Board',
     title: 'Who’s waiting?',
     body: 'Running, done, stuck: each looks different, in shape and in words. Only the one waiting on you lights up, and ⌘J jumps there.',
     now: 'now',
@@ -176,7 +173,7 @@ const en = {
     ]
   },
   github: {
-    label: ['03', 'GitHub'] as Label,
+    label: '03 GitHub',
     title: ['Less git.', 'More building.'],
     intro:
       'Issues and pull requests for every project sit on the board. From there to main, each step is one button: the agent does the writing, you do the deciding.',
@@ -194,7 +191,7 @@ const en = {
       issueTitle: 'Session lost after login',
       hand: 'Hand to agent',
       reviewed: 'No P1 found',
-      notes: '2 notes · src/auth/session.ts',
+      notes: '2 notes · session.ts',
       message: 'fix(auth): keep the session after login',
       create: 'Create PR',
       lint: 'lint',
@@ -205,7 +202,7 @@ const en = {
     }
   },
   windows: {
-    label: ['04', 'Windows'] as Label,
+    label: '04 Windows',
     title: ['More screens,', 'more threads.'],
     cells: [
       ['Split it.', 'Drag a session into the window: up to four side by side. Split, swap, resize.'],
@@ -218,7 +215,7 @@ const en = {
     ]
   },
   appearance: {
-    label: ['04', 'Appearance'] as Label,
+    label: 'Appearance',
     title: ['Terminal or chat.', 'Glass or solid.'],
     looks: ['Default · terminal 85%', 'Your picture · terminal 50%', 'Blurred · 50%, blur 40%', 'Appearance settings, light'],
     groups: [
@@ -324,7 +321,6 @@ const zh: Copy = {
     download: '下载'
   },
   hero: {
-    badge: '免费开源 · MIT 许可',
     title: [
       ['在你的 Mac 上', '', ''],
       ['跑', '所有', ' coding agent。']
@@ -335,7 +331,7 @@ const zh: Copy = {
   },
   strip: '已支持 19 种命令行 agent，装了哪个就用哪个',
   agents: {
-    label: ['01', 'Agents'],
+    label: '01 Agents',
     title: ['一个任务，', '几双手。'],
     intro:
       '派活、leader、subagent、agent teams、workflow，或者把同一个任务交给几个 agent。每一种 Wavi 都能跑，并且把谁在做什么画出来。',
@@ -350,7 +346,7 @@ const zh: Copy = {
     ]
   },
   board: {
-    label: ['02', 'Board'],
+    label: '02 Board',
     title: '谁在等你？',
     body: '跑着的、做完的、卡住的，形状和文字都不一样。只有在等你的那一个会亮起来，按 ⌘J 跳过去。',
     now: '现在',
@@ -441,7 +437,7 @@ const zh: Copy = {
     ]
   },
   github: {
-    label: ['03', 'GitHub'],
+    label: '03 GitHub',
     title: ['少碰 git，', '多做东西。'],
     intro: '每个项目的 issue 和 PR 都在看板上。从这里到 main，每一步是一个按钮：agent 负责写，你负责决定。',
     alt: '浅色模式的 Wavi GitHub 看板：两个项目打开的 issue 和 PR。',
@@ -458,7 +454,7 @@ const zh: Copy = {
       issueTitle: '登录后刷新会丢失会话',
       hand: '交给 agent',
       reviewed: '没有 P1',
-      notes: '2 条建议 · src/auth/session.ts',
+      notes: '2 条建议 · session.ts',
       message: 'fix(auth): keep the session after login',
       create: '创建 PR',
       lint: 'lint',
@@ -469,7 +465,7 @@ const zh: Copy = {
     }
   },
   windows: {
-    label: ['04', 'Windows'],
+    label: '04 Windows',
     title: ['多一块屏，', '多几条线。'],
     cells: [
       ['分屏。', '把会话拖进窗口，最多四个并排。分屏、交换、调大小。'],
@@ -479,7 +475,7 @@ const zh: Copy = {
     ]
   },
   appearance: {
-    label: ['04', 'Appearance'],
+    label: 'Appearance',
     title: ['终端或聊天，', '玻璃或实色。'],
     looks: ['默认 · 终端 85%', '你的图 · 终端 50%', '模糊 · 50%，模糊 40%', '外观设置'],
     groups: [

@@ -1,0 +1,11 @@
+---
+/* Copy with the shortcuts written inside it (⌘J, ⌘Q, ⌘↵) drawn as <kbd>. The string stays plain in i18n.ts and
+   everything around the shortcut goes through Astro's escaping. */
+interface Props {
+  text: string
+}
+const { text } = Astro.props
+const parts = text.split(/(⌘[A-Za-z↵⇧⌃⌥]+)/u)
+---
+
+{parts.map((part) => (part.startsWith('⌘') ? <kbd>{part}</kbd> : part))}

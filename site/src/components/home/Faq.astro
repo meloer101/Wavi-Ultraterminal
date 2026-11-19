@@ -1,6 +1,7 @@
 ---
 /* FAQ: four <details>, the first open, so the page shows everything with JavaScript off. */
 import { copy, type Lang } from '../../i18n'
+import Keycaps from './Keycaps.astro'
 
 interface Props {
   lang: Lang
@@ -19,7 +20,7 @@ const t = copy[lang]
       {t.faq.items.map(({ q, a }, i) => (
         <details open={i === 0}>
           <summary><span>{q}</span><span class="faq-plus" aria-hidden="true"></span></summary>
-          <p class="faq-a">{a}</p>
+          <p class="faq-a"><Keycaps text={a} /></p>
         </details>
       ))}
     </div>

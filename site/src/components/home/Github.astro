@@ -5,6 +5,7 @@ import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
 import BoardGlyph from './BoardGlyph.astro'
 import { CHECK_PATH } from './check-path'
+import Keycaps from './Keycaps.astro'
 import Label from './Label.astro'
 
 interface Props {
@@ -130,7 +131,7 @@ const f = t.github.fragments
               </>
             )}
           </div>
-          <p class="step-cap">{t.github.captions[i]}</p>
+          <p class="step-cap"><Keycaps text={t.github.captions[i]} /></p>
         </li>
       ))}
     </ol>

@@ -1,14 +1,10 @@
 ---
-/* A small heading label, drawn `+  01  AGENTS`. Brand on light sections, white on the ink and brand ones. */
-import type { Label } from '../../i18n'
-
+/* A section label in mono, e.g. "01 Agents". Brand on light sections, white on the ink and brand ones. */
 interface Props {
-  value: Label
+  value: string
   tone?: 'brand' | 'white'
 }
 const { value, tone = 'brand' } = Astro.props
 ---
 
-<p class:list={['label', `label-${tone}`]}>
-  <span aria-hidden="true">+</span><span>{value[0]}</span><span>{value[1]}</span>
-</p>
+<p class:list={['label', `label-${tone}`]}>{value}</p>
