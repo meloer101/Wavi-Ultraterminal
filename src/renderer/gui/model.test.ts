@@ -458,8 +458,9 @@ describe('permission card (49″E)', () => {
 
 describe('plan card (49″D)', () => {
   it('takes the title from the first heading, the rest is the body', () => {
-    expect(planParts('# 支付页的 cookie 在 Safari 下的回退\n\n1. 改 token\n2. 签发 cookie')).toEqual({ title: '计划：支付页的 cookie 在 Safari 下的回退', body: '1. 改 token\n2. 签发 cookie' })
-    expect(planParts('## 计划：迁移\nstep')).toEqual({ title: '计划：迁移', body: 'step' })
+    expect(planParts('# 支付页的 cookie 在 Safari 下的回退\n\n1. 改 token\n2. 签发 cookie')).toEqual({ title: '支付页的 cookie 在 Safari 下的回退', body: '1. 改 token\n2. 签发 cookie' })
+    expect(planParts('## 计划：迁移\nstep')).toEqual({ title: '迁移', body: 'step' })
+    expect(planParts('## 计划：\nstep')).toEqual({ title: '计划', body: 'step' })
     expect(planParts('1. a\n2. b')).toEqual({ title: '计划', body: '1. a\n2. b' })
     expect(planParts('  ')).toEqual({ title: '计划', body: '' })
   })
