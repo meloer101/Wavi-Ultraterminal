@@ -13,6 +13,56 @@ enum LinkState: Equatable, Sendable {
   case refused
 }
 
+/// How long the phone waits before dialling again while no address opens (PRD v1.223, F22 v1.220 ④): a second, then two
+/// seconds for every attempt after it, so a Mac that comes back is seen within 3 s (acceptance ⑫) — a closed port fails in
+/// under 1.5 s, so retrying is cheap while the app is in the foreground (in the background iOS suspends it).
+///
+/// Three things slow it to 30 s: every address saying it does not know this phone, the two sides disagreeing on the
+/// protocol, and a Mac that takes the link and closes it at once three times running (dialling it every 1–2 s would be a
+/// tight loop of pairing proofs). A link that holds, or the phone moving network / coming to the foreground, starts the
+/// fast waits over. Pure; WaviTests/CacheTests.swift.
+struct Reconnect {
+  static let seconds: [Double] = [1, 2]
+  /// Nothing will open until someone acts: the retries stay cheap while that is said on screen.
+  static let slowestSeconds = 30.0
+  /// Links the Mac closed almost as soon as they opened, in a row, before the waits go slow.
+  static let quickCloses = 3
+
+  /// Attempts made since the last open (or since a link that held was closed).
+  private(set) var attempts = 0
+  /// Waiting for someone to act rather than for the Mac to come back.
+  private(set) var waiting = false
+  /// The quick closes since the last link that held (or the last fresh start).
+  private(set) var closedQuickly = 0
+
+  /// How long to wait before the next attempt.
+  mutating func next() -> Double {
+    guard !waiting else { return Self.slowestSeconds }
+    defer { attempts += 1 }
+    return Self.seconds[min(attempts, Self.seconds.count - 1)]
+  }
+
+  /// A link that held, or a fresh start (the app to the foreground, the network changed): the waits go back to 1, 2, 2 ….
+  mutating func opened() {
+    attempts = 0
+    waiting = false
+    closedQuickly = 0
+  }
+
+  /// The Mac took the link and closed it at once (before `Link.heldFor`): the third in a row means the fast retries are
+  /// only spinning through pairing proofs.
+  mutating func tookAndClosed() {
+    closedQuickly += 1
+    if closedQuickly >= Self.quickCloses { slowest() }
+  }
+
+  /// Every address refused this phone, or the two sides disagree on the protocol: 30 s until it changes.
+  mutating func slowest() {
+    attempts = 0
+    waiting = true
+  }
+}
+
 enum PhoneEvent: Sendable {
   case hello(Hello)
   case sessions(RemoteSessionList)
@@ -34,7 +84,7 @@ final class RemoteClient {
   private var timers: [Int: Task<Void, Never>] = [:]
   private var stopped = true
   private var connecting = false
-  private var retries = 0
+  private var retries = Reconnect()
   /// When the open link opened: one that held (Link.heldFor) is dialled again at once when it closes.
   private var openedAt: Date?
   private var retryTask: Task<Void, Never>?
@@ -79,7 +129,7 @@ final class RemoteClient {
     guard isOpen else {
       retryTask?.cancel()
       retryTask = nil
-      retries = 0
+      retries.opened()
       Task { await connect() }
       return
     }
@@ -95,7 +145,7 @@ final class RemoteClient {
     guard !stopped else { return }
     retryTask?.cancel()
     retryTask = nil
-    retries = 0
+    retries.opened()
     if isOpen {
       let at = url
       drop()
@@ -150,8 +200,7 @@ final class RemoteClient {
 
   private func schedule() {
     guard !stopped, retryTask == nil else { return }
-    let delay = Link.retrySeconds[min(retries, Link.retrySeconds.count - 1)]
-    retries += 1
+    let delay = retries.next()
     retryTask = Task {
       try? await Task.sleep(for: .seconds(delay))
       guard !Task.isCancelled else { return }
@@ -169,7 +218,7 @@ final class RemoteClient {
     if untried.isEmpty {
       // Every address refused this phone: say so, and keep trying slowly from the top.
       refusedBy.removeAll()
-      retries = Link.retrySeconds.count
+      retries.slowest()
       saidRefused = true
       onState(.refused)
       schedule()
@@ -202,7 +251,7 @@ final class RemoteClient {
       if let mismatch = Link.protocolMismatch(mac: hello.protocol, phone: Shared.data.protocol) {
         // The two sides would misread each other: say which one to update, and check again slowly.
         socket.close()
-        retries = Link.retrySeconds.count
+        retries.slowest()
         onState(.offline(mismatch))
         schedule()
         return
@@ -215,6 +264,8 @@ final class RemoteClient {
       saidRefused = false
       lastFailures = [:]
       generation += 1
+      // Not `opened()` here: a Mac that takes the link and closes it at once is counted (closed), and only one that holds
+      // starts the fast waits over.
       listen(socket, generation)
       onEvent(.hello(hello))
       onState(.open(url: url))
@@ -286,13 +337,15 @@ final class RemoteClient {
     drop()
     if code == 4001 || code == 4003 { return refused(at) }
     onState(.connecting)
-    // A link that held is dialled again at once: by the time the phone says anything (AppModel waits 2 s), it knows why.
-    // One the Mac closes right after opening it waits its turn, with longer waits each time, not a tight loop of pairing
-    // proofs.
+    // A link that held (and then dropped) is dialled again at once: by the time the phone says anything (AppModel waits
+    // 2 s), it knows why. One the Mac closes right after opening waits its 1–2 s turn — and after three of those in a row
+    // the waits go to 30 s until a link holds or the network / foreground changes, so a Mac that keeps taking the link and
+    // dropping it is not spun through pairing proofs every second.
     if let openedAt, Date().timeIntervalSince(openedAt) >= Link.heldFor {
-      retries = 0
+      retries.opened()
       Task { await connect() }
     } else {
+      retries.tookAndClosed()
       schedule()
     }
   }

@@ -131,17 +131,61 @@ final class AppModel {
 
   @ObservationIgnored private let paths = NWPathMonitor()
   @ObservationIgnored private var lastPath: String?
+  /// The last thing the Mac said, kept for a cold start without it (PRD F22 v1.220 ④).
+  @ObservationIgnored private let cache: PhoneCache
+  /// Which folder of the cache is this pairing's (the secret's digest); nil while there is no pairing.
+  @ObservationIgnored private var cacheScope: String?
 
-  init() {
-    pairing = PairingStore.load()
+  /// `cache`: where the offline copy of the Mac's list and conversations goes (`PhoneCache.shared` in the app; a test
+  /// passes its own folder). `connects`: false leaves the link alone, so a test can hold the app in the state a cold start
+  /// without the Mac has.
+  init(pairing: Pairing? = PairingStore.load(), cache: PhoneCache = .shared, connects: Bool = true) {
+    self.cache = cache
+    self.pairing = pairing
     macName = pairing?.macName ?? ""
-    if let pairing { connect(pairing) }
+    if let pairing {
+      cacheScope = PhoneCache.scope(pairing)
+      restore()
+      if connects { connect(pairing) }
+    }
     // Wi-Fi ↔ cellular (and Tailscale coming up) changes which of the Mac's addresses can be reached.
     paths.pathUpdateHandler = { [weak self] path in
       let key = "\(path.status == .satisfied) \(path.availableInterfaces.map(\.name).joined(separator: ","))"
       Task { @MainActor in self?.pathChanged(key) }
     }
     paths.start(queue: .main)
+  }
+
+  /// What the Mac last said, before it is reached: the list shows as of when it was heard (62B), and a session opens on
+  /// the conversation it last showed (62F). Nothing written yet leaves the list empty: 63B3.
+  private func restore() {
+    guard let cached = cache.sessions(cacheScope) else { return }
+    // An exit the Mac was in the middle of (提交 / 合并 / 推送) is stale by definition — it may have finished or failed
+    // since; the Mac's snapshot brings it back if it is still running. The rest of the row was true when it was sent.
+    sessions = RemoteSessionList(projects: cached.list.projects, sessions: cached.list.sessions.map(\.withoutShip))
+    heardAt = cached.heardAt
+    turnStarts = nextTurnStarts([:], sessions: sessions.sessions)
+  }
+
+  /// The state this phone just took: the list, whose pairing's folder it belongs to, and when the Mac sent it.
+  @discardableResult
+  func cacheSessions(_ list: RemoteSessionList, scope: String?, heardAt: Double?) -> Task<Void, Never>? {
+    guard let heardAt else { return nil }
+    cache.saveSessions(list, heardAt: heardAt, scope: scope)
+    // The prune runs a turn later, off the main actor, with the list as it is now — not whatever the model holds then.
+    return Task { await cache.prune(list, scope: scope) }
+  }
+
+  /// Writes the list as it was just heard, and drops the cached conversations of sessions the Mac no longer lists (they
+  /// cannot be opened again). Everything is taken here, so the work queued below cannot read a newer state.
+  private func cacheSessions() {
+    cacheSessions(sessions, scope: cacheScope, heardAt: heardAt)
+  }
+
+  /// Writes a session's conversation as the phone has it (its newest items, see `PhoneCache.capped`).
+  private func cacheConversation(_ session: String, _ conversation: Conversation?) {
+    guard let conversation else { return }
+    cache.saveConversation(conversation.feed, scope: cacheScope, session: session)
   }
 
   private func pathChanged(_ key: String) {
@@ -163,6 +207,8 @@ final class AppModel {
     PairingStore.save(pairing)
     self.pairing = pairing
     macName = pairing.macName
+    cacheScope = PhoneCache.scope(pairing)
+    restore()
     connect(pairing)
   }
 
@@ -172,6 +218,10 @@ final class AppModel {
     client = nil
     clientToken = UUID()
     PairingStore.clear()
+    // The list and the conversations are this Mac's: 取消配对 takes them with the pairing, now — before anything else can
+    // queue a write for them.
+    if let scope = cacheScope { cache.clear(scope) }
+    cacheScope = nil
     pairing = nil
     link = .offline(.unknown)
     dropped = false
@@ -265,17 +315,25 @@ final class AppModel {
     await syncActivity()?.value
   }
 
-  /// The session on screen (nil: back at the list): its newest page, then what is appended.
+  /// The session on screen (nil: back at the list): its newest page, then what is appended. Without a link it opens on
+  /// what the cache has, the notice over it saying the conversation is the last one seen (62F).
   func watch(_ session: String?) async {
     if watching != session {
       watching = session
-      conversation = session == nil ? nil : Conversation(feed: Feed(start: 0, items: []), total: 0, loading: true)
+      if let session {
+        let cached = cache.conversation(cacheScope, session)
+        conversation = Conversation(feed: cached.map { Feed(start: $0.start, items: $0.items) } ?? Feed(start: 0, items: []),
+          total: cached.map { $0.start + $0.items.count } ?? 0, loading: isOpen)
+      } else {
+        conversation = nil
+      }
     }
     let result = await call(.watch(session: session))
     guard let session, watching == session else { return }
     if let page = result.decode(Page.self) {
       conversation = Conversation(feed: Feed(start: page.start, items: page.items), total: page.total, loading: false)
       arrived(session, page.items)
+      cacheConversation(session, conversation)
     } else {
       conversation?.loading = false
     }
@@ -287,7 +345,10 @@ final class AppModel {
     conversation?.loading = true
     let result = await call(.feed(session: session, before: now.feed.start))
     guard watching == session, var current = conversation else { return }
-    if let page = result.decode(Page.self) { current.feed = prependFeed(current.feed, start: page.start, items: page.items) }
+    if let page = result.decode(Page.self) {
+      current.feed = prependFeed(current.feed, start: page.start, items: page.items)
+      cacheConversation(session, Conversation(feed: current.feed, total: current.total, loading: false))
+    }
     current.loading = false
     conversation = current
   }
@@ -313,6 +374,7 @@ final class AppModel {
     promptsListed(snapshot.prompts ?? [])
     knownPrompts = Set(prompts.map(\.id))
     loaded = true
+    cacheSessions()
     syncActivity()
     return true
   }
@@ -348,6 +410,7 @@ final class AppModel {
       sessions = list
       turnStarts = nextTurnStarts(turnStarts, sessions: list.sessions)
       heardAt = Date().timeIntervalSince1970 * 1000
+      cacheSessions()
       syncActivity()
     case .prompts(let list):
       promptsListed(list)
@@ -360,6 +423,7 @@ final class AppModel {
       let feed = applyFeed(conversation?.feed, start: update.start, items: update.items, reset: update.reset ?? false)
       conversation = Conversation(feed: feed, total: feed.start + feed.items.count, loading: false)
       arrived(update.session, update.items)
+      cacheConversation(update.session, conversation)
     }
   }
 
