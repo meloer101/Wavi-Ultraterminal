@@ -1,6 +1,7 @@
 // A stand-in for `claude -p --input-format stream-json --output-format stream-json …` (PRD §6.17, the message shapes
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
-// "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
+// "write" asks `can_use_tool` for a Write first; "ask me" asks an AskUserQuestion, "plan next" an ExitPlanMode (the two
+// prompts the phone answers too, PRD F22 v1.220 ①); "die" exits with an error; "slow" streams until interrupted; "late echo"
 // replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted); "colors"
 // runs a command with colored output; "visuals" searches the web, fetches a page, runs a failing vitest and a crashing
 // dev server and names files in its reply (Figma 90); "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
@@ -208,6 +209,29 @@ function reply(text) {
     out({ type: 'control_request', request_id: 'req-wf', request: { subtype: 'can_use_tool', tool_name: 'Workflow', input: { script }, description: 'Review dynamic workflow before running', permission_suggestions: [], tool_use_id: 'tu-wf' } })
     turn.waiting = 'req-wf'
     turn.toolUse = 'tu-wf'
+    return
+  }
+  if (text.includes('ask me')) {
+    // AskUserQuestion (PRD F22 v1.220 ①: the phone answers it with the same GuiAnswer as the desktop card).
+    const input = {
+      questions: [
+        { header: '数据库', question: '用哪个数据库', multiSelect: false, options: [{ label: 'Postgres', description: '已经装好了' }, { label: 'SQLite' }] },
+        { question: '要哪些检查', multiSelect: true, options: [{ label: 'lint' }, { label: 'test' }] }
+      ]
+    }
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu-ask', name: 'AskUserQuestion', input }] }, session_id: SESSION, parent_tool_use_id: null })
+    out({ type: 'control_request', request_id: 'req-ask', request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', input, permission_suggestions: [], tool_use_id: 'tu-ask' } })
+    turn.waiting = 'req-ask'
+    turn.toolUse = 'tu-ask'
+    return
+  }
+  if (text.includes('plan next')) {
+    // ExitPlanMode: the plan confirmation (PRD F22 v1.220 ①; the phone's own panel is a later step).
+    const input = { plan: '## 计划\n\n1. 把登录改成 Set-Cookie\n2. 删掉 localStorage 的读写\n3. 跑一遍 auth 测试' }
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu-plan', name: 'ExitPlanMode', input }] }, session_id: SESSION, parent_tool_use_id: null })
+    out({ type: 'control_request', request_id: 'req-plan', request: { subtype: 'can_use_tool', tool_name: 'ExitPlanMode', input, permission_suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }], tool_use_id: 'tu-plan' } })
+    turn.waiting = 'req-plan'
+    turn.toolUse = 'tu-plan'
     return
   }
   if (text.includes('write')) {

@@ -233,6 +233,53 @@ func allowAlwaysLabel(_ rules: [PermissionRule]?) -> String {
   return rules.count > 1 ? String(localized: "总是允许 \(what) 等 \(rules.count) 项") : String(localized: "总是允许 \(what)")
 }
 
+/// A plan's title and body, split as the Mac's plan card splits them (src/renderer/gui/model.ts `planParts`): the title
+/// is the plan's own name — its first heading with the 「计划:」 / 「Plan:」 prefix taken off — or 「计划」 when it names
+/// itself nothing; the rest is the body. On the phone the title sits under a head that already says 等你确认计划 (Figma
+/// 100A / 100B), so it is the name alone; `namedTitle` is the form for a line without that head.
+struct PlanParts: Equatable {
+  let title: String
+  let body: String
+  /// The title is the plan's own name, not 「计划」 standing in for one.
+  let named: Bool
+
+  /// 「计划：<the name>」, for a line with no head above it (a receipt's); 「计划」 when it names itself nothing.
+  var namedTitle: String { named ? String(localized: "计划：\(title)") : title }
+}
+
+func planParts(_ plan: String) -> PlanParts {
+  let lines = plan.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  guard let at = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+    return PlanParts(title: String(localized: "计划"), body: "", named: false)
+  }
+  let first = lines[at].trimmingCharacters(in: .whitespaces)
+  let body = lines[(at + (headingName(first) == nil ? 0 : 1))...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  guard let name = headingName(first), !name.isEmpty else {
+    return PlanParts(title: String(localized: "计划"), body: body, named: false)
+  }
+  return PlanParts(title: name, body: body, named: true)
+}
+
+/// The prompt a receipt names by: `receiptText` (TranscriptGroups.swift) reads a permission's summary or a question's
+/// text, and a plan has neither — its title goes in a question's place, so a plan's receipt reads like a question's.
+func receiptNaming(_ prompt: RemotePrompt) -> RemotePrompt {
+  guard prompt.kind == "plan" else { return prompt }
+  var copy = prompt
+  copy.questions = [AgentQuestion(header: nil, question: planParts(prompt.plan ?? "").namedTitle, multiSelect: false, options: [])]
+  return copy
+}
+
+/// `## 计划：登录改成 Set-Cookie` on its own → `登录改成 Set-Cookie`; null when the line is not a heading.
+private func headingName(_ line: String) -> String? {
+  let marks = line.prefix { $0 == "#" }
+  guard (1...6).contains(marks.count), line.dropFirst(marks.count).first == " " else { return nil }
+  let name = line.dropFirst(marks.count).trimmingCharacters(in: .whitespaces)
+  for prefix in ["计划:", "计划：", "Plan:"] where name.lowercased().hasPrefix(prefix.lowercased()) {
+    return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+  }
+  return name
+}
+
 /// `<prefix>/<adjective>-<noun>` not in `taken` (src/shared/new-session.ts `generateBranchName`, its words from Shared.json).
 func generateBranchName(prefix: String, taken: Set<String>) -> String {
   let words = Shared.data.branchWords

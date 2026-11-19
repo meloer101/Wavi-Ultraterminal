@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
-import { GUI_IPC, isGuiRewindScope, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiBranch, type GuiOpenResult, type GuiRewindInfo, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_IPC, isGuiRewindScope, type GuiAnswer, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiBranch, type GuiOpenResult, type GuiPrompt, type GuiRewindInfo, type GuiSendResult } from '@shared/gui-chat'
 import { GUI_TASK_ID } from '@shared/workflow-run'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
@@ -177,8 +177,30 @@ const host = new GuiHost<WebContents>({
   },
   image: readImage,
   keepImage: keepInlineImage,
-  clientVersion: app.getVersion()
+  clientVersion: app.getVersion(),
+  prompts: (sessionId, prompts) => guiPromptsListener?.(sessionId, prompts)
 })
+
+/**
+ * What a GUI session waits on, for the phone (PRD F22 v1.220 ①): its whole open set, each time it changes. The phone's
+ * answer comes back through `answerGuiPrompt`, so it takes the same path as the desktop card.
+ */
+export type GuiPromptsListener = (sessionId: string, prompts: readonly GuiPrompt[]) => void
+
+let guiPromptsListener: GuiPromptsListener | null = null
+
+/** src/main/remote: hear what the GUI sessions ask, and answer it from the phone. */
+export function setGuiPrompts(listener: GuiPromptsListener | null): void {
+  guiPromptsListener = listener
+}
+
+/** A session this app runs as a GUI (its prompts come from the driver, not from hooks). */
+export const isGuiSession = (sessionId: string): boolean => host.has(sessionId)
+
+/** The phone answers a GUI session's prompt: the same GuiAnswer the desktop card sends (PRD F22 v1.220 ①). */
+export function answerGuiPrompt(sessionId: string, answer: GuiAnswer): boolean {
+  return host.answer(sessionId, answer)
+}
 
 /** The window a GUI session belongs to (dispatch and remote route to it, like `ptySessionOwner`). */
 export const guiSessionOwner = (sessionId: string): WebContents | null => host.ownerOf(sessionId)

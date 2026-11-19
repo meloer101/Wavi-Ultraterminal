@@ -1,9 +1,19 @@
-// What the agent waits for, as a sheet over its conversation (Figma 59 Mobile/PromptSheet, 61C / 61D, 63D1–63D5, 63G3):
-// a permission request or an AskUserQuestion. The answer goes back through the held hook (PRD §6.16), so the Mac
-// terminal's dialog closes with it; answered in the terminal first, the prompt leaves the list Wavi pushes and the sheet
-// goes. What it asks scrolls inside a capped area; the answers stay pinned under it, so a long command never pushes 允许
-// off screen. Put aside, a row over the composer brings it back.
+// What the agent waits for, as a sheet over its conversation (Figma 59 Mobile/PromptSheet, 61C / 61D, 63D1–63D5, 63G3;
+// the plan is Figma 100, 100A / 100B): a permission request, an AskUserQuestion or a GUI session's plan. An answer goes
+// back the way the Mac's own card answers (a held hook for a terminal session, the driver for a GUI one), so whichever
+// side answers first, the other's card goes; answered in the terminal first, the prompt leaves the list Wavi pushes and
+// the sheet goes. What it asks scrolls inside a capped area; the answers stay pinned under it, so a long command never
+// pushes 允许 off screen. Put aside, a row over the composer brings it back.
 import SwiftUI
+
+/// The row over the composer for a prompt put aside, and its sheet's head: what it waits for.
+func promptLabel(_ prompt: RemotePrompt) -> String {
+  switch prompt.kind {
+  case "permission": return String(localized: "等你确认：\(prompt.summary ?? "")")
+  case "plan": return String(localized: "等你确认计划")
+  default: return String(localized: "等你回答：\(prompt.questions?.first?.question ?? "")")
+  }
+}
 
 struct PromptBar: View {
   let prompts: [RemotePrompt]
@@ -17,7 +27,7 @@ struct PromptBar: View {
         Button { hidden = nil } label: {
           HStack(spacing: 8) {
             StatusGlyph(status: .needsYou)
-            Text(prompt.kind == "permission" ? String(localized: "等你确认：\(prompt.summary ?? "")") : String(localized: "等你回答：\(prompt.questions?.first?.question ?? "")"))
+            Text(promptLabel(prompt))
               .font(.ui(.subheadline, medium: true)).foregroundStyle(Color.statusAttention).lineLimit(1)
             Spacer(minLength: 0)
             Icon("chevron-right", size: 14).rotationEffect(.degrees(-90)).foregroundStyle(Color.textSecondary)
@@ -44,7 +54,13 @@ private struct PromptSheet: View {
 
   var body: some View {
     Group {
-      if prompt.kind == "permission" { PermissionAsk(prompt: prompt, error: $error, close: close) } else { QuestionAsk(prompt: prompt, error: $error, close: close) }
+      if prompt.kind == "permission" {
+        PermissionAsk(prompt: prompt, error: $error, close: close)
+      } else if prompt.kind == "plan" {
+        PlanAsk(prompt: prompt, error: $error, close: close)
+      } else {
+        QuestionAsk(prompt: prompt, error: $error, close: close)
+      }
     }
   }
 }
@@ -162,6 +178,54 @@ private struct PermissionAsk: View {
       error = nil
       Task {
         let result = await model.answer(prompt, .permission(prompt: prompt.id, decision: decision))
+        busy = nil
+        if let failure = result.error { error = String(localized: "没有送到 Mac：\(failure)") } else { close() }
+      }
+    } label: {
+      busyLabel(label, busy: busy == decision, primary: primary)
+    }
+    .buttonStyle(.wavi(primary: primary))
+    .disabled(busy != nil)
+  }
+}
+
+/// Figma 100A / 100B (approved 2026-11-19): a GUI session's plan. The same parts as the other two sheets — the head with
+/// the wait time, the title and the plan (Markdown, as the Mac's card draws it) in the capped scrolling area, the answers
+/// pinned under it. Three buttons, stacked full width in the Mac plan card's order: 批准并自动接受编辑 first (the primary
+/// one), then 批准，编辑时问我, then 继续规划.
+struct PlanAsk: View {
+  let prompt: RemotePrompt
+  @Binding var error: String?
+  let close: () -> Void
+  @Environment(AppModel.self) private var model
+  @State private var busy: String?
+
+  var body: some View {
+    let parts = planParts(prompt.plan ?? "")
+    FittedSheet {
+      VStack(alignment: .leading, spacing: 12) {
+        Head(label: String(localized: "等你确认计划"), since: prompt.createdAt)
+        Text(parts.title).font(.ui(.title2)).foregroundStyle(Color.textPrimary)
+        if !parts.body.isEmpty { MarkdownText(text: parts.body) }
+      }
+    } actions: {
+      if prompt.answerable {
+        if let error { Notice(tone: .danger, message: error) }
+        decisionButton(String(localized: "批准并自动接受编辑"), "approve-auto", primary: true)
+        decisionButton(String(localized: "批准，编辑时问我"), "approve-ask")
+        decisionButton(String(localized: "继续规划"), "keep-planning")
+      } else {
+        TerminalOnly(text: String(localized: "这个计划只能在 Mac 上回答"), close: close)
+      }
+    }
+  }
+
+  private func decisionButton(_ label: String, _ decision: String, primary: Bool = false) -> some View {
+    Button {
+      busy = decision
+      error = nil
+      Task {
+        let result = await model.answer(prompt, .plan(prompt: prompt.id, decision: decision))
         busy = nil
         if let failure = result.error { error = String(localized: "没有送到 Mac：\(failure)") } else { close() }
       }

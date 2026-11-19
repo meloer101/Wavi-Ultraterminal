@@ -33,6 +33,11 @@
       "prompt": "p1",
       "decision": "allow-always"
     },
+    "plan": {
+      "type": "plan",
+      "prompt": "p3",
+      "decision": "approve-ask"
+    },
     "answer": {
       "type": "answer",
       "prompt": "p2",
@@ -330,6 +335,14 @@
           ],
           "createdAt": 1730000000500,
           "answerable": false
+        },
+        {
+          "kind": "plan",
+          "id": "p3",
+          "sessionId": "s1",
+          "plan": "## 计划\n\n1. 把登录改成 Set-Cookie\n2. 删掉 localStorage 的读写\n\n```ts\nres.cookie('session', token, { httpOnly: true })\n```",
+          "createdAt": 1730000000700,
+          "answerable": true
         }
       ]
     },
@@ -636,6 +649,14 @@
           ],
           "createdAt": 1730000000500,
           "answerable": false
+        },
+        {
+          "kind": "plan",
+          "id": "p3",
+          "sessionId": "s1",
+          "plan": "## 计划\n\n1. 把登录改成 Set-Cookie\n2. 删掉 localStorage 的读写\n\n```ts\nres.cookie('session', token, { httpOnly: true })\n```",
+          "createdAt": 1730000000700,
+          "answerable": true
         }
       ]
     },
