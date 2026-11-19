@@ -157,6 +157,8 @@ describe('GuiPrompts', () => {
     // Codex's prompt id is its JSON-RPC request id and ACP's the same kind: both processes start at 0 / 100.
     const codexA: GuiPrompt = { kind: 'permission', id: '100', tool: 'Bash', detail: 'ls', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
     const codexB: GuiPrompt = { kind: 'permission', id: '100', tool: 'Edit', detail: 'b.txt', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
+    // ACP and Pi ids are agent strings, anything goes: the phone's id still has to look like one it may send back.
+    expect(remotePromptId('a', 'req.1/a b')).toMatch(/^a:[A-Za-z0-9_-]+$/)
     const list = new GuiPrompts()
     list.set('a', [codexA], AT)
     list.set('b', [codexB], AT + 1)
@@ -170,6 +172,16 @@ describe('GuiPrompts', () => {
     list.set('a', [], AT + 2)
     expect(list.get(remotePromptId('a', '100'))).toBeNull()
     expect(list.get(remotePromptId('b', '100'))).toEqual({ sessionId: 'b', prompt: codexB })
+  })
+
+  it('keeps a driver id with dots, slashes and spaces apart and answers with it', () => {
+    const acp: GuiPrompt = { kind: 'permission', id: 'req.1/a b', tool: 'Bash', detail: 'ls', options: [{ id: 'yes', label: '允许', kind: 'allow_once' }] }
+    const list = new GuiPrompts()
+    list.set('s1', [acp], AT)
+    const seen = list.list(known)[0]!
+    expect(seen.id).toBe(remotePromptId('s1', 'req.1/a b'))
+    expect(optionFor(list.get(seen.id)!.prompt, 'allow-once')).toBe('yes')
+    expect(list.get(seen.id)!.prompt.id).toBe('req.1/a b')
   })
 
   it('lists the oldest ask first, whatever order the sessions reported in', () => {

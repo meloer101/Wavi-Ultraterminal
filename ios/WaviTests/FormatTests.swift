@@ -26,6 +26,34 @@ private func session(_ id: String = "s", project: String = "p1", status: Session
     #expect(staleNotice(heardAt: nil, now: now) == "显示的不是最新的状态")
   }
 
+  @Test func aPlanSplitsIntoTheTitleItsFirstHeadingNamesAndTheRest() {
+    // The Mac's plan card splits it the same way (src/renderer/gui/model.ts planParts).
+    let headed = planParts("## 计划：登录改成 Set-Cookie\n\n1. 读 cookie\n2. 删 localStorage\n")
+    #expect(headed.title == "计划：登录改成 Set-Cookie")
+    #expect(headed.body == "1. 读 cookie\n2. 删 localStorage")
+    // The agent's own heading prefix goes, in either language, and any heading level counts.
+    #expect(planParts("# Plan: migrate auth\nbody").title == "计划：migrate auth")
+    #expect(planParts("### 会话续期\nbody").title == "计划：会话续期")
+    // No heading: 计划, and the whole text stays as the body (blank lines in front dropped).
+    #expect(planParts("\n\n先看看 auth.ts，再改登录。\n第二步").title == "计划")
+    #expect(planParts("\n\n先看看 auth.ts，再改登录。\n第二步").body == "先看看 auth.ts，再改登录。\n第二步")
+    // A heading with nothing after the prefix is just 计划, and an empty plan asks nothing.
+    #expect(planParts("## 计划：\nstep").title == "计划")
+    #expect(planParts("## 计划：\nstep").body == "step")
+    #expect(planParts("") == PlanParts(title: "计划", body: ""))
+    #expect(planParts("\r\n## 标题\r\nbody").body == "body")
+  }
+
+  @Test func aPlansReceiptNamesThePlanWhereAQuestionNamesItsText() {
+    // The receipt line reads a permission's summary or a question's text (TranscriptGroups.swift receiptText).
+    let plan = RemotePrompt(kind: "plan", id: "s1:p", sessionId: "s1", createdAt: 0, answerable: true, plan: "## 登录迁移\n1. 读 cookie")
+    #expect(receiptNaming(plan).questions?.first?.question == "计划：登录迁移")
+    #expect(receiptText(receiptNaming(plan), decision: nil, onPhone: true) == "在这台手机上回答 · 计划：登录迁移")
+    let question = RemotePrompt(kind: "question", id: "s1:q", sessionId: "s1", createdAt: 0, answerable: true,
+      questions: [AgentQuestion(header: nil, question: "按什么排序？", multiSelect: false, options: [])])
+    #expect(receiptNaming(question) == question)
+  }
+
   @Test func connectionLineSaysWhatIsWrong() {
     let mac = "MacBook Pro"
     #expect(connectionWords(.open(url: "ws://100.101.1.2:7429"), mac: mac, dropped: false) == ConnectionWords(text: "MacBook Pro · Tailscale", tone: .quiet))

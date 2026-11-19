@@ -27,6 +27,8 @@ private func date(_ ms: Double) -> Date { Date(timeIntervalSince1970: ms / 1000)
 
 /// `mac`: the paired Mac's name, the 空闲 card's title.
 func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double, mac: String = "") -> ActivityState? {
+  // Figma 100 is the plan's sheet, not a card: a plan waits in the app, and the island keeps showing what it knows.
+  let prompts = prompts.filter { $0.kind != "plan" }
   var state = activityCard(sessions: sessions, prompts: prompts, now: now, mac: mac)
   state?.updated = date(now)
   if let kind = state?.kind, kind != .running && kind != .idle {

@@ -233,6 +233,49 @@ func allowAlwaysLabel(_ rules: [PermissionRule]?) -> String {
   return rules.count > 1 ? String(localized: "总是允许 \(what) 等 \(rules.count) 项") : String(localized: "总是允许 \(what)")
 }
 
+/// A plan's title and body, split as the Mac's plan card splits them (src/renderer/gui/model.ts `planParts`): the title
+/// from the plan's first heading (「计划：<name>」, its own 「计划:」 / 「Plan:」 prefix dropped), 「计划」 without one, and the
+/// rest as the body.
+struct PlanParts: Equatable {
+  let title: String
+  let body: String
+}
+
+func planParts(_ plan: String) -> PlanParts {
+  let lines = plan.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  guard let at = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+    return PlanParts(title: String(localized: "计划"), body: "")
+  }
+  let first = lines[at].trimmingCharacters(in: .whitespaces)
+  guard let name = headingName(first) else {
+    return PlanParts(title: String(localized: "计划"), body: lines[at...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+  return PlanParts(
+    title: name.isEmpty ? String(localized: "计划") : String(localized: "计划：\(name)"),
+    body: lines[(at + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  )
+}
+
+/// The prompt a receipt names by: `receiptText` (TranscriptGroups.swift) reads a permission's summary or a question's
+/// text, and a plan has neither — its title goes in a question's place, so a plan's receipt reads like a question's.
+func receiptNaming(_ prompt: RemotePrompt) -> RemotePrompt {
+  guard prompt.kind == "plan" else { return prompt }
+  var copy = prompt
+  copy.questions = [AgentQuestion(header: nil, question: planParts(prompt.plan ?? "").title, multiSelect: false, options: [])]
+  return copy
+}
+
+/// `## 计划：登录改成 Set-Cookie` on its own → `登录改成 Set-Cookie`; null when the line is not a heading.
+private func headingName(_ line: String) -> String? {
+  let marks = line.prefix { $0 == "#" }
+  guard (1...6).contains(marks.count), line.dropFirst(marks.count).first == " " else { return nil }
+  let name = line.dropFirst(marks.count).trimmingCharacters(in: .whitespaces)
+  for prefix in ["计划:", "计划：", "Plan:"] where name.lowercased().hasPrefix(prefix.lowercased()) {
+    return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+  }
+  return name
+}
+
 /// `<prefix>/<adjective>-<noun>` not in `taken` (src/shared/new-session.ts `generateBranchName`, its words from Shared.json).
 func generateBranchName(prefix: String, taken: Set<String>) -> String {
   let words = Shared.data.branchWords

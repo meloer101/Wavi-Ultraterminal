@@ -68,15 +68,13 @@ final class AppModel {
   /// One receipt per prompt: a later one replaces it.
   private func addReceipt(_ prompt: RemotePrompt, onPhone: Bool, decision: String?) {
     let receipt = Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: onPhone,
-      text: receiptText(prompt, decision: decision, onPhone: onPhone))
+      text: receiptText(receiptNaming(prompt), decision: decision, onPhone: onPhone))
     receipts[prompt.sessionId, default: []].removeAll { $0.id == receipt.id }
     receipts[prompt.sessionId, default: []].append(receipt)
   }
 
   /// A new list of prompts: the ones that left without an answer from here were answered on the Mac.
   private func promptsListed(_ list: [RemotePrompt]) {
-    // Figma 100: the phone's plan sheet is not drawn yet, so a plan waits on the Mac's own card instead of an empty sheet.
-    let list = list.filter { $0.kind != "plan" }
     let ids = Set(list.map(\.id))
     for (id, prompt) in listed where !ids.contains(id) && !answeredHere.contains(id) {
       addReceipt(prompt, onPhone: false, decision: nil)

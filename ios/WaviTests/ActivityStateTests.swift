@@ -28,6 +28,20 @@ private func question(_ id: String, at: Double, options: [String], multi: Bool =
     #expect(state?.since == Date(timeIntervalSince1970: 2))
   }
 
+  @Test func aPlanIsNotACard() {
+    // Figma 100 is the plan's sheet, not a Live Activity design: the island shows what it knows instead of an empty card.
+    let plan = RemotePrompt(kind: "plan", id: "s1:p", sessionId: "s1", createdAt: 0, answerable: true, plan: "## 计划：…")
+    // A plan alone: no card of its own; a running session, a finished one or nothing decide what the island shows.
+    #expect(activityState(sessions: [session("s1", status: .running)], prompts: [plan], now: 1000)?.kind == .running)
+    #expect(activityState(sessions: [session("s1", status: .doneUnread, since: 500)], prompts: [plan], now: 1000)?.kind == .done)
+    #expect(activityState(sessions: [], prompts: [plan], now: 1000) == nil)
+    // Next to a question it is not the one the card takes, and it does not count as one waiting.
+    let withQuestion = activityState(sessions: [session("s1", status: .needsYou)], prompts: [plan, question("q", at: 5, options: ["a"])], now: 1000)
+    #expect(withQuestion?.kind == .question)
+    #expect(withQuestion?.prompt == "q")
+    #expect(withQuestion?.others == nil)
+  }
+
   @Test func questionOptionsGetButtonsUpToThree() {
     let three = activityState(sessions: [], prompts: [question("q", at: 0, options: ["a", "b", "c"])], now: 0)
     #expect(three?.options == ["a", "b", "c"])
