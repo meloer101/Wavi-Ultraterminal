@@ -1,0 +1,137 @@
+---
+/* 03 GitHub: the board window on brand, then one line through five step cards from issue to main. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+import BoardGlyph from './BoardGlyph.astro'
+import Label from './Label.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const f = t.github.fragments
+---
+
+<section class="section section-brand" id="github">
+  <div class="wrap">
+    <div class="gh-head">
+      <div class="gh-copy">
+        <Label value={t.github.label} tone="white" />
+        <h2 class="display">{t.github.title[0]}<br />{t.github.title[1]}</h2>
+        <p class="gh-intro">{t.github.intro}</p>
+      </div>
+      <Image
+        class="gh-shot"
+        src={pic(lang, 'github.webp')}
+        widths={[741, 1482]}
+        sizes="741px"
+        loading="lazy"
+        alt=""
+      />
+    </div>
+
+    <div class="steps-line" aria-hidden="true">
+      {t.github.steps.map((_, i) => (
+        <span class="step-mark">
+          {i < t.github.steps.length - 1 ? (
+            <span class="step-dot"></span>
+          ) : (
+            <span class="step-disc">
+              <svg viewBox="0 0 14 14"
+                ><path
+                  d="M2.5 7.4 5.6 10.4 11.5 3.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path
+                ></svg
+              >
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+
+    <ol class="steps">
+      {t.github.steps.map((step, i) => (
+        <li class="step">
+          <p class="step-n">{String(i + 1).padStart(2, '0')}</p>
+          <h3>{step}</h3>
+          <div class="frag" aria-hidden="true">
+            {i === 0 && (
+              <>
+                <p class="frag-row">
+                  <span class="glyph"
+                    ><svg viewBox="0 0 14 14"
+                      ><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4"></circle
+                      ><circle cx="7" cy="7" r="1.6" fill="currentColor"></circle></svg
+                  ></span>
+                  <span class="frag-dim mono">{f.issue}</span>
+                  <span>{f.issueTitle}</span>
+                </p>
+                <p class="frag-btn">{f.hand}</p>
+              </>
+            )}
+            {i === 1 && (
+              <>
+                <p class="frag-row">
+                  <BoardGlyph kind="review" />
+                  <span class="frag-strong">{f.reviewed}</span>
+                </p>
+                <p class="frag-row frag-dim mono">{f.notes}</p>
+              </>
+            )}
+            {i === 2 && (
+              <>
+                <p class="frag-field mono">{f.message}</p>
+                <p class="frag-btn frag-btn-ink">{f.create}</p>
+              </>
+            )}
+            {i === 3 && (
+              <>
+                <p class="frag-row">
+                  <BoardGlyph kind="review" />
+                  <span class="mono">{f.lint}</span>
+                </p>
+                <p class="frag-row frag-fail">
+                  <span class="glyph"
+                    ><svg viewBox="0 0 14 14"
+                      ><path d="M3.5 3.5 10.5 10.5M10.5 3.5 3.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg
+                  ></span>
+                  <span class="mono">{f.test}</span>
+                </p>
+                <p class="frag-row">
+                  <BoardGlyph kind="review" />
+                  <span class="mono">{f.test}</span>
+                  <span class="frag-note">{f.fixed}</span>
+                </p>
+              </>
+            )}
+            {i === 4 && (
+              <>
+                <p class="frag-merged">
+                  <span class="frag-disc"
+                    ><svg viewBox="0 0 14 14"
+                      ><path
+                        d="M2.5 7.4 5.6 10.4 11.5 3.8"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"></path></svg
+                  ></span>
+                  <span>{f.merged}</span>
+                </p>
+                <p class="frag-row frag-dim mono">{f.branch}</p>
+              </>
+            )}
+          </div>
+          <p class="step-cap">{t.github.captions[i]}</p>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>

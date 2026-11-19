@@ -1,0 +1,42 @@
+---
+/* The hero: badge, the headline with its one serif italic word, two lines of sub, the two buttons, and the dotted
+   cradle art whose bottom third is cut by the section's lower edge. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+import Ctas from '../Ctas.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+---
+
+<section class="hero">
+  <div class="wrap hero-content">
+    <p class="badge">{t.hero.badge}<span class="badge-mark" aria-hidden="true"></span></p>
+    <h1>
+      {t.hero.title.map(([before, em, after], i) => (
+        <Fragment>
+          {before}
+          {em ? <em>{em}</em> : null}
+          {after}
+          {i < t.hero.title.length - 1 ? <br /> : null}
+        </Fragment>
+      ))}
+    </h1>
+    <p class="hero-sub">{t.hero.sub[0]}<br />{t.hero.sub[1]}</p>
+    <Ctas download={t.hero.download} github={t.hero.github} />
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <Image
+      src={pic(lang, 'hero-cradle.png')}
+      widths={[960, 1920]}
+      sizes="(min-width: 1044px) 960px, 92vw"
+      loading="eager"
+      fetchpriority="high"
+      alt=""
+    />
+  </div>
+</section>

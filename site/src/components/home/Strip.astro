@@ -1,0 +1,23 @@
+---
+/* The paper strip under the hero: the nineteen agent CLIs Wavi starts, each with its own mark. */
+import { AGENT_NAMES, AGENT_ORDER } from '../../agent-marks'
+import { copy, type Lang } from '../../i18n'
+import AgentMark from './AgentMark.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+---
+
+<section class="strip">
+  <div class="wrap">
+    <p class="strip-title">{t.strip}</p>
+    <ul class="strip-list">
+      {AGENT_ORDER.map((id) => (
+        <li><AgentMark id={id} /><span>{AGENT_NAMES[id]}</span></li>
+      ))}
+    </ul>
+  </div>
+</section>

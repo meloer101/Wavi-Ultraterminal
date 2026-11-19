@@ -1,0 +1,51 @@
+---
+/* 01 Agents: the dispatch window on brand, then six cells, one per way of running several agents. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+import Label from './Label.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same-task']
+---
+
+<section class="section section-light" id="agents">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <Label value={t.agents.label} />
+        <h2 class="display">{t.agents.title[0]}<br />{t.agents.title[1]}</h2>
+      </div>
+      <p class="intro">{t.agents.intro}</p>
+    </div>
+    <div class="agents-panel">
+      <Image
+        src={pic(lang, 'dispatch.webp')}
+        widths={[1250, 2500]}
+        sizes="(min-width: 1440px) 1250px, 92vw"
+        loading="lazy"
+        alt=""
+      />
+    </div>
+    <div class="cells3">
+      {t.agents.cells.map(([label, text], i) => (
+        <div class="cell">
+          <Image
+            class="cell-art"
+            src={pic(lang, `diagram-${diagrams[i]}.svg`)}
+            width={384}
+            height={176}
+            loading="lazy"
+            alt=""
+          />
+          <p class="cell-label"><span aria-hidden="true">+</span><span>{label}</span></p>
+          <p class="cell-text">{text}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

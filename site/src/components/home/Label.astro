@@ -1,0 +1,15 @@
+---
+/* A small heading label, drawn `+  01  AGENTS`. Brand on light sections, white on the ink and brand ones, ink inside
+   the light cells. */
+import type { Label } from '../../i18n'
+
+interface Props {
+  value: Label
+  tone?: 'brand' | 'white' | 'ink'
+}
+const { value, tone = 'brand' } = Astro.props
+---
+
+<p class:list={['label', `label-${tone}`]}>
+  <span aria-hidden="true">+</span><span>{value[0]}</span><span>{value[1]}</span>
+</p>

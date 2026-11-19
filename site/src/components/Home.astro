@@ -1,0 +1,31 @@
+---
+/* The landing page (Figma frame O, 1794:15463): nav, hero, the agent strip, four sections and the FAQ, then the
+   download block and footer. Static HTML and CSS; the only script is Ctas.astro's chip switch. */
+import type { Lang } from '../i18n'
+import Agents from './home/Agents.astro'
+import Board from './home/Board.astro'
+import Faq from './home/Faq.astro'
+import Footer from './home/Footer.astro'
+import Github from './home/Github.astro'
+import Hero from './home/Hero.astro'
+import Nav from './home/Nav.astro'
+import Strip from './home/Strip.astro'
+import Windows from './home/Windows.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+---
+
+<Nav lang={lang} />
+<main id="main">
+  <Hero lang={lang} />
+  <Strip lang={lang} />
+  <Agents lang={lang} />
+  <Board lang={lang} />
+  <Github lang={lang} />
+  <Windows lang={lang} />
+  <Faq lang={lang} />
+</main>
+<Footer lang={lang} />
