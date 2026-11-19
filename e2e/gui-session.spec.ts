@@ -133,7 +133,8 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(page.getByTestId('gui-agent-models').getByRole('menuitemradio', { name: 'Opus' })).toHaveAttribute('aria-checked', 'true')
     // Rows are 32 high (the author, 2026-11-08: a little roomier).
     // Rounded: a display that is not at an integer scale lays the row out a fraction of a pixel short (31.98 on the CI runner).
-    expect(Math.round((await page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' }).boundingBox())!.height)).toBe(32)
+    // Polled: the menu pops in from scale(0.97) over --duration-pop, and a box measured mid-animation is 31.
+    await expect.poll(async () => Math.round((await page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' }).boundingBox())!.height)).toBe(32)
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
