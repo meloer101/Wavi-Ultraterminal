@@ -234,26 +234,30 @@ func allowAlwaysLabel(_ rules: [PermissionRule]?) -> String {
 }
 
 /// A plan's title and body, split as the Mac's plan card splits them (src/renderer/gui/model.ts `planParts`): the title
-/// from the plan's first heading (「计划：<name>」, its own 「计划:」 / 「Plan:」 prefix dropped), 「计划」 without one, and the
-/// rest as the body.
+/// is the plan's own name — its first heading with the 「计划:」 / 「Plan:」 prefix taken off — or 「计划」 when it names
+/// itself nothing; the rest is the body. On the phone the title sits under a head that already says 等你确认计划 (Figma
+/// 100A / 100B), so it is the name alone; `namedTitle` is the form for a line without that head.
 struct PlanParts: Equatable {
   let title: String
   let body: String
+  /// The title is the plan's own name, not 「计划」 standing in for one.
+  let named: Bool
+
+  /// 「计划：<the name>」, for a line with no head above it (a receipt's); 「计划」 when it names itself nothing.
+  var namedTitle: String { named ? String(localized: "计划：\(title)") : title }
 }
 
 func planParts(_ plan: String) -> PlanParts {
   let lines = plan.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
   guard let at = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
-    return PlanParts(title: String(localized: "计划"), body: "")
+    return PlanParts(title: String(localized: "计划"), body: "", named: false)
   }
   let first = lines[at].trimmingCharacters(in: .whitespaces)
-  guard let name = headingName(first) else {
-    return PlanParts(title: String(localized: "计划"), body: lines[at...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines))
+  let body = lines[(at + (headingName(first) == nil ? 0 : 1))...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  guard let name = headingName(first), !name.isEmpty else {
+    return PlanParts(title: String(localized: "计划"), body: body, named: false)
   }
-  return PlanParts(
-    title: name.isEmpty ? String(localized: "计划") : String(localized: "计划：\(name)"),
-    body: lines[(at + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-  )
+  return PlanParts(title: name, body: body, named: true)
 }
 
 /// The prompt a receipt names by: `receiptText` (TranscriptGroups.swift) reads a permission's summary or a question's
@@ -261,7 +265,7 @@ func planParts(_ plan: String) -> PlanParts {
 func receiptNaming(_ prompt: RemotePrompt) -> RemotePrompt {
   guard prompt.kind == "plan" else { return prompt }
   var copy = prompt
-  copy.questions = [AgentQuestion(header: nil, question: planParts(prompt.plan ?? "").title, multiSelect: false, options: [])]
+  copy.questions = [AgentQuestion(header: nil, question: planParts(prompt.plan ?? "").namedTitle, multiSelect: false, options: [])]
   return copy
 }
 
