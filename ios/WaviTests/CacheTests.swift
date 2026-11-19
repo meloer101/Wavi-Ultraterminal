@@ -44,8 +44,8 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     #expect(cache.conversation(nil, "s1") == nil)
     let empty = tempCache()
     #expect(empty.sessions(PhoneCache.scope(pairing(9))) == nil)
-    await cache.clearAll()
-    await empty.clearAll()
+    cache.clearAll()
+    empty.clearAll()
   }
 
   @Test func aConversationKeepsItsNewestTwoHundredItems() async {
@@ -66,7 +66,7 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     #expect(later.items.count == 200)
     #expect(PhoneCache.capped(Feed(start: 7, items: [item(7)])).start == 7)
     #expect(PhoneCache.capped(Feed(start: 0, items: [])).items.isEmpty)
-    await cache.clearAll()
+    cache.clearAll()
   }
 
   @Test func eachPairingHasItsOwnFolderAndUnpairingTakesItAway() async {
@@ -84,7 +84,7 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     // 取消配对 while a write is still waiting (a frame landed a moment before): the folder goes and the write does not
     // bring it back.
     cache.saveConversation(Feed(start: 0, items: [item(0), item(1)]), scope: first, session: "s2")
-    await cache.clear(first)
+    cache.clear(first)
     await cache.flush()
     #expect(cache.sessions(first) == nil)
     #expect(cache.conversation(first, "s1") == nil)
@@ -92,9 +92,9 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     // The same when the Mac revokes the phone: the app clears this pairing's folder and nothing else.
     cache.saveSessions(list, heardAt: 1, scope: second)
     await cache.flush()
-    await cache.clear(first)
+    cache.clear(first)
     #expect(cache.sessions(second) != nil)
-    await cache.clearAll()
+    cache.clearAll()
   }
 
   @Test func theMacsFullListPrunesTheSessionsItNoLongerHas() async {
@@ -114,10 +114,53 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     await cache.flush()
     #expect(cache.conversation(scope, "s3") == nil)
     #expect(cache.conversation(scope, "s1")?.items.map(\.id) == ["i0", "i2"])
+    // Unlike 取消配对 this is not final: a session the Mac lists again is cached again.
+    cache.saveConversation(Feed(start: 0, items: [item(1)]), scope: scope, session: "s2")
+    await cache.flush()
+    #expect(cache.conversation(scope, "s2") != nil)
     // A list with nothing in it prunes everything.
     await cache.prune(.empty, scope: scope)
     #expect(cache.conversation(scope, "s1") == nil)
-    await cache.clearAll()
+    #expect(cache.conversation(scope, "s2") == nil)
+    cache.clearAll()
+  }
+
+  @Test func aClearedFolderDoesNotComeBackFromAWriteThatArrivesAfterIt() async {
+    let cache = tempCache()
+    let scope = PhoneCache.scope(pairing(1))
+    cache.saveConversation(Feed(start: 0, items: [item(0)]), scope: scope, session: "s1")
+    await cache.flush()
+    #expect(cache.conversation(scope, "s1") != nil)
+    // 取消配对: the folder goes with the pairing, now.
+    cache.clear(scope)
+    #expect(!FileManager.default.fileExists(atPath: cache.folder(scope).path))
+    // A write that was on its way anyway (a frame that landed a moment before, a session closing) must not bring the
+    // folder — or its file — back.
+    cache.saveConversation(Feed(start: 0, items: [item(1)]), scope: scope, session: "s1")
+    cache.saveSessions(list, heardAt: 1, scope: scope)
+    await cache.flush()
+    #expect(!FileManager.default.fileExists(atPath: cache.folder(scope).path))
+    #expect(cache.conversation(scope, "s1") == nil)
+    #expect(cache.sessions(scope) == nil)
+    cache.clearAll()
+  }
+
+  @Test func anUnpairDuringAFlushLeavesNothingBehind() async {
+    let cache = tempCache()
+    let scope = PhoneCache.scope(pairing(1))
+    // Enough waiting writes that the drain is still writing when the unpair comes: the folder must be deleted after them,
+    // never between them (a write taken, then the folder removed, then that write's createDirectory).
+    for n in 0..<300 {
+      cache.saveConversation(Feed(start: 0, items: (0..<32).map(item)), scope: scope, session: "s\(n)")
+    }
+    async let writing: Void = cache.flush()
+    // The drain is under way: 取消配对 lands in the middle of it.
+    try? await Task.sleep(for: .milliseconds(10))
+    cache.clear(scope)
+    await writing
+    await cache.flush()
+    #expect(!FileManager.default.fileExists(atPath: cache.folder(scope).path))
+    cache.clearAll()
   }
 
   @Test func aFailedWriteLeavesNoHalfFileAndNoSessionNameOutsideTheFolder() async {
@@ -129,7 +172,7 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     #expect(cache.conversation(scope, "../../etc/passwd")?.items.count == 1)
     #expect(PhoneCache.name("../../etc/passwd").contains("/") == false)
     #expect(PhoneCache.name("s1") != PhoneCache.name("s_1"))
-    await cache.clearAll()
+    cache.clearAll()
   }
 }
 
@@ -139,6 +182,26 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     // to; a closed port fails in under 1.5 s, so trying again is cheap.
     var reconnect = Reconnect()
     #expect((0..<6).map { _ in reconnect.next() } == [1, 2, 2, 2, 2, 2])
+  }
+
+  @Test func aMacThatTakesTheLinkAndClosesItSlowsDownAfterThree() {
+    // A Mac that accepts the pairing and drops the link at once (an old daemon, a half-started Wavi): dialling it every
+    // 1–2 s forever is a loop of pairing proofs, so the third in a row goes to 30 s.
+    var reconnect = Reconnect()
+    #expect(reconnect.next() == 1)
+    reconnect.tookAndClosed()
+    #expect(reconnect.next() == 2)
+    reconnect.tookAndClosed()
+    #expect(reconnect.next() == 2)
+    reconnect.tookAndClosed()
+    #expect(reconnect.next() == 30)
+    reconnect.tookAndClosed()
+    #expect(reconnect.next() == 30)
+    // A link that holds — or the phone coming to the foreground, or onto another network — starts the fast waits over.
+    reconnect.opened()
+    #expect(reconnect.closedQuickly == 0)
+    #expect(reconnect.next() == 1)
+    #expect(reconnect.next() == 2)
   }
 
   @Test func aLinkThatOpensStartsTheWaitsOver() {
@@ -183,7 +246,50 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     await model.watch("s1")
     #expect(model.conversation?.feed.items.map(\.id) == ["i8", "i9"])
     #expect(model.conversation?.loading == false)
-    await cache.clearAll()
+    cache.clearAll()
+  }
+
+  @Test func aCachedSessionsExitIsDroppedUntilTheMacSaysOtherwise() async {
+    let cache = tempCache()
+    let pairing = pairing(1)
+    let scope = PhoneCache.scope(pairing)
+    // The list was sent while a 合并到 main was running: that was minutes or hours ago, and an exit it showed then may be
+    // over — the row shows without it (the Mac's snapshot sends it again if it still runs).
+    let shipping = RemoteSession(id: "s1", projectId: "p1", title: "合并这一轮改动", agent: "claude", status: .running,
+      action: "合并到 main", since: 0, activity: 0, branch: "main", model: nil, reply: nil,
+      ship: RemoteShip(kind: "main", title: "合并到 main", agent: "claude", stage: .running, steps: [],
+        texts: RemoteShip.Texts(commit: "合并", title: "合并这一轮改动", body: "", draft: false), fields: [],
+        submitLabel: "提交", submitBlocker: nil, error: nil), shipNotice: nil)
+    cache.saveSessions(RemoteSessionList(projects: list.projects, sessions: [shipping]), heardAt: 1_000, scope: scope)
+    await cache.flush()
+    let model = AppModel(pairing: pairing, cache: cache, connects: false)
+    #expect(model.session("s1")?.ship == nil)
+    // The rest of the row is what the Mac said, and still shows.
+    #expect(model.session("s1")?.title == "合并这一轮改动")
+    #expect(model.session("s1")?.branch == "main")
+    cache.clearAll()
+  }
+
+  @Test func aPruneGoesByTheListItWasQueuedWith() async {
+    let cache = tempCache()
+    let pairing = pairing(1)
+    let scope = PhoneCache.scope(pairing)
+    cache.saveSessions(list, heardAt: 1_000, scope: scope)
+    cache.saveConversation(Feed(start: 0, items: [item(0)]), scope: scope, session: "s2")
+    await cache.flush()
+    let model = AppModel(pairing: pairing, cache: cache, connects: false)
+    #expect(model.sessions.sessions.map(\.id) == ["s1", "s2"])
+    // The Mac's next list no longer has s2. The prune is queued with that list; it must not read the list the model holds
+    // by the time it runs (still s1 and s2 here), which would keep s2's conversation.
+    let prune = model.cacheSessions(RemoteSessionList(projects: list.projects, sessions: [session("s1")]), scope: scope,
+      heardAt: 2_000)
+    await prune?.value
+    await cache.flush()
+    #expect(model.sessions.sessions.map(\.id) == ["s1", "s2"])
+    #expect(cache.conversation(scope, "s2") == nil)
+    #expect(cache.sessions(scope)?.list.sessions.map(\.id) == ["s1"])
+    #expect(cache.sessions(scope)?.heardAt == 2_000)
+    cache.clearAll()
   }
 
   @Test func withoutACacheTheListSaysItIsNotTheLatest() async {
@@ -197,6 +303,6 @@ private func tempCache(_ name: String = UUID().uuidString) -> PhoneCache {
     await model.watch("s1")
     #expect(model.conversation?.feed.items.isEmpty == true)
     #expect(model.conversation?.loading == false)
-    await cache.clearAll()
+    cache.clearAll()
   }
 }

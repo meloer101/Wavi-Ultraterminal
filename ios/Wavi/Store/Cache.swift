@@ -9,6 +9,15 @@
 import CryptoKit
 import Foundation
 
+extension RemoteSession {
+  /// The same session without the exit it was in the middle of: a list kept on disk can be hours old, and a 提交 / 合并 /
+  /// 推送 it showed then may be over. The Mac's snapshot sends the exit again if it still runs (PRD v1.223).
+  var withoutShip: RemoteSession {
+    RemoteSession(id: id, projectId: projectId, title: title, agent: agent, status: status, action: action, since: since,
+      activity: activity, branch: branch, model: model, reply: reply, ship: nil, shipNotice: shipNotice, settings: settings)
+  }
+}
+
 final class PhoneCache: Sendable {
   /// One session's conversation as last written: items `start` … `start + items.count - 1`, the newest ones the phone
   /// has seen.
@@ -101,50 +110,43 @@ final class PhoneCache: Sendable {
     sink.add(data, to: feedFile(scope, session))
   }
 
-  /// The pairing is gone (取消配对, the user's own action): its folder goes now, and a write still waiting for it does not
-  /// bring it back. A Mac that says it does not know this phone keeps its files — the pairing is kept then, the user
-  /// decides (PRD v1.223).
-  func clear(_ scope: String) async {
-    let folder = folder(scope)
-    sink.discard(under: folder)
-    await Task.detached { try? FileManager.default.removeItem(at: folder) }.value
-  }
+  /// The pairing is gone (取消配对, the user's own action): its folder goes now, and neither the writes still waiting for it
+  /// nor a late one bring it back — the pairing is over. A Mac that says it does not know this phone keeps its files
+  /// (`clear` is not called then): the pairing is kept, and the user decides (PRD v1.223).
+  func clear(_ scope: String) { sink.clear(folder(scope)) }
 
   /// Every pairing's folder (a test's clean-up; the app clears one pairing at a time).
-  func clearAll() async {
-    sink.discard(under: root)
-    let root = self.root
-    await Task.detached { try? FileManager.default.removeItem(at: root) }.value
-  }
+  func clearAll() { sink.clear(root) }
 
   /// Writes what is waiting now and returns once it is on disk (a test waits for this; the app never has to).
   func flush() async { await Task.detached { [sink] in sink.drain() }.value }
 
-  /// The Mac's full list: sessions it no longer has cannot be opened again, so their cached conversations go (and a write
-  /// still waiting for one does not land).
+  /// The Mac's full list: sessions it no longer has cannot be opened again, so their cached conversations go, together with
+  /// writes still waiting for them. (A session that comes back to the list can be cached again: unlike 取消配对 this is not
+  /// final.)
   func prune(_ list: RemoteSessionList, scope: String?) async {
     guard let scope else { return }
-    let folder = folder(scope).appendingPathComponent("feed", isDirectory: true)
+    let feed = folder(scope).appendingPathComponent("feed", isDirectory: true)
     let keep = Set(list.sessions.map { PhoneCache.name($0.id) })
-    sink.discard(under: folder, except: keep)
-    await Task.detached {
-      guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
-      for name in names where !keep.contains(name) {
-        try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
-      }
-    }.value
+    await Task.detached { [sink] in sink.prune(feed, keep: keep) }.value
   }
 
-  /// The writes not yet on disk, one per file, and the timer of the current burst. A lock rather than an actor: adding a
-  /// write is synchronous, so one enqueued before 取消配对 cannot land after the folder was deleted.
+  /// The writes not yet on disk (one per file), the timer of the current burst, and the folders that were cleared. One lock
+  /// holds all of it, and every write and deletion happens under it: a file cannot be created inside a folder that a
+  /// 取消配对 or a prune has just removed, because neither the folder nor the write can move between the two.
   private final class Sink: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [URL: Data] = [:]
     private var timer: Task<Void, Never>?
+    /// Folders of pairings that ended: nothing is written under them again (each pairing has its own, so a new one never
+    /// lands here).
+    private var cleared: [String] = []
 
     func add(_ data: Data, to url: URL) {
       lock.lock()
       defer { lock.unlock() }
+      // The pairing ended while this write was on its way: it must not bring the folder back.
+      guard !cleared.contains(where: { url.path.hasPrefix($0) }) else { return }
       pending[url] = data
       // One timer for a burst: the first change starts it, the rest ride along.
       guard timer == nil else { return }
@@ -155,31 +157,47 @@ final class PhoneCache: Sendable {
       }
     }
 
-    /// Every waiting write, off the caller's actor (the file work is what takes the time).
+    /// Every waiting write, off the caller's actor (the file work is what takes the time). The lock is held across the
+    /// writes: a clear or a prune that arrives meanwhile waits, instead of deleting a folder that is being written into.
     func drain() {
       lock.lock()
+      defer { lock.unlock() }
+      timer = nil
       let writes = pending
       pending.removeAll()
-      timer = nil
-      lock.unlock()
       for (url, data) in writes { PhoneCache.write(data, to: url) }
     }
 
-    func discard(under folder: URL) {
-      discard(under: folder, except: [])
+    /// 取消配对: the waiting writes for this pairing are dropped and the folder is deleted, under the one lock — and nothing
+    /// is written under it again.
+    func clear(_ folder: URL) {
+      lock.lock()
+      defer { lock.unlock() }
+      pending = pending.filter { !$0.key.path.hasPrefix(folder.path) }
+      if pending.isEmpty {
+        timer?.cancel()
+        timer = nil
+      }
+      cleared.append(folder.path)
+      try? FileManager.default.removeItem(at: folder)
     }
 
-    /// Drops what is waiting under `folder`, all of it or everything whose file name is not in `except`.
-    func discard(under folder: URL, except keep: Set<String>) {
+    /// The Mac's list: the waiting writes for sessions it does not have are dropped, and so are their files, under the one
+    /// lock. Unlike `clear` this does not block the folder: a session that comes back is cached again.
+    func prune(_ feed: URL, keep: Set<String>) {
       lock.lock()
+      defer { lock.unlock() }
       pending = pending.filter { url, _ in
-        !url.path.hasPrefix(folder.path) || keep.contains(url.lastPathComponent)
+        !url.path.hasPrefix(feed.path) || keep.contains(url.lastPathComponent)
       }
       if pending.isEmpty {
         timer?.cancel()
         timer = nil
       }
-      lock.unlock()
+      guard let names = try? FileManager.default.contentsOfDirectory(atPath: feed.path) else { return }
+      for name in names where !keep.contains(name) {
+        try? FileManager.default.removeItem(at: feed.appendingPathComponent(name))
+      }
     }
   }
 

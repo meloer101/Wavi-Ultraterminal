@@ -160,17 +160,26 @@ final class AppModel {
   /// the conversation it last showed (62F). Nothing written yet leaves the list empty: 63B3.
   private func restore() {
     guard let cached = cache.sessions(cacheScope) else { return }
-    sessions = cached.list
+    // An exit the Mac was in the middle of (提交 / 合并 / 推送) is stale by definition — it may have finished or failed
+    // since; the Mac's snapshot brings it back if it is still running. The rest of the row was true when it was sent.
+    sessions = RemoteSessionList(projects: cached.list.projects, sessions: cached.list.sessions.map(\.withoutShip))
     heardAt = cached.heardAt
-    turnStarts = nextTurnStarts([:], sessions: cached.list.sessions)
+    turnStarts = nextTurnStarts([:], sessions: sessions.sessions)
   }
 
-  /// Writes the list as it was just heard (debounced, off the main actor), and drops the conversations of sessions the
-  /// Mac no longer lists (they cannot be opened again).
+  /// The state this phone just took: the list, whose pairing's folder it belongs to, and when the Mac sent it.
+  @discardableResult
+  func cacheSessions(_ list: RemoteSessionList, scope: String?, heardAt: Double?) -> Task<Void, Never>? {
+    guard let heardAt else { return nil }
+    cache.saveSessions(list, heardAt: heardAt, scope: scope)
+    // The prune runs a turn later, off the main actor, with the list as it is now — not whatever the model holds then.
+    return Task { await cache.prune(list, scope: scope) }
+  }
+
+  /// Writes the list as it was just heard, and drops the cached conversations of sessions the Mac no longer lists (they
+  /// cannot be opened again). Everything is taken here, so the work queued below cannot read a newer state.
   private func cacheSessions() {
-    guard let heardAt else { return }
-    cache.saveSessions(sessions, heardAt: heardAt, scope: cacheScope)
-    Task { await cache.prune(sessions, scope: cacheScope) }
+    cacheSessions(sessions, scope: cacheScope, heardAt: heardAt)
   }
 
   /// Writes a session's conversation as the phone has it (its newest items, see `PhoneCache.capped`).
@@ -209,8 +218,9 @@ final class AppModel {
     client = nil
     clientToken = UUID()
     PairingStore.clear()
-    // The list and the conversations are this Mac's: 取消配对 takes them with the pairing.
-    if let scope = cacheScope { Task { await cache.clear(scope) } }
+    // The list and the conversations are this Mac's: 取消配对 takes them with the pairing, now — before anything else can
+    // queue a write for them.
+    if let scope = cacheScope { cache.clear(scope) }
     cacheScope = nil
     pairing = nil
     link = .offline(.unknown)
