@@ -134,14 +134,6 @@ const en = {
           agent: 'codex'
         },
         {
-          title: 'Login API tests',
-          age: '4m',
-          path: 'acme-web › jacob/login-tests',
-          status: 'Editing tests/auth/login.test.ts',
-          diff: '+84 −3',
-          agent: 'codex'
-        },
-        {
           title: 'Auto-refresh sessions',
           age: '1m',
           path: 'acme-web › jacob/refresh',
@@ -399,14 +391,6 @@ const zh: Copy = {
           path: 'acme-web › jacob/checkout-perf',
           status: '运行 pnpm test checkout',
           diff: '+128 −35',
-          agent: 'codex'
-        },
-        {
-          title: '登录接口测试',
-          age: '4m',
-          path: 'acme-web › jacob/login-tests',
-          status: '编辑 tests/auth/login.test.ts',
-          diff: '+84 −3',
           agent: 'codex'
         },
         {

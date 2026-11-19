@@ -555,6 +555,32 @@ button.keycap {
 
 /* ---------------------------------------------------------------- 02 board */
 
+#board {
+  padding-block: clamp(32px, 7svh, 96px);
+}
+#board h2 {
+  font-size: clamp(40px, 6svh, 64px);
+  line-height: 1.0625;
+}
+/* Shorter than 860px: the board gives up padding, heading size, card padding and multi-line statuses so the screen
+   still fits the viewport. */
+@media (max-height: 859px) {
+  #board {
+    padding-block: 32px;
+  }
+  #board .board-body {
+    font: 400 16px/26px var(--sans);
+  }
+  #board .card {
+    padding: 12px;
+  }
+  #board .card-status {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
 .board-wrap {
   position: relative;
 }
@@ -611,7 +637,7 @@ button.keycap {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
-  margin-top: clamp(32px, 5svh, 64px);
+  margin-top: clamp(24px, 5svh, 64px);
 }
 .col-head {
   display: flex;
@@ -716,10 +742,10 @@ button.keycap {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 48px;
-  margin-top: clamp(32px, 5svh, 72px);
+  margin-top: clamp(24px, 5svh, 72px);
 }
 .fact {
-  padding-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--line-ink);
 }
 .fact h3 {
@@ -969,6 +995,21 @@ button.keycap {
   padding: 40px;
   background: var(--brand);
 }
+@media (max-height: 859px) {
+  #appearance {
+    padding-block: 32px;
+  }
+  #appearance .display-s {
+    font-size: clamp(36px, 5.2svh, 48px);
+    line-height: 1.125;
+  }
+  #appearance .group {
+    padding: 16px 20px;
+  }
+  #appearance .group p {
+    font: 400 13px/20px var(--sans);
+  }
+}
 .look img {
   display: block;
   width: 100%;
@@ -985,6 +1026,21 @@ button.keycap {
 }
 .controls-col h2 {
   margin-top: 20px;
+}
+@media (min-width: 1151px) {
+  .looks {
+    flex: 1 1 560px;
+    max-width: 744px;
+  }
+  .controls-col {
+    flex: 0 0 520px;
+    min-width: 520px;
+  }
+}
+@media (min-width: 1151px) and (max-width: 1415px) {
+  .looks {
+    padding: 32px;
+  }
 }
 .groups {
   margin-top: 32px;
@@ -1328,7 +1384,7 @@ html.js .hero-art.in {
 /* The board lights up: the needs-you cards start neutral, turn brand once the last card has landed, and the
    notification follows 200ms later. */
 .board-wrap {
-  --land: 850ms;
+  --land: 800ms;
 }
 html.js .card[data-reveal] {
   transition:
