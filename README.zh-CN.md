@@ -1,163 +1,144 @@
 <p align="center">
-  <a href="https://wavi.autos/zh/"><img src="docs/assets/readme/banner.jpg" alt="Wavi" width="100%"></a>
-</p>
-
-<h3 align="center">一个人，多线程。</h3>
-
-<p align="center">
-  同时运行多个 Claude Code、Codex 的 macOS 终端。<br>
-  每个 agent 在自己的 git worktree 里干活；Wavi 告诉你哪个在等你、<br>
-  每个改了什么，再把好的结果在本地合并回去。
+  <a href="https://wavi.autos/zh/"><img src="docs/assets/readme/header.zh-CN.svg" alt="Wavi。一个人，多线程。同时带很多个 coding agent 的 macOS 终端：Claude Code、Codex，还有另外 17 家。" width="100%"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><img src="https://img.shields.io/github/v/release/meloer101/Wavi-Ultraterminal?style=flat-square&label=release&labelColor=1a1a1a&color=3a3a3a" alt="最新版本"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-3a3a3a?style=flat-square&logo=apple&logoColor=white&labelColor=1a1a1a" alt="macOS 13+">
-  <img src="https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="Claude Code 与 Codex">
-  <img src="https://img.shields.io/badge/telemetry-none-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="无遥测">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/meloer101/Wavi-Ultraterminal?style=flat-square&labelColor=1a1a1a&color=3a3a3a" alt="MIT 许可"></a>
+  <img src="https://img.shields.io/badge/agents-19-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="19 家 agent">
+  <img src="https://img.shields.io/badge/telemetry-none-3a3a3a?style=flat-square&labelColor=1a1a1a" alt="没有遥测">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/meloer101/Wavi-Ultraterminal?style=flat-square&labelColor=1a1a1a&color=3a3a3a" alt="MIT 许可证"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/meloer101/Wavi-Ultraterminal/releases/latest"><b>下载 macOS 版</b></a>
   &nbsp;·&nbsp; <a href="https://wavi.autos/zh/">官网</a>
-  &nbsp;·&nbsp; <a href="CHANGELOG.md">更新记录</a>
+  &nbsp;·&nbsp; <a href="CHANGELOG.md">更新日志</a>
   &nbsp;·&nbsp; <a href="docs/ROADMAP.md">路线图</a>
   &nbsp;·&nbsp; <a href="README.md">English</a>
 </p>
 
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.png">
-  <img src="docs/assets/readme/hero-light.png" alt="Wavi 侧栏里有六个 agent 会话。Claude Code 在覆盖文件前请求确认，它在侧栏里变成“等你确认”；右侧 Git 图谱给每个 worktree 分支标上对应 agent 的状态。">
-</picture>
+开一个 coding agent 很容易。开五个，就是五个终端、五条互相踩的分支，还有一个权限确认在你忘掉的标签页里等了十分钟。
 
-<p align="center"><sub>真实的 Claude Code 会话在覆盖文件前请求确认，它在侧栏里变成“等你确认”；Git 图谱给每个 worktree 分支标上对应 agent 的状态。</sub></p>
+Wavi 给每个 agent 一个自己的 git worktree，把带队的事收进一个窗口：现在谁在等你，每个改了什么，谁把活派给了谁，好的结果怎么回到 `main`。
 
-## 为什么是 Wavi
+## 最拿得出手的几件事
 
-跑一个 coding agent 很简单。跑五个，就是五个终端、五条互相踩脚的分支，还有一个在你忘掉的标签页里已经等了十分钟的权限确认。
+### agent 给 agent 派活
 
-Wavi 让每个 agent 留在它自己的终端界面里，和 CLI 原本的样子一样，你照常在里面输入和作答。Wavi 补上旁边那些带团队的活：现在谁需要你，每个 worktree 改了什么，测试过没过，以及怎样在不弄坏 `main` 的前提下把最好的结果合并回去。
+哪家 agent 都能用 `wavi run` 把手上的一部分活派给别家：Claude Code 派给 Codex，Codex 派给 Cursor Agent，方向随意。每个子会话有自己的 worktree 和分支。你确认一次，干完的报告自己回到派活的那个会话。GUI 会话里，派活会实时画成一张图。
 
-## 工作流程
+<img src="docs/assets/readme/feature-dispatch.zh-CN.png" alt="一个 Claude Code 会话派出三个会话，分别交给 Codex、Claude Code 和 Cursor Agent。图上一个在运行，一个等你处理，一个已完成并送回报告。" width="100%">
 
-<img src="docs/assets/readme/workflow.jpg" alt="Git 图谱上的六步：启动 agent、在各自的 worktree 里并行、提前发现冲突、审阅、合并、收尾。worktree 删掉，分支保留。">
+### agent teams，画成一条时间线
 
-## 功能
+Claude Code 起 agent team 时，Wavi 在 lead 的终端下面把它画成泳道：谁在干活，谁闲着，谁在等你，队友之间发过的每一条消息。侧栏列出每个队友和它用的模型。
 
-### 谁在等你，一眼就知道
+<img src="docs/assets/readme/feature-teams.zh-CN.png" alt="五个 agent 的队伍画成时间线上的泳道，箭头是它们之间的消息：第 1 版好了、退回、第 2 版好了。" width="100%">
 
-每个会话用图形加文字显示状态，从不只靠颜色；旁边是当前动作（“编辑 auth.ts”“运行 pnpm test”）和已经等了多久。总览（<kbd>⇧⌘A</kbd>）跨项目按需要你做什么分组：等你处理、出错、待审阅、运行中、空闲。agent 请求权限时有系统通知和 Dock 角标，<kbd>⌘J</kbd> 跳到下一个需要你的会话。
+### issue 进来，PR 出去
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/overview-dark.png">
-  <img src="docs/assets/readme/overview-light.png" alt="总览把六个会话按状态分组：一个出错，一个待审阅，四个运行中。">
-</picture>
+看板的 GitHub 页签列出各个项目打开的 issue 和 PR。把其中一个交给 agent，Wavi 就在新的 worktree 里开一个会话，任务是这条 issue 的正文和评论；交 PR 时会话直接接在 PR 的分支上。检查失败、review 评论也这样交回去。合不合，你说了算。
 
-### 一个 agent 一个 worktree，或者一个任务交给几个 agent
+<img src="docs/assets/readme/feature-github.zh-CN.png" alt="看板的 GitHub 页签，三个 issue 和三个 PR；新建会话面板里已经填好 issue 139 的任务。" width="100%">
 
-<kbd>⌘N</kbd> 在后台新建 worktree，按 `.worktreeinclude` 复制被 git 忽略的文件（如 `.env`），在里面启动 Claude Code、Codex 或普通终端。选“多个”，就把同一个任务同时交给 2–4 个 agent，Claude Code 和 Codex 可以混着来；每份都在同一个基线上有自己的 worktree。做完后并排比较，合并最好的那一份。
+### 分屏、多格、多窗口
 
-<img src="docs/assets/readme/compare.jpg" alt="同一个任务的三份结果并排比较：改动行数、测试、类型检查和 lint 结果，每份都能直接合并。">
+两到四个会话并排看；把其中一个拖到窗口外，它就是一个新窗口。项目也可以有自己的窗口。会话挪到哪儿，agent 都照跑，重启后排法还在。
 
-### 审阅 diff，在行上回话
+<img src="docs/assets/readme/feature-windows.zh-CN.png" alt="三个 Wavi 窗口：分成两格的主窗口、拖出去的一格、一个 GUI 会话窗口。" width="100%">
 
-变更面板按未提交 / 已提交显示相对基线的改动，统一或并排。在任意一行写评论，Wavi 把评论合成一条带代码引用的说明，放进 agent 的输入行。也可以让 agent 做一次只读审阅，还可以让另一家来审（Codex 审 Claude 写的，反之亦然），发现的问题按 P0–P3 变成同样的行内评论。
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/review-dark.png">
-  <img src="docs/assets/readme/review-light.png" alt="变更面板里的 CSS diff，第 4 行有一条行内评论，可以发给 Claude。">
-</picture>
-
-### 本地合并，失败也不留半截
-
-<kbd>⇧⌘M</kbd> 先检查领先 / 落后、冲突和未提交的改动，有 `test` 脚本时先跑它；然后选 squash、merge 或 rebase。合并在内存里完成，基线分支到最后一步才前移，失败时仓库保持原样。后台的冲突雷达把活跃的 worktree 两两比对、并和基线比对，在两个 agent 撞车之前提醒你。
+## 其余的
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/new-session-dark.png">
-        <img src="docs/assets/readme/new-session-light.png" alt="新建会话面板：同一个任务交给两份 Claude Code 和一份 Codex。">
-      </picture>
-      <p align="center"><sub><kbd>⌘N</kbd> 一个任务，三个 worktree：两份 Claude Code，一份 Codex</sub></p>
+      <h4>谁在等你，扫一眼就知道</h4>
+      每个会话的状态是一个图形加一个词，不只靠颜色，旁边写着它正在做什么、等了多久。看板（<kbd>⇧⌘A</kbd>）把所有项目的会话按需要你做什么分组。<kbd>⌘J</kbd> 跳到下一个等你的。
     </td>
     <td width="50%" valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/merge-dark.png">
-        <img src="docs/assets/readme/merge-light.png" alt="合并面板：领先 main 2 个提交，选中 squash，合并后删除 worktree、保留分支。">
-      </picture>
-      <p align="center"><sub><kbd>⇧⌘M</kbd> 先检查再合并，分支保留</sub></p>
+      <h4>GUI 还是 CLI，每个会话自己选</h4>
+      一个会话可以是 agent 自己的终端界面，和 CLI 原样一致；也可以是 Wavi 画的对话：工具调用收成一行，diff 着色，文件可点。每个会话各选各的，两种混着开。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>一道题，多几份答案</h4>
+      <kbd>⌘N</kbd> 可以把同一件事同时交给两到四个 agent，各家混着来，每个从同一个基线开自己的 worktree。结果并排比，挑最好的那份合进去。
+    </td>
+    <td valign="top">
+      <h4>先审阅，再在本地合并</h4>
+      在 diff 的任意一行写评论，Wavi 把它们连同代码位置一起交给 agent。<kbd>⇧⌘M</kbd> 先查冲突、跑你的测试；基线分支到最后一步才动，失败时仓库和之前一样。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>冲突雷达</h4>
+      Wavi 在后台把活跃的 worktree 两两比较，也和基线比较，在两个 agent 撞上之前提醒你。
+    </td>
+    <td valign="top">
+      <h4>关了窗口，agent 照跑</h4>
+      每个终端由后台守护进程持有。<kbd>⌘Q</kbd> 退出后 agent 继续跑，重新打开 Wavi 回到同一屏。重启电脑后，会话接着原来的对话。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>定时任务</h4>
+      按时间在新的 worktree 里开会话，或者给空闲的会话发消息：每隔 N 分钟、每天、工作日、每周，或只跑一次。
+    </td>
+    <td valign="top">
+      <h4>长成你喜欢的样子</h4>
+      窗口材质有玻璃、实色、实心玻璃，可调不透明度，可放背景图；中英文字体分开设，终端主题可导入。界面有中文和英文。
     </td>
   </tr>
 </table>
 
-**同一条链路上的还有**
+## 支持的 agent
 
-- **PR**：创建 PR 时附上这一轮的检查和审阅作为证据；PR 上没解决的评论回到对应的行上；在 GitHub 合并时锁定你审阅过的那个提交。
-- **这一轮的检查**：agent 这一轮跑过哪些测试、lint、类型检查，是否通过。从 hook 读出，不花 token。
-- **归档**：停掉会话，未提交的改动存进私有 ref，把 worktree 收起；之后恢复，agent 接上原来的对话。
+Claude Code · Codex · OpenCode · Gemini CLI · Qwen Code · Pi · Copilot CLI · Cursor Agent · Grok · Kimi Code · Droid · Amp · Kiro · Crush · Goose · Cline · Antigravity · Auggie · CodeBuddy
 
-### 一个像样的终端该有的
+这 19 家都能派活，也都能被派活。Claude Code 和 Codex 接得最深：状态来自它们自己的 hooks，有 context 和额度、审阅，重启后能接上原来的对话。其他命令行工具在普通终端会话里运行。
 
-- **agent 比窗口活得久。** 所有 PTY 由后台守护进程托管：关窗口或 <kbd>⌘Q</kbd> 之后 agent 继续运行，再打开时接回同一个进程和屏幕；<kbd>⌥⌘Q</kbd> 才结束所有会话。重启电脑后，你打开某个会话时它用 `--resume` 接上原来的对话。
-- **agent 之间互相派活。** agent 可以开新的 Claude Code 或 Codex 会话，每个都在自己的 worktree 里、带着自己的任务，做完后结果回到派活的会话。每一批都先等你确认。
-- **context 与额度。** 会话头显示 context 用了多少（以 agent 自己的自动压缩点为刻度）、todo 进度和 Claude / Codex 的额度窗口；用到 75%、90% 和用完时各提醒一次。
-- **右侧栏。** 带 agent 状态的 Git 图谱、每个 worktree 一个内置浏览器（开发服务器和终端里的链接）、带预览的文件树。终端输出里的 `src/app.ts:42` 点一下就跳到那一行。
-- **分屏与多窗口。** 2–4 个会话并排，或者把一个拖出去单独成窗口；重启后布局都会恢复。
-- **把中文做对的终端。** xterm.js + WebGL 渲染；英文字体和中文字体分开设置，中文严格占两格；浅色 / 深色主题，<kbd>⌘K</kbd> 跳到任何地方，<kbd>⌘F</kbd> 搜索。
+## 默认不外传
 
-## 默认私密
-
-- **不需要账号，没有服务器，没有遥测。** Wavi 每天问一次 GitHub 有没有新版本；除此之外只在你触发的 git 命令里联网，走你自己的 git 配置。
-- **不改你的 agent 配置。** hooks 在每次启动时通过命令行参数传入（Claude 用 `--settings`，Codex 用 `-c`），从不写 `~/.claude/settings.json` 或 `~/.codex/`。Wavi 不绕过 Codex 的 hook 信任，只按 hash 信任它自己的那几条。
-- **不替你花 token。** 行内评论、冲突说明和 `/compact` 都只放进 agent 的输入行，由你按回车。会自动花额度的功能（比如合并前自动审阅）都在设置 · 自动化里，默认关闭。
-- **不用 `git stash`。** 归档的改动存进 `refs/wavi/archive/<id>`，不会碰到其他 worktree 的 stash 列表。
+- **没有账号，没有服务器，没有遥测。** Wavi 每天向 GitHub 查一次新版本。除此之外，只有你触发的 git 和 GitHub 命令会联网，用的是你自己的凭据。
+- **不碰你的 agent 配置。** hooks 在每次启动时传入，不写进 `~/.claude/settings.json` 和 `~/.codex/`。
+- **不替你做决定。** 合并、推送、批准权限都由你来。自动的事都在 设置 · 自动化 里，默认关闭。
 
 ## 安装
 
 1. 在 [Releases](https://github.com/meloer101/Wavi-Ultraterminal/releases/latest) 下载 dmg：Apple 芯片选 `arm64`，Intel 选 `x64`。
-2. 打开 dmg，把 Wavi 拖进「应用程序」。发布版用 Developer ID 签名并经过 Apple 公证。
-3. 安装并登录 [Claude Code](https://docs.claude.com/en/docs/claude-code) 或 [Codex](https://github.com/openai/codex) 命令行。都没装也能当普通终端用。
+2. 打开后把 Wavi 拖进「应用程序」。安装包用 Developer ID 签名，并经过 Apple 公证。
+3. 至少装好并登录一家 agent，例如 [Claude Code](https://docs.claude.com/en/docs/claude-code) 或 [Codex](https://github.com/openai/codex)。一家都没有时，Wavi 仍然可以当终端用。
 
-需要 macOS 13 或更高。有新版本时 Wavi 会提醒你，下载后覆盖安装即可。
-
-## 支持的 agent
-
-| | 状态与通知 | context 与额度 | 审阅、派活、恢复 |
-|---|:---:|:---:|:---:|
-| **Claude Code** | ✓ | ✓ | ✓ |
-| **Codex** | ✓ | ✓ <sup>1</sup> | ✓ |
-| 其他 CLI | 在普通终端会话里运行 | – | – |
-
-<sup>1</sup> Codex 的额度还没有在真实 ChatGPT 账号上验证过；用 API key 登录时 Codex 只提供 context。
+需要 macOS 13 或更高版本。有新版本时 Wavi 会告诉你。
 
 ## 常见问题
 
 <details>
 <summary><b>和 tmux、终端标签页有什么不同？</b></summary>
 <br>
-标签页只给你看终端。Wavi 知道每个终端里的 agent 在做什么：它读 agent 自己的 hook，分得清在等你、在运行还是做完了；git 那一侧也归它管，包括 worktree、diff、审阅、合并和归档。你不用再挨个翻标签页。
+标签页只给你看终端。Wavi 知道每个终端里的 agent 在做什么，并且管 git 这一侧：worktree、diff、审阅、合并、归档。你不用再挨个标签页去看。
 </details>
 
 <details>
-<summary><b>Wavi 会把我的代码发到哪里吗？</b></summary>
+<summary><b>Wavi 会把我的代码发到别处吗？</b></summary>
 <br>
-不会。Wavi 没有服务器，你的代码只会去你的 agent 和 git 远程本来就会去的地方。额度读数由 CLI 用你自己的登录查询，不发模型请求。
+不会。Wavi 没有服务器。你的代码只会去 agent 和 git 远程本来就会发去的地方。
 </details>
 
 <details>
-<summary><b>会改动我的 Claude Code 或 Codex 配置吗？</b></summary>
+<summary><b>它会改我的 Claude Code 或 Codex 配置吗？</b></summary>
 <br>
-不会。Wavi 需要的一切都在每次启动时通过命令行传入。在 Wavi 外面运行 <code>claude</code> 或 <code>codex</code>，一切照旧。
+不会。Wavi 需要的东西都在每次启动时通过命令行传入。在 Wavi 之外运行 <code>claude</code> 或 <code>codex</code>，一切照旧。
 </details>
 
 <details>
-<summary><b>还不支持什么？</b></summary>
+<summary><b>现在还做不到什么？</b></summary>
 <br>
-只有 macOS 版。状态、通知和各项指标只适配了 Claude Code 和 Codex。接下来要做什么见<a href="docs/ROADMAP.md">路线图</a>。
+只支持 macOS。接下来做什么见<a href="docs/ROADMAP.md">路线图</a>。
 </details>
 
 ## 开发
@@ -166,20 +147,20 @@ Wavi 让每个 agent 留在它自己的终端界面里，和 CLI 原本的样子
 
 ```bash
 npm install
-npm run dev          # 开发版，带热更新，用独立的 Wavi Dev 配置
-npm run check        # typecheck + lint + 单元测试
+npm run dev          # 带热更新的开发版，使用独立的 "Wavi Dev" 配置
+npm run check        # 类型检查 + lint + 依赖规则 + 单元测试
 npm run test:e2e     # 构建并运行 Electron 端到端测试
 npm run dist         # 打包 arm64 / x64 的 dmg 和 zip 到 release/
 ```
 
-产品要做成什么样见 [docs/PRD.md](docs/PRD.md)，进度见 [docs/ROADMAP.md](docs/ROADMAP.md)，其余见 [CONTRIBUTING.md](CONTRIBUTING.md)。遇到问题或想要某个功能，请[提交 issue](https://github.com/meloer101/Wavi-Ultraterminal/issues/new/choose)，有中文模板；附上 Wavi、macOS、`claude --version` 和 `codex --version` 最有用。
+产品规格在 [docs/PRD.md](docs/PRD.md)，进度在 [docs/ROADMAP.md](docs/ROADMAP.md)，其余见 [CONTRIBUTING.md](CONTRIBUTING.md)。发现 bug 或想要新功能，请[提 issue](https://github.com/meloer101/Wavi-Ultraterminal/issues/new/choose)。
 
-## 许可
+## 许可证
 
-[MIT](LICENSE)。第三方代码和素材见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[MIT](LICENSE)。第三方代码和素材列在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 <br>
 
 <p align="center">
-  <img src="docs/assets/readme/branch-out-merge-in.jpg" alt="Branch out. Merge in." width="100%">
+  <a href="https://wavi.autos/zh/"><img src="docs/assets/readme/footer.zh-CN.svg" alt="分头开工，合到一处。wavi.autos" width="100%"></a>
 </p>
