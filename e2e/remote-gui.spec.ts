@@ -1,20 +1,24 @@
 // 手机远程 and GUI sessions (PRD F22 / F23): a session the phone starts runs as a GUI session whenever its agent has one,
 // so the phone's 会话设置 (model, effort, 模式) are the agent's own pickers from the start — before the first message —
 // and change by button, not by typing into a TUI; a first message typed in 新建会话 still reaches the agent. A restored
-// GUI session nobody has shown yet starts when the phone opens it (PRD F22 v1.161). Against the fake headless Claude of src/main/gui/fixtures, through the stand-in phone (test-phone.ts).
+// GUI session nobody has shown yet starts when the phone opens it (PRD F22 v1.161). And the GUI session's prompts
+// (PRD F22 v1.220 ①): the phone answers the permission, question and plan the agent asks, with the same GuiAnswer the
+// desktop card sends, so the agent goes on and the Mac's card closes (and the other way round). Against the fake
+// headless Claude, Codex and ACP agent of src/main/gui/fixtures, through the stand-in phone (test-phone.ts).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RemoteSession, RemoteStatus } from '../src/shared/remote'
+import type { RemotePrompt, RemoteSession, RemoteStatus } from '../src/shared/remote'
 import { pairPhone, TestPhone } from '../src/main/remote/test-phone'
 import { outerClaudeEnv } from './fake-claude'
 import { launchApp, setWindowSize } from './launch'
 
 const WITHIN = { timeout: 20_000 }
-const FAKE = join(process.cwd(), 'src', 'main', 'gui', 'fixtures', 'fake-claude.mjs')
+const SOON = { timeout: 1_000 }
+const FIXTURES = join(process.cwd(), 'src', 'main', 'gui', 'fixtures')
 
 interface Hooks {
   tr: { settings: { update(patch: unknown): Promise<unknown> }; ui: { openSettings(): void }; remote: { status(): Promise<RemoteStatus> } }
@@ -43,8 +47,10 @@ test.describe('手机远程 · GUI sessions', () => {
   const profile = join(root, 'profile')
   const argsFile = join(root, 'claude-args.json')
   for (const dir of [bin, zdot, project, profile]) mkdirSync(dir)
-  writeFileSync(join(bin, 'claude'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`)
-  chmodSync(join(bin, 'claude'), 0o755)
+  for (const [name, fake] of [['claude', 'fake-claude.mjs'], ['codex', 'fake-codex.mjs'], ['grok', 'fake-acp.mjs']] as const) {
+    writeFileSync(join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${join(FIXTURES, fake)}" "$@"\n`)
+    chmodSync(join(bin, name), 0o755)
+  }
   writeFileSync(join(zdot, '.zshrc'), `export PATH="${bin}:$PATH"\nexport FAKE_ARGS_FILE="${argsFile}"\n`)
 
   let app: ElectronApplication
@@ -60,6 +66,30 @@ test.describe('手机远程 · GUI sessions', () => {
   }
   const kinds = async (id: string) => (await phoneRow(id))?.settings?.items.map((i) => i.kind) ?? []
   const current = async (id: string, kind: string) => (await phoneRow(id))?.settings?.items.find((i) => i.kind === kind)?.current
+  /** Everything the phone would draw as a sheet or put in the Live Activity, as of now. */
+  const phonePrompts = async (): Promise<RemotePrompt[]> => {
+    const answer = await phone.request({ type: 'snapshot' })
+    return answer.ok ? ((answer.data as { prompts: RemotePrompt[] }).prompts ?? []) : []
+  }
+  type Prompt<K extends RemotePrompt['kind']> = Extract<RemotePrompt, { kind: K }>
+  const promptOf = async (sessionId: string, kind: RemotePrompt['kind']) => (await phonePrompts()).find((p) => p.sessionId === sessionId && p.kind === kind)
+  /** A prompt for the session with that kind, once the phone's list has it. */
+  const waitPrompt = async <K extends RemotePrompt['kind']>(sessionId: string, kind: K): Promise<Prompt<K>> => {
+    let found: Prompt<K> | undefined
+    await expect.poll(async () => (found = (await promptOf(sessionId, kind)) as Prompt<K> | undefined)?.id, WITHIN).toBeTruthy()
+    return found!
+  }
+  /** The session's conversation in the Mac's window (opening it there), whose card a prompt shows as. */
+  const showOnMac = async (id: string) => {
+    const row = page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`)
+    await row.click()
+    await expect(row).toHaveAttribute('aria-current', 'true', WITHIN)
+    await expect(page.getByTestId('gui-composer')).toBeVisible(WITHIN)
+  }
+  const card = () => page.getByTestId('gui-permission')
+  const planCard = () => page.getByTestId('gui-plan')
+  const feed = () => page.locator('[data-region="gui-feed"]')
+  const send = (id: string, text: string) => phone.request({ type: 'send', session: id, text, photos: [] })
 
   test.beforeAll(async () => {
     execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: project })
@@ -157,5 +187,156 @@ test.describe('手机远程 · GUI sessions', () => {
     // It starts with the agent's last pick (Haiku, from 新建会话 above), which has no effort levels: no effort row.
     await expect.poll(() => kinds('s1'), WITHIN).toEqual(['model', 'permission'])
     expect(await current('s1', 'model')).toBe('haiku')
+  })
+
+  // PRD F22 v1.220 ①, acceptance ⑨: the GUI session's own prompts (no hook is held for them), answered with the same
+  // GuiAnswer the desktop card sends — whichever side answers first, the other's card goes.
+  test('the phone allows a GUI permission: the agent goes on and the Mac’s card closes', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'please write a file')).toMatchObject({ ok: true })
+    await expect(card()).toBeVisible(WITHIN)
+    const prompt = await waitPrompt(created, 'permission')
+    // A GUI prompt is answerable while it is open: nothing is held for it, the driver takes the answer.
+    expect(prompt).toMatchObject({ kind: 'permission', tool: 'Write', summary: 'a.txt', answerable: true, canAllowAlways: true })
+    expect(prompt.input).toEqual({ file_path: 'a.txt' })
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    // The Mac's card closes as it does for a click on it, and the phone's list drops the ask.
+    await expect(card()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    // The agent went on with the turn.
+    await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone denies a GUI permission with a reason: the agent gets it and the turn goes on', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'please write another file')).toMatchObject({ ok: true })
+    await expect(card()).toBeVisible(WITHIN)
+    const prompt = await waitPrompt(created, 'permission')
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'deny', message: '改完再跑' })).toMatchObject({ ok: true })
+    await expect(card()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    // The reason reached the agent, as the reason written on the Mac's card does: the fake prints it as the call's
+    // result, which the tool row shows when it opens.
+    await expect(feed()).toContainText('Refused', WITHIN)
+    await feed().getByRole('button', { name: /写入 a\.txt/ }).last().click()
+    await expect(feed().locator('pre').filter({ hasText: '改完再跑' })).toBeVisible(WITHIN)
+  })
+
+  test('the Mac answers first: the phone’s panel goes within 1 s and can no longer answer it', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'please write one more')).toMatchObject({ ok: true })
+    await expect(card()).toBeVisible(WITHIN)
+    const prompt = await waitPrompt(created, 'permission')
+    await card().getByRole('button', { name: /^允许/ }).click()
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect(card()).toHaveCount(0, WITHIN)
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-once' })).toMatchObject({ ok: false })
+    await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone answers a GUI question: the agent goes on with the answers', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'ask me about the database')).toMatchObject({ ok: true })
+    const prompt = await waitPrompt(created, 'question')
+    expect(prompt.questions?.map((q) => q.question)).toEqual(['用哪个数据库', '要哪些检查'])
+    expect(prompt.answerable).toBe(true)
+    expect(await phone.request({ type: 'answer', prompt: prompt.id, answers: { 用哪个数据库: 'Postgres', 要哪些检查: 'lint' } })).toMatchObject({ ok: true })
+    await expect(card()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone approves a GUI plan (批准并自动接受编辑): the agent goes on and the Mac’s plan card closes', async () => {
+    await showOnMac(created)
+    expect(await send(created, 'plan next')).toMatchObject({ ok: true })
+    const prompt = await waitPrompt(created, 'plan')
+    // The plan itself reaches the phone (Figma 100's sheet is not drawn yet; the data path is in place).
+    expect(prompt.plan).toContain('Set-Cookie')
+    expect(prompt.answerable).toBe(true)
+    await expect(planCard()).toBeVisible(WITHIN)
+    expect(await phone.request({ type: 'plan', prompt: prompt.id, decision: 'approve-auto' })).toMatchObject({ ok: true })
+    // Both cards go at once (the driver settles the ask), and the plan's mode switch took effect for the session.
+    await expect(planCard()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect.poll(() => current(created, 'permission'), WITHIN).toBe('accept-edits')
+    await expect(feed()).toContainText('Wrote it', WITHIN)
+  })
+
+  test('the phone keeps planning: the reason reaches the agent and the session stays in plan mode', async () => {
+    // Plan mode first, as the Mac's own 模式 menu would put it there.
+    expect(await phone.request({ type: 'set-setting', session: created, kind: 'permission', value: 'plan' })).toMatchObject({ ok: true })
+    await expect.poll(() => current(created, 'permission'), WITHIN).toBe('plan')
+    await showOnMac(created)
+    expect(await send(created, 'plan next again')).toMatchObject({ ok: true })
+    const prompt = await waitPrompt(created, 'plan')
+    expect(await phone.request({ type: 'plan', prompt: prompt.id, decision: 'keep-planning', message: '先把测试补上' })).toMatchObject({ ok: true })
+    await expect(planCard()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    // Still planning: 继续规划 leaves the mode alone.
+    expect(await current(created, 'permission')).toBe('plan')
+    await expect(feed()).toContainText('Refused', WITHIN)
+  })
+
+  test('a Codex GUI session’s approval is answered from the phone', async () => {
+    const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'codex', base: 'main', branch: 'phone-codex' }, 30_000)
+    expect(answer).toMatchObject({ ok: true })
+    const id = (answer as { data: { session: string } }).data.session
+    await showOnMac(id)
+    // Its pickers are in once `codex app-server` has initialized: the agent takes a message from then on.
+    await expect.poll(() => kinds(id), WITHIN).not.toEqual([])
+    expect(await send(id, 'run a command')).toMatchObject({ ok: true })
+    // Codex asks through `item/commandExecution/requestApproval` (a `GuiPrompt`, not a hook).
+    const prompt = await waitPrompt(id, 'permission')
+    expect(prompt).toMatchObject({ kind: 'permission', tool: 'Bash', summary: 'ls', answerable: true, canAllowAlways: true })
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    await expect(card()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect(feed()).toContainText('Done', WITHIN)
+  })
+
+  test('two Codex GUI sessions ask at once: answering one leaves the other’s answerable', async () => {
+    const start = async (branch: string): Promise<string> => {
+      const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'codex', base: 'main', branch }, 30_000)
+      expect(answer).toMatchObject({ ok: true })
+      const id = (answer as { data: { session: string } }).data.session
+      await expect.poll(() => kinds(id), WITHIN).not.toEqual([])
+      return id
+    }
+    const first = await start('phone-codex-a')
+    const second = await start('phone-codex-b')
+    expect(await send(first, 'run a command')).toMatchObject({ ok: true })
+    expect(await send(second, 'run a command')).toMatchObject({ ok: true })
+    const a = await waitPrompt(first, 'permission')
+    const b = await waitPrompt(second, 'permission')
+    // Both app-servers number their first request the same way; the phone must still tell the two apart.
+    expect(a.id).not.toBe(b.id)
+    expect(a.id.split(':').pop()).toBe(b.id.split(':').pop())
+    expect(await phone.request({ type: 'permission', prompt: a.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    // Only the answered session goes on: the other still waits, and its prompt can still be answered.
+    await expect.poll(async () => (await promptOf(first, 'permission'))?.id, WITHIN).toBeUndefined()
+    const waiting = await promptOf(second, 'permission')
+    expect(waiting?.id).toBe(b.id)
+    expect(waiting?.answerable).toBe(true)
+    expect(await phone.request({ type: 'permission', prompt: b.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+  })
+
+  test('an ACP GUI session’s permission is answered from the phone', async () => {
+    const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'grok', base: 'main', branch: 'phone-acp' }, 30_000)
+    expect(answer).toMatchObject({ ok: true })
+    const id = (answer as { data: { session: string } }).data.session
+    await showOnMac(id)
+    // `session/new` brought its pickers: the agent takes a message from then on.
+    await expect.poll(() => kinds(id), WITHIN).not.toEqual([])
+    expect(await send(id, 'run ls')).toMatchObject({ ok: true })
+    // An ACP agent offers its own options (`allow_once` / `reject_once` here, no 总是允许).
+    const prompt = await waitPrompt(id, 'permission')
+    expect(prompt).toMatchObject({ kind: 'permission', tool: 'Bash', summary: 'ls', answerable: true, canAllowAlways: false })
+    // 总是允许 was not offered: the phone's button says so, rather than that someone else answered it.
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-always' })).toMatchObject({ ok: false, error: '这个请求没有这个选项' })
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    await expect(card()).toHaveCount(0, SOON)
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+    await expect(feed()).toContainText('a.txt', WITHIN)
   })
 })

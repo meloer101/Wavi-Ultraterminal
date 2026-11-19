@@ -29,6 +29,7 @@ import {
 import { detectAgents } from '../agents-installed'
 import { appWindows } from '../app-windows'
 import { changes, fileDiff } from '../git-graph'
+import { answerGuiPrompt, isGuiSession, setGuiPrompts } from '../gui'
 import { answerFromRemote, promptHeld, respondFromRemote, setRemoteHooks, transcriptSource } from '../hooks'
 import { claudeTranscriptPath, defaultAgentDataDirs } from '../hooks/agent-title'
 import { getSettings, onSettingsChange } from '../settings'
@@ -36,7 +37,9 @@ import { newSessionInfo } from '../worktree-create'
 import { identityFromPem, identityToPem, newIdentity, type Identity } from './crypto'
 import { DeviceStore, type StoredDevice } from './devices'
 import { FeedHub, type FeedSource } from './feed'
+import { GuiPrompts, optionFor, planAnswer, questionAnswer } from './gui-prompts'
 import { PhotoError, savePhotos } from './photos'
+import { PromptPusher } from './prompt-push'
 import { RemoteServer, type RemoteConnection } from './server'
 import { defineMessages, pick as pickLang } from '@shared/i18n'
 
@@ -49,6 +52,7 @@ const M = defineMessages({
     handled: '已经在终端里处理了',
     answered: '已经在终端里回答了',
     terminalOnly: '这个问题现在只能在终端里回答',
+    noOption: '这个请求没有这个选项',
     noProject: '项目不存在',
     notRepo: '不是 git 仓库',
     noBase: '没有可对比的基线分支',
@@ -62,6 +66,7 @@ const M = defineMessages({
     handled: 'Already handled in the terminal',
     answered: 'Already answered in the terminal',
     terminalOnly: 'This question can only be answered in the terminal now',
+    noOption: "This request doesn't offer that option",
     noProject: "The project doesn't exist",
     notRepo: 'Not a git repository',
     noBase: 'No base branch to compare with',
@@ -74,6 +79,8 @@ let running: { port: number } | null = null
 let lastError: string | undefined
 let windowSessions: RemoteWindowSessions = { projects: [], sessions: [], folders: {}, roots: {} }
 const prompts = new Map<string, PendingPrompt>()
+/** The GUI sessions' open prompts (PRD F22 v1.220 ①): the drivers' own asks, answered with the desktop card's GuiAnswer. */
+const guiPrompts = new GuiPrompts()
 let ownerOf: (sessionId: string) => WebContents | null = () => null
 let mainWindow: () => WebContents | null = () => null
 let macName = hostname().replace(/\.local$/, '')
@@ -254,7 +261,9 @@ const feed = new FeedHub({
 
 async function visiblePrompts(): Promise<RemotePrompt[]> {
   const list = [...prompts.values()].filter((p) => knownSession(p.sessionId))
-  return Promise.all(list.map(async (p) => ({ ...p, answerable: await promptHeld(p.id) })))
+  const hook = await Promise.all(list.map(async (p) => ({ ...p, answerable: await promptHeld(p.id) })))
+  // A GUI session's prompt is answerable while it is open: the driver takes the answer, nothing is held for it.
+  return [...hook, ...guiPrompts.list(knownSession)].sort((a, b) => a.createdAt - b.createdAt)
 }
 
 const phoneList = () => ({ projects: windowSessions.projects, sessions: windowSessions.sessions })
@@ -298,11 +307,37 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
         ? askWindow(ownerOf(request.session), { type: 'set-setting', session: request.session, kind: request.kind, value: request.value })
         : notFound()
     case 'permission': {
+      // A GUI session first: its prompt is the driver's own ask, and the answer is the desktop card's (PRD F22 v1.220 ①).
+      const gui = guiPrompts.get(request.prompt)
+      if (gui) {
+        const optionId = optionFor(gui.prompt, request.decision)
+        // Nothing of that kind was offered (an ACP agent with no 总是允许): not "handled", which would say it was answered.
+        if (!optionId) return remoteFail(pickLang(M).noOption)
+        const answered = answerGuiPrompt(gui.sessionId, {
+          kind: 'permission',
+          // The driver's own id, not the phone's: the phone's has the session in front of it.
+          id: gui.prompt.id,
+          optionId,
+          ...(request.message ? { message: request.message } : {})
+        })
+        return answered ? { ok: true } : remoteFail(pickLang(M).handled)
+      }
       const prompt = prompts.get(request.prompt)
       if (!prompt || prompt.kind !== 'permission') return remoteFail(pickLang(M).handled)
       return (await respondFromRemote(request.prompt, request.decision)) ? { ok: true } : remoteFail(pickLang(M).handled)
     }
+    case 'plan': {
+      const gui = guiPrompts.get(request.prompt)
+      if (!gui) return remoteFail(pickLang(M).handled)
+      const answer = planAnswer(gui.prompt, request.decision, request.message)
+      return answer && answerGuiPrompt(gui.sessionId, answer) ? { ok: true } : remoteFail(pickLang(M).handled)
+    }
     case 'answer': {
+      const gui = guiPrompts.get(request.prompt)
+      if (gui) {
+        const answer = questionAnswer(gui.prompt, request.answers)
+        return answer && answerGuiPrompt(gui.sessionId, answer) ? { ok: true } : remoteFail(pickLang(M).answered)
+      }
       const prompt = prompts.get(request.prompt)
       if (!prompt || prompt.kind !== 'question') return remoteFail(pickLang(M).answered)
       return (await answerFromRemote(request.prompt, request.answers)) ? { ok: true } : remoteFail(pickLang(M).terminalOnly)
@@ -369,9 +404,15 @@ function broadcastSessions(): void {
   }, 250)
 }
 
+/**
+ * The prompt list the phone gets: built once per change, and an older build never lands after a newer one (each hook
+ * prompt's "is it held" is awaited, so two builds overlap); an unchanged list is not pushed again.
+ */
+const promptPusher = new PromptPusher<RemotePrompt[]>((data) => server?.broadcast({ event: 'prompts', data }))
+
 function broadcastPrompts(): void {
   if (!server) return
-  void visiblePrompts().then((data) => server?.broadcast({ event: 'prompts', data }))
+  void promptPusher.push(visiblePrompts)
 }
 
 async function apply(): Promise<void> {
@@ -382,6 +423,7 @@ async function apply(): Promise<void> {
     running = null
     feed.stop()
     prompts.clear()
+    promptPusher.reset()
     await old.stop()
   }
   if (!enabled || server) {
@@ -421,6 +463,9 @@ function reapply(): void {
 /** A prompt the phone can act on: a question, or a permission request that is held (an announced one never resolves here). */
 async function track(prompt: PendingPrompt): Promise<void> {
   if (!server) return
+  // A GUI session's ask comes from its driver (the `prompts` seam below); its hooks report the same ask, and the GUI's
+  // card owns it, so those would only be a second, unanswerable row in the phone's list.
+  if (isGuiSession(prompt.sessionId)) return
   if (prompt.kind === 'permission' && !(await promptHeld(prompt.id))) return
   prompts.set(prompt.id, prompt)
   if (knownSession(prompt.sessionId)) broadcastPrompts()
@@ -446,6 +491,11 @@ export function registerRemoteHandlers(owner: (sessionId: string) => WebContents
     // Hold permission requests only while a phone could answer them (the TUI dialog shows either way).
     () => (server?.connections().length ?? 0) > 0
   )
+  // GUI sessions (PRD F22 v1.220 ①): the host names its whole open set each time it changes, however it was answered.
+  setGuiPrompts((sessionId, list) => {
+    guiPrompts.set(sessionId, list, Date.now())
+    if (knownSession(sessionId)) broadcastPrompts()
+  })
   ipcMain.handle(REMOTE_IPC.getStatus, () => status(true))
   ipcMain.handle(REMOTE_IPC.newCode, () => {
     server?.renewCode()
@@ -471,6 +521,8 @@ export function registerRemoteHandlers(owner: (sessionId: string) => WebContents
     }
     windowSessions = list
     broadcastSessions()
+    // A session the phone learns of now may already wait on something (a GUI session created a moment ago).
+    broadcastPrompts()
     // A session that just started now names its transcript.
     feed.retry()
   })

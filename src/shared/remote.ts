@@ -261,7 +261,16 @@ export type PhoneCommand =
   | { type: 'feed'; session: string; before?: number }
   | { type: 'send'; session: string; text: string; photos: RemotePhoto[] }
   | { type: 'interrupt'; session: string }
-  | { type: 'permission'; prompt: string; decision: 'allow-once' | 'allow-always' | 'deny' }
+  /**
+   * 允许 / 总是允许 / 拒绝 a permission request. `message`: what the phone wrote with 拒绝, as the agent gets its reason
+   * (a terminal session's hook answer takes none; a GUI session's card does).
+   */
+  | { type: 'permission'; prompt: string; decision: 'allow-once' | 'allow-always' | 'deny'; message?: string }
+  /**
+   * 继续规划 / 批准，编辑时问我 / 批准并自动接受编辑 a GUI session's plan (PRD F22 v1.220 ①, the phone's sheet is Figma 100);
+   * `message`: what to tell the agent when it keeps planning.
+   */
+  | { type: 'plan'; prompt: string; decision: 'keep-planning' | 'approve-ask' | 'approve-auto'; message?: string }
   /** AskUserQuestion: question text → the chosen label (or what the user wrote). */
   | { type: 'answer'; prompt: string; answers: Record<string, string> }
   | { type: 'new-session-info'; project: string }
@@ -385,12 +394,21 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
       const value = settingValue(v.value)
       return isId(v.session) && isSettingKind(v.kind) && value !== null ? { id, type: 'set-setting', session: v.session, kind: v.kind, value } : null
     }
-    case 'permission':
-      if (!isId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
-      return { id, type: 'permission', prompt: v.prompt, decision: v.decision }
+    case 'permission': {
+      if (!isPromptId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
+      const message = optText(v.message, REMOTE_LIMITS.answerChars)
+      if (message === null) return null
+      return { id, type: 'permission', prompt: v.prompt, decision: v.decision, ...(message ? { message } : {}) }
+    }
+    case 'plan': {
+      if (!isPromptId(v.prompt) || (v.decision !== 'keep-planning' && v.decision !== 'approve-ask' && v.decision !== 'approve-auto')) return null
+      const message = optText(v.message, REMOTE_LIMITS.answerChars)
+      if (message === null) return null
+      return { id, type: 'plan', prompt: v.prompt, decision: v.decision, ...(message ? { message } : {}) }
+    }
     case 'answer': {
       const a = answers(v.answers)
-      return isId(v.prompt) && a ? { id, type: 'answer', prompt: v.prompt, answers: a } : null
+      return isPromptId(v.prompt) && a ? { id, type: 'answer', prompt: v.prompt, answers: a } : null
     }
     case 'new-session-info':
       return isId(v.project) ? { id, type: 'new-session-info', project: v.project } : null
@@ -445,8 +463,29 @@ export type RemoteResult = { ok: true; data?: unknown } | { ok: false; error: st
 
 export type PhoneResponse = { re: number } & RemoteResult
 
-/** A prompt as the phone gets it: `answerable` while an answer from the phone would reach the agent (its request is held). */
-export type RemotePrompt = PendingPrompt & { answerable: boolean }
+/**
+ * A prompt as the phone gets it: `answerable` while an answer from the phone would reach the agent (its request is held,
+ * or a GUI session's driver is waiting). A plan is the third kind (PRD F22 v1.220 ①): a GUI session's plan, answered with
+ * `plan` instead of `permission` / `answer`.
+ */
+export interface RemotePlanPrompt {
+  kind: 'plan'
+  id: string
+  sessionId: string
+  /** The plan, as Markdown, as the agent wrote it (the Mac's card shows the same text). */
+  plan: string
+  createdAt: number
+}
+
+export type RemotePrompt = (PendingPrompt | RemotePlanPrompt) & { answerable: boolean }
+
+/**
+ * A prompt id from the phone: a hook prompt's uuid, or a GUI prompt's `<sessionId>:<digest>` — main builds that one
+ * (src/main/remote/gui-prompts.ts `remotePromptId`), because a driver's own id is only unique inside its process and may
+ * be any string at all.
+ */
+const PROMPT_ID = /^[A-Za-z0-9_:-]{1,200}$/
+const isPromptId = (v: unknown): v is string => typeof v === 'string' && PROMPT_ID.test(v)
 
 export type PhoneEvent =
   /** `urls`: where this Mac can be reached now (its LAN address may have changed since pairing). */

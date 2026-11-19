@@ -55,6 +55,7 @@ const commands: Commands = {
   send: { type: 'send', session: 's1', text: '看看这个 bug', photos: [{ name: 'IMG_0001.HEIC', data: PHOTO }] },
   interrupt: { type: 'interrupt', session: 's1' },
   permission: { type: 'permission', prompt: 'p1', decision: 'allow-always' },
+  plan: { type: 'plan', prompt: 'p3', decision: 'approve-ask' },
   answer: { type: 'answer', prompt: 'p2', answers: { 用哪个数据库: 'Postgres' } },
   'new-session-info': { type: 'new-session-info', project: 'proj1' },
   'agent-models': { type: 'agent-models', agent: 'codex' },
@@ -141,6 +142,14 @@ const prompts: RemotePrompt[] = [
     ],
     createdAt: 1_730_000_000_500,
     answerable: false
+  },
+  {
+    kind: 'plan',
+    id: 'p3',
+    sessionId: 's1',
+    plan: '## 计划\n\n1. 把登录改成 Set-Cookie\n2. 删掉 localStorage 的读写\n\n```ts\nres.cookie(\'session\', token, { httpOnly: true })\n```',
+    createdAt: 1_730_000_000_700,
+    answerable: true
   }
 ]
 

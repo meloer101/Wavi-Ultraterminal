@@ -33,6 +33,24 @@ describe('parsePhoneRequest', () => {
       photos: [{ name: 'IMG_1.HEIC', data: 'AAAA' }]
     })
     expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })).toEqual({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })
+    // A reason with 拒绝 (a GUI session's card shows it to the agent); empty or absent leaves it out.
+    expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny', message: '改完再跑' })).toEqual({
+      id: 5,
+      type: 'permission',
+      prompt: 'p1',
+      decision: 'deny',
+      message: '改完再跑'
+    })
+    expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny', message: '' })).toEqual({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })
+    // A GUI session's plan (the phone's sheet is Figma 100): three decisions, and the reason only with 继续规划.
+    expect(parsePhoneRequest({ id: 8, type: 'plan', prompt: 'p3', decision: 'approve-auto' })).toEqual({ id: 8, type: 'plan', prompt: 'p3', decision: 'approve-auto' })
+    expect(parsePhoneRequest({ id: 8, type: 'plan', prompt: 'p3', decision: 'keep-planning', message: '先把测试补上' })).toEqual({
+      id: 8,
+      type: 'plan',
+      prompt: 'p3',
+      decision: 'keep-planning',
+      message: '先把测试补上'
+    })
     expect(parsePhoneRequest({ id: 6, type: 'answer', prompt: 'p2', answers: { '要不要提示？': '显示' } })).toEqual({ id: 6, type: 'answer', prompt: 'p2', answers: { '要不要提示？': '显示' } })
     expect(parsePhoneRequest({ id: 7, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'jacob/x', prompt: '  ' })).toEqual({
       id: 7,
@@ -69,6 +87,17 @@ describe('parsePhoneRequest', () => {
     expect(parsePhoneRequest({ id: 1, type: 'diff', session: 's1', path: '/etc/passwd', scope: 'committed' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'diff', session: 's1', path: 'a.ts', scope: 'all' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'yes' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'deny', message: 42 })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'deny', message: 'x'.repeat(REMOTE_LIMITS.answerChars + 1) })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'plan', prompt: 'p', decision: 'approve' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a:0', decision: 'allow-once' })).toEqual({ id: 1, type: 'permission', prompt: 'a:0', decision: 'allow-once' })
+    // A GUI prompt's id: the session and a 22-character digest of the driver's id (src/main/remote/gui-prompts.ts).
+    const gui = 'a:Ab3x_9-zQ8kY7wV6uT5sR4'
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: gui, decision: 'allow-once' })).toEqual({ id: 1, type: 'permission', prompt: gui, decision: 'allow-once' })
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a b:0', decision: 'allow-once' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a:req.1/a b', decision: 'allow-once' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: `${'x'.repeat(200)}:0`, decision: 'allow-once' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'plan', prompt: '', decision: 'approve-auto' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'answer', prompt: 'p', answers: {} })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'bash' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'claude', branch: 'a b' })).toBeNull()

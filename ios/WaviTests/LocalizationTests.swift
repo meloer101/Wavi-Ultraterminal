@@ -24,6 +24,12 @@ private func en(_ key: String) -> String { english?.localizedString(forKey: key,
     #expect(en("在后台继续") == "Continue in background")
     #expect(en("展开") == "Show more")
     #expect(en("收起") == "Show less")
+    // Figma 100's plan sheet, the same words as the Mac's plan card.
+    #expect(en("等你确认计划") == "Confirm plan")
+    #expect(en("批准并自动接受编辑") == "Approve and auto-accept edits")
+    #expect(en("批准，编辑时问我") == "Approve, ask before edits")
+    #expect(en("继续规划") == "Keep planning")
+    #expect(en("计划：%@") == "Plan: %@")
   }
 
   @Test func englishCountsArePlural() {

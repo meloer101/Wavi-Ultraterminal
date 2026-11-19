@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentEvent } from '@shared/agent-events'
 import type { CliAgent } from '@shared/agents'
-import { applyGuiEvent, GUI_IPC, type GuiEvent, type GuiLaunch, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, GUI_IPC, type GuiEvent, type GuiLaunch, type GuiPrompt, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import { LocalPipeLink, type PipeAttach, type PipeLink } from '../pty/pipes'
 import { GuiHost, type GuiOwner } from './host'
@@ -32,6 +32,10 @@ interface Harness {
   status: AgentEvent[]
   adopted: string[]
   ended: string[]
+  /** What `deps.prompts` was told, in order (PRD F22 v1.220 ①: the phone's list of what a session waits on). */
+  reported: { sessionId: string; prompts: readonly GuiPrompt[] }[]
+  /** The prompts last reported for a session ([] before anything was said). */
+  promptsOf(sessionId: string): readonly GuiPrompt[]
   /** The renderer's view: open's state with every batch since folded in. */
   view(sessionId: string): GuiState
   opened: Map<string, GuiState>
@@ -54,6 +58,7 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
   const status: AgentEvent[] = []
   const adopted: string[] = []
   const ended: string[] = []
+  const reported: { sessionId: string; prompts: readonly GuiPrompt[] }[] = []
   const opened = new Map<string, GuiState>()
   const host = new GuiHost<FakeOwner>({
     link: () => link,
@@ -73,6 +78,7 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
     status: (_id, _agent, events) => status.push(...events),
     adopted: (id) => adopted.push(id),
     ended: (id) => ended.push(id),
+    prompts: (sessionId, prompts) => reported.push({ sessionId, prompts }),
     image: () => Promise.resolve({ mediaType: 'image/png', data: 'iVBORw0KGgo=' }),
     clientVersion: '0.0.0-test',
     batchMs
@@ -88,7 +94,8 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
   }
   const view = (sessionId: string) =>
     owner.batches.filter((b) => b.sessionId === sessionId).reduce((state, b) => b.events.reduce(applyGuiEvent, state), opened.get(sessionId)!)
-  return { host, owner, status, adopted, ended, view, opened }
+  const promptsOf = (sessionId: string) => reported.filter((r) => r.sessionId === sessionId).at(-1)?.prompts ?? []
+  return { host, owner, status, adopted, ended, reported, promptsOf, view, opened }
 }
 
 async function until(check: () => boolean, ms = 20_000): Promise<void> {
@@ -198,6 +205,39 @@ describe('GuiHost · Claude stream-json', () => {
     expect(h.status.map((e) => e.type).filter((t) => t !== 'session-start')).toEqual(['prompt-submit', 'tool-start', 'permission-request'])
     h.host.answer('c6', { kind: 'permission', id: stateOf(h, 'c6').prompts[0]!.id, optionId: 'allow_once' })
     await until(() => h.status.at(-1)?.type === 'stop')
+  }, 30_000)
+
+  it('does not tell the phone again that nothing waits, when a turn with no asks ends', async () => {
+    const h = harness()
+    await h.host.open(launchOf('claude', 'c8'), h.owner)
+    await ready(h, 'c8')
+    await h.host.send('c8', { text: 'hello', attachments: [] })
+    await until(() => !stateOf(h, 'c8').busy && texts(stateOf(h, 'c8')).includes('text:Hello: hello'))
+    // Both the start and the end of the turn have an empty set: neither says anything new to the phone.
+    expect(h.reported.filter((r) => r.sessionId === 'c8')).toEqual([])
+  }, 30_000)
+
+  it('tells the phone what the session waits on, and that it waits on nothing once answered (F22 v1.220 ①)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('claude', 'c7'), h.owner)
+    await ready(h, 'c7')
+    expect(h.promptsOf('c7')).toEqual([])
+    await h.host.send('c7', { text: 'please write', attachments: [] })
+    await until(() => h.promptsOf('c7').length === 1)
+    expect(h.promptsOf('c7')[0]).toMatchObject({ kind: 'permission', tool: 'Write', detail: 'a.txt' })
+    // Answered by whichever side: the driver settles it, and the set the phone gets goes empty (its card goes too).
+    expect(h.host.answer('c7', { kind: 'permission', id: h.promptsOf('c7')[0]!.id, optionId: 'allow_once' })).toBe(true)
+    await until(() => h.promptsOf('c7').length === 0)
+    // A question and a plan are reported as the driver asks them.
+    await h.host.send('c7', { text: 'ask me', attachments: [] })
+    await until(() => h.promptsOf('c7').length === 1)
+    expect(h.promptsOf('c7')[0]).toMatchObject({ kind: 'question', questions: [{ question: '用哪个数据库' }, { question: '要哪些检查' }] })
+    expect(h.host.answer('c7', { kind: 'question', id: h.promptsOf('c7')[0]!.id, answers: { 用哪个数据库: 'Postgres' } })).toBe(true)
+    await until(() => h.promptsOf('c7').length === 0)
+    await until(() => !stateOf(h, 'c7').busy)
+    await h.host.send('c7', { text: 'plan next', attachments: [] })
+    await until(() => h.promptsOf('c7').length === 1)
+    expect(h.promptsOf('c7')[0]).toMatchObject({ kind: 'plan', plan: expect.stringContaining('Set-Cookie') })
   }, 30_000)
 
   it('sends a batch only the newest of its streamed texts (each one is the whole text so far)', async () => {

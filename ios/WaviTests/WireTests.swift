@@ -164,6 +164,7 @@ private func command(_ type: String, _ v: JSONValue) throws -> PhoneCommand {
   case "send": return .send(session: try text(v, "session"), text: try text(v, "text"), photos: try decoded(v["photos"], [RemotePhoto].self, "photos"))
   case "interrupt": return .interrupt(session: try text(v, "session"))
   case "permission": return .permission(prompt: try text(v, "prompt"), decision: try text(v, "decision"))
+  case "plan": return .plan(prompt: try text(v, "prompt"), decision: try text(v, "decision"))
   case "answer": return .answer(prompt: try text(v, "prompt"), answers: try decoded(v["answers"], [String: String].self, "answers"))
   case "new-session-info": return .newSessionInfo(project: try text(v, "project"))
   case "agent-models": return .agentModels(agent: try text(v, "agent"))

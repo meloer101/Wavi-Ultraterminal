@@ -68,7 +68,7 @@ final class AppModel {
   /// One receipt per prompt: a later one replaces it.
   private func addReceipt(_ prompt: RemotePrompt, onPhone: Bool, decision: String?) {
     let receipt = Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: onPhone,
-      text: receiptText(prompt, decision: decision, onPhone: onPhone))
+      text: receiptText(receiptNaming(prompt), decision: decision, onPhone: onPhone))
     receipts[prompt.sessionId, default: []].removeAll { $0.id == receipt.id }
     receipts[prompt.sessionId, default: []].append(receipt)
   }
