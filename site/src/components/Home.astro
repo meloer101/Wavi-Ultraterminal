@@ -43,22 +43,30 @@ const { lang } = Astro.props
   // js class lands before the first paint (a deferred module would flash the page first).
   ;(function () {
     var root = document.documentElement
-    var items = document.querySelectorAll('[data-reveal]')
+    var all = document.querySelectorAll('[data-reveal]')
+    var items = document.querySelectorAll('[data-reveal]:not([data-board-notice])')
     var hero = document.querySelectorAll('[data-hero], .hero-art')
     root.classList.add('js')
     function show(list) {
       for (var i = 0; i < list.length; i++) list[i].classList.add('in')
     }
     if (!('IntersectionObserver' in window)) {
-      show(items)
+      show(all)
       show(hero)
     } else {
       var io = new IntersectionObserver(
         function (entries) {
           for (var i = 0; i < entries.length; i++) {
             if (!entries[i].isIntersecting) continue
-            entries[i].target.classList.add('in')
-            io.unobserve(entries[i].target)
+            var target = entries[i].target
+            target.classList.add('in')
+            // The whole board reveals as one group, including cards outside the sideways-scrolled board; the
+            // notification belongs to that group too.
+            if (target.hasAttribute('data-board')) {
+              var notice = target.parentElement.querySelector('[data-board-notice]')
+              if (notice) notice.classList.add('in')
+            }
+            io.unobserve(target)
           }
         },
         { threshold: 0.2, rootMargin: '0px 0px -10% 0px' }

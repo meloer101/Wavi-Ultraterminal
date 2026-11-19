@@ -32,7 +32,7 @@ const at = (column: number): number => t.board.cards.slice(0, column).reduce((n,
       </div>
     </div>
 
-    <aside class="notice" data-reveal>
+    <aside class="notice" data-reveal data-board-notice>
       <span class="notice-tile"><Logo /></span>
       <div class="notice-text">
         <p class="notice-top"><span>{notice.title}</span><span class="notice-time">{t.board.now}</span></p>
@@ -40,7 +40,7 @@ const at = (column: number): number => t.board.cards.slice(0, column).reduce((n,
       </div>
     </aside>
 
-    <div class="board">
+    <div class="board" data-reveal data-container data-board>
       {t.board.columns.map((name, i) => (
         <section class:list={['col', i === 0 && 'col-needs']}>
           <p class="col-head">
@@ -50,7 +50,7 @@ const at = (column: number): number => t.board.cards.slice(0, column).reduce((n,
           </p>
           <div class="col-cards">
             {t.board.cards[i].map((card, j) => (
-              <article class:list={['card', i === 0 && 'card-needs']} data-reveal style={`--i:${at(i) + j}`}>
+              <article class:list={['card', i === 0 && 'card-needs']} style={`--i:${at(i) + j}`}>
                 <p class="card-top">
                   <BoardGlyph kind={kinds[i]} />
                   <span class="card-title">{card.title}</span>
