@@ -79,7 +79,6 @@ const M = defineMessages({
     wantsTool: (agent: string, tool: string) => `${agent} 要使用 ${tool}`,
     wantsConfirm: (agent: string) => `${agent} 要你确认`,
     plan: '计划',
-    planNamed: (name: string) => `计划：${name}`,
     commands: '命令',
     model: '模型',
     effort: '推理强度',
@@ -144,7 +143,6 @@ const M = defineMessages({
     wantsTool: (agent: string, tool: string) => `${agent} wants to use ${tool}`,
     wantsConfirm: (agent: string) => `${agent} needs your confirmation`,
     plan: 'Plan',
-    planNamed: (name: string) => `Plan: ${name}`,
     commands: 'Commands',
     model: 'Model',
     effort: 'Effort',
@@ -834,7 +832,10 @@ export function permissionTitle(agentLabel: string, tool: string): string {
   }
 }
 
-/** 49″D: the plan's title (「计划：…」 from its first heading or line) and the rest as the body. */
+/**
+ * 49″D: the plan's title (its first heading's name, without a 「计划：」 of its own: the card's label already says
+ * 「等你确认计划」, as on the phone, Figma 100) and the rest as the body; 「计划」 when it names itself nothing.
+ */
 export function planParts(plan: string): { title: string; body: string } {
   const m = pick(M)
   const lines = plan.replace(/\r\n/g, '\n').split('\n')
@@ -846,7 +847,7 @@ export function planParts(plan: string): { title: string; body: string } {
   // The agent's own heading, in either language (Claude writes the plan in the user's).
   // eslint-disable-next-line no-restricted-syntax -- matches agent output (a 计划: heading), not UI text
   const name = heading[1]!.replace(/^(?:计划[:：]|Plan:)\s*/i, '').trim()
-  return { title: name ? m.planNamed(name) : m.plan, body: lines.slice(at + 1).join('\n').trim() }
+  return { title: name || m.plan, body: lines.slice(at + 1).join('\n').trim() }
 }
 
 /** A question card's choice: an option by index, or 其他… with what the user typed. */
