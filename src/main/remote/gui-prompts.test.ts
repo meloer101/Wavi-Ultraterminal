@@ -2,6 +2,7 @@
 // the phone's answer becomes the GuiAnswer the desktop card would send.
 import { describe, expect, it } from 'vitest'
 import type { GuiPrompt } from '@shared/gui-chat'
+import { remotePromptId } from '@shared/remote'
 import { GuiPrompts, optionFor, planAnswer, questionAnswer, remotePromptOf } from './gui-prompts'
 
 const AT = 1_730_000_000_000
@@ -45,7 +46,7 @@ describe('remotePromptOf', () => {
   it('puts a permission request in the phone’s shape: the tool, its detail as the summary, the input the card reads', () => {
     expect(remotePromptOf(permission, 's1', AT)).toEqual({
       kind: 'permission',
-      id: 'req-1',
+      id: remotePromptId('s1', 'req-1'),
       sessionId: 's1',
       tool: 'Bash',
       input: { command: 'pnpm vitest run server/auth' },
@@ -59,11 +60,11 @@ describe('remotePromptOf', () => {
   })
 
   it('puts a question in the phone’s shape, keyed by the question text the phone answers with', () => {
-    expect(remotePromptOf(question, 's1', AT)).toEqual({ kind: 'question', id: 'req-q', sessionId: 's1', questions: question.questions, createdAt: AT, answerable: true })
+    expect(remotePromptOf(question, 's1', AT)).toEqual({ kind: 'question', id: remotePromptId('s1', 'req-q'), sessionId: 's1', questions: question.questions, createdAt: AT, answerable: true })
   })
 
   it('puts a GUI plan in the phone’s shape: its Markdown, answered with the plan command', () => {
-    expect(remotePromptOf(plan, 's1', AT)).toEqual({ kind: 'plan', id: 'req-plan', sessionId: 's1', plan: '先改登录，再改刷新', createdAt: AT, answerable: true })
+    expect(remotePromptOf(plan, 's1', AT)).toEqual({ kind: 'plan', id: remotePromptId('s1', 'req-plan'), sessionId: 's1', plan: '先改登录，再改刷新', createdAt: AT, answerable: true })
   })
 })
 
@@ -82,14 +83,28 @@ describe('optionFor', () => {
 })
 
 describe('questionAnswer', () => {
-  it('takes the answers whose keys are the open questions (the phone sends the question text)', () => {
-    expect(questionAnswer(question, { 用哪个数据库: 'Postgres' })).toEqual({ kind: 'question', id: 'req-q', answers: { 用哪个数据库: 'Postgres' } })
-    expect(questionAnswer(question, { 用哪个数据库: 'Postgres', 不存在的题: 'x' })).toEqual({ kind: 'question', id: 'req-q', answers: { 用哪个数据库: 'Postgres' } })
+  it('takes the answers for every open question, keyed by the question’s own text', () => {
+    expect(questionAnswer(question, { 用哪个数据库: 'Postgres', 要哪些检查: 'lint,test' })).toEqual({
+      kind: 'question',
+      id: 'req-q',
+      answers: { 用哪个数据库: 'Postgres', 要哪些检查: 'lint,test' }
+    })
   })
 
-  it('refuses an answer that names no open question, and a prompt that asks nothing', () => {
-    expect(questionAnswer(question, { 用哪个数据库呢: 'Postgres' })).toBeNull()
+  it('matches a question written with surrounding whitespace, and leaves the extra keys out', () => {
+    expect(questionAnswer(question, { ' 用哪个数据库 ': 'Postgres', '要哪些检查\n': 'lint' })).toEqual({
+      kind: 'question',
+      id: 'req-q',
+      answers: { 用哪个数据库: 'Postgres', 要哪些检查: 'lint' }
+    })
+  })
+
+  it('refuses an answer missing a question the phone’s sheet would send, or naming no open question', () => {
+    // The phone answers the whole sheet (PromptSheet.swift): a partial one would leave the agent waiting.
+    expect(questionAnswer(question, { 用哪个数据库: 'Postgres' })).toBeNull()
+    expect(questionAnswer(question, { 用哪个数据库呢: 'Postgres', 要哪些检查: 'lint' })).toBeNull()
     expect(questionAnswer(permission, { Bash: 'allow' })).toBeNull()
+    expect(questionAnswer({ kind: 'question', id: 'q', questions: [] }, { '': 'x' })).toBeNull()
   })
 })
 
@@ -114,15 +129,15 @@ describe('GuiPrompts', () => {
     const list = new GuiPrompts()
     list.set('s1', [permission], AT)
     list.set('s2', [question], AT + 1)
-    expect(list.list(known).map((p) => p.id)).toEqual(['req-1', 'req-q'])
-    expect(list.get('req-1')).toEqual({ sessionId: 's1', prompt: permission })
+    expect(list.list(known).map((p) => p.id)).toEqual([remotePromptId('s1', 'req-1'), remotePromptId('s2', 'req-q')])
+    expect(list.get(remotePromptId('s1', 'req-1'))).toEqual({ sessionId: 's1', prompt: permission })
     // Both open at once (an agent may ask twice), then one is answered.
     list.set('s1', [permission, { ...question, id: 'req-q2' }], AT + 2)
-    expect(list.list(known).map((p) => p.id)).toEqual(['req-1', 'req-q', 'req-q2'])
+    expect(list.list(known).map((p) => p.id)).toEqual([remotePromptId('s1', 'req-1'), remotePromptId('s2', 'req-q'), remotePromptId('s1', 'req-q2')])
     list.set('s1', [{ ...question, id: 'req-q2' }], AT + 3)
-    expect(list.list(known).map((p) => p.id)).toEqual(['req-q', 'req-q2'])
-    expect(list.get('req-1')).toBeNull()
-    expect(list.list(known).find((p) => p.id === 'req-q2')?.createdAt).toBe(AT + 2)
+    expect(list.list(known).map((p) => p.id)).toEqual([remotePromptId('s2', 'req-q'), remotePromptId('s1', 'req-q2')])
+    expect(list.get(remotePromptId('s1', 'req-1'))).toBeNull()
+    expect(list.list(known).find((p) => p.id === remotePromptId('s1', 'req-q2'))?.createdAt).toBe(AT + 2)
   })
 
   it('drops a session’s prompts when it changes or ends, and follows what the phone still knows', () => {
@@ -130,12 +145,31 @@ describe('GuiPrompts', () => {
     list.set('s1', [permission], AT)
     list.set('s1', [], AT + 1)
     expect(list.list(known)).toEqual([])
-    expect(list.get('req-1')).toBeNull()
+    expect(list.get(remotePromptId('s1', 'req-1'))).toBeNull()
     list.set('s1', [permission], AT + 2)
     expect(list.list(() => false)).toEqual([])
     list.clear('s1')
-    expect(list.get('req-1')).toBeNull()
+    expect(list.get(remotePromptId('s1', 'req-1'))).toBeNull()
     expect(list.list(known)).toEqual([])
+  })
+
+  it('keeps two sessions’ prompts apart when the drivers hand out the same id', () => {
+    // Codex's prompt id is its JSON-RPC request id and ACP's the same kind: both processes start at 0 / 100.
+    const codexA: GuiPrompt = { kind: 'permission', id: '100', tool: 'Bash', detail: 'ls', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
+    const codexB: GuiPrompt = { kind: 'permission', id: '100', tool: 'Edit', detail: 'b.txt', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
+    const list = new GuiPrompts()
+    list.set('a', [codexA], AT)
+    list.set('b', [codexB], AT + 1)
+    expect(list.list(known).map((p) => [p.id, p.kind === 'permission' ? p.summary : ''])).toEqual([
+      [remotePromptId('a', '100'), 'ls'],
+      [remotePromptId('b', '100'), 'b.txt']
+    ])
+    // Answering A's leaves B's open, and each keeps the driver's own id for the GuiAnswer.
+    expect(list.get(remotePromptId('a', '100'))).toEqual({ sessionId: 'a', prompt: codexA })
+    expect(list.get(remotePromptId('b', '100'))).toEqual({ sessionId: 'b', prompt: codexB })
+    list.set('a', [], AT + 2)
+    expect(list.get(remotePromptId('a', '100'))).toBeNull()
+    expect(list.get(remotePromptId('b', '100'))).toEqual({ sessionId: 'b', prompt: codexB })
   })
 
   it('lists the oldest ask first, whatever order the sessions reported in', () => {

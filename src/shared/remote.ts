@@ -395,20 +395,20 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
       return isId(v.session) && isSettingKind(v.kind) && value !== null ? { id, type: 'set-setting', session: v.session, kind: v.kind, value } : null
     }
     case 'permission': {
-      if (!isId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
+      if (!isPromptId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
       const message = optText(v.message, REMOTE_LIMITS.answerChars)
       if (message === null) return null
       return { id, type: 'permission', prompt: v.prompt, decision: v.decision, ...(message ? { message } : {}) }
     }
     case 'plan': {
-      if (!isId(v.prompt) || (v.decision !== 'keep-planning' && v.decision !== 'approve-ask' && v.decision !== 'approve-auto')) return null
+      if (!isPromptId(v.prompt) || (v.decision !== 'keep-planning' && v.decision !== 'approve-ask' && v.decision !== 'approve-auto')) return null
       const message = optText(v.message, REMOTE_LIMITS.answerChars)
       if (message === null) return null
       return { id, type: 'plan', prompt: v.prompt, decision: v.decision, ...(message ? { message } : {}) }
     }
     case 'answer': {
       const a = answers(v.answers)
-      return isId(v.prompt) && a ? { id, type: 'answer', prompt: v.prompt, answers: a } : null
+      return isPromptId(v.prompt) && a ? { id, type: 'answer', prompt: v.prompt, answers: a } : null
     }
     case 'new-session-info':
       return isId(v.project) ? { id, type: 'new-session-info', project: v.project } : null
@@ -478,6 +478,17 @@ export interface RemotePlanPrompt {
 }
 
 export type RemotePrompt = (PendingPrompt | RemotePlanPrompt) & { answerable: boolean }
+
+/**
+ * The id the phone knows a GUI session's prompt by. A driver's own id is unique only inside its process (Codex's is the
+ * app-server's JSON-RPC request id, ACP's the same kind), so two sessions both ask as `0`: the phone gets the session's
+ * id in front of it, and `GuiPrompts` keeps the driver's own id to hand back in the GuiAnswer.
+ */
+export const remotePromptId = (sessionId: string, promptId: string): string => `${sessionId}:${promptId}`
+
+/** A prompt id from the phone: a hook prompt's uuid, or a GUI prompt's `<sessionId>:<driver id>`. */
+const PROMPT_ID = /^[A-Za-z0-9_:-]{1,300}$/
+const isPromptId = (v: unknown): v is string => typeof v === 'string' && PROMPT_ID.test(v)
 
 export type PhoneEvent =
   /** `urls`: where this Mac can be reached now (its LAN address may have changed since pairing). */

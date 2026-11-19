@@ -207,6 +207,16 @@ describe('GuiHost · Claude stream-json', () => {
     await until(() => h.status.at(-1)?.type === 'stop')
   }, 30_000)
 
+  it('does not tell the phone again that nothing waits, when a turn with no asks ends', async () => {
+    const h = harness()
+    await h.host.open(launchOf('claude', 'c8'), h.owner)
+    await ready(h, 'c8')
+    await h.host.send('c8', { text: 'hello', attachments: [] })
+    await until(() => !stateOf(h, 'c8').busy && texts(stateOf(h, 'c8')).includes('text:Hello: hello'))
+    // Both the start and the end of the turn have an empty set: neither says anything new to the phone.
+    expect(h.reported.filter((r) => r.sessionId === 'c8')).toEqual([])
+  }, 30_000)
+
   it('tells the phone what the session waits on, and that it waits on nothing once answered (F22 v1.220 ①)', async () => {
     const h = harness()
     await h.host.open(launchOf('claude', 'c7'), h.owner)

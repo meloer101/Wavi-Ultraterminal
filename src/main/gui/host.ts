@@ -437,6 +437,8 @@ class GuiSession<O extends GuiOwner> {
   /** The open prompts, when they changed (`applyGuiEvent` keeps the array unless a prompt came, went, or a turn ended). */
   private reportPrompts(): void {
     if (!this.deps.prompts || this.state.prompts === this.reportedPrompts) return
+    // A turn ending replaces the empty set with another empty one: telling the phone "nothing waits" again says nothing.
+    if (this.state.prompts.length === 0 && this.reportedPrompts.length === 0) return
     this.reportedPrompts = this.state.prompts
     this.deps.prompts(this.id, this.state.prompts)
   }

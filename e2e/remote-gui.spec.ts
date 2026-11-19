@@ -294,6 +294,33 @@ test.describe('手机远程 · GUI sessions', () => {
     await expect(feed()).toContainText('Done', WITHIN)
   })
 
+  test('two Codex GUI sessions ask at once: answering one leaves the other’s answerable', async () => {
+    const start = async (branch: string): Promise<string> => {
+      const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'codex', base: 'main', branch }, 30_000)
+      expect(answer).toMatchObject({ ok: true })
+      const id = (answer as { data: { session: string } }).data.session
+      await expect.poll(() => kinds(id), WITHIN).not.toEqual([])
+      return id
+    }
+    const first = await start('phone-codex-a')
+    const second = await start('phone-codex-b')
+    expect(await send(first, 'run a command')).toMatchObject({ ok: true })
+    expect(await send(second, 'run a command')).toMatchObject({ ok: true })
+    const a = await waitPrompt(first, 'permission')
+    const b = await waitPrompt(second, 'permission')
+    // Both app-servers number their first request the same way; the phone must still tell the two apart.
+    expect(a.id).not.toBe(b.id)
+    expect(a.id.split(':').pop()).toBe(b.id.split(':').pop())
+    expect(await phone.request({ type: 'permission', prompt: a.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    // Only the answered session goes on: the other still waits, and its prompt can still be answered.
+    await expect.poll(async () => (await promptOf(first, 'permission'))?.id, WITHIN).toBeUndefined()
+    const waiting = await promptOf(second, 'permission')
+    expect(waiting?.id).toBe(b.id)
+    expect(waiting?.answerable).toBe(true)
+    expect(await phone.request({ type: 'permission', prompt: b.id, decision: 'allow-once' })).toMatchObject({ ok: true })
+    await expect.poll(() => phonePrompts(), SOON).toEqual([])
+  })
+
   test('an ACP GUI session’s permission is answered from the phone', async () => {
     const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'grok', base: 'main', branch: 'phone-acp' }, 30_000)
     expect(answer).toMatchObject({ ok: true })
@@ -305,8 +332,8 @@ test.describe('手机远程 · GUI sessions', () => {
     // An ACP agent offers its own options (`allow_once` / `reject_once` here, no 总是允许).
     const prompt = await waitPrompt(id, 'permission')
     expect(prompt).toMatchObject({ kind: 'permission', tool: 'Bash', summary: 'ls', answerable: true, canAllowAlways: false })
-    // 总是允许 was not offered: the button cannot be answered (it is not on the phone's sheet either).
-    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-always' })).toMatchObject({ ok: false })
+    // 总是允许 was not offered: the phone's button says so, rather than that someone else answered it.
+    expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-always' })).toMatchObject({ ok: false, error: '这个请求没有这个选项' })
     expect(await phone.request({ type: 'permission', prompt: prompt.id, decision: 'allow-once' })).toMatchObject({ ok: true })
     await expect(card()).toHaveCount(0, SOON)
     await expect.poll(() => phonePrompts(), SOON).toEqual([])

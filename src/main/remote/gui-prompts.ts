@@ -3,7 +3,7 @@
 // is held for the phone: the GUI's own card and the phone are two views of one ask, so whichever answers first wins and
 // the other's list drops it (`prompt-done`, broadcast as `prompts`). Pure: no Electron, no Node.
 import type { GuiAnswer, GuiPermissionOption, GuiPrompt } from '@shared/gui-chat'
-import type { PhoneCommand, RemotePrompt } from '@shared/remote'
+import { remotePromptId, REMOTE_LIMITS, type PhoneCommand, type RemotePrompt } from '@shared/remote'
 import { toolInputOf } from '../gui/status'
 
 /** 拒绝 / 总是允许 / 允许 on the phone → the option kind the agent offered (ACP's own kinds; Claude and Codex use them too). */
@@ -21,14 +21,15 @@ export type PlanDecision = Extract<PhoneCommand, { type: 'plan' }>['decision']
  * A GUI prompt in the phone's list. A permission request keeps its tool and detail (the phone's sheet shows them, and the
  * built input the way `current-action.ts` reads it, as status.ts's `promptCall` does); a question keeps its questions,
  * keyed by the question text the phone answers with; a plan its Markdown, which the phone's sheet (Figma 100) shows as
- * the Mac's plan card does.
+ * the Mac's plan card does. The `id` is `remotePromptId`: the driver's own is unique only inside its process.
  */
 export function remotePromptOf(prompt: GuiPrompt, sessionId: string, createdAt: number): RemotePrompt {
-  if (prompt.kind === 'question') return { kind: 'question', id: prompt.id, sessionId, questions: prompt.questions, createdAt, answerable: true }
-  if (prompt.kind === 'plan') return { kind: 'plan', id: prompt.id, sessionId, plan: prompt.plan, createdAt, answerable: true }
+  const id = remotePromptId(sessionId, prompt.id)
+  if (prompt.kind === 'question') return { kind: 'question', id, sessionId, questions: prompt.questions, createdAt, answerable: true }
+  if (prompt.kind === 'plan') return { kind: 'plan', id, sessionId, plan: prompt.plan, createdAt, answerable: true }
   return {
     kind: 'permission',
-    id: prompt.id,
+    id,
     sessionId,
     tool: prompt.tool,
     input: toolInputOf(prompt.tool, prompt.detail),
@@ -45,19 +46,24 @@ export function optionFor(prompt: GuiPrompt, decision: PhoneDecision): string | 
   return prompt.options.find((o) => o.kind === OPTION_KIND[decision])?.id ?? null
 }
 
+/** How a question is matched against the phone's keys (whose length `parsePhoneRequest` bounds the same way); a question
+ *  written with surrounding whitespace still matches. */
+const questionKey = (text: string): string => text.trim().slice(0, REMOTE_LIMITS.answerChars)
+
 /**
- * The phone's answers (question text → the chosen label) as a `GuiAnswer`. Every driver keys its answer by the question
- * text, as the phone sends it, so this only refuses an answer that names no open question.
+ * The phone's answers (question text → the chosen label) as a `GuiAnswer`: every open question must have one (the phone's
+ * sheet sends them all), and the keys are compared trimmed, as a question written with surrounding whitespace still
+ * matches. The answer goes back keyed by the question's own text. Every driver reads its answers by that text.
  */
 export function questionAnswer(prompt: GuiPrompt, answers: Record<string, string>): GuiAnswer | null {
-  if (prompt.kind !== 'question') return null
-  const known = new Map(prompt.questions.map((q) => [q.question, q]))
+  if (prompt.kind !== 'question' || prompt.questions.length === 0) return null
+  const known = new Map(prompt.questions.map((q) => [questionKey(q.question), q.question]))
   const kept: Record<string, string> = {}
-  for (const [question, answer] of Object.entries(answers)) {
-    if (!known.has(question)) continue
-    kept[question] = answer
+  for (const [key, answer] of Object.entries(answers)) {
+    const question = known.get(questionKey(key))
+    if (question !== undefined) kept[question] = answer
   }
-  return Object.keys(kept).length > 0 ? { kind: 'question', id: prompt.id, answers: kept } : null
+  return prompt.questions.every((q) => kept[q.question] !== undefined) ? { kind: 'question', id: prompt.id, answers: kept } : null
 }
 
 /** The phone's three plan buttons as a `GuiAnswer`; the message only travels with 继续规划 (the agent is told why). */
@@ -85,15 +91,15 @@ export class GuiPrompts {
       const createdAt = before.get(prompt.id)?.remote.createdAt ?? at
       next.push({ prompt, remote: remotePromptOf(prompt, sessionId, createdAt) })
     }
-    for (const open of before.values()) if (!next.some((o) => o.prompt.id === open.prompt.id)) this.byId.delete(open.prompt.id)
-    for (const open of next) this.byId.set(open.prompt.id, { ...open, sessionId })
+    for (const open of before.values()) if (!next.some((o) => o.prompt.id === open.prompt.id)) this.byId.delete(open.remote.id)
+    for (const open of next) this.byId.set(open.remote.id, { ...open, sessionId })
     if (next.length > 0) this.sessions.set(sessionId, next)
     else this.sessions.delete(sessionId)
   }
 
   /** The session ended: nothing waits on it. */
   clear(sessionId: string): void {
-    for (const open of this.sessions.get(sessionId) ?? []) this.byId.delete(open.prompt.id)
+    for (const open of this.sessions.get(sessionId) ?? []) this.byId.delete(open.remote.id)
     this.sessions.delete(sessionId)
   }
 

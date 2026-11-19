@@ -39,6 +39,7 @@ import { DeviceStore, type StoredDevice } from './devices'
 import { FeedHub, type FeedSource } from './feed'
 import { GuiPrompts, optionFor, planAnswer, questionAnswer } from './gui-prompts'
 import { PhotoError, savePhotos } from './photos'
+import { PromptPusher } from './prompt-push'
 import { RemoteServer, type RemoteConnection } from './server'
 import { defineMessages, pick as pickLang } from '@shared/i18n'
 
@@ -51,6 +52,7 @@ const M = defineMessages({
     handled: '已经在终端里处理了',
     answered: '已经在终端里回答了',
     terminalOnly: '这个问题现在只能在终端里回答',
+    noOption: '这个请求没有这个选项',
     noProject: '项目不存在',
     notRepo: '不是 git 仓库',
     noBase: '没有可对比的基线分支',
@@ -64,6 +66,7 @@ const M = defineMessages({
     handled: 'Already handled in the terminal',
     answered: 'Already answered in the terminal',
     terminalOnly: 'This question can only be answered in the terminal now',
+    noOption: "This request doesn't offer that option",
     noProject: "The project doesn't exist",
     notRepo: 'Not a git repository',
     noBase: 'No base branch to compare with',
@@ -308,10 +311,12 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       const gui = guiPrompts.get(request.prompt)
       if (gui) {
         const optionId = optionFor(gui.prompt, request.decision)
-        if (!optionId) return remoteFail(pickLang(M).handled)
+        // Nothing of that kind was offered (an ACP agent with no 总是允许): not "handled", which would say it was answered.
+        if (!optionId) return remoteFail(pickLang(M).noOption)
         const answered = answerGuiPrompt(gui.sessionId, {
           kind: 'permission',
-          id: request.prompt,
+          // The driver's own id, not the phone's: the phone's has the session in front of it.
+          id: gui.prompt.id,
           optionId,
           ...(request.message ? { message: request.message } : {})
         })
@@ -399,17 +404,15 @@ function broadcastSessions(): void {
   }, 250)
 }
 
-/** The prompt list last pushed: a session list that changed while nothing waits on anything says nothing new. */
-let lastPrompts = ''
+/**
+ * The prompt list the phone gets: built once per change, and an older build never lands after a newer one (each hook
+ * prompt's "is it held" is awaited, so two builds overlap); an unchanged list is not pushed again.
+ */
+const promptPusher = new PromptPusher<RemotePrompt[]>((data) => server?.broadcast({ event: 'prompts', data }))
 
 function broadcastPrompts(): void {
   if (!server) return
-  void visiblePrompts().then((data) => {
-    const now = JSON.stringify(data)
-    if (now === lastPrompts) return
-    lastPrompts = now
-    server?.broadcast({ event: 'prompts', data })
-  })
+  void promptPusher.push(visiblePrompts)
 }
 
 async function apply(): Promise<void> {
@@ -420,7 +423,7 @@ async function apply(): Promise<void> {
     running = null
     feed.stop()
     prompts.clear()
-    lastPrompts = ''
+    promptPusher.reset()
     await old.stop()
   }
   if (!enabled || server) {
