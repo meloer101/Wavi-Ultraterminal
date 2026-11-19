@@ -44,7 +44,6 @@ enum Link {
   static let openSeconds = 6.0
   static let replySeconds = 10.0
   static let requestSeconds = 20.0
-  static let retrySeconds: [Double] = [1, 2, 4, 8, 15]
   /// A link open at least this long held; one closed sooner backs off.
   static let heldFor: Double = 5
   static let maxURLs = 8
