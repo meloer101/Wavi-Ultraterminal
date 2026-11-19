@@ -1,6 +1,6 @@
 ---
-/* 04 Appearance: four looks on a brand panel, and the settings panel beside it — three groups of static controls
-   (drawings, not inputs: each controls row is aria-hidden and nothing here takes focus). */
+/* Screen 8: appearance — four looks on a brand panel and the settings panel beside it, centred against each other
+   (the controls are drawings, not inputs: each controls row is aria-hidden and nothing here takes focus). */
 import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
@@ -15,7 +15,9 @@ const c = t.appearance.controls
 const own = lang === 'en' ? 0 : 1
 ---
 
-<div class="appearance-row" id="appearance">
+<section class="screen section-light" id="appearance">
+  <div class="wrap">
+    <div class="appearance-row">
   <div class="looks" data-reveal>
     {t.appearance.looks.map((caption, i) => (
       <figure class="look">
@@ -75,4 +77,6 @@ const own = lang === 'en' ? 0 : 1
       </div>
     </div>
   </div>
-</div>
+    </div>
+  </div>
+</section>

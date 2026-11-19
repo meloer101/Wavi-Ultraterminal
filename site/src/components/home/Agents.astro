@@ -1,5 +1,6 @@
 ---
-/* 01 Agents: the dispatch window on brand, then six cells, one per way of running several agents. */
+/* Screen 3: 01 Agents, part one — the label, the headline and the dispatch window, which takes the height that is
+   left under them. The intro and the six diagrams are the next screen. */
 import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
@@ -10,17 +11,13 @@ interface Props {
 }
 const { lang } = Astro.props
 const t = copy[lang]
-const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same-task']
 ---
 
-<section class="section section-light" id="agents">
+<section class="screen section-light" id="agents">
   <div class="wrap">
-    <div class="head" data-reveal>
-      <div>
-        <Label value={t.agents.label} />
-        <h2 class="display">{t.agents.title[0]}<br />{t.agents.title[1]}</h2>
-      </div>
-      <p class="intro">{t.agents.intro}</p>
+    <div class="agents-head" data-reveal>
+      <Label value={t.agents.label} />
+      <h2 class="display">{t.agents.title[0]}<br />{t.agents.title[1]}</h2>
     </div>
     <div class="agents-panel" data-reveal>
       <Image
@@ -30,22 +27,6 @@ const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same
         loading="lazy"
         alt={t.agents.alt}
       />
-    </div>
-    <div class="cells3">
-      {t.agents.cells.map(([label, text], i) => (
-        <div class="cell" data-reveal style={`--i:${i}`}>
-          <Image
-            class="cell-art"
-            src={pic(lang, `diagram-${diagrams[i]}.svg`)}
-            width={384}
-            height={176}
-            loading="lazy"
-            alt=""
-          />
-          <h3 class="cell-title">{label}</h3>
-          <p class="cell-text">{text}</p>
-        </div>
-      ))}
     </div>
   </div>
 </section>

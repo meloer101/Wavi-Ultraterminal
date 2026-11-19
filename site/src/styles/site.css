@@ -146,8 +146,27 @@ img {
   margin-inline: auto;
   padding-inline: var(--pad);
 }
-.section {
-  padding-block: 112px;
+/* Ten screens (PRD v1.221): each is at least one viewport and centres its content; a screen whose content needs more
+   grows instead of clipping. Screens 1, 2 and 10 keep the viewport even on narrow screens; the rest take their content
+   height there. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding-block: clamp(40px, 7svh, 96px);
+}
+.screen > .wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+}
+.screen-hero {
+  padding-block: 0;
+}
+.screen-hero .hero {
+  flex: 1;
 }
 .section-light {
   background: var(--white);
@@ -445,27 +464,30 @@ button.keycap {
 
 /* ---------------------------------------------------------------- agent strip */
 
-.strip {
-  background: var(--paper);
-  padding: 64px 0 72px;
+.wall-title {
+  max-width: 1100px;
+  margin-inline: auto;
+  font: 500 clamp(32px, 3.6vw, 52px) / 1.1 var(--sans);
+  letter-spacing: -0.02em;
   text-align: center;
 }
-.strip-title {
-  font: 400 22px/30px var(--sans);
-}
-.strip-list {
+.wall-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 24px 32px;
-  max-width: 1200px;
-  margin: 40px auto 0;
+  gap: 28px 40px;
+  max-width: 1100px;
+  margin: 56px auto 0;
 }
-.strip-list li {
+.wall-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font: 500 16px/22px var(--sans);
+  gap: 12px;
+  font: 500 18px/26px var(--sans);
+}
+.wall .mark {
+  width: 32px;
+  height: 32px;
 }
 
 /* ---------------------------------------------------------------- 01 agents */
@@ -479,16 +501,15 @@ button.keycap {
 .head h2 {
   margin-top: 20px;
 }
-.head .intro {
-  flex: none;
-  width: 520px;
-  font: 400 18px/28px var(--sans);
-  color: var(--text-2);
+.agents-head h2 {
+  margin-top: 20px;
 }
 .agents-panel {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: 600px;
   margin-top: 56px;
-  aspect-ratio: 1296 / 600;
   overflow: hidden;
   background: var(--brand);
 }
@@ -499,22 +520,28 @@ button.keycap {
   width: 96.45%;
   height: auto;
 }
+.agents-lead {
+  max-width: 760px;
+  font: 400 22px/32px var(--sans);
+  color: var(--text-2);
+}
 .cells3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
+  margin-top: 40px;
   background: var(--line-light);
   border: 1px solid var(--line-light);
 }
 .cell {
   background: var(--white);
-  padding: 28px 24px;
+  padding: 24px;
 }
 .cell-art {
   display: block;
-  width: 100%;
-  max-width: 384px;
-  height: auto;
+  width: auto;
+  height: clamp(96px, 14svh, 176px);
+  max-width: 100%;
 }
 .cell-title {
   margin-top: 24px;
@@ -584,7 +611,7 @@ button.keycap {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 64px;
+  margin-top: clamp(32px, 5svh, 64px);
 }
 .col-head {
   display: flex;
@@ -689,7 +716,7 @@ button.keycap {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 48px;
-  margin-top: 72px;
+  margin-top: clamp(32px, 5svh, 72px);
 }
 .fact {
   padding-top: 20px;
@@ -726,16 +753,17 @@ button.keycap {
 }
 .gh-shot {
   display: block;
-  width: 741px;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
-  height: auto;
+  height: clamp(220px, 34svh, 430px);
 }
 .steps {
   position: relative;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 72px;
+  margin-top: clamp(32px, 5svh, 72px);
 }
 .steps::before {
   content: '';
@@ -898,17 +926,18 @@ button.keycap {
 }
 .cells4 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   margin-top: 56px;
   border: 1px solid var(--line-light);
   background: var(--line-light);
 }
 .cell4 {
+  min-width: 0;
   padding: 24px 24px 28px;
   background: var(--white);
 }
-.cell4 img {
+.cell4 .diagram {
   display: block;
   width: 100%;
   max-width: 276px;
@@ -928,9 +957,8 @@ button.keycap {
 
 .appearance-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 72px;
-  margin-top: 128px;
 }
 .looks {
   display: grid;
@@ -1071,9 +1099,6 @@ button.keycap {
 
 /* ---------------------------------------------------------------- faq */
 
-.faq {
-  border-top: 1px solid var(--line-light);
-}
 .faq-row {
   display: flex;
   gap: 72px;
@@ -1165,11 +1190,16 @@ details[open] .faq-mark span:last-child {
 /* ---------------------------------------------------------------- footer */
 
 .footer {
+  min-height: 100svh;
   background: var(--brand);
   color: var(--white);
 }
+.footer.screen {
+  padding-block: 0;
+}
 .footer-main {
   position: relative;
+  flex: 1;
   overflow: hidden;
   padding: 104px 0 72px;
 }
@@ -1291,7 +1321,7 @@ html.js .hero-art.in {
   opacity: 1;
   transform: none;
 }
-.strip-list {
+.wall-list {
   --stagger: 30ms;
 }
 
@@ -1521,6 +1551,16 @@ html.js .cell4.in .layout-branch .link-red {
   }
 }
 
+/* Wide, tall viewports snap to the top of each screen; narrow or short ones never do. */
+@media (min-width: 1101px) and (min-height: 760px) {
+  html {
+    scroll-snap-type: y proximity;
+  }
+  .screen {
+    scroll-snap-align: start;
+  }
+}
+
 /* ---------------------------------------------------------------- narrower screens */
 
 @media (max-width: 1200px) {
@@ -1546,6 +1586,19 @@ html.js .cell4.in .layout-branch .link-red {
 @media (max-width: 1100px) {
   :root {
     --pad: 40px;
+  }
+  .screen {
+    min-height: 0;
+    padding-block: 64px;
+  }
+  .screen-hero,
+  .wall,
+  .footer.screen {
+    min-height: 100svh;
+  }
+  .screen-hero,
+  .footer.screen {
+    padding-block: 0;
   }
   .cells3 {
     grid-template-columns: repeat(2, 1fr);

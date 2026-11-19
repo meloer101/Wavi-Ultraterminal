@@ -1,8 +1,11 @@
 ---
-/* The landing page (Figma frame O, 1794:15463): nav, hero, the agent strip, four sections and the FAQ, then the
-   download block and footer. Static HTML and CSS; the only script is Ctas.astro's chip switch. */
+/* The landing page (Figma frame O, 1794:15463) as ten screens: hero, the agent wall, two Agents screens, Board,
+   GitHub, Windows, Appearance, FAQ, and the download block + footer. Every screen is one viewport when it can be
+   (PRD v1.221). Static HTML and CSS; the only scripts are Ctas.astro's chip switch and the reveal script below. */
 import type { Lang } from '../i18n'
+import AgentGrid from './home/AgentGrid.astro'
 import Agents from './home/Agents.astro'
+import Appearance from './home/Appearance.astro'
 import Board from './home/Board.astro'
 import Faq from './home/Faq.astro'
 import Footer from './home/Footer.astro'
@@ -18,14 +21,18 @@ interface Props {
 const { lang } = Astro.props
 ---
 
-<Nav lang={lang} />
-<main id="main">
+<div class="screen screen-hero">
+  <Nav lang={lang} />
   <Hero lang={lang} />
+</div>
+<main id="main">
   <Strip lang={lang} />
   <Agents lang={lang} />
+  <AgentGrid lang={lang} />
   <Board lang={lang} />
   <Github lang={lang} />
   <Windows lang={lang} />
+  <Appearance lang={lang} />
   <Faq lang={lang} />
 </main>
 <Footer lang={lang} />

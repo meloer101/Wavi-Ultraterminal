@@ -1,7 +1,6 @@
 ---
-/* 04 Windows: four layout cells on paper, and the appearance block 128 below them in the same section. */
+/* Screen 7: 04 Windows — the four layouts, each with the animation of its own diagram. */
 import { copy, type Lang } from '../../i18n'
-import Appearance from './Appearance.astro'
 import Keycaps from './Keycaps.astro'
 import Label from './Label.astro'
 import LayoutDiagram, { type LayoutKind } from './LayoutDiagram.astro'
@@ -14,23 +13,20 @@ const t = copy[lang]
 const layouts: LayoutKind[] = ['split', 'tear-off', 'running', 'branch']
 ---
 
-<section class="section section-paper">
+<section class="screen section-paper" id="windows">
   <div class="wrap">
-    <div id="windows">
-      <div data-reveal>
-        <Label value={t.windows.label} />
-        <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
-      </div>
-      <div class="cells4">
-        {t.windows.cells.map(([title, text], i) => (
-          <div class="cell4" data-reveal style={`--i:${i}`}>
-            <LayoutDiagram kind={layouts[i]} />
-            <h3>{title}</h3>
-            <p><Keycaps text={text} /></p>
-          </div>
-        ))}
-      </div>
+    <div data-reveal>
+      <Label value={t.windows.label} />
+      <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
     </div>
-    <Appearance lang={lang} />
+    <div class="cells4">
+      {t.windows.cells.map(([title, text], i) => (
+        <div class="cell4" data-reveal style={`--i:${i}`}>
+          <LayoutDiagram kind={layouts[i]} />
+          <h3>{title}</h3>
+          <p><Keycaps text={text} /></p>
+        </div>
+      ))}
+    </div>
   </div>
 </section>
