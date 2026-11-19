@@ -27,8 +27,6 @@ private func date(_ ms: Double) -> Date { Date(timeIntervalSince1970: ms / 1000)
 
 /// `mac`: the paired Mac's name, the 空闲 card's title.
 func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double, mac: String = "") -> ActivityState? {
-  // Figma 100 is the plan's sheet, not a card: a plan waits in the app, and the island keeps showing what it knows.
-  let prompts = prompts.filter { $0.kind != "plan" }
   var state = activityCard(sessions: sessions, prompts: prompts, now: now, mac: mac)
   state?.updated = date(now)
   if let kind = state?.kind, kind != .running && kind != .idle {
@@ -53,9 +51,13 @@ private func activityCard(sessions: [RemoteSession], prompts: [RemotePrompt], no
   let byId = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
   if let prompt = prompts.min(by: { $0.createdAt < $1.createdAt }) {
     let session = byId[prompt.sessionId]
-    var state = ActivityState(kind: prompt.kind == "permission" ? .permission : .question, session: prompt.sessionId, prompt: prompt.id,
+    var state = ActivityState(kind: prompt.kind == "question" ? .question : .permission, session: prompt.sessionId, prompt: prompt.id,
       title: cut(session?.title ?? ""), agent: session?.agent ?? "", since: date(prompt.createdAt))
-    if prompt.kind == "permission" {
+    if prompt.kind == "plan" {
+      // Figma 100 is the plan's sheet, not a card: while the Mac's card holds it, the island says the session is waiting
+      // for a confirmation — the plan's name, no buttons (a tap opens the sheet) — rather than 空闲 or nothing.
+      state.detail = cut(planParts(prompt.plan ?? "").title)
+    } else if prompt.kind == "permission" {
       state.detail = permissionTitle(prompt.tool ?? "")
       state.subject = cut(permissionSubject(prompt.input ?? [:], summary: prompt.summary ?? ""))
       state.answerable = prompt.answerable

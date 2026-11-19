@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPairingCode, normalizePairingCode, pairingLink, parsePhoneRequest, parseRemoteResult, parseWindowSessions, REMOTE_LIMITS, remotePromptId } from './remote'
+import { formatPairingCode, normalizePairingCode, pairingLink, parsePhoneRequest, parseRemoteResult, parseWindowSessions, REMOTE_LIMITS } from './remote'
 
 describe('pairing codes', () => {
   it('reads what the phone typed, with or without the dash, and refuses misreadable letters', () => {
@@ -91,17 +91,12 @@ describe('parsePhoneRequest', () => {
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'deny', message: 'x'.repeat(REMOTE_LIMITS.answerChars + 1) })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'plan', prompt: 'p', decision: 'approve' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a:0', decision: 'allow-once' })).toEqual({ id: 1, type: 'permission', prompt: 'a:0', decision: 'allow-once' })
-    // A GUI prompt's id: the session and the driver's id, encoded — an ACP or Pi id may hold dots, slashes and spaces.
-    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: remotePromptId('a', 'req.1/a b'), decision: 'allow-once' })).toEqual({
-      id: 1,
-      type: 'permission',
-      prompt: remotePromptId('a', 'req.1/a b'),
-      decision: 'allow-once'
-    })
-    expect(remotePromptId('a', 'req.1/a b')).toMatch(/^a:[A-Za-z0-9_-]+$/)
+    // A GUI prompt's id: the session and a 22-character digest of the driver's id (src/main/remote/gui-prompts.ts).
+    const gui = 'a:Ab3x_9-zQ8kY7wV6uT5sR4'
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: gui, decision: 'allow-once' })).toEqual({ id: 1, type: 'permission', prompt: gui, decision: 'allow-once' })
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a b:0', decision: 'allow-once' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'a:req.1/a b', decision: 'allow-once' })).toBeNull()
-    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: `${'x'.repeat(400)}:0`, decision: 'allow-once' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: `${'x'.repeat(200)}:0`, decision: 'allow-once' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'plan', prompt: '', decision: 'approve-auto' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'answer', prompt: 'p', answers: {} })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'bash' })).toBeNull()

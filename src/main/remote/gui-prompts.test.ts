@@ -2,8 +2,8 @@
 // the phone's answer becomes the GuiAnswer the desktop card would send.
 import { describe, expect, it } from 'vitest'
 import type { GuiPrompt } from '@shared/gui-chat'
-import { remotePromptId } from '@shared/remote'
-import { GuiPrompts, optionFor, planAnswer, questionAnswer, remotePromptOf } from './gui-prompts'
+import { parsePhoneRequest } from '@shared/remote'
+import { GuiPrompts, optionFor, planAnswer, questionAnswer, remotePromptId, remotePromptOf } from './gui-prompts'
 
 const AT = 1_730_000_000_000
 
@@ -158,7 +158,7 @@ describe('GuiPrompts', () => {
     const codexA: GuiPrompt = { kind: 'permission', id: '100', tool: 'Bash', detail: 'ls', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
     const codexB: GuiPrompt = { kind: 'permission', id: '100', tool: 'Edit', detail: 'b.txt', options: [{ id: 'accept', label: '允许', kind: 'allow_once' }] }
     // ACP and Pi ids are agent strings, anything goes: the phone's id still has to look like one it may send back.
-    expect(remotePromptId('a', 'req.1/a b')).toMatch(/^a:[A-Za-z0-9_-]+$/)
+    expect(remotePromptId('a', 'req.1/a b')).toMatch(/^a:[A-Za-z0-9_-]{22}$/)
     const list = new GuiPrompts()
     list.set('a', [codexA], AT)
     list.set('b', [codexB], AT + 1)
@@ -182,6 +182,32 @@ describe('GuiPrompts', () => {
     expect(seen.id).toBe(remotePromptId('s1', 'req.1/a b'))
     expect(optionFor(list.get(seen.id)!.prompt, 'allow-once')).toBe('yes')
     expect(list.get(seen.id)!.prompt.id).toBe('req.1/a b')
+  })
+
+  it('gives ids that share a long prefix, and ids of any script, a distinct id the phone can send back', () => {
+    const list = new GuiPrompts()
+    const prefix = 'x'.repeat(200)
+    const first: GuiPrompt = { kind: 'permission', id: `${prefix}-a`, tool: 'Bash', detail: 'one', options: [{ id: 'yes', label: '允许', kind: 'allow_once' }] }
+    const second: GuiPrompt = { kind: 'permission', id: `${prefix}-b`, tool: 'Bash', detail: 'two', options: [{ id: 'yes', label: '允许', kind: 'allow_once' }] }
+    list.set('s1', [first, second], AT)
+    const [a, b] = list.list(known)
+    expect(a!.id).not.toBe(b!.id)
+    expect(optionFor(list.get(a!.id)!.prompt, 'allow-once')).toBe('yes')
+    expect(list.get(b!.id)!.prompt).toBe(second)
+    // CJK and emoji (a driver id is whatever the agent says), and a number as a driver hands one:
+    for (const id of ['计'.repeat(300), '🙂'.repeat(40), 100]) {
+      const one = new GuiPrompts()
+      one.set('s2', [{ kind: 'question', id: String(id), questions: [{ question: 'q', multiSelect: false, options: [] }] }], AT)
+      const seen = one.list(known)[0]!
+      expect(seen.id.length).toBeLessThanOrEqual(200)
+      expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: seen.id, decision: 'allow-once' })).toEqual({
+        id: 1,
+        type: 'permission',
+        prompt: seen.id,
+        decision: 'allow-once'
+      })
+      expect(one.get(seen.id)!.prompt.id).toBe(String(id))
+    }
   })
 
   it('lists the oldest ask first, whatever order the sessions reported in', () => {

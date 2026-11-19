@@ -480,15 +480,11 @@ export interface RemotePlanPrompt {
 export type RemotePrompt = (PendingPrompt | RemotePlanPrompt) & { answerable: boolean }
 
 /**
- * The id the phone knows a GUI session's prompt by. A driver's own id is unique only inside its process (Codex's is the
- * app-server's JSON-RPC request id, ACP's and Pi's the same kind of string), so two sessions both ask as `0`: the phone
- * gets the session's id and the driver's id, encoded so whatever the driver says with still matches `PROMPT_ID` below.
- * Nothing decodes it: `GuiPrompts` keeps the driver's own id to hand back in the GuiAnswer.
+ * A prompt id from the phone: a hook prompt's uuid, or a GUI prompt's `<sessionId>:<digest>` — main builds that one
+ * (src/main/remote/gui-prompts.ts `remotePromptId`), because a driver's own id is only unique inside its process and may
+ * be any string at all.
  */
-export const remotePromptId = (sessionId: string, promptId: string): string => `${sessionId}:${base64url(promptId.slice(0, 160))}`
-
-/** A prompt id from the phone: a hook prompt's uuid, or a GUI prompt's `<sessionId>:<base64url driver id>`. */
-const PROMPT_ID = /^[A-Za-z0-9_:-]{1,400}$/
+const PROMPT_ID = /^[A-Za-z0-9_:-]{1,200}$/
 const isPromptId = (v: unknown): v is string => typeof v === 'string' && PROMPT_ID.test(v)
 
 export type PhoneEvent =

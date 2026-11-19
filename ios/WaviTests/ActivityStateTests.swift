@@ -28,18 +28,24 @@ private func question(_ id: String, at: Double, options: [String], multi: Bool =
     #expect(state?.since == Date(timeIntervalSince1970: 2))
   }
 
-  @Test func aPlanIsNotACard() {
-    // Figma 100 is the plan's sheet, not a Live Activity design: the island shows what it knows instead of an empty card.
-    let plan = RemotePrompt(kind: "plan", id: "s1:p", sessionId: "s1", createdAt: 0, answerable: true, plan: "## 计划：…")
-    // A plan alone: no card of its own; a running session, a finished one or nothing decide what the island shows.
-    #expect(activityState(sessions: [session("s1", status: .running)], prompts: [plan], now: 1000)?.kind == .running)
-    #expect(activityState(sessions: [session("s1", status: .doneUnread, since: 500)], prompts: [plan], now: 1000)?.kind == .done)
-    #expect(activityState(sessions: [], prompts: [plan], now: 1000) == nil)
-    // Next to a question it is not the one the card takes, and it does not count as one waiting.
-    let withQuestion = activityState(sessions: [session("s1", status: .needsYou)], prompts: [plan, question("q", at: 5, options: ["a"])], now: 1000)
-    #expect(withQuestion?.kind == .question)
-    #expect(withQuestion?.prompt == "q")
-    #expect(withQuestion?.others == nil)
+  @Test func aPlanWaitsAsItsConfirmationCardWithoutButtons() {
+    // Figma 100 is the plan's sheet, not a Live Activity design: the island says the session is waiting for a
+    // confirmation — the plan's name, no buttons (a tap opens the sheet) — not 空闲 because no one is waiting.
+    let plan = RemotePrompt(kind: "plan", id: "s1:p", sessionId: "s1", createdAt: 0, answerable: true, plan: "## 会话过期自动续期\n1. 刷新时滚动过期时间")
+    let state = activityState(sessions: [session("s1", status: .needsYou)], prompts: [plan], now: 1000)
+    #expect(state?.kind == .permission)
+    #expect(state?.detail == "会话过期自动续期")
+    #expect(state?.prompt == "s1:p")
+    #expect(state?.answerable == false)
+    #expect(state?.options == [])
+    // A plan named nothing reads 计划, and it is the oldest prompt that wins, as with any other kind.
+    let unnamed = RemotePrompt(kind: "plan", id: "s1:q", sessionId: "s1", createdAt: 0, answerable: true, plan: "先看看 auth.ts")
+    #expect(activityState(sessions: [], prompts: [unnamed], now: 1000)?.detail == "计划")
+    #expect(activityState(sessions: [session("s1", status: .needsYou)], prompts: [question("q", at: 5, options: ["a"]), plan], now: 1000)?.prompt == "s1:p")
+    // It counts as one waiting in the line under another card.
+    let other = RemotePrompt(kind: "question", id: "s1:q", sessionId: "s1", createdAt: 0, answerable: true,
+      questions: [AgentQuestion(header: nil, question: "按什么排序？", multiSelect: false, options: [QuestionOption(label: "a", description: nil)])])
+    #expect(activityState(sessions: [session("s1", status: .needsYou)], prompts: [other, plan], now: 1000)?.others == "另有 1 个等你处理")
   }
 
   @Test func questionOptionsGetButtonsUpToThree() {

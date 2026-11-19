@@ -2,9 +2,22 @@
 // and the phone's answer back as the same `GuiAnswer` the desktop card sends. Unlike a terminal session's prompt, nothing
 // is held for the phone: the GUI's own card and the phone are two views of one ask, so whichever answers first wins and
 // the other's list drops it (`prompt-done`, broadcast as `prompts`). Pure: no Electron, no Node.
+import { createHash } from 'node:crypto'
 import type { GuiAnswer, GuiPermissionOption, GuiPrompt } from '@shared/gui-chat'
-import { remotePromptId, REMOTE_LIMITS, type PhoneCommand, type RemotePrompt } from '@shared/remote'
+import { REMOTE_LIMITS, type PhoneCommand, type RemotePrompt } from '@shared/remote'
 import { toolInputOf } from '../gui/status'
+
+/**
+ * The id the phone knows a GUI session's prompt by: the session and a digest of the driver's whole id.
+ *
+ * A driver's id is unique only inside its own process (Codex's is the app-server's JSON-RPC request id, ACP's and Pi's
+ * the same kind of value, a number or any string), so two sessions both ask as `100`. It is also the driver's to choose:
+ * a cut would let two of one session's ids with the same first characters collide, and base64 of the text would blow any
+ * length bound when it is CJK. A digest of the whole id is fixed in length (22 base64url characters, 132 bits) and always
+ * matches `PROMPT_ID`. Nothing decodes it: `GuiPrompts` keeps the driver's own id for the GuiAnswer.
+ */
+export const remotePromptId = (sessionId: string, promptId: string | number): string =>
+  `${sessionId}:${createHash('sha256').update(String(promptId)).digest('base64url').slice(0, 22)}`
 
 /** 拒绝 / 总是允许 / 允许 on the phone → the option kind the agent offered (ACP's own kinds; Claude and Codex use them too). */
 const OPTION_KIND: Readonly<Record<Extract<PhoneCommand, { type: 'permission' }>['decision'], GuiPermissionOption['kind']>> = {
