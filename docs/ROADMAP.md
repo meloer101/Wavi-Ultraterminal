@@ -10,6 +10,7 @@
 
 - 2026-11-18：Worktree 视图里能删的都能删，多选菜单不虚报（PRD v1.218 ①②③④；作者 2026-11-18 截图：「没有会话」剩 4 个，全选后右键「删除 4 个 worktree…」只得到「没有可以删除的：…」）：① Wavi 自己建的快照 worktree（`wavi run --base snapshot`，`commit-tree` 生成、天然不在任何分支上）不再被当成用户的孤立提交：`unreachableCommits` 改用 `git log --format=%an%x00%ae%x00%s`，作者名、作者邮箱、说明三者都等于 Wavi 快照提交的才算，数出来的才是「会丢的提交」；`GitWorktreeInfo` 新增 `snapshot`（分离 HEAD 且 HEAD 是快照提交），没有会话时归「可清理」，最后一个会话关闭时的删除不再给 `force`（原来传的是只给子模块用的 `true`，所以从来没成功过）。②「更多 › 删除 worktree…」唯一的阻碍是未提交改动时，确认框改成「丢弃未提交的改动并删除「<名字>」？」，列出会丢的文件（截到 480 字预算内，其余写「…还有 N 个」），按钮「丢弃并删除」，确认后 `git worktree remove --force`（`gitWorktrees.remove` 新增可选第四个参数 `discard`）；其他阻碍照旧拒绝，全部清理和多选删除从不传它。③ 多选后右键那一项的数量是实际会删的个数，一个都删不了时是置灰的「没有可以删除的」；按 ⌫ 时一个都删不了顶部只列放得下的几条原因（200 字预算），其余写「…还有 N 个」。`src/shared/git-worktrees.ts`（`parseUnreachableLog`、`snapshot`、快照提交的三个常量）、`src/main/worktree-create.ts`（`snapshotCommit` 用常量）、`src/main/git-worktrees.ts`（`unreachableCommits`、`details`、`removeWorktree` 的 `discard`）、`src/shared/ipc.ts` / `src/preload/index.ts`（`remove` 的可选第四个参数）、`renderer/panels/worktree/model.ts`（`groupOf`、`discardable`）、`actions.ts`（`deleteWorktreeInteractive` 的丢弃确认、`openPickedMenu` 的数量、`cleanUpInteractive` 的截短）、`renderer/state/session-actions.ts`（`closeSessionNow` 传 `false`）；单测 `src/shared/git-worktrees.test.ts`（解析器）、`src/main/git-worktrees.test.ts`（真实仓库：快照 worktree 列出 0 个不可达提交并能删、用户自己的脱离提交仍拒、快照上再叠一个用户提交、说明相同但作者不同、丢弃删除保留分支、`discard` 越不过锁定 / 主目录 / 脱离的用户提交 / 非字面量 `true`）、`renderer/panels/worktree/model.test.ts`（`groupOf`、`discardable`），e2e `worktree-panel.spec.ts`（快照 worktree 在可清理并被全部清理删掉、没有会话且只有未提交改动的 worktree 一次确认后丢弃并删除、多选菜单数实际会删的个数和置灰的「没有可以删除的」）、`dispatch.spec.ts`（快照子会话关闭后 worktree 文件夹消失）。第一轮复核后：① 快照提交的身份还包括 committer（`git commit --amend` 改掉它就不再算快照，那条提交是用户或 agent 的活）；`git log` 固定 `-c log.showSignature=false`，用户的 `log.showSignature=true` 加不进 `gpg:` 行。② 丢弃确认把 `{ count, files }`（确认框当时数到的、列出的）一起交给主进程；主进程重读未提交状态，和它不一致就返回新的 `changed` 拒绝，什么都不删，界面写「改动和确认时不一样了，没有删除，再点一次删除」；带丢弃时若有子模块，仍先返回 `submodules`，第二次确认后 `force` 和丢弃一起传。③ 丢弃清单按「项」计数（`dirtyCount` 可能多于 `dirtyFiles` 的 50 条，未跟踪文件夹算一项），放不下时写「…还有 N 个」；超过 100 字的路径只留最后 99 字，前面加 …；这个文件里每个确认框的 detail 都截到 480 字以内。单测补了主进程的这些行为（丢弃与确认时不一致、非法 payload、有子模块时仍要二次确认、amend 过的快照提交）和 model 的清单 helper，e2e 补了取消后改动还在、确认框 detail 不超过 500。真实 app 里还没看过；e2e 和单测之外，作者那 4 个 worktree 没有在原作者机器上重跑。
 - 2026-11-18：Worktree 视图「可清理」里只放真能清掉的，只多出未跟踪符号链接的 worktree 能删（PRD v1.217 ①②；作者的真实仓库：7 个已合并 worktree 都列在可清理，点「全部清理」却得到「没有可以清理的：…（有 1 个未提交的改动）」×7，各自只有一个指向已断的 `node_modules` 的未跟踪链接）：① 未跟踪的符号链接不算未提交改动，不计入 `+N −M` 和未提交数；删除前 Wavi 再 `lstat` 一次，仍是工作区内的链接才 `unlink` 链接本身（从不碰目标、不用 `rm -r`），然后照常 `git worktree remove`；链接的父文件夹按真实路径（`realpath`）必须在这个 worktree 里，否则拒绝；之后若 git 拒绝或后面某个链接没能去掉，已去掉的链接按 `readlink` 的原样放回去（相对链接仍是相对的），`--force` 仍只给子模块；已跟踪的符号链接被改动、未跟踪文件夹（`dir/`）里的链接仍按未提交改动算，`lstat` 失败也算。②「可清理」= 没有会话、已合并或文件夹已不在，并且 `deleteBlocker` 为 null；会被拒绝的归到「没有会话」，行上照常写「已合并」。`src/main/git-worktrees.ts`（`dirtyState`、`unlinkUntrackedLinks`、`removeWorktree`）、`src/shared/git-worktrees.ts`（只改 `dirtyFiles` / `dirtyCount` 的注释）、`renderer/panels/worktree/model.ts`（`groupOf`、`buildRows`）；单测 `src/main/git-worktrees.test.ts`（真实仓库：只有未跟踪链接 / 断链接 / 链接加未跟踪文件 / 已跟踪链接被改动 / 未跟踪文件夹里的链接 / git 拒绝后链接复原 / 只删掉一部分后全部复原 / 相对链接复原 / 父文件夹在工作区外的链接被拒绝）、`renderer/panels/worktree/model.test.ts`，e2e `worktree-panel.spec.ts`（一个只有 `node_modules` 链接的已合并 worktree 可一键清理、目标文件夹和文件还在；一个有未跟踪文件的留在没有会话）。真实 app 里还没看过；作者那 7 个 worktree 没有在原作者机器上重跑。
+- 2026-11-19：F22 手机远程 v2「放进口袋也能管」定下（PRD v1.220）：阶段 1 GUI 会话的权限 / 提问 / 计划确认在手机上答、离线缓存和重连；阶段 2 经推送转发服务的通知和后台 Live Activity、TestFlight 外部测试。下一步：阶段 1 的 Figma 稿和 Mac 端。见下面「F22 v2」。
 - 2026-11-18：Worktree 视图多选删除的两处修正（PRD v1.216 ②③④；作者合并后试用：点一行、按住 ⇧ 点另一行，没能删掉中间的）：① 清理 / 删除进行中 ⇧ / ⌘ 点击被静默忽略（作者的 26 个 worktree 清理了约 2 分钟），改为照样可以选，结束时只把这次删的行移出选区，进行中再按删除在顶部写「上一次删除还没结束」；② 进行中顶部那一行写进度「正在清理 3 / 26…」/「正在删除 3 / 26…」，原来整段时间没有任何显示；③ ⇧ 还按着时按 ⌫ 被忽略，改为放行（⌘ / ⌃ / ⌥ 和长按重复仍忽略）。`panels/worktree/actions.ts`、`WorktreeView.tsx`；e2e `worktree-panel.spec.ts`（清理进行中看到进度并能选中一行，⇧⌫ 删除）。作者遇到的是哪一处没有确认；真实 app 里还没看过。
 - 2026-11-18：Worktree 视图「全部清理」在可清理的 worktree 多时点了没反应：确认框把每个 worktree 列一行，超过主进程对确认框文字的 500 字上限（`confirm-spec.ts`）时 IPC 抛错，没有确认框也没有提示（作者的仓库有 33 个已合并的 worktree）。确认框现在只列放得下的几行，其余写「…还有 N 个」，标题里的数量仍是全部；跳过的清单同样截短。`panels/worktree/model.ts` `fitLines`、`actions.ts` `listWithin`；单测 `model.test.ts`，e2e `worktree-panel.spec.ts`（12 个已合并的 worktree，修复前失败）。真实 app 里还没看过；多选删除另见同日「Worktree 视图 ⇧ / ⌘ 点击多选后一起删除」。
 - 2026-11-18：Worktree 视图 ⇧ / ⌘ 点击多选后一起删除（PRD v1.216 ①②③④，Figma 99A `1701:80070` / 浅色 `1701:81005`）：手势同侧栏 v1.197，按面板显示顺序跨分组，没点过时 ⇧ 只选这一行，只有在这个视图里点过的行才算起点（跟着当前会话自动展开的行不算），主目录不能选、起点是它时从下面第一行算起；选中的行铺 `--bg-selected`（悬停时也是），有选中时展开的行收起，Esc、再单击一行、切换会话或项目、关掉面板都取消，删除进行中不能选；刷新后已不在列表里的行自动移出。在选中的行上右键只有「删除 N 个 worktree…」（右侧写 ⌫），焦点在面板里时 ⌫ / ⌦ 也一样；一次确认，规则同「全部清理」（只删没有会话的，有会话、未提交改动、被锁定、变基中、分离 HEAD 有提交不在分支上、git 检查失败、含子模块的跳过并写原因，从不 `--force`，分支保留）；确认标题里的数量是实际要删的个数（同「全部清理」，跳过的不算）。`panels/worktree/model.ts` `pickRows` / `listWithin`、`store.ts` 的 `selection` / `anchor`、`actions.ts` 的 `pickRow` / `deletePickedInteractive` / `openPickedMenu` 和 `cleanUpInteractive` 的 `'delete'` 措辞、`WorktreeView.tsx`、`WorktreeView.module.css`；单测 `model.test.ts`，e2e `worktree-panel.spec.ts`（3 个干净 + 1 个有未提交改动的没有会话 worktree），两种主题截图 `test-results/right-panel/99a-worktree-picked-{dark,light}.png`。真实 app 里还没看过；Figma 99A 的原图没打开过（这次会话里没有 Figma MCP），选中底色按侧栏 v1.197 的同一条规则写。
@@ -393,7 +394,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] v1.201 没测 / 没做：真 Claude 在 Wavi 里回退一次（只有假 Claude 的 e2e 和命令行实测）；`--resume` 之后旧消息的文件回退；Codex 的搜索结果列表（app-server 只给搜索词）、ACP 的 `resource_link`；版本切换只看一层（旧版本里再改过的消息不能再切）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
-- [ ] 没做：总览浮层里 GUI 会话不显示聊天；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上（手机打开也算看到，v1.161）；ACP agent 的状态事件 agent 字段暂报 `opencode`
+- [ ] 没做：总览浮层里 GUI 会话不显示聊天；手机远程回答 GUI 会话的权限、提问和计划确认（F22 v2 阶段 1；给它发消息已能用，`src/renderer/remote/handler.ts`）；app 重启后没看过的 GUI 会话要等看到时才接上（手机打开也算看到，v1.161）；ACP agent 的状态事件 agent 字段暂报 `opencode`
 
 ## 进行中：F22 手机远程（2026-11-01 定）
 
@@ -434,8 +435,27 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 - [x] S2 灵动岛和锁屏卡片（2026-11-01，PRD v1.122，Figma 47）：WidgetKit 扩展 `ios/WaviActivity`，App 前台和刚退后台时更新，按钮走 `LiveActivityIntent`（允许 / 拒绝 / 提问选项，「更多」进 App）。测试 `ActivityStateTests`；iOS 26.3 模拟器对替身 Mac 点过提问选项和锁屏上的「允许」。作者手机上没试
 - [x] 手机提问修复（2026-11-01，PRD v1.123）：接管旧守护进程时不为手机挂起（它 10 s 就答空，回答会白发）；窗口重新接上同一进程时保留待回答的提问和权限。测试 `bridge.test.ts`、`daemon-endpoint.test.ts`，`e2e/remote.spec.ts` 新增 AskUserQuestion 端到端
 - [x] S2 空闲态（2026-11-01，PRD v1.124，Figma 47′）：没有要显示的会话时不立刻结束，换成「空闲」，安静 30 分钟后结束；只接着已有的卡片。测试 `ActivityStateTests`；模拟器对替身 Mac 看过紧凑和展开态，锁屏没截图。App 挂起时到点结束要等 S4
-- [ ] S3 蓝牙后台更新：先实测后台被蓝牙唤醒时能否更新灵动岛；Mac 端 `@stoprocent/bleno`
-- [ ] S4 APNs（取代原 P4 的 Expo push）：Mac 直发，.p8 存 Mac 钥匙串；通知和灵动岛的 start / update / end
+- [ ] S3 蓝牙后台更新：先实测后台被蓝牙唤醒时能否更新灵动岛；Mac 端 `@stoprocent/bleno`（不在 v2）
+- ~~S4 APNs：Mac 直发，.p8 存 Mac 钥匙串~~（v1.220 改为经推送转发服务，见下面 v2 阶段 2）
+
+### F22 v2「放进口袋也能管」（2026-11-19 定，PRD v1.220）
+
+每个阶段先出 Figma 稿给作者看，再交给 Pi 实现。
+- [ ] 阶段 1 · GUI 会话的权限、提问、计划确认在手机上答（v1.220 ①，PRD F22 验收 ⑨）
+  - [ ] Mac 端：`GuiPrompt` 进手机的 prompts（`answerable`），手机的回答转成 `GuiAnswer` 走桌面卡片同一段代码，先答的生效；Claude、Codex、ACP 三类驱动
+  - [ ] Figma：手机的计划确认面板（深浅两种主题）
+  - [ ] 手机端：计划确认面板；权限、提问面板复用 `PromptSheet`
+- [ ] 阶段 1 · 离线和重连（v1.220 ④，验收 ⑫）
+  - [ ] Figma：离线时的会话列表和会话页（「Mac 上次更新于 HH:MM」、挡住的按钮）
+  - [ ] 手机端：缓存会话列表和每个会话最近 200 条对话；网络变化 / 回到前台立即重连，1 / 2 / 4 … 30 s 退避
+- [ ] 阶段 2 · 推送（v1.220 ②③，验收 ⑩⑪）
+  - [ ] 作者：Apple Developer 里建 APNs 密钥（.p8），放进转发服务的 Vercel 环境变量
+  - [ ] 转发服务：无状态 HTTPS 函数、独立的 Vercel 项目，签 JWT 转给 APNs，按 device token 限速，不记录内容
+  - [ ] Mac 端：等你处理 / 做完 / 出错时加密后交给转发服务，手机在前台连着时不发；设置 · 手机 每台设备的「推送」开关
+  - [ ] 手机端：通知权限、device token 和 Live Activity push token 交给 Mac；Notification Service Extension 解密；权限通知的「允许 / 拒绝」；Live Activity 后台 start / update / end
+  - [ ] Figma：通知的文字和按钮、设置 · 手机 的「推送」开关
+- [ ] 阶段 2 · TestFlight 外部测试（验收 ⑬；作者在 App Store Connect 建 App）
+- [ ] 下一版（v1.220 ⑥）：会话行的 todo / workflow / 派活子会话 / context 占用；输入框「/」菜单、复制消息；手机上的提交 / 同步 / 拉取、「合并 PR #N…」面板、CI 状态
 
 ## 进行中：F25 Ultracode（2026-11-11 定）
 
