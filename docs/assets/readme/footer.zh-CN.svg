@@ -3,7 +3,7 @@
 .s{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue','Segoe UI','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif} .m{font-family:ui-monospace,'SF Mono',Menlo,Consolas,'PingFang SC','Noto Sans SC',monospace}
 .flow{stroke-dasharray:5 9;animation:flow 1.1s linear infinite}
 .slow{animation-duration:2.4s}
-.spin{transform-box:fill-box;transform-origin:center;animation:spin 1.1s linear infinite}
+.spin{transform-box:view-box;animation:spin 1.1s linear infinite}
 .pulse{transform-box:fill-box;transform-origin:center;animation:pulse 1.8s ease-out infinite}
 .up{opacity:0;animation:up .9s cubic-bezier(.2,.8,.2,1) forwards}
 .draw{stroke-dasharray:1400;stroke-dashoffset:1400;animation:draw 6s cubic-bezier(.6,0,.3,1) infinite}
