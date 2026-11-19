@@ -4,6 +4,45 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-19
+
+A full access level for every agent, deletable worktrees and a quieter interface: dispatched sessions follow their dispatcher's permission, the Worktree view deletes several worktrees at once, shortcut hints show on hover, and your messages fly from the composer into the chat.
+每个 agent 都有「完全访问」，worktree 能删干净，界面更安静：派出的会话跟派活方的权限走，Worktree 视图能多选一起删，快捷键悬停才出现，你的消息从输入框飞进对话。
+
+### Permissions / 权限
+- GUI sessions have a fourth permission level after Auto, 完全访问, for every agent: Claude runs with bypassPermissions, Codex with approval never and no sandbox, and Wavi allows every request for Pi and ACP agents.
+  GUI 会话在「自动」之后多了第四档「完全访问」，每个 agent 都有：Claude 用 bypassPermissions，Codex 不再询问且不用沙箱，Pi 和 ACP agent 由 Wavi 放行所有请求。
+- Scheduled terminal sessions list the permission levels each CLI can be launched with.
+  定时任务里的终端会话按各家 CLI 列出它能用的权限档。
+- A dispatched session starts at its dispatcher's permission (full access when its agent has no Auto), and a leader session runs at Auto.
+  派出的会话按派活方的权限启动（这家没有「自动」时用「完全访问」）；leader 会话默认「自动」。
+
+### Worktrees
+- Pick several worktrees with ⇧ / ⌘ click and delete them at once (⌫ or the right-click menu); the menu counts only what will really be deleted.
+  ⇧ / ⌘ 点击多选 worktree，一起删除（⌫ 或右键菜单）；菜单里的数量是实际会删的个数。
+- 可清理 holds only worktrees that can be deleted; a worktree whose only change is an untracked symlink (such as a broken `node_modules` link) can be deleted.
+  「可清理」里只放真能删的；只多出一个未跟踪符号链接（比如断了的 `node_modules` 链接）的 worktree 可以删。
+- Deleting one worktree whose only obstacle is uncommitted changes offers 丢弃并删除, listing the files that will be lost. Wavi's snapshot worktrees can be deleted and go with their session.
+  逐个删除时，唯一的阻碍是未提交改动的 worktree 可以「丢弃并删除」，确认框列出会丢的文件。Wavi 的快照 worktree 能删，并随会话一起删掉。
+
+### GUI sessions / GUI 会话
+- A message you send flies from the composer to its place in the chat, on the desktop and the iPhone.
+  你发出的消息从输入框飞到它在对话里的位置，桌面和 iPhone 都是。
+- A long message of yours opens folded behind 展开 — 10 lines on the desktop, 8 on the iPhone.
+  你的长消息默认折叠在「展开」后面：桌面 10 行，iPhone 8 行。
+- Claude sessions take the agent's own title sooner, also after a short first turn.
+  Claude 会话更早换成 agent 起的标题，第一轮很短时也一样。
+
+### Interface / 界面
+- Shortcut hints on the sidebar and on buttons show only on hover or keyboard focus; 设置 · 快捷键 lists every shortcut by area.
+  侧栏和按钮上的快捷键只在悬停或键盘焦点时出现；设置 · 快捷键 按区域列出全部快捷键。
+- 终端 and iOS 模拟器 move into the session header's … menu, leaving four view icons.
+  「终端」和「iOS 模拟器」挪进会话头的「…」菜单，视图图标回到 4 个。
+- Under 实心玻璃 the board's status cards get the glass edge — a top highlight and a hairline, no drop shadow.
+  材质为「实心玻璃」时，看板的状态卡片也画玻璃边缘：顶部一道亮线和一圈发丝线，没有投影。
+- The built-in browser no longer opens new ports by itself, and the page leaves together with the closing right panel.
+  内置浏览器不再自动打开新端口；关闭右侧栏时网页和面板一起离开。
+
 ## [0.20.0] - 2026-11-17
 
 A livelier GUI chat, a new icon set and a third window material: a message shows its run row the moment you send it, the chat links files, colors code and folds stacks, and every icon in Wavi and the iPhone app is now Hugeicons.
@@ -726,7 +765,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/meloer101/Wavi-Ultraterminal/compare/v0.17.0...v0.18.0
