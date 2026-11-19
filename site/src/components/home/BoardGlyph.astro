@@ -1,6 +1,8 @@
 ---
 /* The five board status glyphs, 14×14 in `currentColor`. Shape as well as the words, so a status never rides on
    colour alone. */
+import { CHECK_PATH } from './check-path'
+
 export type GlyphKind = 'needs' | 'error' | 'review' | 'running' | 'idle'
 
 interface Props {
@@ -20,14 +22,7 @@ const { kind } = Astro.props
       </>
     )}
     {kind === 'review' && (
-      <path
-        d="M2.5 7.4 5.6 10.4 11.5 3.8"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
+      <path d={CHECK_PATH} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
     )}
     {kind === 'running' && (
       <path d="M12 7a5 5 0 1 1-2.2-4.15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />

@@ -1,6 +1,6 @@
 ---
 /* 04 Appearance: four looks on a brand panel, and the settings panel beside it — three groups of static controls
-   (drawings, not inputs, so nothing here takes focus). */
+   (drawings, not inputs: each controls row is aria-hidden and nothing here takes focus). */
 import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
@@ -24,7 +24,7 @@ const own = lang === 'en' ? 0 : 1
           widths={[321, 642]}
           sizes="(min-width: 1000px) 321px, 45vw"
           loading="lazy"
-          alt=""
+          alt={caption}
         />
         <figcaption>{caption}</figcaption>
       </figure>
@@ -34,18 +34,18 @@ const own = lang === 'en' ? 0 : 1
   <div class="controls-col">
     <Label value={t.appearance.label} />
     <h2 class="display-s">{t.appearance.title[0]}<br />{t.appearance.title[1]}</h2>
-    <div class="groups" aria-hidden="true">
+    <div class="groups">
       <div class="group">
         <h3>{t.appearance.groups[0][0]}</h3>
         <p>{t.appearance.groups[0][1]}</p>
-        <div class="controls">
+        <div class="controls" aria-hidden="true">
           <span class="seg"><span class="on">{c.mode[0]}</span><span>{c.mode[1]}</span></span>
         </div>
       </div>
       <div class="group">
         <h3>{t.appearance.groups[1][0]}</h3>
         <p>{t.appearance.groups[1][1]}</p>
-        <div class="controls">
+        <div class="controls" aria-hidden="true">
           <span class="seg"><span class="on">{c.glass[0]}</span><span>{c.glass[1]}</span></span>
           <span class="slider">
             <span class="mono">{c.slider[0]}</span>
@@ -58,15 +58,13 @@ const own = lang === 'en' ? 0 : 1
       <div class="group">
         <h3>{t.appearance.groups[2][0]}</h3>
         <p>{t.appearance.groups[2][1]}</p>
-        <div class="controls">
+        <div class="controls controls-chips" aria-hidden="true">
           {c.chips.map(([key, value]) => (
             <span class="chip"><span class="chip-key">{key}</span><span>{value}</span></span>
           ))}
         </div>
-        <div class="controls">
+        <div class="controls" aria-hidden="true">
           <span class="seg"><span>{c.theme[0]}</span><span class="on">{c.theme[1]}</span></span>
-        </div>
-        <div class="controls">
           <span class="seg">
             <span class:list={[own === 0 && 'on']}>{c.language[0]}</span>
             <span class:list={[own === 1 && 'on']}>{c.language[1]}</span>

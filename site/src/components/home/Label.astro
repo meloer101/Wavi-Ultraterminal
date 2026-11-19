@@ -1,11 +1,10 @@
 ---
-/* A small heading label, drawn `+  01  AGENTS`. Brand on light sections, white on the ink and brand ones, ink inside
-   the light cells. */
+/* A small heading label, drawn `+  01  AGENTS`. Brand on light sections, white on the ink and brand ones. */
 import type { Label } from '../../i18n'
 
 interface Props {
   value: Label
-  tone?: 'brand' | 'white' | 'ink'
+  tone?: 'brand' | 'white'
 }
 const { value, tone = 'brand' } = Astro.props
 ---

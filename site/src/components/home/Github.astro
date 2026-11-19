@@ -4,6 +4,7 @@ import { Image } from 'astro:assets'
 import { pic } from '../../home-art'
 import { copy, type Lang } from '../../i18n'
 import BoardGlyph from './BoardGlyph.astro'
+import { CHECK_PATH } from './check-path'
 import Label from './Label.astro'
 
 interface Props {
@@ -28,7 +29,7 @@ const f = t.github.fragments
         widths={[741, 1482]}
         sizes="741px"
         loading="lazy"
-        alt=""
+        alt={t.github.alt}
       />
     </div>
 
@@ -41,7 +42,7 @@ const f = t.github.fragments
             <span class="step-disc">
               <svg viewBox="0 0 14 14"
                 ><path
-                  d="M2.5 7.4 5.6 10.4 11.5 3.8"
+                  d={CHECK_PATH}
                   fill="none"
                   stroke="currentColor"
                   stroke-width="1.8"
@@ -116,7 +117,7 @@ const f = t.github.fragments
                   <span class="frag-disc"
                     ><svg viewBox="0 0 14 14"
                       ><path
-                        d="M2.5 7.4 5.6 10.4 11.5 3.8"
+                        d={CHECK_PATH}
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"

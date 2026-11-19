@@ -65,6 +65,7 @@ const en = {
     title: ['One task,', 'many hands.'],
     intro:
       'Dispatch, a leader, subagents, agent teams, workflows, or one task given to several agents. Wavi runs each of them and draws who is doing what.',
+    alt: 'A chat session in Wavi: one agent dispatches three sessions to Codex, Claude Code and Gemini CLI, drawn as a fan of lines, with a report card from Codex underneath.',
     cells: [
       [
         'Dispatch',
@@ -179,6 +180,7 @@ const en = {
     title: ['Less git.', 'More building.'],
     intro:
       'Issues and pull requests for every project sit on the board. From there to main, each step is one button: the agent does the writing, you do the deciding.',
+    alt: 'Wavi’s GitHub board in light mode: open issues and pull requests for two projects.',
     steps: ['Hand to agent', 'Review before push', 'Create PR', 'CI and auto-fix', 'Merge'],
     captions: [
       'Hand an issue or a PR to an agent from the board. It gets a worktree and the task.',
@@ -337,6 +339,7 @@ const zh: Copy = {
     title: ['一个任务，', '几双手。'],
     intro:
       '派活、leader、subagent、agent teams、workflow，或者把同一个任务交给几个 agent。每一种 Wavi 都能跑，并且把谁在做什么画出来。',
+    alt: 'Wavi 的聊天会话：一个 agent 把三个会话派给 Codex、Claude Code 和 Gemini CLI，画成扇形的连线，下面是 Codex 发回的报告卡片。',
     cells: [
       ['派活', '让一个 agent 拆活，把各块交给 Codex、Gemini 或另外十七家里的任何一家，各在各的分支上。'],
       ['Leader', 'leader 会话只派活。你点一次头，它就能接管你自己开的会话。'],
@@ -441,6 +444,7 @@ const zh: Copy = {
     label: ['03', 'GitHub'],
     title: ['少碰 git，', '多做东西。'],
     intro: '每个项目的 issue 和 PR 都在看板上。从这里到 main，每一步是一个按钮：agent 负责写，你负责决定。',
+    alt: '浅色模式的 Wavi GitHub 看板：两个项目打开的 issue 和 PR。',
     steps: ['交给 agent', '推送前审阅', '创建 PR', 'CI 和自动修复', '合并'],
     captions: [
       '在看板上把 issue 或 PR 交给 agent，它会拿到一个 worktree 和任务。',

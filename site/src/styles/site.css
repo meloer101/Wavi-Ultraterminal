@@ -12,6 +12,7 @@
  */
 
 @font-face {
+  /* One variable file: weight 400–600 and optical size 9–40 (the browser applies opsz from the font size). */
   font-family: 'DM Sans';
   src: url('../assets/fonts/dm-sans-wght-subset.woff2') format('woff2');
   font-weight: 400 600;
@@ -49,12 +50,20 @@
 
 :root {
   --brand: #d8330e;
+  --brand-text: #c42d0b;
   --ink: #0b0b14;
   --paper: #efeff1;
   --white: #fff;
   --line-light: rgb(11 11 20 / 0.12);
   --line-brand: rgb(255 255 255 / 0.32);
   --line-ink: rgb(255 255 255 / 0.18);
+  /* Three text roles per surface, nothing else (WCAG AA 4.5:1): on white and paper primary ink, secondary
+     --text-2, muted --text-3; on ink primary white, secondary --text-ink-2, muted --text-ink-3; on brand every text
+     is solid white (hierarchy from size only). Brand-coloured text on white/paper is --brand-text, not --brand. */
+  --text-2: rgb(11 11 20 / 0.68);
+  --text-3: rgb(11 11 20 / 0.6);
+  --text-ink-2: rgb(255 255 255 / 0.72);
+  --text-ink-3: rgb(255 255 255 / 0.55);
   --sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, monospace;
   --serif: 'Source Serif 4', 'Noto Serif SC', Georgia, serif;
@@ -72,10 +81,6 @@
 *::after {
   box-sizing: border-box;
 }
-html,
-body {
-  overflow-x: clip;
-}
 html {
   background: var(--white);
   color: var(--ink);
@@ -88,6 +93,7 @@ body {
   margin: 0;
   background: var(--white);
   font: 400 18px/28px var(--sans);
+  font-optical-sizing: auto;
 }
 h1,
 h2,
@@ -169,13 +175,10 @@ h1 {
   text-transform: uppercase;
 }
 .label-brand {
-  color: var(--brand);
+  color: var(--brand-text);
 }
 .label-white {
   color: var(--white);
-}
-.label-ink {
-  color: var(--ink);
 }
 
 .skip {
@@ -224,10 +227,10 @@ h1 {
   transform: translateY(1px);
 }
 .btn-primary:hover {
-  background: rgb(255 255 255 / 0.92);
+  background: #f4f4f6;
 }
 .btn-ghost:hover {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(11 11 20 / 0.1);
 }
 .chev {
   display: block;
@@ -331,7 +334,8 @@ h1 {
 }
 .nav-links a:hover,
 .nav-cell:hover {
-  opacity: 0.8;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 /* ---------------------------------------------------------------- hero */
@@ -354,9 +358,9 @@ h1 {
   align-items: center;
   gap: 8px;
   padding: 7px 14px;
-  border: 1px solid rgb(255 255 255 / 0.32);
+  border: 1px solid var(--line-brand);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(11 11 20 / 0.06);
   font: 400 14px/20px var(--sans);
 }
 .badge-mark {
@@ -377,7 +381,7 @@ h1 {
 .hero-sub {
   margin-top: 22px;
   font: 400 18px/28px var(--sans);
-  color: rgb(255 255 255 / 0.92);
+  color: var(--white);
 }
 .hero .ctas {
   margin-top: 32px;
@@ -436,7 +440,7 @@ h1 {
   flex: none;
   width: 520px;
   font: 400 18px/28px var(--sans);
-  color: rgb(11 11 20 / 0.72);
+  color: var(--text-2);
 }
 .agents-panel {
   position: relative;
@@ -447,7 +451,7 @@ h1 {
 }
 .agents-panel img {
   position: absolute;
-  top: 2.66%;
+  top: 5.75%;
   left: 1.775%;
   width: 96.45%;
   height: auto;
@@ -481,7 +485,7 @@ h1 {
 .cell-text {
   margin-top: 10px;
   font: 400 15px/23px var(--sans);
-  color: rgb(11 11 20 / 0.7);
+  color: var(--text-2);
 }
 
 /* ---------------------------------------------------------------- 02 board */
@@ -492,7 +496,7 @@ h1 {
 .board-body {
   margin-top: 24px;
   max-width: 600px;
-  color: rgb(255 255 255 / 0.72);
+  color: var(--text-ink-2);
 }
 .notice {
   position: absolute;
@@ -532,15 +536,15 @@ h1 {
 .notice-time {
   flex: none;
   font: 400 12px/18px var(--sans);
-  color: rgb(11 11 20 / 0.5);
+  color: var(--text-3);
 }
 .notice-body {
   font: 400 13px/18px var(--sans);
-  color: rgb(11 11 20 / 0.75);
+  color: var(--text-2);
 }
 .board {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   margin-top: 64px;
 }
@@ -554,7 +558,7 @@ h1 {
 }
 .col-count {
   font: 400 12px/20px var(--mono);
-  color: rgb(255 255 255 / 0.5);
+  color: var(--text-ink-3);
 }
 .col-cards {
   display: flex;
@@ -566,6 +570,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   padding: 14px;
   border: 1px solid rgb(255 255 255 / 0.16);
   border-radius: 2px;
@@ -592,18 +597,18 @@ h1 {
 .card-age {
   flex: none;
   font: 400 11px/20px var(--mono);
-  color: rgb(255 255 255 / 0.5);
+  color: var(--text-ink-3);
 }
 .card-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font: 400 11px/17px var(--mono);
-  color: rgb(255 255 255 / 0.55);
+  color: var(--text-ink-3);
 }
 .card-status {
   font: 400 13px/19px var(--sans);
-  color: rgb(255 255 255 / 0.8);
+  color: var(--text-ink-2);
 }
 .card-foot {
   display: flex;
@@ -613,7 +618,7 @@ h1 {
 }
 .card-diff {
   font: 400 11px/16px var(--mono);
-  color: rgb(255 255 255 / 0.6);
+  color: var(--text-ink-3);
 }
 .card-foot .mark {
   width: 13px;
@@ -621,16 +626,16 @@ h1 {
   color: var(--white);
 }
 .card-needs .card-age {
-  color: rgb(255 255 255 / 0.8);
+  color: var(--white);
 }
 .card-needs .card-path {
-  color: rgb(255 255 255 / 0.85);
+  color: var(--white);
 }
 .card-needs .card-status {
   color: var(--white);
 }
 .card-needs .card-diff {
-  color: rgb(255 255 255 / 0.9);
+  color: var(--white);
 }
 .facts {
   display: grid;
@@ -648,7 +653,7 @@ h1 {
 .fact p {
   margin-top: 6px;
   font: 400 15px/23px var(--sans);
-  color: rgb(255 255 255 / 0.66);
+  color: var(--text-ink-2);
 }
 
 /* ---------------------------------------------------------------- 03 github */
@@ -669,11 +674,12 @@ h1 {
 .gh-intro {
   margin-top: 24px;
   font: 400 18px/28px var(--sans);
-  color: rgb(255 255 255 / 0.92);
+  color: var(--white);
 }
 .gh-shot {
   display: block;
   width: 741px;
+  min-width: 0;
   height: auto;
 }
 .steps-line {
@@ -728,11 +734,12 @@ h1 {
 }
 .steps {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   margin-top: 12px;
 }
 .step {
+  min-width: 0;
   padding: 20px 20px 22px;
   border-radius: 2px;
   background: var(--white);
@@ -740,7 +747,7 @@ h1 {
 }
 .step-n {
   font: 400 12px/18px var(--mono);
-  color: rgb(11 11 20 / 0.5);
+  color: var(--text-3);
 }
 .step h3 {
   margin-top: 6px;
@@ -762,7 +769,7 @@ h1 {
 .step-cap {
   margin-top: 16px;
   font: 400 14px/21px var(--sans);
-  color: rgb(11 11 20 / 0.7);
+  color: var(--text-2);
 }
 .frag-row {
   display: flex;
@@ -779,15 +786,19 @@ h1 {
 .frag-row .mono {
   font-size: 11px;
 }
+.frag-row.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+}
 .frag-strong {
   font-weight: 500;
 }
 .frag-dim {
-  color: rgb(11 11 20 / 0.55);
+  color: var(--text-3);
   font-size: 11px;
 }
 .frag-note {
-  color: rgb(11 11 20 / 0.6);
+  color: var(--text-3);
   font-size: 11px;
 }
 .frag-fail {
@@ -870,7 +881,7 @@ h1 {
 .cell4 p {
   margin-top: 6px;
   font: 400 15px/23px var(--sans);
-  color: rgb(11 11 20 / 0.7);
+  color: var(--text-2);
 }
 
 /* ---------------------------------------------------------------- 04 appearance */
@@ -883,10 +894,10 @@ h1 {
 }
 .looks {
   display: grid;
-  flex: none;
+  flex: 0 1 744px;
   grid-template-columns: repeat(2, 1fr);
   gap: 24px 22px;
-  width: 744px;
+  min-width: 0;
   padding: 40px;
   background: var(--brand);
 }
@@ -901,7 +912,7 @@ h1 {
   color: var(--white);
 }
 .controls-col {
-  flex: 1;
+  flex: 1 1 480px;
   min-width: 0;
 }
 .controls-col h2 {
@@ -925,7 +936,7 @@ h1 {
 .group p {
   margin-top: 4px;
   font: 400 14px/21px var(--sans);
-  color: rgb(11 11 20 / 0.68);
+  color: var(--text-2);
 }
 .controls {
   display: flex;
@@ -936,6 +947,11 @@ h1 {
 }
 .controls + .controls {
   margin-top: 8px;
+}
+.controls-chips {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: start;
 }
 .seg {
   display: inline-flex;
@@ -954,12 +970,16 @@ h1 {
 }
 .slider {
   display: inline-flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 .slider .mono {
   font-size: 11px;
-  color: rgb(11 11 20 / 0.55);
+  color: var(--text-3);
 }
 .slider .slider-val {
   font-size: 12px;
@@ -967,7 +987,10 @@ h1 {
 }
 .track {
   position: relative;
-  width: 150px;
+  flex: 1 1 80px;
+  width: auto;
+  min-width: 60px;
+  max-width: 150px;
   height: 2px;
   border-radius: 1px;
   background: rgb(11 11 20 / 0.2);
@@ -993,15 +1016,17 @@ h1 {
 }
 .chip {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   padding: 5px 10px;
   border: 1px solid rgb(11 11 20 / 0.22);
   border-radius: 2px;
   font: 400 12px/16px var(--sans);
 }
 .chip-key {
-  color: rgb(11 11 20 / 0.55);
+  color: var(--text-3);
 }
 
 /* ---------------------------------------------------------------- faq */
@@ -1050,7 +1075,7 @@ h1 {
   justify-content: center;
   width: 20px;
   height: 26px;
-  color: var(--brand);
+  color: var(--brand-text);
   font: 400 20px/1 var(--sans);
 }
 .faq-plus::before {
@@ -1063,7 +1088,7 @@ details[open] .faq-plus::before {
   max-width: 700px;
   margin-top: 10px;
   font: 400 16px/25px var(--sans);
-  color: rgb(11 11 20 / 0.68);
+  color: var(--text-2);
 }
 
 /* ---------------------------------------------------------------- footer */
@@ -1088,7 +1113,7 @@ details[open] .faq-plus::before {
 .footer-line {
   margin-top: 20px;
   font: 400 17px/26px var(--sans);
-  color: rgb(255 255 255 / 0.9);
+  color: var(--white);
 }
 .footer .ctas {
   margin-top: 36px;
@@ -1112,16 +1137,21 @@ details[open] .faq-plus::before {
   margin-top: 14px;
 }
 .footer-col a {
+  display: block;
   font: 400 15px/22px var(--sans);
-  color: rgb(255 255 255 / 0.85);
+  color: var(--white);
 }
 .footer-col a:hover {
-  color: var(--white);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.footer-col li {
+  line-height: 22px;
 }
 .footer-art {
   position: absolute;
   bottom: -24px;
-  left: 624px;
+  left: max(624px, calc(50% - 96px));
   width: 780px;
   pointer-events: none;
 }
@@ -1148,7 +1178,7 @@ details[open] .faq-plus::before {
 }
 .footer-end p {
   font: 400 13px/20px var(--sans);
-  color: rgb(255 255 255 / 0.8);
+  color: var(--white);
 }
 
 /* ---------------------------------------------------------------- narrower screens */
@@ -1172,6 +1202,26 @@ details[open] .faq-plus::before {
   }
 }
 
+@media (max-width: 1200px) {
+  .notice {
+    position: static;
+    margin-top: 32px;
+  }
+}
+
+@media (max-width: 1150px) {
+  .appearance-row {
+    display: block;
+  }
+  .looks {
+    max-width: 744px;
+  }
+  .controls-col {
+    max-width: 744px;
+    margin-top: 56px;
+  }
+}
+
 @media (max-width: 1100px) {
   :root {
     --pad: 40px;
@@ -1187,10 +1237,6 @@ details[open] .faq-plus::before {
   }
   .steps-line {
     display: none;
-  }
-  .notice {
-    position: static;
-    margin-top: 32px;
   }
   .board {
     display: flex;
@@ -1217,17 +1263,6 @@ details[open] .faq-plus::before {
   }
   .gh-shot {
     margin-top: 40px;
-  }
-  .appearance-row {
-    display: block;
-  }
-  .looks {
-    width: auto;
-    max-width: 744px;
-  }
-  .controls-col {
-    max-width: 744px;
-    margin-top: 56px;
   }
 }
 
@@ -1305,6 +1340,9 @@ details[open] .faq-plus::before {
 
 @media (max-width: 480px) {
   .looks {
+    grid-template-columns: 1fr;
+  }
+  .controls-chips {
     grid-template-columns: 1fr;
   }
 }

@@ -1,10 +1,10 @@
 // The font files are subsets of only the characters in src/i18n.ts. This checks each character the copy uses is in
 // the face that draws it, so new copy cannot silently fall back to a system font. Run with `npm test`.
 // To re-make a subset, fetch https://fonts.googleapis.com/css2?family=<Family>:<axes>&text=<characters> with a
-// browser User-Agent and download the woff2 it links (DM Sans wght@400;500;600, JetBrains Mono wght@400,
-// Source Serif 4 ital,wght@1,400 with only the emphasised headline word `ALL`, Noto Sans SC wght@400;500, Noto
-// Serif SC wght@500 with only the Chinese emphasised word `所有`); DM Sans and Noto Sans SC come back as one variable
-// file spanning their weights, the other three as one file each.
+// browser User-Agent and download the woff2 it links (DM Sans opsz,wght@9..40,400..600 — one variable file with both
+// axes, so headings get the optical size; JetBrains Mono wght@400; Source Serif 4 ital,wght@1,400 with only the
+// emphasised headline word `ALL`; Noto Sans SC wght@400;500; Noto Serif SC wght@500 with only the Chinese emphasised
+// word `所有`).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -78,8 +78,9 @@ const missing = (file: string, chars: string[]): string => {
   return chars.filter((c) => !have.has(c.codePointAt(0) ?? 0)).join('')
 }
 
-// Latin text, punctuation and the typographic marks the copy uses; ⌘ ⇧ ↵ are left to the system font on purpose.
-const latin = used(/[!-~’‘“”–—·º…©›→]/u)
+// Latin text, punctuation and the typographic marks the copy uses (including the U+2212 minus in diffs); ⌘ ⇧ ↵ are
+// left to the system font on purpose.
+const latin = used(/[!-~’‘“”–—·º…©›→−]/u)
 // Chinese characters and full-width punctuation.
 const cjk = used(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/u)
 
