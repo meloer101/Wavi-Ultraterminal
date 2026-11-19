@@ -1,0 +1,104 @@
+// A GUI session's prompts as the phone gets them (PRD F22 v1.220 ①): the driver's `GuiPrompt` in the phone's shape,
+// and the phone's answer back as the same `GuiAnswer` the desktop card sends. Unlike a terminal session's prompt, nothing
+// is held for the phone: the GUI's own card and the phone are two views of one ask, so whichever answers first wins and
+// the other's list drops it (`prompt-done`, broadcast as `prompts`). Pure: no Electron, no Node.
+import type { GuiAnswer, GuiPermissionOption, GuiPrompt } from '@shared/gui-chat'
+import type { PhoneCommand, RemotePrompt } from '@shared/remote'
+import { toolInputOf } from '../gui/status'
+
+/** 拒绝 / 总是允许 / 允许 on the phone → the option kind the agent offered (ACP's own kinds; Claude and Codex use them too). */
+const OPTION_KIND: Readonly<Record<Extract<PhoneCommand, { type: 'permission' }>['decision'], GuiPermissionOption['kind']>> = {
+  'allow-once': 'allow_once',
+  'allow-always': 'allow_always',
+  deny: 'reject_once'
+}
+export type PhoneDecision = keyof typeof OPTION_KIND
+
+/**
+ * A GUI prompt in the phone's list. A permission request keeps its tool and detail (the phone's sheet shows them, and the
+ * built input the way `current-action.ts` reads it, as status.ts's `promptCall` does); a question keeps its questions,
+ * keyed by the question text the phone answers with. A plan waits for the phone's own panel (ROADMAP 阶段 1 · 手机端),
+ * which needs the phone to decode the plan text: until then it stays on the Mac rather than opening an empty sheet.
+ */
+export function remotePromptOf(prompt: GuiPrompt, sessionId: string, createdAt: number): RemotePrompt | null {
+  if (prompt.kind === 'question') return { kind: 'question', id: prompt.id, sessionId, questions: prompt.questions, createdAt, answerable: true }
+  if (prompt.kind === 'plan') return null
+  return {
+    kind: 'permission',
+    id: prompt.id,
+    sessionId,
+    tool: prompt.tool,
+    input: toolInputOf(prompt.tool, prompt.detail),
+    summary: prompt.detail,
+    canAllowAlways: prompt.options.some((o) => o.kind === 'allow_always'),
+    createdAt,
+    answerable: true
+  }
+}
+
+/** The option the phone's button picks, or null when the agent offered none of that kind (the ask stays unanswered). */
+export function optionFor(prompt: GuiPrompt, decision: PhoneDecision): string | null {
+  if (prompt.kind !== 'permission') return null
+  return prompt.options.find((o) => o.kind === OPTION_KIND[decision])?.id ?? null
+}
+
+/**
+ * The phone's answers (question text → the chosen label) as a `GuiAnswer`. Every driver keys its answer by the question
+ * text, as the phone sends it, so this only refuses an answer that names no open question.
+ */
+export function questionAnswer(prompt: GuiPrompt, answers: Record<string, string>): GuiAnswer | null {
+  if (prompt.kind !== 'question') return null
+  const known = new Map(prompt.questions.map((q) => [q.question, q]))
+  const kept: Record<string, string> = {}
+  for (const [question, answer] of Object.entries(answers)) {
+    if (!known.has(question)) continue
+    kept[question] = answer
+  }
+  return Object.keys(kept).length > 0 ? { kind: 'question', id: prompt.id, answers: kept } : null
+}
+
+interface Open {
+  prompt: GuiPrompt
+  remote: RemotePrompt
+}
+
+/** What each GUI session waits on now, by session and by prompt id. */
+export class GuiPrompts {
+  private readonly sessions = new Map<string, Open[]>()
+  private readonly byId = new Map<string, Open & { sessionId: string }>()
+
+  /** The session's whole open set, each time it changes (`GuiHostDeps.prompts`); `at` dates a prompt seen first now. */
+  set(sessionId: string, prompts: readonly GuiPrompt[], at: number): void {
+    const before = new Map((this.sessions.get(sessionId) ?? []).map((open) => [open.prompt.id, open]))
+    const next: Open[] = []
+    for (const prompt of prompts) {
+      // The same ask, seen again (another one joined or left): it keeps the moment the phone first saw it.
+      const createdAt = before.get(prompt.id)?.remote.createdAt ?? at
+      const remote = remotePromptOf(prompt, sessionId, createdAt)
+      if (remote) next.push({ prompt, remote })
+    }
+    for (const open of before.values()) if (!next.some((o) => o.prompt.id === open.prompt.id)) this.byId.delete(open.prompt.id)
+    for (const open of next) this.byId.set(open.prompt.id, { ...open, sessionId })
+    if (next.length > 0) this.sessions.set(sessionId, next)
+    else this.sessions.delete(sessionId)
+  }
+
+  /** The session ended: nothing waits on it. */
+  clear(sessionId: string): void {
+    for (const open of this.sessions.get(sessionId) ?? []) this.byId.delete(open.prompt.id)
+    this.sessions.delete(sessionId)
+  }
+
+  /** What the phone's prompt list gets, oldest first; `known` drops the sessions the phone no longer has. */
+  list(known: (sessionId: string) => boolean): RemotePrompt[] {
+    const out: RemotePrompt[] = []
+    for (const [sessionId, opens] of this.sessions) if (known(sessionId)) for (const open of opens) out.push(open.remote)
+    return out.sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  /** The prompt the phone names, while it is open. */
+  get(id: string): { sessionId: string; prompt: GuiPrompt } | null {
+    const open = this.byId.get(id)
+    return open ? { sessionId: open.sessionId, prompt: open.prompt } : null
+  }
+}

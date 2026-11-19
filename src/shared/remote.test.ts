@@ -33,6 +33,15 @@ describe('parsePhoneRequest', () => {
       photos: [{ name: 'IMG_1.HEIC', data: 'AAAA' }]
     })
     expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })).toEqual({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })
+    // A reason with 拒绝 (a GUI session's card shows it to the agent); empty or absent leaves it out.
+    expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny', message: '改完再跑' })).toEqual({
+      id: 5,
+      type: 'permission',
+      prompt: 'p1',
+      decision: 'deny',
+      message: '改完再跑'
+    })
+    expect(parsePhoneRequest({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny', message: '' })).toEqual({ id: 5, type: 'permission', prompt: 'p1', decision: 'deny' })
     expect(parsePhoneRequest({ id: 6, type: 'answer', prompt: 'p2', answers: { '要不要提示？': '显示' } })).toEqual({ id: 6, type: 'answer', prompt: 'p2', answers: { '要不要提示？': '显示' } })
     expect(parsePhoneRequest({ id: 7, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'jacob/x', prompt: '  ' })).toEqual({
       id: 7,
@@ -69,6 +78,8 @@ describe('parsePhoneRequest', () => {
     expect(parsePhoneRequest({ id: 1, type: 'diff', session: 's1', path: '/etc/passwd', scope: 'committed' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'diff', session: 's1', path: 'a.ts', scope: 'all' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'yes' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'deny', message: 42 })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'permission', prompt: 'p', decision: 'deny', message: 'x'.repeat(REMOTE_LIMITS.answerChars + 1) })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'answer', prompt: 'p', answers: {} })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'bash' })).toBeNull()
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'claude', branch: 'a b' })).toBeNull()

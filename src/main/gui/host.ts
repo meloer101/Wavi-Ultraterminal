@@ -8,7 +8,7 @@ import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, guiCanRewindFiles, type GuiAnswer, type GuiBranch, type GuiRewindInfo, type GuiRewindScope, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, guiCanRewindFiles, type GuiAnswer, type GuiBranch, type GuiRewindInfo, type GuiRewindScope, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiPrompt, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem, KeepImage } from '@shared/transcript-chat'
 import type { WorkflowRun } from '@shared/workflow-run'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
@@ -97,6 +97,11 @@ export interface GuiHostDeps<O extends GuiOwner> {
   adopted(sessionId: string, agent: CliAgent, owner: O, hooks: readonly unknown[]): void
   /** The process ended or was stopped. */
   ended(sessionId: string, agent: CliAgent): void
+  /**
+   * What the session waits on now (PRD F22 v1.220 ①): its whole open set, each time it changes — a prompt asked, one
+   * answered or withdrawn, a turn ending. The phone answers these with the same GuiAnswer as the desktop card.
+   */
+  prompts?(sessionId: string, prompts: readonly GuiPrompt[]): void
   image(path: string): Promise<ImageBlock | null>
   /** Keeps a message's inline pictures as files (Figma 71A); without it the chat draws none of them. */
   keepImage?: KeepImage
@@ -121,6 +126,8 @@ class GuiSession<O extends GuiOwner> {
   private readonly indexes = new Map<number, number>()
   /** While a reattached session's kept lines are read back: items wait here, status is not sent. */
   private replay: { items: { index: number; item: ChatItem }[] } | null = null
+  /** The prompts last handed to `deps.prompts` (by reference: the state's array changes only when the set does). */
+  private reportedPrompts: readonly GuiPrompt[] = []
   /** Live lines that arrive before the kept ones are read; and the last line number handled. */
   private early: { line: string; seq: number }[] | null = null
   private seq = 0
@@ -421,9 +428,17 @@ class GuiSession<O extends GuiOwner> {
       out.push(stamped)
     }
     if (out.length === 0) return
+    this.reportPrompts()
     if (this.synthStatus) this.status(this.tracker.events(out))
     this.queue(out)
     if (out.some((e) => e.type === 'busy' && !e.busy)) this.pump()
+  }
+
+  /** The open prompts, when they changed (`applyGuiEvent` keeps the array unless a prompt came, went, or a turn ended). */
+  private reportPrompts(): void {
+    if (!this.deps.prompts || this.state.prompts === this.reportedPrompts) return
+    this.reportedPrompts = this.state.prompts
+    this.deps.prompts(this.id, this.state.prompts)
   }
 
   private indexOf(driverIndex: number): number {
@@ -564,6 +579,11 @@ class GuiSession<O extends GuiOwner> {
     this.deps.link().kill(this.id)
     if (!this.exited) {
       this.exited = true
+      // Nothing waits on a session that is gone (a stop sends no events of its own).
+      if (this.deps.prompts && this.state.prompts.length > 0) {
+        this.state = { ...this.state, prompts: [] }
+        this.reportPrompts()
+      }
       this.deps.ended(this.id, this.launch.agent)
     }
   }

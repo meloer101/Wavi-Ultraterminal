@@ -261,7 +261,11 @@ export type PhoneCommand =
   | { type: 'feed'; session: string; before?: number }
   | { type: 'send'; session: string; text: string; photos: RemotePhoto[] }
   | { type: 'interrupt'; session: string }
-  | { type: 'permission'; prompt: string; decision: 'allow-once' | 'allow-always' | 'deny' }
+  /**
+   * 允许 / 总是允许 / 拒绝 a permission request. `message`: what the phone wrote with 拒绝, as the agent gets its reason
+   * (a terminal session's hook answer takes none; a GUI session's card does).
+   */
+  | { type: 'permission'; prompt: string; decision: 'allow-once' | 'allow-always' | 'deny'; message?: string }
   /** AskUserQuestion: question text → the chosen label (or what the user wrote). */
   | { type: 'answer'; prompt: string; answers: Record<string, string> }
   | { type: 'new-session-info'; project: string }
@@ -385,9 +389,12 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
       const value = settingValue(v.value)
       return isId(v.session) && isSettingKind(v.kind) && value !== null ? { id, type: 'set-setting', session: v.session, kind: v.kind, value } : null
     }
-    case 'permission':
+    case 'permission': {
       if (!isId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
-      return { id, type: 'permission', prompt: v.prompt, decision: v.decision }
+      const message = optText(v.message, REMOTE_LIMITS.answerChars)
+      if (message === null) return null
+      return { id, type: 'permission', prompt: v.prompt, decision: v.decision, ...(message ? { message } : {}) }
+    }
     case 'answer': {
       const a = answers(v.answers)
       return isId(v.prompt) && a ? { id, type: 'answer', prompt: v.prompt, answers: a } : null
