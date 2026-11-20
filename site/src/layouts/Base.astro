@@ -1,4 +1,5 @@
 ---
+import Analytics from '@vercel/analytics/astro'
 import '../styles/site.css'
 import dmSans from '../assets/fonts/dm-sans-wght-subset.woff2?url'
 import notoSans from '../assets/fonts/noto-sans-sc-subset.woff2?url'
@@ -55,6 +56,7 @@ const app = JSON.stringify({
     <link rel="apple-touch-icon" href={withBase('icon-180.png')} />
     <link rel="preload" href={dmSans} as="font" type="font/woff2" crossorigin />
     {lang === 'zh' && <link rel="preload" href={notoSans} as="font" type="font/woff2" crossorigin />}
+    <Analytics />
   </head>
   <body>
     <a class="skip" href="#main">{t.skip}</a>
