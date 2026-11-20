@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-19
+> 最后更新：2026-11-20
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -134,6 +134,7 @@
 - [ ] Homebrew：自己的 tap，`brew install --cask` 一行装好。放在公证之后做，因为未公证的 app 经 brew 装上同样会被 Gatekeeper 拦
 - [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）；2026-10-21 起 `site/` 是 Astro 项目，Pages 工作流先构建再发布，同一份站点也部署到 Vercel（项目根目录 `site/`，见 `site/vercel.json`）
 - [x] 官网域名 https://wavi.autos （2026-11-18，在 Vercel 注册，项目 `wavi`）：`www.wavi.autos` 和 `wavi-pi.vercel.app` 301 到它；页头加 canonical、绝对地址的 hreflang 和 `x-default`、`SoftwareApplication` JSON-LD，`/robots.txt` 和 `/sitemap.xml` 由 `site/src/pages/` 按构建的 `site` 生成；README 链接已换。GitHub Pages 同日停用（作者定）：删掉 `.github/workflows/pages.yml`，仓库设置里关掉 Pages，原地址 `meloer101.github.io/Wavi-Ultraterminal/` 不再有副本
+- [x] 官网接入 Vercel Web Analytics（2026-11-20）：`site/` 加 `@vercel/analytics`，`Base.astro` 的 `<head>` 放 `<Analytics />`，中英文两页都计数（访客、页面浏览、来源）；Vercel 项目 `wavi` 的 Analytics 已开启，部署后数据出现在项目的 Analytics 页
 - [x] 官网「Download for macOS」直接下载最新版（2026-11-18）：链接是 `releases/latest/download/Wavi-<arch>.dmg`，`release.yml` 每次发版多传一份不带版本号的 `Wavi-arm64.dmg` / `Wavi-x64.dmg`（v0.20.0 已手动补传）；默认 Apple 芯片的包，Chrome / Edge 报出 Intel 时换成 x64，Safari / Firefox 报不出芯片，Intel 用户要去 GitHub 页面下 x64
 - [x] README 按 v0.3.0 重写，中文在前，加“Wavi 不会做的事”四条（2026-10-20）
 - [x] README 改为英文在前（`README.md`），中文另成 `README.zh-CN.md`（2026-10-24，跟随 PRD v1.62 主要市场改为海外）：横幅、徽章、深浅两套真实应用截图（`<picture>`）、官网的比较图和流程图，`docs/assets/readme/`；截图用 `npm run readme:shots` 重拍（演示仓库 + e2e 夹具 + 一个真实 Claude Code 会话，`scripts/readme-shots/`）。同日在 GitHub 上补了 20 个 topic、改了简介、上传了 social preview 图
