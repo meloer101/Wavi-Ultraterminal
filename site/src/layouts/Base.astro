@@ -1,9 +1,7 @@
 ---
 import '../styles/site.css'
-import archivo from '../assets/fonts/archivo-wght-subset.woff2?url'
-import cormorantItalic from '../assets/fonts/cormorant-garamond-italic-subset.woff2?url'
-import cormorant from '../assets/fonts/cormorant-garamond-subset.woff2?url'
-import songti from '../assets/fonts/noto-serif-sc-subset.woff2?url'
+import dmSans from '../assets/fonts/dm-sans-wght-subset.woff2?url'
+import notoSans from '../assets/fonts/noto-sans-sc-subset.woff2?url'
 import { copy, otherPath, type Lang } from '../i18n'
 import { absolute, withBase } from '../site'
 
@@ -38,7 +36,7 @@ const app = JSON.stringify({
     <title>{t.meta.title}</title>
     <meta name="description" content={t.meta.description} />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#f6f6f6" />
+    <meta name="theme-color" content="#D8330E" />
     <meta property="og:title" content={t.meta.title} />
     <meta property="og:description" content={t.meta.description} />
     <meta property="og:type" content="website" />
@@ -55,20 +53,8 @@ const app = JSON.stringify({
     <script type="application/ld+json" is:inline set:html={app} />
     <link rel="icon" type="image/png" sizes="64x64" href={withBase('icon-64.png')} />
     <link rel="apple-touch-icon" href={withBase('icon-180.png')} />
-    <link rel="preload" href={cormorant} as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href={cormorantItalic} as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href={archivo} as="font" type="font/woff2" crossorigin />
-    {lang === 'zh' && <link rel="preload" href={songti} as="font" type="font/woff2" crossorigin />}
-    <script is:inline>
-      ;(function () {
-        var root = document.documentElement
-        root.classList.add('js')
-        // If the page script never starts (blocked, old browser), show the pages stacked, as authored.
-        setTimeout(function () {
-          if (!root.classList.contains('ready')) root.classList.remove('js')
-        }, 4000)
-      })()
-    </script>
+    <link rel="preload" href={dmSans} as="font" type="font/woff2" crossorigin />
+    {lang === 'zh' && <link rel="preload" href={notoSans} as="font" type="font/woff2" crossorigin />}
   </head>
   <body>
     <a class="skip" href="#main">{t.skip}</a>

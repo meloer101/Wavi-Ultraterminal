@@ -1,56 +1,87 @@
 /*
- * Wavi website · the magazine (Figma page 「官网·时尚杂志风」, W10 spreads at 1440×900 and W10 phone pages at 390×844).
- * Imported once by layouts/Base.astro. Paper and ink only; hierarchy from type, hairlines and white space.
+ * Wavi website · the landing page (Figma page 「官网·新风格探究‘」, frame O 1794:15463, 1440 wide).
+ * Imported once by layouts/Base.astro. One scrolling page per language; static HTML and CSS, no script of its own
+ * (the only script is Ctas.astro's Intel/Apple-silicon switch; the FAQ is <details>).
  *
- * Three layouts share one DOM (components/Magazine.astro):
- *   - no class on <html>: every page stacked and scrolled (no script, or before scripts/book.ts starts);
- *     sized like the phone pages.
- *   - .book-single: one page per screen, turned by scripts/book.ts (phones, portrait tablets).
- *   - .book-spread: one 1440×900 spread per screen, scaled to fit, turned at the gutter (wide screens).
- * English is "/", Chinese "/zh/"; :lang(zh) at the end swaps in the Song face for CJK.
+ * Type: DM Sans for text and headings, Source Serif 4 Italic for the one emphasised headline word (Noto Serif SC in
+ * Chinese), JetBrains Mono for paths, counts and diffs, Noto Sans SC for Chinese. All are self-hosted subsets of the
+ * page's own characters (fonts.test.ts checks them).
+ *
+ * Colour only for status and the brand blocks; hierarchy from type, hairlines and white space. Corners 2px except the
+ * notification (16) and its icon tile (10). Every margin, padding, gap and fixed height is a multiple of 4; only the
+ * small controls (chips, segmented switch, slider) use a 2 px step.
  */
 
 @font-face {
-  font-family: 'Cormorant Garamond';
-  src: url('../assets/fonts/cormorant-garamond-subset.woff2') format('woff2');
-  font-weight: 300 400;
+  /* One variable file: weight 400–600 and optical size 9–40 (the browser applies opsz from the font size). */
+  font-family: 'DM Sans';
+  src: url('../assets/fonts/dm-sans-wght-subset.woff2') format('woff2');
+  font-weight: 400 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Cormorant Garamond';
-  src: url('../assets/fonts/cormorant-garamond-italic-subset.woff2') format('woff2');
-  font-weight: 300 400;
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/jetbrains-mono-subset.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('../assets/fonts/source-serif-4-italic-subset.woff2') format('woff2');
+  font-weight: 400;
   font-style: italic;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Archivo';
-  src: url('../assets/fonts/archivo-wght-subset.woff2') format('woff2');
-  font-weight: 300 400;
+  font-family: 'Noto Sans SC';
+  src: url('../assets/fonts/noto-sans-sc-subset.woff2') format('woff2');
+  font-weight: 400 500;
+  font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: 'Noto Serif SC';
   src: url('../assets/fonts/noto-serif-sc-subset.woff2') format('woff2');
-  font-weight: 300 400;
+  font-weight: 500;
+  font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --paper: #f6f6f6;
-  --ink: #121212;
-  --rule: rgb(18 18 18 / 0.2);
-  --serif: 'Cormorant Garamond', 'Noto Serif SC', 'Songti SC', serif;
-  --sans: 'Archivo', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif;
-  /* Phone sizes (W10 phone pages): display type at 0.62 of the spread, text unchanged. */
-  --title: 55px;
-  --display: 40px;
-  --display-s: 32px;
-  --wordmark: 76px;
-  --pad-x: 24px;
-  --pad-top: clamp(84px, 12.5svh, 104px);
+  --brand: #d8330e;
+  --brand-text: #c42d0b;
+  --ink: #0b0b14;
+  --paper: #efeff1;
+  --white: #fff;
+  --line-light: rgb(11 11 20 / 0.12);
+  --line-brand: rgb(255 255 255 / 0.32);
+  --line-ink: rgb(255 255 255 / 0.18);
+  /* Three text roles per surface, nothing else (WCAG AA 4.5:1): on white and paper primary ink, secondary
+     --text-2, muted --text-3; on ink primary white, secondary --text-ink-2, muted --text-ink-3; on brand every text
+     is solid white (hierarchy from size only). Brand-coloured text on white/paper is --brand-text, not --brand. */
+  --text-2: rgb(11 11 20 / 0.68);
+  --text-3: rgb(11 11 20 / 0.6);
+  --text-ink-2: rgb(255 255 255 / 0.72);
+  --text-ink-3: rgb(255 255 255 / 0.55);
+  --sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, monospace;
+  --serif: 'Source Serif 4', 'Noto Serif SC', Georgia, serif;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 120ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-enter: 500ms;
+  interpolate-size: allow-keywords;
+  --pad: 72px;
+  --h1: clamp(40px, 5vw, 72px);
+  --h2: clamp(36px, 4.4vw, 64px);
+  --h2s: clamp(32px, 3.3vw, 48px);
+  --hf: clamp(44px, 6vw, 88px);
 }
+
+/* ---------------------------------------------------------------- base */
 
 *,
 *::before,
@@ -58,829 +89,1712 @@
   box-sizing: border-box;
 }
 html {
-  background: var(--paper);
+  background: var(--white);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 body {
   margin: 0;
-  font: 300 12px/1.6 var(--sans);
-}
-a {
-  color: inherit;
-  text-decoration: none;
+  background: var(--white);
+  font: 400 18px/28px var(--sans);
+  font-optical-sizing: auto;
 }
 h1,
 h2,
 h3,
 p,
-ol,
-figure {
+figure,
+ul,
+ol {
   margin: 0;
   padding: 0;
 }
+ul,
 ol {
   list-style: none;
 }
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a,
+button,
+summary {
+  transition:
+    color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
 img {
+  max-width: 100%;
+}
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.wrap {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: var(--pad);
+}
+/* Ten screens (PRD v1.225): each is at least one viewport and centres its content; a screen whose content needs more
+   grows instead of clipping. Screens 1, 2 and 10 keep the viewport even on narrow screens; the rest take their content
+   height there. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding-block: clamp(40px, 7svh, 96px);
+}
+.screen > .wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+}
+.screen-hero {
+  padding-block: 0;
+}
+.screen-hero .hero {
+  flex: 1;
+}
+.section-light {
+  background: var(--white);
+  color: var(--ink);
+}
+.section-paper {
+  background: var(--paper);
+  color: var(--ink);
+}
+.section-ink {
+  background: var(--ink);
+  color: var(--white);
+}
+.section-brand {
+  background: var(--brand);
+  color: var(--white);
+}
+
+h1 {
+  font: 500 var(--h1) / 1.083 var(--sans);
+  letter-spacing: -0.015em;
+}
+.display {
+  font: 500 var(--h2) / 1.0625 var(--sans);
+  letter-spacing: -0.02em;
+}
+.display-s {
+  font: 500 var(--h2s) / 1.125 var(--sans);
+  letter-spacing: -0.02em;
+}
+.mono {
+  font-family: var(--mono);
+}
+
+.label {
+  font: 400 13px/20px var(--mono);
+}
+.label-brand {
+  color: var(--brand-text);
+}
+.label-white {
+  color: var(--white);
+}
+
+/* Shortcuts written inside a sentence; the border takes the surface's hairline colour. The board's ⌘J is a button
+   with the same look, so it keeps that shape and gains a pointer. */
+kbd,
+.keycap {
+  padding: 0 4px;
+  border: 1px solid rgb(11 11 20 / 0.22);
+  border-radius: 2px;
+  background: none;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+button.keycap {
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+}
+.section-ink kbd,
+.section-ink .keycap,
+.section-brand kbd,
+.section-brand .keycap {
+  border-color: var(--line-brand);
+}
+
+.skip {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--white);
+  color: var(--ink);
+  font: 500 14px/1 var(--sans);
+}
+.skip:focus {
+  left: 12px;
+  top: 12px;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.ctas {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px 0 20px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font: 500 15px/1 var(--sans);
+  white-space: nowrap;
+  transition:
+    color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+.btn-primary {
+  background: var(--white);
+  color: var(--ink);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--white);
+  border-color: rgb(255 255 255 / 0.9);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn-primary:hover {
+  background: #f4f4f6;
+}
+.btn-ghost:hover {
+  background: rgb(11 11 20 / 0.1);
+}
+.chev {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transition: transform var(--duration) var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover .chev {
+    transform: translateX(2px);
+  }
+}
+.chev svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------------------------------------------------------------- logo and marks */
+
+.logo {
+  display: inline-flex;
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mark {
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.glyph {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.glyph svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------------------------------------------------------------- nav */
+
+.nav {
+  display: flex;
+  align-items: stretch;
+  height: 72px;
+  background: var(--brand);
+  color: var(--white);
+  border-bottom: 1px solid var(--line-brand);
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 28px;
+  border-right: 1px solid var(--line-brand);
+  font: 600 18px/1 var(--sans);
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  padding: 0 24px;
+  border-right: 1px solid var(--line-brand);
+}
+.nav-links a,
+.nav-cell {
+  font: 500 14px/20px var(--sans);
+}
+.nav-gap {
+  flex: 1;
+}
+.nav-cell {
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-left: 1px solid var(--line-brand);
+}
+.nav-dl {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-left: 1px solid var(--line-brand);
+}
+.btn-nav {
+  height: 36px;
+  padding: 0 12px;
+  gap: 8px;
+  background: var(--white);
+  color: var(--ink);
+}
+.nav-links a:hover,
+.nav-cell:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* ---------------------------------------------------------------- hero */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 72px);
+  padding-top: clamp(48px, 8svh, 120px);
+  overflow: hidden;
+  background: var(--brand);
+  color: var(--white);
+  text-align: center;
+}
+.hero-content {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+}
+.hero-line {
+  display: block;
+}
+.hero h1 em {
+  font: 400 1em/1 var(--serif);
+  font-style: italic;
+  letter-spacing: 0;
+}
+.hero-sub {
+  margin-top: 24px;
+  font: 400 18px/28px var(--sans);
+  color: var(--white);
+}
+.hero-actions {
+  margin-top: 32px;
+}
+/* The art takes the space under the text: 1/0.7 of it, so its lowest 30% runs past the hero's edge; 96vw is the
+   width limit, and then the max-height leaves it shorter and the auto margin keeps it on the bottom. */
+.hero-art {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  min-height: 280px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hero-art-media {
+  flex: none;
+  aspect-ratio: 3 / 2;
+  height: calc(100% / 0.7);
+  max-height: calc(96vw * 2 / 3);
+  max-width: 96vw;
+  margin-top: auto;
+}
+.hero-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- agent strip */
+
+.wall-title {
+  max-width: 1100px;
+  margin-inline: auto;
+  font: 500 clamp(32px, 3.6vw, 52px) / 1.1 var(--sans);
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+.wall-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 28px 40px;
+  max-width: 1100px;
+  margin: 56px auto 0;
+}
+.wall-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 500 18px/26px var(--sans);
+}
+.wall .mark {
+  width: 32px;
+  height: 32px;
+}
+
+/* ---------------------------------------------------------------- 01 agents */
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 56px;
+}
+.head h2 {
+  margin-top: 20px;
+}
+.agents-head h2 {
+  margin-top: 20px;
+}
+.agents-panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: 600px;
+  margin-top: 56px;
+  overflow: hidden;
+  background: var(--brand);
+}
+.agents-panel img {
+  position: absolute;
+  top: 5.75%;
+  left: 1.775%;
+  width: 96.45%;
+  height: auto;
+}
+.agents-lead {
+  max-width: 760px;
+  font: 400 22px/32px var(--sans);
+  color: var(--text-2);
+}
+.cells3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 40px;
+  background: var(--line-light);
+  border: 1px solid var(--line-light);
+}
+.cell {
+  background: var(--white);
+  padding: 24px;
+}
+.cell-art {
+  display: block;
+  width: auto;
+  height: clamp(96px, 14svh, 176px);
+  max-width: 100%;
+}
+.cell-title {
+  margin-top: 24px;
+  font: 500 17px/26px var(--sans);
+}
+.cell-text {
+  margin-top: 8px;
+  font: 400 15px/23px var(--sans);
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------- 02 board */
+
+#board {
+  padding-block: clamp(32px, 7svh, 96px);
+}
+#board h2 {
+  font-size: clamp(40px, 6svh, 64px);
+  line-height: 1.0625;
+}
+/* Shorter than 860px: the board gives up padding, heading size, card padding and multi-line statuses so the screen
+   still fits the viewport. */
+@media (max-height: 859px) {
+  #board {
+    padding-block: 32px;
+  }
+  #board .board-body {
+    font: 400 16px/26px var(--sans);
+  }
+  #board .card {
+    padding: 12px;
+  }
+  #board .card-status {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+.board-wrap {
+  position: relative;
+}
+.board-body {
+  margin-top: 24px;
+  max-width: 600px;
+  color: var(--text-ink-2);
+}
+.notice {
+  position: absolute;
+  top: 16px;
+  right: var(--pad);
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px 12px 12px;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 0.96);
+  color: var(--ink);
+}
+.notice-tile {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--white);
+}
+.notice-tile .logo {
+  width: 24px;
+  height: 24px;
+}
+.notice-text {
+  width: 280px;
+}
+.notice-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 500 13px/18px var(--sans);
+}
+.notice-time {
+  flex: none;
+  font: 400 12px/18px var(--sans);
+  color: var(--text-3);
+}
+.notice-body {
+  font: 400 13px/18px var(--sans);
+  color: var(--text-2);
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: clamp(24px, 5svh, 64px);
+}
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-ink);
+  font: 500 14px/20px var(--sans);
+}
+.col-count {
+  font: 400 12px/20px var(--mono);
+  color: var(--text-ink-3);
+}
+.col-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+}
+.card {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    outline-color 160ms var(--ease-out),
+    outline-offset 160ms var(--ease-out);
+}
+.card-needs {
+  border-color: transparent;
+  background: var(--brand);
+}
+.card.target {
+  outline-color: var(--white);
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 14px/20px var(--sans);
+}
+.card-age {
+  flex: none;
+  font: 400 11px/20px var(--mono);
+  color: var(--text-ink-3);
+}
+.card-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px/17px var(--mono);
+  color: var(--text-ink-3);
+}
+.card-status {
+  font: 400 13px/19px var(--sans);
+  color: var(--text-ink-2);
+}
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+.card-diff {
+  font: 400 11px/16px var(--mono);
+  color: var(--text-ink-3);
+}
+.card-foot .mark {
+  width: 12px;
+  height: 12px;
+  color: var(--white);
+}
+.card-needs .card-age {
+  color: var(--white);
+}
+.card-needs .card-path {
+  color: var(--white);
+}
+.card-needs .card-status {
+  color: var(--white);
+}
+.card-needs .card-diff {
+  color: var(--white);
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+  margin-top: clamp(24px, 5svh, 72px);
+}
+.fact {
+  padding-top: 16px;
+  border-top: 1px solid var(--line-ink);
+}
+.fact h3 {
+  font: 500 17px/26px var(--sans);
+}
+.fact p {
+  margin-top: 8px;
+  font: 400 15px/23px var(--sans);
+  color: var(--text-ink-2);
+}
+
+/* ---------------------------------------------------------------- 03 github */
+
+.gh-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 56px;
+}
+.gh-copy {
+  flex: none;
+  width: 480px;
+}
+.gh-copy h2 {
+  margin-top: 20px;
+}
+.gh-intro {
+  margin-top: 24px;
+  font: 400 18px/28px var(--sans);
+  color: var(--white);
+}
+.gh-shot {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  height: clamp(220px, 34svh, 430px);
+}
+.steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: clamp(32px, 5svh, 72px);
+}
+.steps::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 0;
+  left: 0;
+  height: 1.5px;
+  background: rgb(255 255 255 / 0.55);
+  transform-origin: left;
+}
+.step-col {
+  min-width: 0;
+}
+.step-mark {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding-left: 20px;
+}
+.step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--white);
+}
+.step-disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--brand);
+}
+.step-disc svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+.step {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 20px 20px 24px;
+  border-radius: 2px;
+  background: var(--white);
+  color: var(--ink);
+}
+.step-n {
+  font: 400 12px/18px var(--mono);
+  color: var(--text-3);
+}
+.step h3 {
+  margin-top: 8px;
+  font: 500 19px/26px var(--sans);
+  letter-spacing: -0.01em;
+}
+.frag {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  height: 96px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 2px;
+  background: #f4f4f6;
+  overflow: hidden;
+}
+.step-cap {
+  margin-top: 16px;
+  font: 400 14px/21px var(--sans);
+  color: var(--text-2);
+}
+.frag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font: 400 12px/16px var(--sans);
+}
+.frag-row > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.frag-row .mono {
+  font-size: 11px;
+}
+.frag-row.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.frag-strong {
+  font-weight: 500;
+}
+.frag-dim {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.frag-note {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.frag-fail {
+  color: var(--brand);
+  opacity: 0.55;
+}
+.frag-btn {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 1px solid rgb(11 11 20 / 0.3);
+  border-radius: 2px;
+  font: 500 12px/1 var(--sans);
+}
+.frag-btn-ink {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--white);
+}
+.frag-field {
+  padding: 4px 8px;
+  border: 1px solid rgb(11 11 20 / 0.14);
+  border-radius: 2px;
+  background: var(--white);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 15px;
+}
+.frag-merged {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 13px/18px var(--sans);
+}
+.frag-disc {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--white);
+}
+.frag-disc svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------------------------------------------------------------- 04 windows */
+
+#windows h2 {
+  margin-top: 20px;
+}
+.cells4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 56px;
+  border: 1px solid var(--line-light);
+  background: var(--line-light);
+}
+.cell4 {
+  min-width: 0;
+  padding: 24px 24px 28px;
+  background: var(--white);
+}
+.cell4 .diagram {
+  display: block;
+  width: 100%;
+  max-width: 276px;
+  height: auto;
+}
+.cell4 h3 {
+  margin-top: 24px;
+  font: 500 17px/26px var(--sans);
+}
+.cell4 p {
+  margin-top: 8px;
+  font: 400 15px/23px var(--sans);
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------- 04 appearance */
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 72px;
+}
+.looks {
+  display: grid;
+  flex: 0 1 744px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  min-width: 0;
+  padding: 40px;
+  background: var(--brand);
+}
+@media (max-height: 859px) {
+  #appearance {
+    padding-block: 32px;
+  }
+  #appearance .display-s {
+    font-size: clamp(36px, 5.2svh, 48px);
+    line-height: 1.125;
+  }
+  #appearance .group {
+    padding: 16px 20px;
+  }
+  #appearance .group p {
+    font: 400 13px/20px var(--sans);
+  }
+}
+.look img {
   display: block;
   width: 100%;
   height: auto;
 }
-:focus-visible {
-  outline: 1px solid var(--ink);
-  outline-offset: 3px;
+.look figcaption {
+  margin-top: 8px;
+  font: 400 13px/18px var(--sans);
+  color: var(--white);
 }
-.skip {
-  position: fixed;
-  left: 16px;
-  top: -40px;
-  z-index: 20;
-  padding: 6px 10px;
-  background: var(--ink);
-  color: var(--paper);
-  font: 400 11px var(--sans);
+.controls-col {
+  flex: 1 1 480px;
+  min-width: 0;
 }
-.skip:focus {
-  top: 16px;
+.controls-col h2 {
+  margin-top: 20px;
 }
-/* The script hides the stacked pages until it has laid out the book (Base.astro removes .js if it never starts). */
-.js:not(.ready) .book {
-  visibility: hidden;
+@media (min-width: 1151px) {
+  .looks {
+    flex: 1 1 560px;
+    max-width: 744px;
+  }
+  .controls-col {
+    flex: 0 0 520px;
+    min-width: 520px;
+  }
 }
-
-/* ---------- type ---------- */
-
-.bar-mark {
-  font: 400 22px/1 var(--serif);
-  letter-spacing: 0.4em;
-  margin-right: -0.4em;
+@media (min-width: 1151px) and (max-width: 1415px) {
+  .looks {
+    padding: 32px;
+  }
 }
-.bar nav,
-.label,
-.kicker,
-.folio,
-.colophon {
-  font: 400 10px/1.2 var(--sans);
+.groups {
+  margin-top: 32px;
+  border: 1px solid var(--line-light);
+  border-radius: 2px;
+  background: var(--white);
 }
-.bar nav,
-.label,
-.kicker {
-  text-transform: uppercase;
+.group {
+  padding: 20px 24px 24px;
 }
-.bar nav {
-  letter-spacing: 0.2em;
+.group + .group {
+  border-top: 1px solid var(--line-light);
 }
-.label {
-  letter-spacing: 0.4em;
-  margin-bottom: 15px;
+.group h3 {
+  font: 500 16px/24px var(--sans);
 }
-.kicker {
-  letter-spacing: 0.3em;
-  white-space: pre;
+.group p {
+  margin-top: 8px;
+  font: 400 14px/21px var(--sans);
+  color: var(--text-2);
 }
-.folio,
-.colophon {
-  letter-spacing: 0.1em;
-}
-.title {
-  font: 300 var(--title) / 0.96 var(--serif);
-  margin: 21px 0 26px;
-}
-.display {
-  font: italic 300 var(--display) / 1 var(--serif);
-}
-.ensemble .display {
-  font-size: var(--display-s);
-}
-.sub {
-  font: italic 400 22px/1.3 var(--serif);
-  max-width: 520px;
-}
-.ctas {
+.controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 28px;
-  margin-top: 48px;
-}
-.cta {
-  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font: italic 400 20px/1.2 var(--serif);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.16em;
+  gap: 12px;
+  margin-top: 12px;
 }
-.cta svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
+.controls + .controls {
+  margin-top: 8px;
+}
+.controls-chips {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: start;
+}
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid rgb(11 11 20 / 0.22);
+  border-radius: 2px;
+}
+.seg span {
+  padding: 6px 12px;
+  border-radius: 1px;
+  font: 500 13px/18px var(--sans);
+}
+.seg .on {
+  background: var(--ink);
+  color: var(--white);
+}
+.slider {
+  display: inline-flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.slider .mono {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.slider .slider-val {
+  font-size: 12px;
+  color: var(--ink);
+}
+.track {
+  position: relative;
+  flex: 1 1 80px;
+  width: auto;
+  min-width: 60px;
+  max-width: 150px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgb(11 11 20 / 0.2);
+}
+.track .fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 37%;
+  height: 2px;
+  background: var(--ink);
+}
+.track .knob {
+  position: absolute;
+  top: 50%;
+  left: 37%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  background: var(--white);
+}
+.chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgb(11 11 20 / 0.22);
+  border-radius: 2px;
+  font: 400 12px/16px var(--sans);
+}
+.chip-key {
+  color: var(--text-3);
+}
+
+/* ---------------------------------------------------------------- faq */
+
+.faq-row {
+  display: flex;
+  gap: 72px;
+}
+.screen > .wrap.faq-row {
+  flex-direction: row;
+}
+.faq-left {
   flex: none;
+  width: 400px;
 }
-.cta:active {
-  opacity: 0.6;
+.faq-left h2 {
+  margin-top: 20px;
 }
-.num {
-  font: italic 400 14px/1.2 var(--serif);
+.faq-list {
+  flex: 1;
+  min-width: 0;
 }
-.item-title {
-  font: italic 400 26px/1.2 var(--serif);
-  margin: 3px 0 6px;
+.faq details {
+  padding: 24px 0;
+  border-top: 1px solid var(--line-light);
 }
-.body {
-  font: 300 12px/1.6 var(--sans);
+.faq details:last-child {
+  border-bottom: 1px solid var(--line-light);
 }
-.body-lead {
-  font-size: 13px;
-  line-height: 1.65;
-  margin-top: 26px;
-  max-width: 420px;
+.faq summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  list-style: none;
+  cursor: pointer;
+  font: 500 18px/26px var(--sans);
 }
-.plate figcaption,
-.plate-caption {
-  display: block;
-  margin-top: 16px;
+.faq summary::-webkit-details-marker {
+  display: none;
 }
-.plate-n {
-  display: block;
-  font: italic 400 22px/1.2 var(--serif);
+.faq-mark {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 20px;
+  height: 24px;
 }
-.plate-cap {
-  display: block;
-  margin-top: 5px;
-  font: 300 12px/1.4 var(--sans);
+.faq-mark span {
+  position: absolute;
+  background: var(--brand-text);
 }
-.still figcaption,
-.still-cap {
-  margin-top: 14px;
-  font: 300 11px/1.4 var(--sans);
+.faq-mark span:first-child {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 16px;
+  height: 1.5px;
+  margin-block: auto;
+}
+.faq-mark span:last-child {
+  top: 4px;
+  right: 0;
+  left: 0;
+  width: 1.5px;
+  height: 16px;
+  margin-inline: auto;
+  transition: transform 200ms var(--ease-out);
+  transform: rotate(0deg);
+}
+details[open] .faq-mark span:last-child {
+  transform: rotate(90deg);
+}
+.faq details::details-content {
+  block-size: 0;
+  overflow: hidden;
+  opacity: 0;
+  content-visibility: hidden;
+  transition:
+    block-size 250ms var(--ease-out),
+    opacity 250ms var(--ease-out),
+    content-visibility 250ms allow-discrete;
+}
+.faq details[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+  content-visibility: visible;
+}
+.faq-a {
+  max-width: 700px;
+  margin-top: 12px;
+  font: 400 16px/25px var(--sans);
+  color: var(--text-2);
 }
 
-/* ---------- blocks ---------- */
+/* ---------------------------------------------------------------- footer */
 
-.bar {
+.footer {
+  min-height: 100svh;
+  background: var(--brand);
+  color: var(--white);
+}
+.footer.screen {
+  padding-block: 0;
+}
+.footer-main {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  padding: 104px 0 72px;
+}
+.footer-main .wrap {
+  position: relative;
+  z-index: 1;
+}
+.footer h2 {
+  font: 500 var(--hf) / 1.045 var(--sans);
+  letter-spacing: -0.02em;
+}
+.footer-line {
+  margin-top: 20px;
+  font: 400 17px/26px var(--sans);
+  color: var(--white);
+}
+.footer .ctas {
+  margin-top: 36px;
+  justify-content: flex-start;
+}
+.footer-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 40px 72px;
+  margin-top: 80px;
+}
+.footer-col h3 {
+  font: 500 13px/20px var(--sans);
+}
+.footer-col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.footer-col a {
+  display: block;
+  font: 400 15px/22px var(--sans);
+  color: var(--white);
+}
+.footer-col a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.footer-col li {
+  line-height: 22px;
+}
+.footer-art {
+  position: absolute;
+  bottom: -24px;
+  left: max(624px, calc(50% - 96px));
+  width: 780px;
+  pointer-events: none;
+}
+.footer-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.footer-bottom {
+  padding: 24px 0 32px;
+  border-top: 1px solid var(--line-brand);
+}
+.footer-end {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 28px var(--pad-x) 0;
+  gap: 24px;
 }
-.bar nav {
+.footer-brand {
   display: flex;
-  gap: 18px;
-}
-.bar-section {
-  display: none;
-}
-
-.items {
-  margin-top: 40px;
-  display: grid;
-  gap: 36px;
-}
-
-.toc li a {
-  border-top: 1px solid var(--rule);
-}
-.toc {
-  margin-top: 24px;
-  border-bottom: 1px solid var(--rule);
-}
-.toc a {
-  display: grid;
-  grid-template-columns: 34% 1fr auto;
-  align-items: baseline;
-  padding: 13px 0 12px;
-}
-.toc-look {
-  font: italic 400 22px/1.2 var(--serif);
-}
-.toc-name {
-  font: 400 22px/1.2 var(--serif);
-}
-.toc-line {
-  display: block;
-  margin-top: 6px;
-  font: 300 12px/1.4 var(--sans);
-}
-.toc-page {
-  font: 400 11px/1 var(--sans);
-}
-
-.still-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  margin-top: 36px;
-}
-.still-row .still {
-  width: 200px;
-  flex: none;
-}
-
-
-.wordmark {
-  font: 300 var(--wordmark) / 1 var(--serif);
-  letter-spacing: 0.3em;
-  margin-right: -0.3em;
-  text-align: center;
-}
-.ctas-end {
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  margin-top: 32px;
+  gap: 8px;
+  font: 600 18px/1 var(--sans);
 }
-.colophon {
-  margin-top: 36px;
-  text-align: center;
-}
-
-/* ---------- stacked pages (no script) ---------- */
-
-.page {
-  position: relative;
-  padding: var(--pad-top) var(--pad-x) 64px;
-}
-.page > * {
-  max-width: 480px;
-  margin-inline: auto;
-}
-.page > .label,
-.page > .display,
-.page > .kicker {
-  margin-inline: auto;
-}
-.folio {
-  position: absolute;
-  bottom: 26px;
-}
-.folio-l {
-  left: var(--pad-x);
-}
-.folio-r {
-  right: var(--pad-x);
-}
-.cover .page.l .folio-l {
-  bottom: 26px;
+.footer-end p {
+  font: 400 13px/20px var(--sans);
+  color: var(--white);
 }
 
-/* ---------- single pages (phones) ---------- */
-
-.book-single,
-.book-single body,
-.book-spread,
-.book-spread body {
-  height: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-.book-single .board {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  perspective: 1600px;
-  touch-action: none;
-}
-.book-single .bar {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 6;
-}
-.book-single .spread:not(.unit) {
-  display: contents;
-}
-.book-single .unit {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  padding: var(--pad-top) var(--pad-x) 64px;
-  background: var(--paper);
-  overflow: hidden;
-  transform-origin: 0 50%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.book-single .unit[data-center] {
-  justify-content: center;
-}
-.book-single .unit > :not(.folio) {
-  width: 100%;
-  zoom: var(--fit, 1);
-}
-.book-single .spread.unit > .page {
-  padding: 0;
-  position: static;
-}
-.book-single .spread.unit > .page[data-center]:only-child {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-.book-single .spread.unit > .page + .page {
-  margin-top: 40px;
-}
-/* A merged page is shrunk as a whole on short phones; its folios stay at full size and in the margin. */
-.book-single .spread.unit .folio {
-  zoom: calc(1 / var(--fit, 1));
-}
-.book-single .unit::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgb(18 18 18 / 0.5), rgb(18 18 18 / 0.08) 40%, rgb(18 18 18 / 0) 80%);
-  opacity: var(--shade, 0);
-}
-.book-single .back .ctas-end {
-  margin-top: 32px;
-}
-.book-single [data-zoomable] {
-  cursor: zoom-in;
+/* Figures line up: every mono span and the counts and ages use tabular numerals. This is after every `font`
+   shorthand, which would otherwise reset it. */
+.mono,
+.col-count,
+.card-age,
+.card-path,
+.card-diff,
+.step-n,
+.frag-field {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Only the page on screen and its neighbours are laid out. The neighbours are transparent but stay in the tab
-   order, so Tab past the last link of a page reaches the next one and book.ts turns to it. */
-.book-single .unit:not(.is-near),
-.book-spread .spread:not(.is-near) {
-  display: none;
-}
-.book-single .unit:not(.is-on),
-.book-spread .spread:not(.is-on) {
+/* ---------------------------------------------------------------- motion (PRD v1.225) */
+
+/* Everything below runs once, never loops, and moves only transform and opacity (plus named colour changes). Hidden
+   states exist only under html.js: without JavaScript the page shows every element. */
+
+html.js [data-reveal]:not([data-container]),
+html.js [data-hero] {
   opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * var(--stagger, 50ms)),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * var(--stagger, 50ms));
 }
-.book-single .unit:not(.is-on),
-.book-single .unit:not(.is-on) *,
-.book-spread .spread:not(.is-on) * {
-  pointer-events: none !important;
+html.js [data-reveal].in,
+html.js [data-hero].in {
+  opacity: 1;
+  transform: none;
 }
-
-/* ---------- spreads (wide screens) ---------- */
-
-.book-spread .board {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  width: 1440px;
-  height: 900px;
-  transform: translate(-50%, -50%) scale(var(--scale, 1));
-  perspective: 2600px;
-  touch-action: none;
+html.js .hero-art {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 700ms var(--ease-out) 240ms,
+    transform 700ms var(--ease-out) 240ms;
 }
-.book-spread .bar {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 6;
-  padding: 36px 80px 0;
-  align-items: flex-start;
+html.js .hero-art.in {
+  opacity: 1;
+  transform: none;
 }
-.book-spread .bar nav {
-  gap: 30px;
-  padding-top: 8px;
-}
-.book-spread .bar-section {
-  display: inline;
-}
-.book-spread {
-  --title: 88px;
-  --display: 64px;
-  --display-s: 52px;
-  --wordmark: 160px;
-}
-.book-spread .spread {
-  position: absolute;
-  inset: 0;
-  background: var(--paper);
-}
-.book-spread .page {
-  position: absolute;
-  top: 0;
-  height: 900px;
-  padding: 130px 0 0;
-  pointer-events: none;
-}
-.book-spread .page > * {
-  max-width: none;
-  margin-inline: 0;
-  pointer-events: auto;
-}
-.book-spread .page.l {
-  left: 80px;
-  width: 560px;
-}
-.book-spread .page.r {
-  left: 800px;
-  width: 560px;
-}
-.book-spread .page.wide.l {
-  width: 600px;
-}
-.book-spread .page.wide.r {
-  left: 760px;
-  width: 600px;
-}
-.book-spread .page.inset {
-  padding-left: 140px;
-}
-.book-spread .page.full {
-  left: 0;
-  width: 1440px;
-  padding-inline: 80px;
-}
-.book-spread .duo:not(.cover)::before {
-  content: '';
-  position: absolute;
-  left: 720px;
-  top: 110px;
-  width: 1px;
-  height: 720px;
-  background: var(--rule);
-}
-.book-spread .folio {
-  position: absolute;
-  top: 860px;
-  bottom: auto;
-}
-.book-spread .folio-l {
-  left: 0;
-}
-.book-spread .folio-r {
-  right: 0;
-}
-.book-spread .page.full .folio-l {
-  left: 80px;
-}
-.book-spread .page.full .folio-r {
-  right: 80px;
+.wall-list {
+  --stagger: 30ms;
 }
 
-/* cover */
-.book-spread .cover .page {
-  padding-top: 240px;
+/* The board lights up: the needs-you cards start neutral, turn brand once the last card has landed, and the
+   notification follows 200ms later. */
+.board-wrap {
+  --land: 800ms;
 }
-.book-spread .cover .page.r {
-  left: 760px;
-  width: 600px;
+/* The board is observed as one group: every card gets `in` together (the stagger is the per-card delay), so cards
+   that sit outside the sideways-scrolled board are revealed too. */
+html.js .board .card {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 50ms),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 50ms),
+    background-color 400ms var(--ease-out) calc(var(--land) + 400ms),
+    border-color 400ms var(--ease-out) calc(var(--land) + 400ms),
+    outline-color 160ms var(--ease-out),
+    outline-offset 160ms var(--ease-out);
 }
-.book-spread .cover .title {
-  margin: 21px 0 40px;
+html.js .board.in .card {
+  opacity: 1;
+  transform: none;
 }
-.book-spread .cover .ctas {
-  margin-top: 81px;
-  gap: 36px;
+html.js .board .card-needs {
+  background: rgb(255 255 255 / 0.04);
+  border-color: rgb(255 255 255 / 0.16);
 }
-.book-spread .plate figcaption,
-.book-spread .plate-caption {
-  margin-top: 20px;
+html.js .board.in .card-needs {
+  background: var(--brand);
+  border-color: transparent;
 }
-
-/* index */
-.book-spread .index .page {
-  padding-top: 245px;
+html.js .notice[data-reveal] {
+  transform: translateY(-8px);
+  transition:
+    opacity 300ms var(--ease-out) calc(var(--land) + 600ms),
+    transform 300ms var(--ease-out) calc(var(--land) + 600ms);
 }
-.book-spread .toc {
-  margin-top: 39px;
-}
-.book-spread .toc a {
-  grid-template-columns: 140px 1fr auto;
-  height: 64px;
-  padding: 16px 0 0;
-}
-
-/* plates: one plate across both pages */
-.book-spread .plate-spread .page.full {
-  padding: 96px 176px 0;
-}
-
-/* status */
-.book-spread .status .page.r {
-  padding-top: 230px;
-}
-.book-spread .still-tall {
-  width: 420px;
-}
-.book-spread .page > .body-lead {
-  max-width: 420px;
+html.js .notice[data-reveal].in {
+  opacity: 1;
+  transform: none;
 }
 
-/* sections with a label, a two-line display title and numbered items */
-.book-spread .page > .display + .items {
-  margin-top: 56px;
-  gap: 53px;
+/* The GitHub line draws through the five steps; each dot, its card and the last check follow it. */
+html.js .steps::before {
+  transform: scaleX(0);
+  transition: transform 900ms var(--ease-in-out);
 }
-.book-spread .items .body {
-  max-width: 440px;
+html.js .steps.in::before {
+  transform: scaleX(1);
 }
-.book-spread .ensemble .page > .display + .items {
-  margin-top: 60px;
-  gap: 41px;
+html.js .step {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 180ms),
+    transform var(--dur-enter) var(--ease-out) calc(var(--i, 0) * 180ms);
 }
-.book-spread .windows .still-row {
-  margin-top: 0;
-  position: absolute;
-  top: 610px;
-  left: 0;
+html.js .steps.in .step {
+  opacity: 1;
+  transform: none;
 }
-
-
-.book-spread .finale .page.back {
-  padding-top: 360px;
-  text-align: center;
+html.js .step-dot,
+html.js .step-disc {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 200ms var(--ease-out) calc(var(--i, 0) * 180ms),
+    transform 200ms var(--ease-out) calc(var(--i, 0) * 180ms),
+    scale 120ms var(--ease);
 }
-.book-spread .ctas-end {
-  margin-top: 26px;
-  gap: 9px;
+html.js .steps.in .step-dot,
+html.js .steps.in .step-disc {
+  opacity: 1;
+  transform: scale(1);
 }
-.book-spread .ctas-end .cta {
-  font-size: 22px;
+html.js .step-disc svg {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 200ms var(--ease-out) calc(var(--i, 0) * 180ms + 120ms),
+    transform 200ms var(--ease-out) calc(var(--i, 0) * 180ms + 120ms);
 }
-.book-spread .colophon {
-  position: absolute;
-  top: 860px;
-  left: 0;
-  right: 0;
-  margin: 0;
+html.js .steps.in .step-disc svg {
+  opacity: 1;
+  transform: none;
 }
-
-/* ---------- W10 blocks: plates that bleed, the chain, the tiles, the two contents lists ---------- */
-
-.toc-plates a {
-  padding: 10px 0 9px;
-}
-.toc-plates .toc-look,
-.toc-plates .toc-name {
-  font-size: 20px;
-}
-.plate-detail {
-  margin-top: 40px;
-}
-.chain-steps {
-  margin-top: 32px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 12px;
-  align-items: start;
-}
-.chain-steps .item-title {
-  font-size: 18px;
-  margin: 0 0 8px;
-}
-.chain-steps .num {
-  display: none;
-}
-.chain .display {
-  font-size: var(--display-s);
-}
-.tiles {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 12px;
-}
-.tiles .still-cap {
-  display: block;
-  margin-top: 8px;
-}
-.plate-tiles figcaption {
-  margin-top: 28px;
-}
-
-.book-spread .toc-chapters a {
-  grid-template-columns: 70px 1fr auto;
-  height: 78px;
-}
-.book-spread .toc-plates {
-  margin-top: 39px;
-}
-.book-spread .toc-plates a {
-  grid-template-columns: 120px 1fr auto;
-  height: 46px;
-  padding: 10px 0 0;
-}
-/* a plate that runs off the spread's outer edge: 680 wide from the gutter side, top at 110 like the gutter rule */
-.book-spread .page.bleed {
-  padding-top: 110px;
-}
-.book-spread .plate-bleed-r img,
-.book-spread .plate-bleed-l img {
-  width: 680px;
-  max-width: none;
-}
-.book-spread .plate-bleed-l {
-  margin-left: -80px;
-}
-.book-spread .plate-bleed-l figcaption {
-  padding-left: 80px;
-}
-.book-spread .plate-bleed-r figcaption,
-.book-spread .plate-bleed-l figcaption {
-  max-width: 640px;
-}
-.book-spread .plate-detail {
-  margin-top: 46px;
-  width: 560px;
-}
-.book-spread .plate-detail figcaption {
-  margin-top: 14px;
-}
-/* four items under a two-line title (threads, ship) end above the folio */
-.book-spread .windows .page > .display + .items,
-.book-spread .ship .page > .display + .items {
-  gap: 34px;
-}
-.book-spread .page > .body-lead + .items {
-  margin-top: 46px;
-  gap: 30px;
-}
-.book-spread .chain .page.full {
-  padding: 120px 80px 0;
-}
-.book-spread .chain-steps {
-  grid-template-columns: repeat(5, 232px);
-  column-gap: 30px;
-  align-items: start;
-  margin-top: 68px;
-}
-.book-spread .chain-steps .num {
-  display: block;
-}
-.book-spread .chain-steps .item-title {
-  font-size: 22px;
-  margin: 3px 0 22px;
-}
-.book-spread .chain .plate-caption {
-  position: absolute;
-  top: 700px;
-  left: 80px;
-  margin: 0;
-}
-.book-spread .tiles {
-  grid-template-columns: repeat(2, 290px);
-  gap: 22px 20px;
-}
-.book-spread .plate-tiles figcaption {
-  margin-top: 46px;
-}
-
-/* the turning leaf: two faces sharing the gutter as their hinge */
-.face {
-  position: absolute;
-  top: 0;
-  width: 720px;
-  height: 900px;
-  overflow: hidden;
-  z-index: 4;
-  pointer-events: none;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform;
-}
-.face[hidden] {
-  display: none;
-}
-.face-front {
-  left: 720px;
-  transform-origin: 0 50%;
-}
-.face-back {
-  left: 0;
-  transform-origin: 100% 50%;
-}
-.face > .spread {
-  width: 1440px;
-}
-.face-front > .spread {
-  left: -720px;
-}
-.face::after,
-.under::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: var(--shade, 0);
-}
-.face-front::after {
-  background: linear-gradient(90deg, rgb(18 18 18 / 0.45), rgb(18 18 18 / 0.06) 35%, rgb(18 18 18 / 0) 70%);
-}
-.face-back::after {
-  background: linear-gradient(270deg, rgb(18 18 18 / 0.45), rgb(18 18 18 / 0.06) 35%, rgb(18 18 18 / 0) 70%);
-}
-.under {
-  position: absolute;
-  top: 0;
-  width: 720px;
-  height: 900px;
-  z-index: 3;
-  pointer-events: none;
-}
-.under-l {
-  left: 0;
-}
-.under-r {
-  left: 720px;
-}
-.under-r::after {
-  background: linear-gradient(90deg, rgb(18 18 18 / 0.4), rgb(18 18 18 / 0) 60%);
-}
-.under-l::after {
-  background: linear-gradient(270deg, rgb(18 18 18 / 0.4), rgb(18 18 18 / 0) 60%);
-}
-
-/* ---------- a plate, full screen (phones) ---------- */
-
-.zoom {
-  width: 100vw;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: var(--ink);
-  touch-action: pinch-zoom;
-}
-.zoom::backdrop {
-  background: var(--ink);
-}
-.zoom img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-/* A landscape screenshot on a portrait phone is turned to lie along the long side; turn the phone to read it. */
-@media (orientation: portrait) {
-  .zoom img {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 100dvh;
-    height: 100vw;
-    transform: translate(-50%, -50%) rotate(90deg);
+@media (hover: hover) and (pointer: fine) {
+  .step-col:hover .step-dot,
+  .step-col:hover .step-disc,
+  .step-col:focus-within .step-dot,
+  .step-col:focus-within .step-disc {
+    scale: 1.25;
   }
 }
-.zoom-close {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  padding: 6px 10px;
-  border: 0;
-  background: none;
-  color: var(--paper);
-  font: 400 10px/1 var(--sans);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  cursor: pointer;
+
+/* The four layout diagrams: each part moves once when its cell enters. */
+html.js .layout-split .divider {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 500ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-split .divider {
+  stroke-dashoffset: 0;
+}
+html.js .cell4.in .layout-split .d2 {
+  transition-delay: 80ms;
+}
+html.js .cell4.in .layout-split .d3 {
+  transition-delay: 160ms;
+}
+html.js .layout-split .pane {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 400ms;
+}
+html.js .cell4.in .layout-split .pane {
+  opacity: 1;
+}
+html.js .layout-tear-off .window {
+  transform: translate(-48px, -16px);
+  transition: transform 600ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-tear-off .window {
+  transform: none;
+}
+html.js .layout-tear-off .arrow {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 600ms;
+}
+html.js .cell4.in .layout-tear-off .arrow {
+  opacity: 1;
+}
+html.js .layout-running .arc {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 1200ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-running .arc {
+  transform: rotate(720deg);
+}
+html.js .layout-branch .branch {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 600ms var(--ease-in-out);
+}
+html.js .cell4.in .layout-branch .branch {
+  stroke-dashoffset: 0;
+}
+html.js .cell4.in .layout-branch .b2 {
+  transition-delay: 120ms;
+}
+html.js .cell4.in .layout-branch .b3 {
+  transition-delay: 240ms;
+}
+html.js .layout-branch .node-red,
+html.js .layout-branch .link-red {
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out) 720ms;
+}
+html.js .cell4.in .layout-branch .node-red,
+html.js .cell4.in .layout-branch .link-red {
+  opacity: 1;
 }
 
-/* ---------- Chinese ---------- */
-
-:lang(zh) .title {
-  font-weight: 300;
-  letter-spacing: 0.04em;
-}
-:lang(zh) .display,
-:lang(zh) .item-title,
-:lang(zh) .sub,
-:lang(zh) .cta,
-:lang(zh) .toc-name,
-:lang(zh) .toc-look {
-  font-style: normal;
-  font-weight: 300;
-}
-:lang(zh) .display {
-  font-size: calc(var(--display) * 0.86);
-  line-height: 1.2;
-}
-:lang(zh) .ensemble .display {
-  font-size: calc(var(--display-s) * 0.86);
-}
-:lang(zh) .item-title {
-  font-size: 22px;
-}
-:lang(zh) .sub {
-  font-size: 19px;
-}
-:lang(zh) .label,
-:lang(zh) .kicker {
-  letter-spacing: 0.3em;
-}
-/* PingFang's Light is too thin at 12px and reads as grey; CJK text runs at Regular. */
-:lang(zh) .body,
-:lang(zh) .plate-cap,
-:lang(zh) .still figcaption,
-:lang(zh) .still-cap {
-  font-weight: 400;
-}
-:lang(zh) .body {
-  line-height: 1.75;
-}
-
+/* Reduced motion: no transforms and no drawing, a 200ms opacity fade only, and the board and line in their final
+   state. */
 @media (prefers-reduced-motion: reduce) {
-  .cta:active {
+  html.js [data-reveal],
+  html.js [data-hero],
+  html.js .hero-art {
+    transform: none !important;
+    transition: opacity 200ms linear !important;
+    transition-delay: 0ms !important;
+  }
+  html.js .board .card,
+  html.js .notice {
     opacity: 1;
+    transform: none !important;
+    transition: opacity 200ms linear !important;
+    transition-delay: 0ms !important;
+  }
+  html.js .board .card-needs {
+    background: var(--brand);
+    border-color: transparent;
+  }
+  html.js .steps::before {
+    transform: none;
+    transition: none;
+  }
+  html.js .step,
+  html.js .step-dot,
+  html.js .step-disc,
+  html.js .step-disc svg {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .btn:active {
+    transform: none;
+  }
+  .step-col:hover .step-dot,
+  .step-col:hover .step-disc,
+  .step-col:focus-within .step-dot,
+  .step-col:focus-within .step-disc {
+    scale: none;
+  }
+  .faq-mark span:last-child,
+  details[open] .faq-mark span:last-child {
+    transform: none;
+    transition: none;
+  }
+  details[open] .faq-mark span:last-child {
+    opacity: 0;
+  }
+  html.js .layout-split .divider,
+  html.js .layout-branch .branch {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+  html.js .layout-split .pane,
+  html.js .layout-tear-off .arrow,
+  html.js .layout-branch .node-red,
+  html.js .layout-branch .link-red {
+    opacity: 1;
+    transition: none;
+  }
+  html.js .layout-tear-off .window,
+  html.js .layout-running .arc {
+    transform: none;
+    transition: none;
+  }
+  .faq-mark span,
+  .chev {
+    transition: none;
+  }
+  .faq details::details-content {
+    transition: opacity 200ms linear;
+  }
+  .btn:hover .chev {
+    transform: none;
+  }
+}
+
+/* Wide, tall viewports snap to the top of each screen; narrow or short ones never do. */
+@media (min-width: 1101px) and (min-height: 760px) {
+  html {
+    scroll-snap-type: y proximity;
+  }
+  .screen {
+    scroll-snap-align: start;
+  }
+}
+
+/* ---------------------------------------------------------------- narrower screens */
+
+@media (max-width: 1200px) {
+  .notice {
+    position: static;
+    margin-top: 32px;
+  }
+}
+
+@media (max-width: 1150px) {
+  .appearance-row {
+    display: block;
+  }
+  .looks {
+    max-width: 744px;
+  }
+  .controls-col {
+    max-width: 744px;
+    margin-top: 56px;
+  }
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --pad: 40px;
+  }
+  .screen {
+    min-height: 0;
+    padding-block: 64px;
+  }
+  .screen-hero,
+  .wall,
+  .footer.screen {
+    min-height: 100svh;
+  }
+  .screen-hero,
+  .footer.screen {
+    padding-block: 0;
+  }
+  .cells3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .cells4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .steps::before,
+  .step-mark {
+    display: none;
+  }
+  .step {
+    margin-top: 0;
+  }
+  .board {
+    display: flex;
+    gap: 16px;
+    margin-inline: calc(-1 * var(--pad));
+    padding-inline: var(--pad);
+    padding-bottom: 8px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+  .col {
+    flex: 0 0 240px;
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 1000px) {
+  .gh-head {
+    display: block;
+  }
+  .gh-copy {
+    width: auto;
+    max-width: 600px;
+  }
+  .gh-shot {
+    margin-top: 40px;
+  }
+}
+
+@media (max-width: 900px) {
+  .nav-links {
+    display: none;
+  }
+  .head {
+    display: block;
+  }
+  .head .intro {
+    width: auto;
+    max-width: 600px;
+    margin-top: 24px;
+  }
+  .screen > .wrap.faq-row {
+    display: block;
+  }
+  .faq-left {
+    width: auto;
+  }
+  .faq-list {
+    margin-top: 48px;
+  }
+  .footer-art {
+    position: static;
+    width: min(780px, 92vw);
+    margin: 64px auto 0;
+  }
+  .footer-main {
+    padding-bottom: 48px;
+  }
+  .footer-end {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 800px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --pad: 20px;
+  }
+  .cells3,
+  .cells4,
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .nav-brand {
+    padding: 0 16px;
+  }
+  .nav-cell {
+    padding: 0 12px;
+  }
+  .nav-dl {
+    padding: 0 12px;
+  }
+  .nav-github {
+    display: none;
+  }
+  .looks {
+    padding: 20px;
+  }
+  .footer-cols {
+    gap: 40px 48px;
+  }
+}
+
+@media (max-width: 480px) {
+  .looks {
+    grid-template-columns: 1fr;
+  }
+  .controls-chips {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,0 +1,57 @@
+---
+/* The download block and the footer in one brand ground: heading, line, the two hero buttons, three link columns,
+   the dotted cradle art, and the bottom row. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, otherPath, type Lang, type LinkTarget } from '../../i18n'
+import { gh, withBase } from '../../site'
+import Ctas from '../Ctas.astro'
+import Logo from './Logo.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const home = withBase(lang === 'en' ? '' : 'zh/')
+const href = (target: LinkTarget): string => {
+  if (target === 'lang') return withBase(otherPath(lang))
+  if (target === 'repo') return gh()
+  if (target === 'releases') return gh('/releases')
+  if (target === 'roadmap') return gh('/blob/main/docs/ROADMAP.md')
+  if (target === 'license') return gh('/blob/main/LICENSE')
+  return `#${target}`
+}
+---
+
+<footer class="footer screen">
+  <div class="footer-main">
+    <div class="wrap" data-reveal>
+      <h2>{t.footer.title}</h2>
+      <p class="footer-line">{t.footer.line}</p>
+      <Ctas download={t.footer.download} github={t.footer.github} />
+      <div class="footer-cols">
+        {t.footer.columns.map((column) => (
+          <div class="footer-col">
+            <h3>{column.title}</h3>
+            <ul>
+              {column.links.map(([label, target]) => (
+                <li><a href={href(target)}>{label}</a></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div class="footer-art" aria-hidden="true">
+      <Image src={pic(lang, 'footer-cradle.png')} widths={[780, 1720]} sizes="780px" loading="lazy" alt="" />
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="wrap footer-end">
+      <a class="footer-brand" href={home}><Logo /><span>Wavi</span></a>
+      <p>{t.footer.copyright}</p>
+      <p>{t.footer.tagline}</p>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,32 @@
+---
+/* Screen 3: 01 Agents, part one — the label, the headline and the dispatch window, which takes the height that is
+   left under them. The intro and the six diagrams are the next screen. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+import Label from './Label.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+---
+
+<section class="screen section-light" id="agents">
+  <div class="wrap">
+    <div class="agents-head" data-reveal>
+      <Label value={t.agents.label} />
+      <h2 class="display">{t.agents.title[0]}<br />{t.agents.title[1]}</h2>
+    </div>
+    <div class="agents-panel" data-reveal>
+      <Image
+        src={pic(lang, 'dispatch.webp')}
+        widths={[1250, 2500]}
+        sizes="(min-width: 1440px) 1250px, 92vw"
+        loading="lazy"
+        alt={t.agents.alt}
+      />
+    </div>
+  </div>
+</section>

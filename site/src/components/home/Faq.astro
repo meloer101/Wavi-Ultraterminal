@@ -1,0 +1,31 @@
+---
+/* FAQ: four <details>, the first open, so the page shows everything with JavaScript off. */
+import { copy, type Lang } from '../../i18n'
+import Keycaps from './Keycaps.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+---
+
+<section class="screen section-paper faq">
+  <div class="wrap faq-row">
+    <div class="faq-left" data-reveal>
+      <p class="label label-brand">{t.faq.label}</p>
+      <h2 class="display-s">{t.faq.title}</h2>
+    </div>
+    <div class="faq-list">
+      {t.faq.items.map(({ q, a }, i) => (
+        <details open={i === 0} data-reveal style={`--i:${i}`}>
+          <summary>
+            <span>{q}</span>
+            <span class="faq-mark" aria-hidden="true"><span></span><span></span></span>
+          </summary>
+          <p class="faq-a"><Keycaps text={a} /></p>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>

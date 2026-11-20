@@ -1,0 +1,32 @@
+---
+/* Screen 7: 04 Windows — the four layouts, each with the animation of its own diagram. */
+import { copy, type Lang } from '../../i18n'
+import Keycaps from './Keycaps.astro'
+import Label from './Label.astro'
+import LayoutDiagram, { type LayoutKind } from './LayoutDiagram.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const layouts: LayoutKind[] = ['split', 'tear-off', 'running', 'branch']
+---
+
+<section class="screen section-paper" id="windows">
+  <div class="wrap">
+    <div data-reveal>
+      <Label value={t.windows.label} />
+      <h2 class="display">{t.windows.title[0]}<br />{t.windows.title[1]}</h2>
+    </div>
+    <div class="cells4">
+      {t.windows.cells.map(([title, text], i) => (
+        <div class="cell4" data-reveal style={`--i:${i}`}>
+          <LayoutDiagram kind={layouts[i]} />
+          <h3>{title}</h3>
+          <p><Keycaps text={text} /></p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

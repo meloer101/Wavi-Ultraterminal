@@ -1,0 +1,82 @@
+---
+/* Screen 8: appearance — four looks on a brand panel and the settings panel beside it, centred against each other
+   (the controls are drawings, not inputs: each controls row is aria-hidden and nothing here takes focus). */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+import Label from './Label.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const c = t.appearance.controls
+const own = lang === 'en' ? 0 : 1
+---
+
+<section class="screen section-light" id="appearance">
+  <div class="wrap">
+    <div class="appearance-row">
+  <div class="looks" data-reveal>
+    {t.appearance.looks.map((caption, i) => (
+      <figure class="look">
+        <Image
+          src={pic(lang, `look-${i + 1}.webp`)}
+          widths={[321, 642]}
+          sizes="(min-width: 1000px) 321px, 45vw"
+          loading="lazy"
+          alt={caption}
+        />
+        <figcaption>{caption}</figcaption>
+      </figure>
+    ))}
+  </div>
+
+  <div class="controls-col">
+    <div data-reveal>
+      <Label value={t.appearance.label} />
+      <h2 class="display-s">{t.appearance.title[0]}<br />{t.appearance.title[1]}</h2>
+    </div>
+    <div class="groups" data-reveal>
+      <div class="group">
+        <h3>{t.appearance.groups[0][0]}</h3>
+        <p>{t.appearance.groups[0][1]}</p>
+        <div class="controls" aria-hidden="true">
+          <span class="seg"><span class="on">{c.mode[0]}</span><span>{c.mode[1]}</span></span>
+        </div>
+      </div>
+      <div class="group">
+        <h3>{t.appearance.groups[1][0]}</h3>
+        <p>{t.appearance.groups[1][1]}</p>
+        <div class="controls" aria-hidden="true">
+          <span class="seg"><span class="on">{c.glass[0]}</span><span>{c.glass[1]}</span></span>
+          <span class="slider">
+            <span class="mono">{c.slider[0]}</span>
+            <span class="track"><span class="fill"></span><span class="knob"></span></span>
+            <span class="mono">{c.slider[1]}</span>
+            <span class="slider-val mono">{c.slider[2]}</span>
+          </span>
+        </div>
+      </div>
+      <div class="group">
+        <h3>{t.appearance.groups[2][0]}</h3>
+        <p>{t.appearance.groups[2][1]}</p>
+        <div class="controls controls-chips" aria-hidden="true">
+          {c.chips.map(([key, value]) => (
+            <span class="chip"><span class="chip-key">{key}</span><span>{value}</span></span>
+          ))}
+        </div>
+        <div class="controls" aria-hidden="true">
+          <span class="seg"><span>{c.theme[0]}</span><span class="on">{c.theme[1]}</span></span>
+          <span class="seg">
+            <span class:list={[own === 0 && 'on']}>{c.language[0]}</span>
+            <span class:list={[own === 1 && 'on']}>{c.language[1]}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+    </div>
+  </div>
+</section>

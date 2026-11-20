@@ -1,0 +1,10 @@
+---
+/* A section label in mono, e.g. "01 Agents". Brand on light sections, white on the ink and brand ones. */
+interface Props {
+  value: string
+  tone?: 'brand' | 'white'
+}
+const { value, tone = 'brand' } = Astro.props
+---
+
+<p class:list={['label', `label-${tone}`]}>{value}</p>

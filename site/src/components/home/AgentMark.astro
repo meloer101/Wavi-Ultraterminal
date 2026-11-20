@@ -1,0 +1,13 @@
+---
+/* The agent's mark, 22px in the strip and 13px on a board card. Crush, Droid and Auggie have none in the pack, so
+   they get the `>_` prompt drawing (agent-marks.ts). Decorative: the name is in the text beside it. */
+import { AGENT_MARKS, DRAW_PROMPT, type AgentId } from '../../agent-marks'
+
+interface Props {
+  id: AgentId
+  class?: string
+}
+const { id, class: extra } = Astro.props
+---
+
+<span class:list={['mark', extra]} aria-hidden="true"><Fragment set:html={AGENT_MARKS[id] ?? DRAW_PROMPT} /></span>

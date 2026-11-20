@@ -1,0 +1,38 @@
+---
+/* The top bar: brand, the five section anchors, the language link, GitHub and the download button. Brand ground, one
+   hairline under it, a vertical hairline between cells; it does not stick. */
+import { copy, otherPath, type Lang } from '../../i18n'
+import { dmg, gh, withBase } from '../../site'
+import Chevron from './Chevron.astro'
+import Logo from './Logo.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const home = withBase(lang === 'en' ? '' : 'zh/')
+---
+
+<header class="nav">
+  <a class="nav-brand" href={home}>
+    <Logo />
+    <span>Wavi</span>
+  </a>
+  <nav class="nav-links" aria-label={t.nav.label}>
+    {t.nav.links.map(([label, section]) => <a href={`#${section}`}>{label}</a>)}
+  </nav>
+  <span class="nav-gap"></span>
+  <a
+    class="nav-cell"
+    href={withBase(otherPath(lang))}
+    hreflang={lang === 'en' ? 'zh-CN' : 'en'}
+    aria-label={t.nav.otherLabel}>{t.nav.other}</a
+  >
+  <a class="nav-cell nav-github" href={gh()} rel="noopener">{t.nav.github}</a>
+  <span class="nav-dl">
+    <a class="btn btn-nav" href={dmg('arm64')} data-intel={dmg('x64')} rel="noopener">
+      {t.nav.download}<Chevron />
+    </a>
+  </span>
+</header>

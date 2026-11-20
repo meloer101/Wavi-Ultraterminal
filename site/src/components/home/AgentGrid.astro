@@ -1,0 +1,36 @@
+---
+/* Screen 4: 01 Agents, part two — the intro as the lead, then the six diagrams, one per way of running several
+   agents. The diagrams scale with the viewport height. */
+import { Image } from 'astro:assets'
+import { pic } from '../../home-art'
+import { copy, type Lang } from '../../i18n'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const diagrams = ['dispatch', 'leader', 'subagents', 'teams', 'workflows', 'same-task']
+---
+
+<section class="screen section-light">
+  <div class="wrap">
+    <p class="agents-lead" data-reveal>{t.agents.intro}</p>
+    <div class="cells3">
+      {t.agents.cells.map(([label, text], i) => (
+        <div class="cell" data-reveal style={`--i:${i}`}>
+          <Image
+            class="cell-art"
+            src={pic(lang, `diagram-${diagrams[i]}.svg`)}
+            width={384}
+            height={176}
+            loading="lazy"
+            alt=""
+          />
+          <h3 class="cell-title">{label}</h3>
+          <p class="cell-text">{text}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,21 @@
+---
+/* Copy with the shortcuts written inside it (⌘J, ⌘Q, ⌘↵) drawn as <kbd>. The string stays plain in i18n.ts and
+   everything around the shortcut goes through Astro's escaping. One shortcut can be a button instead (the board's
+   ⌘J, which rings the next needs-you card); without JavaScript it is a plain keycap. */
+interface Props {
+  text: string
+  action?: { key: string; label: string }
+}
+const { text, action } = Astro.props
+const parts = text.split(/(⌘[A-Za-z↵⇧⌃⌥]+)/u)
+---
+
+{parts.map((part) =>
+  action && part === action.key ? (
+    <button type="button" class="keycap" data-jump aria-label={action.label}>{part}</button>
+  ) : part.startsWith('⌘') ? (
+    <kbd>{part}</kbd>
+  ) : (
+    part
+  )
+)}
