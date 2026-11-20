@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-19
+> 最后更新：2026-11-20
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-20：官网分享封面换成新首屏的样子（Figma「官网·新风格探究‘」`OG · 分享封面 C · 英文` `1811:18007`：朱红底、`Run ALL coding agents on your Mac.`、协作句、GitHub「Open source · Totally free」、点阵翻花绳），导出成 `site/public/og-2.png`（2400×1260），删掉杂志封面 `og.png`；换文件名是为了让 X 等按图片地址缓存的卡片重新抓图，中英文两页仍是同一张。
 - 2026-11-19：官网从翻页杂志换成滚动落地页（PRD v1.224，Figma「官网·新风格探究‘」frame O `1794:15463`）：一页一语言（英文 `/`、中文 `/zh/`），静态 HTML + CSS，页头 → 朱红首屏（`Run ALL coding agents on your Mac.`）→ 19 家 agent 条 → 01 Agents → 02 Board → 03 GitHub → 04 Windows + Appearance → FAQ → 下载与页脚合成一块；`site/src/components/Home.astro` 加 `home/` 下每段一个组件，文案在 `i18n.ts`，字体换成 DM Sans / Source Serif 4 Italic / JetBrains Mono / Noto Sans SC 的自托管子集，翻页脚本、杂志组件和图片删掉。
 - 2026-11-19：手机的离线缓存和重连（PRD v1.220 ④，Figma 62B / 62F / 63B3，只做手机端）：`ios/Wavi/Store/Cache.swift` —— 会话列表带 Mac 发来的时刻、每个会话最近 200 条对话，写成 `Application Support/Wavi/Remote/<配对密钥摘要>/` 下的 JSON，首解锁后可读（后台唤醒还能连）、不进备份、1 s 防抖、写文件不在主线程；取消配对后整个目录删掉（Mac 说不认识这台手机时配对和缓存都留着，v1.223），Mac 的完整列表里没有的会话删掉它的对话。`AppModel` 冷启动先读它再连，连上后照旧用快照和 feed 替换，`watch` 打开会话时没连上就用缓存里的对话（62F），没有缓存时列表是 63B3。重连：`RemoteClient` 里新的 `Reconnect`（前台 1 秒、之后每 2 秒一次，连上并站住后从 1 开始；Mac 不认识这台手机、协议对不上或连开连断三次时 30 秒），网络变化和回到前台仍立即重连。测试 `WaviTests/CacheTests.swift`；截图 `test-results/offline/offline-{list,session}-{dark,light}.png`（`WaviTests/OfflineShots.swift`）
 - 2026-11-19：手机答 GUI 提示的三处修正（审阅 20f8783..333efd2）：① 手机看到的 prompt id 改成 `<会话 id>:<驱动 id 的 sha256 前 22 位 base64url>`，主进程算（`src/main/remote/gui-prompts.ts`，`node:crypto`，`String(id)` 先转一遍），`src/shared` 只留 `PROMPT_ID` 的检查 —— 驱动 id 是 agent 给的任意值，截前 160 个字符会让同会话里前缀相同的两条撞在一起，按 UTF-16 截再 base64 又会让一段中文的 id 超过 400 字符、手机的每个回答都过不了校验；② 单测：共享 200 字符前缀的两条、300 个汉字、一串 emoji、数字 id，都给出不同且 `parsePhoneRequest` 收得下的 id；③ 灵动岛：只有计划在等时不再是「空闲」或什么都没有，而是和「等你处理」里不能回答的提示一样的等你确认卡片（计划的名字作 detail，没有按钮，点开进面板），`ActivityStateTests` 补一条
@@ -619,7 +620,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - [ ] PRD §4 “P2 储备”中的各项
 
 ### D · 发布质量（穿插在各批次里）
-- [x] 官网 `site/`：2026-11-19 换成滚动落地页（PRD v1.224，Figma「官网·新风格探究‘」frame O `1794:15463`）：页头、朱红首屏、19 家 agent 条、Agents / Board / GitHub / Windows + Appearance 四段、FAQ、下载与页脚合成一块；静态 HTML + CSS，没有动画库，脚本只留 Intel / Apple 芯片切换，FAQ 用 `<details>`；英文 `/`、中文 `/zh/`，文案在 `site/src/i18n.ts`，字体是 DM Sans / Source Serif 4 Italic / JetBrains Mono / Noto Sans SC（中文另加 Noto Serif SC 的 `所有`）的自托管子集；翻页脚本、杂志组件和杂志图片删掉，`cd site && npm test` 检查字体子集和从 `src/shared/agent-icon-svg.ts` 复制的 agent 标志。2026-11-19：页面分成十屏、每屏正好一个视口（导航加首屏等于 100svh，翻花绳随剩余高度缩放；宽屏滚动就近吸附，窄屏和矮屏按内容高度排），加入七处只播一次的动效（CSS 加一个小脚本；关掉 JavaScript 全部可见，减少动态效果只留淡入）和一处交互（看板正文的 ⌘J 键帽点按跳到下一张等你处理的卡片），PRD v1.225。还没做：中文页的派活和 GitHub 窗口画面（现在是英文界面）、分享封面 og.png（还是杂志封面）、文档页（Starlight）
+- [x] 官网 `site/`：2026-11-19 换成滚动落地页（PRD v1.224，Figma「官网·新风格探究‘」frame O `1794:15463`）：页头、朱红首屏、19 家 agent 条、Agents / Board / GitHub / Windows + Appearance 四段、FAQ、下载与页脚合成一块；静态 HTML + CSS，没有动画库，脚本只留 Intel / Apple 芯片切换，FAQ 用 `<details>`；英文 `/`、中文 `/zh/`，文案在 `site/src/i18n.ts`，字体是 DM Sans / Source Serif 4 Italic / JetBrains Mono / Noto Sans SC（中文另加 Noto Serif SC 的 `所有`）的自托管子集；翻页脚本、杂志组件和杂志图片删掉，`cd site && npm test` 检查字体子集和从 `src/shared/agent-icon-svg.ts` 复制的 agent 标志。2026-11-19：页面分成十屏、每屏正好一个视口（导航加首屏等于 100svh，翻花绳随剩余高度缩放；宽屏滚动就近吸附，窄屏和矮屏按内容高度排），加入七处只播一次的动效（CSS 加一个小脚本；关掉 JavaScript 全部可见，减少动态效果只留淡入）和一处交互（看板正文的 ⌘J 键帽点按跳到下一张等你处理的卡片），PRD v1.225。还没做：中文页的派活和 GitHub 窗口画面（现在是英文界面）、文档页（Starlight）
 - [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
   - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查
